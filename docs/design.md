@@ -36,12 +36,19 @@ Rust/JS boundary and make the Python untestable on its own.
 
 ## Port negotiation and process lifecycle
 
-The shell probes a predefined list of uncommon ports (8001–8009, 9001–9005, 7999)
-for a free one, spawns the backend process with that port, waits for `/api/health`
-to respond 200, then loads the UI. It retries up to five times to handle the TOCTOU
-window where another process might grab a port between the probe and the bind. On
-window close it sends SIGTERM so uvicorn can flush its logs, then force-kills after
-a short grace period.
+The shell asks the OS for a free loopback port (bind to port 0, read the assigned
+port, release it), spawns the backend process with that port, waits for
+`/api/health` to respond 200, then loads the UI. It retries up to five times to
+handle the TOCTOU window where another process might grab the port between the
+release and the backend's bind. On window close it sends SIGTERM so uvicorn can
+flush its logs, then force-kills after a short grace period.
+
+The frontend never assumes a port: it calls the `get_api_port` Tauri command and
+builds its base URL from the answer. The one hardcoded port is the `127.0.0.1:8000`
+fallback in `services/api.ts`, used only when `invoke` fails — i.e. when the UI is
+opened in a plain browser against the Vite dev server rather than in the Tauri
+window. That path is served by the separate `dev:backend` script, which is
+deliberately pinned to 8000.
 
 Both the Rust shell and the Python backend log to the same directory so startup
 failures are always diagnosable:

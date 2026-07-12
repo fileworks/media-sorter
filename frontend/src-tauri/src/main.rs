@@ -237,27 +237,27 @@ fn backend_is_ready(port: u16) -> bool {
         .unwrap_or(false)
 }
 
+/// Ask the OS for a free loopback port by binding to port 0, then release it so
+/// the backend can claim it. Between the release and the child's own bind there
+/// is a race window; `acquire_backend` retries to close it.
 fn find_available_port() -> u16 {
-    // Predefined list of uncommon, development-friendly ports.
-    const CANDIDATE_PORTS: &[u16] = &[
-        8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009,
-        9001, 9002, 9003, 9004, 9005,
-        7999,
-    ];
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap_or_else(|e| {
+        let msg = format!(
+            "Could not open a local port for the backend: {}\n\
+            \n\
+            This usually means a firewall or security tool is blocking loopback\n\
+            connections. Check the log file at:\n  {}",
+            e,
+            log_dir().join("mediasort.log").display(),
+        );
+        log_error!("FATAL — {}", msg);
+        panic!("{}", msg);
+    });
 
-    for &port in CANDIDATE_PORTS {
-        if TcpListener::bind(("127.0.0.1", port)).is_ok() {
-            return port;
-        }
-    }
-
-    let msg = format!(
-        "No available port found. All candidate ports ({:?}) are in use. \
-        Close other applications and try again.",
-        CANDIDATE_PORTS
-    );
-    log_error!("{}", msg);
-    panic!("{}", msg);
+    listener
+        .local_addr()
+        .expect("a bound TcpListener always has a local address")
+        .port()
 }
 
 /// Try to acquire a working port, retrying if another process beats us between
@@ -304,16 +304,17 @@ fn acquire_backend(max_tries: u32) -> (u16, Child) {
     }
 
     let error_msg = format!(
-        "Could not acquire a working port after {} attempts.\n\
+        "The backend failed to start after {} attempts.\n\
         Tried ports: {}\n\
         \n\
-        This usually means other applications are using these ports.\n\
+        The ports were assigned by the operating system, so a port conflict is\n\
+        unlikely — the backend process itself is most likely crashing on startup.\n\
         \n\
         How to fix:\n\
-        1. Close other applications (dev servers, Docker, other MediaSorter instances)\n\
-        2. Restart MediaSorter\n\
+        1. Restart MediaSorter\n\
+        2. If it still fails, the log file below records why the backend exited\n\
         \n\
-        If the problem persists, check the log file at:\n  {}",
+        Log file:\n  {}",
         max_tries,
         attempted_ports
             .iter()

@@ -206,14 +206,21 @@ class SiglipOnnxEncoder(VisionEncoder):
             # local copy so a packaged app never needs the network; only reach out
             # if the file isn't already cached. The dev/desktop path (no cache_dir)
             # downloads on first use.
+            #
+            # str() is load-bearing: huggingface_hub ships with the optional
+            # `local-ai` extra, so under CI's `.[dev]`-only install mypy resolves
+            # it to Any (ignore_missing_imports) and strict mode rejects the
+            # implicit Any return.
             if cache_dir is not None:
                 try:
-                    return hf_hub_download(
-                        self._repo, filename, cache_dir=cache_dir, local_files_only=True
+                    return str(
+                        hf_hub_download(
+                            self._repo, filename, cache_dir=cache_dir, local_files_only=True
+                        )
                     )
                 except Exception:
                     pass
-            return hf_hub_download(self._repo, filename, cache_dir=cache_dir)
+            return str(hf_hub_download(self._repo, filename, cache_dir=cache_dir))
 
         providers = self._select_providers(ort)
         opts = ort.SessionOptions()
