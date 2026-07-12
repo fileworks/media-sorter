@@ -14,7 +14,7 @@ from app.services.update_service import UpdateService, _is_newer, _parse_semver
 def _fake_release(tag: str = "v1.0.0", html_url: str | None = None) -> dict:
     return {
         "tag_name": tag,
-        "html_url": html_url or f"https://github.com/gykonik/media-sorter/releases/tag/{tag}",
+        "html_url": html_url or f"https://github.com/fileworks/media-sorter/releases/tag/{tag}",
         "body": "## Changelog\n- cool stuff",
         "published_at": "2026-01-01T00:00:00Z",
         "assets": [

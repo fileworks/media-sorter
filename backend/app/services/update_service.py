@@ -18,7 +18,7 @@ from app._version import __version__
 
 logger = structlog.get_logger(__name__)
 
-_REPO = "gykonik/media-sorter"
+_REPO = "fileworks/media-sorter"
 _API_URL = f"https://api.github.com/repos/{_REPO}/releases/latest"
 _CACHE_TTL = timedelta(hours=6)
 _REQUEST_TIMEOUT = 5.0
