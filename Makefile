@@ -291,7 +291,12 @@ bundle-backend:
 		--collect-all=tokenizers \
 		--collect-all=huggingface_hub \
 		app/main.py
-	@# Copy to resources and fix all permissions for Cargo build process
+	@# Copy to resources and fix all permissions for Cargo build process.
+	@# Every subdirectory of resources/ is gitignored, and git cannot track an
+	@# empty directory — so resources/ itself does not exist in a clean checkout
+	@# and `cp -R` would fail on the missing parent. It only ever worked locally
+	@# because an earlier build had already created it.
+	mkdir -p $(TAURI_RES)
 	rm -rf $(TAURI_RES)/backend
 	cp -R $(BACKEND)/dist/mediasort-backend $(TAURI_RES)/backend
 	@# Fix permissions: Cargo's build.rs checks stat() on all files
