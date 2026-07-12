@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # ── FastAPI backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: mediasort-backend:dev
+    container_name: mediasort-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist config.json and mediasort.db across restarts
+      - mediasort-config:/config
+      # Bind-mount media directories from the host.
+      # Override via .env or shell exports: MEDIA_SOURCE=~/Pictures MEDIA_DEST=~/Sorted
+      - type: bind
+        source: ${MEDIA_SOURCE:-/tmp/media_source}
+        target: /media/source
+        read_only: true
+      - type: bind
+        source: ${MEDIA_DEST:-/tmp/media_dest}
+        target: /media/dest
+    environment:
+      MEDIASORT_CONFIG_DIR: /config
+      MEDIASORT_DB_PATH: /config/mediasort.db
+      MEDIASORT_LOG_LEVEL: "${MEDIASORT_LOG_LEVEL:-INFO}"
+      # Uncomment to pre-configure source/dest inside the container:
+      # MEDIASORT_SOURCE_DIRECTORY: /media/source
+      # MEDIASORT_TARGET_DIRECTORY: /media/dest
+    healthcheck:
+      # python:3.11-slim ships no curl — use a Python one-liner instead.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mediasort-config:
+    driver: local

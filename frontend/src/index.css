@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 25 95% 53%; /* orange-500 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 30 20% 95%;
+    --muted-foreground: 25 10% 45%;
+
+    --accent: 30 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 25 20% 88%;
+    --input: 25 20% 88%;
+    --ring: 25 95% 53%;
+
+    --radius: 0.5rem;
+
+    /* Semantic status colours — theme-aware accents for validation, badges,
+       status text, and subtle alert boxes. Exposed as Tailwind utilities
+       (success/warning/error/info); tuned for contrast on a light surface. */
+    --color-success: 142 71% 36%;
+    --color-warning: 38 92% 42%;
+    --color-error: 0 74% 50%;
+    --color-info: 217 91% 50%;
+
+    /* Smart Categorization accent — category chips and folder labels. */
+    --color-category: 263 70% 50%;
+    --color-category-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 20 15% 10%;
+    --foreground: 30 20% 96%;
+
+    --card: 20 15% 13%;
+    --card-foreground: 30 20% 96%;
+
+    --popover: 20 15% 13%;
+    --popover-foreground: 30 20% 96%;
+
+    --primary: 25 95% 58%; /* slightly lighter orange for dark bg */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 20 15% 18%;
+    --secondary-foreground: 30 20% 96%;
+
+    --muted: 20 15% 18%;
+    --muted-foreground: 25 10% 60%;
+
+    --accent: 20 15% 18%;
+    --accent-foreground: 30 20% 96%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 30 20% 96%;
+
+    --border: 20 15% 20%;
+    --input: 20 15% 20%;
+    --ring: 25 80% 40%;
+
+    /* Semantic status colours — brighter so they read on a dark surface. */
+    --color-success: 142 69% 58%;
+    --color-warning: 38 95% 62%;
+    --color-error: 0 91% 71%;
+    --color-info: 213 93% 68%;
+
+    /* Category accent flips to a light violet on dark surfaces. */
+    --color-category: 252 95% 85%;
+    --color-category-foreground: 20 15% 10%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
+
+/* ── Indeterminate progress animation ────────────────────────────────────── */
+
+@keyframes progress-indeterminate {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  50% {
+    left: 60%;
+    width: 40%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+
+.progress-indeterminate {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Custom radio input styling ───────────────────────────────────────────── */
+
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid hsl(var(--input));
+  border-radius: 50%;
+  cursor: pointer;
+  background: hsl(var(--background));
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+  flex-shrink: 0;
+}
+
+input[type="radio"]:hover {
+  border-color: hsl(var(--foreground) / 0.3);
+}
+
+input[type="radio"]:checked {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  box-shadow: inset 0 0 0 2.5px hsl(var(--background));
+}
+
+input[type="radio"]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* ── Range input (slider) styling ─────────────────────────────────────────── */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: hsl(var(--input));
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: 1.5px solid hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--background));
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: 1.5px solid hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--background));
+}
+
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+.progress-indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: hsl(var(--primary));
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+/* ── Purposeful micro-animations (disabled under reduced-motion) ──────────── */
+
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.85);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes celebration-bloom {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Wizard step content fades/slides in on each transition */
+  .step-enter {
+    animation: step-enter 220ms ease-out;
+  }
+  .animate-fade-in {
+    animation: fade-in 200ms ease-out;
+  }
+  /* Status badges pop briefly when their state changes */
+  .animate-badge-pop {
+    animation: badge-pop 220ms ease-out;
+  }
+  /* Sort-complete check-mark bloom (~600ms) */
+  .animate-celebration-bloom {
+    animation: celebration-bloom 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}

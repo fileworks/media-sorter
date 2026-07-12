@@ -1,0 +1,65 @@
+# Tool / IDE metadata
+.claude/
+.mex/
+.git/
+.github/
+.idea/
+.playwright-mcp/
+.ruff_cache/
+
+# Dependencies
+node_modules/
+backend/.ruff_cache/
+
+# Build & lock files
+package-lock.json
+frontend/package-lock.json
+backend/uv.lock
+backend/coverage.xml
+backend/.coverage
+
+# Graphify output (avoid self-referential loops)
+graphify-out/
+
+# Screenshots & images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.webp
+
+# Compiled / generated frontend
+frontend/public/
+
+# Tauri native layer (Rust source, icons, build scripts — not app logic)
+frontend/src-tauri/
+
+# Python venv
+.venv/
+backend/.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+frontend/.vite/
+
+# Temporary analysis & planning docs
+analysis/
+
+# Build / release scripts (not product code)
+scripts/
+
+# Changelog / release config / infra (not useful for graph)
+CHANGELOG.md
+BUGS_AND_IMPROVEMENTS.md
+.releaserc.json
+docker-compose.yml
+package.json

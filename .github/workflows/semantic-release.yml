@@ -1,0 +1,80 @@
+name: Semantic Release
+
+# Runs after every push to main. If the new commits contain a `feat:` or `fix:`
+# (or a breaking change), semantic-release:
+#   1. computes the next version from Conventional Commits,
+#   2. syncs that version into the app (scripts/sync-version.mjs),
+#   3. updates CHANGELOG.md,
+#   4. commits those files back to main and creates a `v<version>` git tag.
+#
+# The tag is what drives release.yml (which builds + publishes the installers).
+#
+# ⚠️ REQUIRED SETUP — SEMANTIC_RELEASE_TOKEN
+# A tag pushed using the default GITHUB_TOKEN will NOT trigger release.yml: GitHub
+# deliberately suppresses workflow runs for events created by GITHUB_TOKEN to avoid
+# recursion. So to make the build fire, create a fine-grained PAT (contents:
+# read/write) and add it as the repo secret `SEMANTIC_RELEASE_TOKEN`. Without it,
+# this still tags + writes the changelog, but you must build by manually dispatching
+# release.yml against the tag (gh workflow run release.yml --ref v<version>).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  # contents: write is all the configured plugins need — to push the release commit
+  # and tag. The plugin set deliberately omits @semantic-release/github, so nothing
+  # here comments on issues/PRs or creates a GitHub Release (release.yml does that),
+  # hence no issues:/pull-requests: write grants.
+  contents: write
+
+# Never run two releases at once; never cancel one mid-flight (a half-done release
+# leaves a dangling tag).
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create release (if warranted)
+    runs-on: ubuntu-latest
+    # Don't re-trigger on the `chore(release): …` commit that this workflow itself
+    # pushes back to main. (We deliberately omit `[skip ci]` from that commit so the
+    # tag push reliably triggers release.yml regardless of GitHub's tag/skip-ci
+    # semantics — this guard suppresses the redundant re-run instead.)
+    if: ${{ !contains(github.event.head_commit.message, 'chore(release):') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so commit-analyzer can see every commit
+          persist-credentials: true
+          # PAT (preferred) so the pushed tag triggers release.yml; falls back to
+          # GITHUB_TOKEN, which still tags but won't kick off the build (see header).
+          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Warn if no release-trigger token is configured
+        # A tag pushed with the default GITHUB_TOKEN will NOT trigger release.yml, so
+        # without a PAT this workflow tags + writes the changelog but silently builds
+        # nothing. Surface that as a warning annotation instead of a silent no-build.
+        env:
+          RELEASE_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::warning title=No SEMANTIC_RELEASE_TOKEN::Releasing with the default GITHUB_TOKEN — the pushed tag will NOT trigger release.yml, so no installers are built automatically. Add a fine-grained PAT (contents: read/write) as the SEMANTIC_RELEASE_TOKEN repo secret, or build manually: gh workflow run release.yml --ref <new v* tag>."
+          fi
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://tauri.app/v1/schema",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "MediaSorter",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "clipboard": {
+        "writeText": true,
+        "readText": false
+      },
+      "dialog": {
+        "open": true,
+        "save": true
+      },
+      "fs": {
+        "writeFile": true,
+        "scope": [
+          "$HOME/**",
+          "$DESKTOP/**",
+          "$DOWNLOAD/**",
+          "$DOCUMENT/**"
+        ]
+      },
+      "notification": {
+        "all": true
+      },
+      "shell": {
+        "open": "^https://"
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.mediasort.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.ico",
+        "icons/icon.png"
+      ],
+      "resources": [
+        "resources/**"
+      ],
+      "macOS": {
+        "minimumSystemVersion": "11.0"
+      }
+    },
+    "security": {
+      "csp": "default-src 'self' tauri:; img-src 'self' data: asset: tauri: https://asset.localhost http://127.0.0.1:* http://localhost:*; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* tauri:"
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "MediaSorter",
+        "width": 1100,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  }
+}

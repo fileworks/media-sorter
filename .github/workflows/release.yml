@@ -1,0 +1,250 @@
+name: Release
+
+# Builds self-contained distributables for every supported OS and (on a v* tag)
+# publishes them to a GitHub Release.  Each distributable bundles the
+# PyInstaller-frozen backend AND static ffmpeg/ffprobe so end users need nothing
+# pre-installed — not Python, not Node, not ffmpeg.
+#
+# Distributables produced:
+#   macOS arm64   → .dmg  (MediaSorter-macos-arm64)
+#   macOS x86_64  → .dmg  (MediaSorter-macos-x64)
+#   Windows x64   → NSIS installer .exe  +  portable .zip  (MediaSorter-windows-x64)
+#
+# Why native-only builds (no cross-compilation)?
+#   PyInstaller freezes the Python backend with native deps (numpy, rawpy/libraw,
+#   pillow-heif) for the host OS only. Each OS therefore gets its own runner.
+#   The Makefile + scripts/fetch_ffmpeg.py are the shared build logic across all.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Publish as a draft GitHub Release (only has effect when run on a v* tag)"
+        type: boolean
+        default: false
+      ffmpeg_win_tag:
+        description: "BtbN Windows ffmpeg tag for reproducible builds (e.g. autobuild-2025-01-30-12-56). Leave blank for rolling 'latest'."
+        type: string
+        default: ""
+
+# Cancel any in-flight build for the same ref so re-tagged pushes don't stack.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Quality gate: re-verify the tagged commit passes the backend CI gate ──────
+  # semantic-release only tags commits already on main (so they passed CI to get
+  # merged), but this guards the case where a v* tag is pushed by hand onto a commit
+  # that never went through CI — we don't want to burn ~20 min building installers
+  # for a broken commit. Mirrors the full backend gate from ci.yml (ruff lint +
+  # format + mypy + pytest). The frontend build is not re-checked here; if it's broken the
+  # build job below fails at `npm run build` rather than producing a bad installer.
+  check-ci:
+    name: Verify backend CI gate passes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libjpeg-dev libpng-dev
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Lint — ruff
+        working-directory: backend
+        run: python -m ruff check app tests
+
+      - name: Format check — ruff
+        working-directory: backend
+        run: python -m ruff format --check app tests
+
+      - name: Type-check — mypy
+        working-directory: backend
+        run: python -m mypy app
+
+      - name: Run tests with coverage gate
+        working-directory: backend
+        run: python -m pytest tests/ --cov=app --cov-fail-under=80 -q
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: check-ci # don't build installers until the quality gate is green
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon runner → arm64 DMG
+            label: macOS (Apple Silicon)
+            artifact: MediaSorter-macos-arm64
+            paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+          - os: macos-13 # Intel runner → x86_64 DMG
+            label: macOS (Intel)
+            artifact: MediaSorter-macos-x64
+            paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest # x64 → NSIS installer .exe + portable .zip
+            label: Windows (x64)
+            artifact: MediaSorter-windows-x64
+            paths: |
+              frontend/src-tauri/target/release/bundle/msi/*.msi
+              frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
+              frontend/src-tauri/target/release/bundle/portable/*.zip
+
+    defaults:
+      run:
+        # Run every step (and therefore `make`) under bash. On Windows this is
+        # Git Bash, which provides /bin/bash + coreutils so the Makefile works.
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install GNU Make (Windows runner)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
+
+      - name: Install project dependencies
+        run: make install
+
+      - name: Bundle Python backend (PyInstaller)
+        run: make bundle-backend
+
+      - name: Bundle static ffmpeg + ffprobe
+        # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
+        # the single source of truth shared with local builds so they never drift.
+        # Pass FFMPEG_WIN_TAG when set (via workflow_dispatch input) for reproducible builds.
+        env:
+          # inputs.ffmpeg_win_tag is '' when pushed via tag (no inputs context) — falls through to 'latest'.
+          FFMPEG_WIN_TAG: ${{ inputs.ffmpeg_win_tag || 'latest' }}
+        run: make bundle-ffmpeg
+
+      - name: Bundle local CLIP model (offline AI tagging)
+        # Downloads the CLIP image/text encoders into resources/clip/ so the
+        # frozen app's "local" AI tagger works fully offline. Requires the
+        # local-ai extra, installed by `make install` above.
+        run: make bundle-clip
+
+      - name: Build desktop app
+        run: make build-tauri
+
+      - name: Create Windows portable ZIP
+        # Produces a run-in-place archive: extract and double-click MediaSorter.exe,
+        # no installation required. Windows-only; no-op on macOS.
+        if: runner.os == 'Windows'
+        run: make bundle-portable
+
+      - name: Verify macOS artifacts
+        if: runner.os == 'macOS'
+        run: |
+          echo "==> Verifying macOS artifacts…"
+          ok=true
+          for f in frontend/src-tauri/target/release/bundle/dmg/*.dmg; do
+            [ -f "$f" ] || { echo "✗ No DMG found"; ok=false; break; }
+            sz=$(wc -c < "$f" | tr -d ' ')
+            min=$((20 * 1024 * 1024))
+            [ "$sz" -ge "$min" ] || { echo "✗ DMG suspiciously small: $f ($sz bytes)"; ok=false; break; }
+            echo "  ✓ $(basename "$f"): $((sz / 1048576)) MB"
+          done
+          $ok || exit 1
+
+      - name: Verify Windows artifacts
+        if: runner.os == 'Windows'
+        run: |
+          echo "==> Verifying Windows artifacts…"
+          ok=true
+          check() {
+            local pat="$1" min="$2"
+            local found
+            found=$(ls $pat 2>/dev/null | head -1)
+            if [ -z "$found" ]; then
+              echo "✗ No file matches: $pat"; return 1
+            fi
+            local sz
+            sz=$(wc -c < "$found" | tr -d ' ')
+            if [ "$sz" -lt "$min" ]; then
+              echo "✗ $found is too small: $sz bytes (< $min expected)"; return 1
+            fi
+            echo "  ✓ $(basename "$found"): $((sz / 1048576)) MB"
+          }
+          min=$((20 * 1024 * 1024))
+          check "frontend/src-tauri/target/release/bundle/msi/*.msi"         "$min" || ok=false
+          check "frontend/src-tauri/target/release/bundle/nsis/*-setup.exe"  "$min" || ok=false
+          check "frontend/src-tauri/target/release/bundle/portable/*.zip"    "$min" || ok=false
+          $ok || exit 1
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
+
+  # ── Publish a GitHub Release (only for v* tags) ───────────────────────────────
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release and upload distributables
+        uses: softprops/action-gh-release@v2
+        with:
+          # inputs.draft is a real boolean (input is type: boolean); comparing it to
+          # the string 'true' would always be false (GitHub coerces to 1 == NaN), so
+          # use the boolean directly.
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.zip

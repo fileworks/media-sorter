@@ -1,0 +1,117 @@
+[project]
+name = "mediasort-backend"
+# Derived from app/_version.py (the single source of truth, bumped by
+# scripts/sync-version.mjs on release) via hatchling's dynamic-version hook below.
+dynamic = ["version"]
+description = "MediaSorter — intelligent media organisation backend"
+authors = [
+    {name = "Niklas Büchel", email = "gykonik@gmail.com"}
+]
+requires-python = ">=3.10"
+readme = "README.md"
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    "websockets>=12.0",
+
+    # Configuration & validation
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "platformdirs>=4.0.0",
+
+    # Logging
+    "structlog>=24.1.0",
+    "python-json-logger>=2.0.7",
+
+    # Image processing
+    "pillow>=10.0.0",
+    "piexif>=1.1.3",
+    "imagehash>=4.3.1",
+    # HEIC/HEIF support (registers a Pillow plugin)
+    "pillow-heif>=0.13.0",
+    # RAW decoding (bundles libraw via the wheel)
+    "rawpy>=0.18.0",
+    # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes; pin explicitly
+    "numpy>=1.24.0",
+
+    # HTTP
+    "httpx>=0.25.0",
+    "aiofiles>=23.2.0",
+
+    # Utilities
+    "filetype>=1.2.0",
+    "python-dateutil>=2.8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.0",
+    # Ruff is the single linter + formatter (replaces black + isort + pylint).
+    "ruff>=0.6",
+    "mypy>=1.5.0",
+    "httpx>=0.25.0",
+    # Bundling — used by `make bundle-backend` to freeze the backend for distribution
+    "pyinstaller>=6.0",
+]
+
+# Local, offline AI tagging (CLIP zero-shot + GPS geocoding). Optional so
+# CI/tests and the cloud-only path don't pull onnxruntime; `make install`
+# includes it so the default "local" provider works out of the box, and release
+# builds freeze it. fastembed brings ONNX Runtime + the CLIP image/text encoders
+# (no torch) and does NOT pin pillow/numpy, so it coexists with pillow-heif/rawpy.
+# reverse_geocoder bundles the GeoNames dataset (~26 MB) for offline GPS → city
+# name resolution — no network needed at runtime.
+local-ai = [
+    "fastembed>=0.8.0",
+    "reverse_geocoder>=1.5.1",
+    # SigLIP 2 ("standard"/"max" tiers): onnxruntime runs the towers, tokenizers
+    # loads the Gemma tokenizer, huggingface_hub lazily fetches the ONNX weights.
+    # fastembed already pulls these transitively; declared explicitly so the
+    # higher tiers keep working if fastembed's deps ever change.
+    "onnxruntime>=1.17.0",
+    "tokenizers>=0.15.0",
+    "huggingface_hub>=0.20.0",
+    # Reliable cross-platform RAM detection for the hardware tier probe (the
+    # probe degrades gracefully without it, but psutil avoids per-OS fallbacks).
+    "psutil>=5.9.0",
+]
+
+[tool.hatch.version]
+path = "app/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# A pragmatic, recommended rule set: pyflakes (F) + pycodestyle (E/W) catch real
+# bugs and style; isort (I) replaces the old isort; pyupgrade (UP), bugbear (B),
+# comprehensions (C4) and simplify (SIM) are high-signal, low-noise.
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests favour explicit, repetitive setup over clever refactors.
+"tests/**" = ["B011", "SIM"]

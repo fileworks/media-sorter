@@ -1,0 +1,44 @@
+# Pre-commit hooks for MediaSorter.
+#
+# Install once per clone:   pre-commit install
+# Run against everything:   pre-commit run --all-files
+#
+# Hooks mirror the CI gates (.github/workflows/ci.yml): Ruff for the Python
+# backend, ESLint + Prettier for the React/TypeScript frontend. They autofix
+# on commit — if a hook changes files, re-stage and commit again.
+
+minimum_pre_commit_version: "3.5.0"
+
+repos:
+  # ── Backend: Ruff lint + format ──────────────────────────────────────────
+  # Pinned to the ruff version locked in backend/uv.lock. Config is discovered
+  # from backend/pyproject.toml ([tool.ruff]).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        name: ruff (backend lint)
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        name: ruff (backend format)
+        files: ^backend/
+
+  # ── Frontend: ESLint + Prettier ──────────────────────────────────────────
+  # Local hooks that reuse the existing npm scripts in frontend/package.json,
+  # so ESLint/Prettier own their own config and ignore files (matching CI).
+  # Require Node + an installed frontend/node_modules.
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npm run lint:fix'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: frontend-prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && npm run format'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|css)$
+        pass_filenames: false
