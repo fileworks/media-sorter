@@ -65,6 +65,13 @@ def log(msg: str) -> None:
     print(msg, flush=True)
 
 
+# Windows defaults stdout to cp1252, which cannot encode the arrows and ellipses
+# this script prints — a decorative character would otherwise raise
+# UnicodeEncodeError and take the whole Windows release build down with it.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 def detect_platform() -> tuple[str, str]:
     """Return (os_key, arch_key) in {darwin,windows,linux} x {arm64,x86_64}."""
     system = platform.system().lower()

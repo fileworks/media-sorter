@@ -21,6 +21,12 @@ import argparse
 import sys
 from pathlib import Path
 
+# Windows defaults stdout to cp1252, which cannot encode the arrows and check
+# marks printed below — a decorative character would otherwise raise
+# UnicodeEncodeError and fail the Windows release build.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # Must match LocalClipTagger._IMAGE_MODEL / _TEXT_MODEL in
 # app/services/ai/base_tagger.py.
 IMAGE_MODEL = "Qdrant/clip-ViT-B-32-vision"
