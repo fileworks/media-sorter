@@ -96,7 +96,11 @@ jobs:
             label: macOS (Apple Silicon)
             artifact: MediaSorter-macos-arm64
             paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
-          - os: macos-13 # Intel runner → x86_64 DMG
+          # macos-13 was RETIRED on 2025-12-04 — that label has no runners left, so
+          # the job queued forever and the release could never finish. macos-15-intel
+          # is GitHub's replacement and the LAST x86_64 image (available until
+          # Aug 2027; Apple/GitHub drop Intel entirely after that).
+          - os: macos-15-intel # Intel runner → x86_64 DMG
             label: macOS (Intel)
             artifact: MediaSorter-macos-x64
             paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
