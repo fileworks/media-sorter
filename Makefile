@@ -9,6 +9,17 @@ BACKEND   := backend
 FRONTEND  := frontend
 TAURI_RES := $(FRONTEND)/src-tauri/resources
 
+# Python on Windows defaults stdout to cp1252, which cannot encode the arrows and
+# check marks (↓ → ✓) our build scripts print — a decorative character in a
+# progress line raises UnicodeEncodeError and aborts the whole release build.
+# Fix it once here rather than in every script.
+#
+# Both vars on purpose: PYTHONIOENCODING pins the std streams outright (highest
+# precedence — it even overrides UTF-8 mode), while PYTHONUTF8 also covers the
+# filesystem encoding. Together they leave no platform-dependent gap.
+export PYTHONIOENCODING := utf-8
+export PYTHONUTF8       := 1
+
 # Static, self-contained ffmpeg + ffprobe are bundled by scripts/fetch_ffmpeg.py
 # — the SINGLE cross-platform source of truth (download URLs + per-arch logic all
 # live there), shared by local `make bundle-ffmpeg` AND the GitHub Actions release
