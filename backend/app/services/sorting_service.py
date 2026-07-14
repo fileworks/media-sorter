@@ -26,7 +26,11 @@ from app.services.duplicate_service import (
     quality_processing_order,
 )
 from app.services.extraction_service import DateExtractionService
-from app.services.filesystem_service import FileSystemService
+from app.services.filesystem_service import (
+    FileSystemService,
+    validate_source_directory,
+    validate_target_directory,
+)
 from app.services.junk_filter import classify_junk
 from app.services.metadata_service import MetadataService
 from app.services.repair_service import RepairService
@@ -94,8 +98,8 @@ class SortingService:
         - Any other error         → _failed/
         """
         config = self._config_service.get()
-        source_root = Path(config.source_directory)
-        dest_root = Path(config.target_directory)
+        source_root = validate_source_directory(config.source_directory)
+        dest_root = validate_target_directory(config.target_directory)
 
         counters: dict[str, int] = {"skipped": 0}
         files = await self._fs.list_files(
