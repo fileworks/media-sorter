@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import os
 import shutil
 from collections.abc import Callable, Iterator
 from datetime import datetime
@@ -262,6 +263,50 @@ def find_available_filename(path: Path) -> Path:
         if not candidate.exists():
             return candidate
         counter += 1
+
+
+def validate_source_directory(directory: str | None) -> Path:
+    """Return the source root, or raise a message the user can act on.
+
+    ``list_files`` answers "no files" for a directory that does not exist, which
+    is the right answer for a generic lister and the wrong one for a sort run:
+    an unplugged external drive or an unmounted network share would otherwise
+    finish with a green tick and "0 files sorted", which reads as "my library is
+    empty" rather than "MediaSorter never saw it".
+    """
+    if not directory or not directory.strip():
+        raise SortingError("No source folder is set — choose one in Settings, then sort.")
+    root = Path(directory)
+    if not root.exists():
+        raise SortingError(
+            f"Source folder not found: {root}. If it lives on an external drive or a "
+            "network share, check that it is plugged in and mounted."
+        )
+    if not root.is_dir():
+        raise SortingError(f"The source path is a file, not a folder: {root}.")
+    if not os.access(root, os.R_OK | os.X_OK):
+        raise SortingError(f"Source folder cannot be read (permission denied): {root}.")
+    return root
+
+
+def validate_target_directory(directory: str | None) -> Path:
+    """Return the destination root, creating it if needed, or raise a clear error.
+
+    An unset destination would resolve to ``Path("")`` — the working directory —
+    and scatter the user's library wherever the app happened to be launched from.
+    """
+    if not directory or not directory.strip():
+        raise SortingError("No destination folder is set — choose one in Settings, then sort.")
+    root = Path(directory)
+    if root.exists() and not root.is_dir():
+        raise SortingError(f"The destination path is a file, not a folder: {root}.")
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise SortingError(f"Destination folder cannot be created: {root} ({exc}).") from exc
+    if not os.access(root, os.W_OK):
+        raise SortingError(f"Destination folder is not writable (permission denied): {root}.")
+    return root
 
 
 class FileSystemService:

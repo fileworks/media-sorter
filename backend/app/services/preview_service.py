@@ -20,7 +20,7 @@ from app.services.duplicate_service import (
     quality_processing_order,
 )
 from app.services.extraction_service import DateExtractionService
-from app.services.filesystem_service import FileSystemService
+from app.services.filesystem_service import FileSystemService, validate_source_directory
 from app.services.junk_filter import classify_junk
 from app.utils.path_utils import sanitize_path_segment
 
@@ -69,6 +69,9 @@ class PreviewService:
         # Phase 1 — directory scan (no incremental count available, so the UI
         # shows an indeterminate "Scanning folder…" bar).
         logger.info("Preview started", source=str(config.source_directory))
+        # A preview is read-only, so only the source is checked here — but it is
+        # checked, so a missing folder says so instead of previewing nothing.
+        source_root = validate_source_directory(config.source_directory)
         if task is not None:
             task.progress.phase = "scanning"
         files = await self._fs.list_files(
@@ -81,7 +84,6 @@ class PreviewService:
         )
 
         dest_root = Path(config.target_directory)
-        source_root = Path(config.source_directory)
         total = len(files)
         logger.info("Preview: scan complete", total=total)
         if task is not None:
