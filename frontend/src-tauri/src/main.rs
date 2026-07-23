@@ -40,7 +40,7 @@ use tauri::{Manager, State};
 //
 // Log location (mirrors the Python backend's log dir):
 //   macOS:   ~/Library/Logs/MediaSorter/mediasort.log
-//   Windows: %APPDATA%\MediaSorter\logs\mediasort.log
+//   Windows: %LOCALAPPDATA%\MediaSorter\logs\mediasort.log
 //   Linux:   ~/.local/share/mediasort/logs/mediasort.log
 
 static LOG_FILE: OnceLock<Mutex<Option<File>>> = OnceLock::new();
@@ -375,7 +375,7 @@ fn resolve_backend_dir() -> PathBuf {
         #[cfg(target_os = "macos")]
         return app_dir.join("../Resources/resources/backend");
         #[cfg(target_os = "windows")]
-        return app_dir.join("../resources/resources/backend");
+        return app_dir.join("resources/backend");
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         return app_dir.join("resources/backend");
     }
@@ -395,7 +395,7 @@ fn resolve_ffmpeg_dir() -> Option<PathBuf> {
         #[cfg(target_os = "macos")]
         return Some(app_dir.join("../Resources/resources/ffmpeg"));
         #[cfg(target_os = "windows")]
-        return Some(app_dir.join("../resources/resources/ffmpeg"));
+        return Some(app_dir.join("resources/ffmpeg"));
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         return Some(app_dir.join("resources/ffmpeg"));
     }
