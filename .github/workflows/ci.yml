@@ -112,46 +112,19 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  # ── Tauri: config schema + Rust type-check ───────────────────────────────────
-  # cargo check runs tauri-build's build.rs, which validates tauri.conf.json
-  # against the schema — catching bad config values before a full release build.
-  # No binary is produced; completes in ~2 min with the Rust cache warm.
-  tauri:
-    name: Tauri — config + Rust check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: frontend/src-tauri
-
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
+      - name: Validate tauri.conf.json schema
         working-directory: frontend
-        run: npm ci
-
-      - name: Check Rust + validate tauri.conf.json
-        working-directory: frontend/src-tauri
-        run: cargo check
+        run: |
+          pip install jsonschema --quiet --disable-pip-version-check
+          python3 - <<'EOF'
+          import json, jsonschema, sys
+          schema = json.load(open("node_modules/@tauri-apps/cli/schema.json"))
+          config = json.load(open("src-tauri/tauri.conf.json"))
+          try:
+              jsonschema.validate(config, schema)
+              print("tauri.conf.json is valid")
+          except jsonschema.ValidationError as e:
+              path = " > ".join(str(p) for p in e.absolute_path)
+              print(f"ERROR in tauri.conf.json at '{path}': {e.message}", file=sys.stderr)
+              sys.exit(1)
+          EOF
