@@ -111,3 +111,37 @@ jobs:
       - name: Build (Vite — no Tauri binary needed in CI)
         working-directory: frontend
         run: npm run build
+
+  # ── Tauri: config schema + Rust type-check ───────────────────────────────────
+  # cargo check runs tauri-build's build.rs, which validates tauri.conf.json
+  # against the schema — catching bad config values before a full release build.
+  # No binary is produced; completes in ~2 min with the Rust cache warm.
+  tauri:
+    name: Tauri — config + Rust check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Check Rust + validate tauri.conf.json
+        working-directory: frontend/src-tauri
+        run: cargo check
