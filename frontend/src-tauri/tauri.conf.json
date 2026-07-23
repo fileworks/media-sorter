@@ -56,7 +56,7 @@
       },
       "windows": {
         "nsis": {
-          "installMode": "bothUserAndMachine"
+          "installMode": "both"
         }
       }
     },

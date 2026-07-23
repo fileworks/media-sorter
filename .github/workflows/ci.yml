@@ -111,3 +111,20 @@ jobs:
       - name: Build (Vite — no Tauri binary needed in CI)
         working-directory: frontend
         run: npm run build
+
+      - name: Validate tauri.conf.json schema
+        working-directory: frontend
+        run: |
+          pip install jsonschema --quiet --disable-pip-version-check
+          python3 - <<'EOF'
+          import json, jsonschema, sys
+          schema = json.load(open("node_modules/@tauri-apps/cli/schema.json"))
+          config = json.load(open("src-tauri/tauri.conf.json"))
+          try:
+              jsonschema.validate(config, schema)
+              print("tauri.conf.json is valid")
+          except jsonschema.ValidationError as e:
+              path = " > ".join(str(p) for p in e.absolute_path)
+              print(f"ERROR in tauri.conf.json at '{path}': {e.message}", file=sys.stderr)
+              sys.exit(1)
+          EOF
