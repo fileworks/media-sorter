@@ -103,6 +103,8 @@ class ServiceContainer:
             self._config_service._config = config
         if self._rule_engine_service is not None:
             self._rule_engine_service._config = config
+        if self._update_service is not None:
+            self._update_service.set_enabled(config.update_check_enabled)
 
         encoder_changed = (
             prev.ai_model_tier != config.ai_model_tier or prev.ai_allow_gpu != config.ai_allow_gpu

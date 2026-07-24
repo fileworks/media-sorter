@@ -63,19 +63,9 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
           )}
 
           <p className="text-xs text-muted-foreground">{t("config.duplicates.recovery")}</p>
-
-          <FormRow
-            label={t("config.duplicates.destination")}
-            htmlFor="dedup-destination"
-            help={HELP.dedupAgainstDestination}
-            inline
-          >
-            <Toggle
-              id="dedup-destination"
-              checked={config.dedup_against_destination ?? false}
-              onChange={(v) => updateConfig({ dedup_against_destination: v })}
-            />
-          </FormRow>
+          <p className="text-xs text-muted-foreground">
+            {t("config.duplicates.destinationAlways")}
+          </p>
         </div>
       )}
     </>

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.core.config import Config
+from app.core.exceptions import SourceUnavailableError
 from app.services.analysis_service import AnalysisService
 from app.services.filesystem_service import FileSystemService
 
@@ -20,11 +21,12 @@ def svc(fs_svc: FileSystemService) -> AnalysisService:
     return AnalysisService(filesystem_service=fs_svc)
 
 
-def test_empty_source_returns_empty_result(svc: AnalysisService, tmp_path: Path) -> None:
+def test_missing_source_fails_instead_of_looking_empty(
+    svc: AnalysisService, tmp_path: Path
+) -> None:
     config = Config(source_directory=str(tmp_path / "nonexistent"), target_directory=str(tmp_path))
-    result = asyncio.run(svc.analyse(config))
-    assert result["total_files"] == 0
-    assert result["by_type"] == {}
+    with pytest.raises(SourceUnavailableError):
+        asyncio.run(svc.analyse(config))
 
 
 def test_analyse_counts_files(svc: AnalysisService, tmp_path: Path) -> None:
@@ -259,12 +261,12 @@ def test_disk_space_check_insufficient_when_known_and_too_small(
     assert ds["sufficient"] is False
 
 
-def test_empty_result_disk_space_known_false(svc: AnalysisService, tmp_path: Path) -> None:
-    """No source ⇒ empty result reports free_space_known=False (never a fake 0-as-known)."""
+def test_missing_source_never_returns_disk_space_result(
+    svc: AnalysisService, tmp_path: Path
+) -> None:
     config = Config(source_directory=str(tmp_path / "missing"), target_directory=str(tmp_path))
-    ds = asyncio.run(svc.analyse(config))["disk_space"]
-    assert ds["free_space_known"] is False
-    assert ds["destination_free_bytes"] == 0
+    with pytest.raises(SourceUnavailableError):
+        asyncio.run(svc.analyse(config))
 
 
 def test_disk_space_check_tolerates_inaccessible_dest(

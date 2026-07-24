@@ -44,6 +44,7 @@ function getStatusColor(status: string): string {
     case "already_in_destination":
       return "bg-info";
     case "junk":
+    case "duplicate_unknown":
       return "bg-warning";
     default:
       return "bg-error";
@@ -68,6 +69,8 @@ function getStatusKey(status: string): string {
       return "preview.status.junk";
     case "already_in_destination":
       return "preview.status.inDestination";
+    case "duplicate_unknown":
+      return "preview.status.duplicateUnknown";
     default:
       return status;
   }

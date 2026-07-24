@@ -238,14 +238,9 @@ class Config:
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
 
-    # ── Destination-aware / cross-run duplicate detection (opt-in) ───────────
-    # When enabled, the destination's existing media are indexed into a small
-    # SQLite file (persisted across runs) and every source file is first checked
-    # against it: a file already present in the destination is quarantined to
-    # _already_in_destination/ instead of being re-added. Off by default — the
-    # classic per-run in-memory
-    # behaviour is unchanged until the user opts in.
-    dedup_against_destination: bool = False
+    # Destination media are always indexed when duplicate removal is enabled.
+    # Legacy persisted ``dedup_against_destination`` keys are ignored by
+    # ``from_dict`` now that the unsafe opt-out has been removed.
     # Where the index database lives. None → "<target>/.mediasort-dedup-index.sqlite3"
     # (hidden inside the destination, so the index travels with the library).
     dedup_index_path: str | None = None
@@ -381,7 +376,9 @@ class Config:
             )
 
         known = {f.name for f in fields(cls)}
-        filtered = {k: v for k, v in source.items() if k in known}
+        filtered = {
+            k: v for k, v in source.items() if k in known and k != "dedup_against_destination"
+        }
         filtered["migration_warnings"] = warnings
         filtered["migrated_legacy_rules"] = migrated
         filtered["rules"] = []

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.exceptions import SortingError
+from app.core.exceptions import SortingError, SourceUnavailableError
 from app.services.filesystem_service import (
     validate_source_directory,
     validate_target_directory,
@@ -19,7 +19,7 @@ class TestValidateSourceDirectory:
 
     def test_missing_directory_names_the_unmounted_drive_case(self, tmp_path: Path) -> None:
         missing = tmp_path / "external-drive" / "photos"
-        with pytest.raises(SortingError) as excinfo:
+        with pytest.raises(SourceUnavailableError) as excinfo:
             validate_source_directory(str(missing))
 
         message = str(excinfo.value)
@@ -28,13 +28,13 @@ class TestValidateSourceDirectory:
 
     @pytest.mark.parametrize("unset", ["", "   ", None])
     def test_unset_directory_points_at_settings(self, unset: str | None) -> None:
-        with pytest.raises(SortingError, match="No source folder is set"):
+        with pytest.raises(SourceUnavailableError, match="No source folder is set"):
             validate_source_directory(unset)
 
     def test_file_instead_of_directory_is_rejected(self, tmp_path: Path) -> None:
         target = tmp_path / "holiday.jpg"
         target.write_bytes(b"not a folder")
-        with pytest.raises(SortingError, match="file, not a folder"):
+        with pytest.raises(SourceUnavailableError, match="file, not a folder"):
             validate_source_directory(str(target))
 
 

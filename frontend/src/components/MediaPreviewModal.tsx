@@ -149,6 +149,8 @@ function getStatusKey(status: PreviewItem["status"]): string {
       return "preview.status.junk";
     case "already_in_destination":
       return "preview.status.inDestination";
+    case "duplicate_unknown":
+      return "preview.status.duplicateUnknown";
     default:
       return status;
   }
@@ -159,6 +161,7 @@ function getStatusColor(status: PreviewItem["status"]): string {
     case "sort":
       return "text-success";
     case "suspicious_date":
+    case "duplicate_unknown":
       return "text-warning";
     case "duplicate":
     case "already_in_destination":

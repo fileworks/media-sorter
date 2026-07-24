@@ -75,7 +75,6 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "duplicate_exact_enabled",
             "duplicate_perceptual_enabled",
             "duplicate_perceptual_threshold",
-            "dedup_against_destination",
         ),
     ),
     ConfigSection(

@@ -13,8 +13,8 @@ def _workflow_text() -> str:
 def test_official_actions_use_node_24_compatible_generations() -> None:
     workflows = _workflow_text()
 
-    assert workflows.count("actions/checkout@v7") == 5
-    assert workflows.count("actions/setup-python@v7") == 3
+    assert workflows.count("actions/checkout@v7") == 6
+    assert workflows.count("actions/setup-python@v7") == 4
     assert workflows.count("actions/upload-artifact@v7") == 2
     assert workflows.count("actions/setup-node@v7") == 3
     assert workflows.count("actions/download-artifact@v8") == 1
@@ -43,3 +43,9 @@ def test_manual_release_validation_cannot_publish_without_a_tag() -> None:
 
     assert "workflow_dispatch:" in release
     assert "if: startsWith(github.ref, 'refs/tags/v')" in release
+
+
+def test_frozen_backend_bundles_runtime_resources() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "--collect-all=app.resources" in makefile

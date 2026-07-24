@@ -23,7 +23,7 @@ _FILENAME_PATTERNS = [
 # clock was never set — a genuine photo taken on these exact dates is
 # flagged and the pipeline falls back to filename/filesystem.
 _RESET_SENTINELS: frozenset[tuple[int, int, int]] = frozenset(
-    {(1970, 1, 1), (1980, 1, 1), (2000, 1, 1), (2002, 1, 1)}
+    {(1904, 1, 1), (1970, 1, 1), (1980, 1, 1), (2000, 1, 1), (2002, 1, 1)}
 )
 
 
@@ -121,36 +121,23 @@ class DateExtractionService:
         if is_image(file_path):
             raw_date, raw_source = self._from_exif(file_path)
             if raw_date is not None:
-                if check_suspicious:
-                    dt = datetime(raw_date.year, raw_date.month, raw_date.day)
-                    is_susp, reason = self._is_suspicious_date(dt)
-                    if is_susp:
-                        # Try filename/filesystem as fallback; track the real source.
-                        fallback_date: date | None = None
-                        fallback_source: str = raw_source  # used when no fallback is found
-                        fb, fb_src = self._from_filename(file_path)
-                        if fb is None:
-                            fb, fb_src = self._from_filesystem(file_path)
-                        if fb is not None:
-                            # Reject epoch/sentinel values from the fallback.
-                            if self._is_sentinel(fb):
-                                fallback_date = None
-                                fallback_source = "none"
-                            else:
-                                fallback_date = fb
-                                fallback_source = fb_src
-                        return ExtractionResult(
-                            extracted_date=fallback_date,
-                            source=fallback_source if fallback_date is not None else raw_source,
-                            suspicious=True,
-                            suspicious_reason=reason,
-                            fallback_date=fallback_date,
-                        )
+                suspicious = self._resolve_suspicious_date(
+                    file_path, raw_date, raw_source, check_suspicious
+                )
+                if suspicious is not None:
+                    return suspicious
                 primary_date = raw_date
                 primary_source = raw_source
 
         if primary_date is None and is_video(file_path):
-            primary_date, primary_source = self._from_video(file_path)
+            raw_date, raw_source = self._from_video(file_path)
+            if raw_date is not None:
+                suspicious = self._resolve_suspicious_date(
+                    file_path, raw_date, raw_source, check_suspicious
+                )
+                if suspicious is not None:
+                    return suspicious
+                primary_date, primary_source = raw_date, raw_source
 
         if primary_date is None:
             primary_date, primary_source = self._from_filename(file_path)
@@ -168,10 +155,40 @@ class DateExtractionService:
 
         return ExtractionResult(extracted_date=primary_date, source=primary_source)
 
+    def _resolve_suspicious_date(
+        self,
+        file_path: Path,
+        raw_date: date,
+        raw_source: str,
+        check_suspicious: bool,
+    ) -> ExtractionResult | None:
+        """Apply the same sanity and fallback chain to EXIF and video dates."""
+        # Exact reset sentinels are never valid metadata. Broader plausibility
+        # policy (old/future dates) remains controlled by the user setting.
+        if not check_suspicious and not self._is_sentinel(raw_date):
+            return None
+        dt = datetime(raw_date.year, raw_date.month, raw_date.day, tzinfo=timezone.utc)
+        is_suspicious, reason = self._is_suspicious_date(dt)
+        if not is_suspicious:
+            return None
+
+        fallback_date, fallback_source = self._from_filename(file_path)
+        if fallback_date is None:
+            fallback_date, fallback_source = self._from_filesystem(file_path)
+        if fallback_date is not None and self._is_sentinel(fallback_date):
+            fallback_date, fallback_source = None, "none"
+        return ExtractionResult(
+            extracted_date=fallback_date,
+            source=fallback_source if fallback_date is not None else raw_source,
+            suspicious=True,
+            suspicious_reason=reason,
+            fallback_date=fallback_date,
+        )
+
     @staticmethod
     def _is_sentinel(d: date) -> bool:
-        """True for clock-reset sentinel dates and pre-digital years."""
-        return (d.year, d.month, d.day) in _RESET_SENTINELS or d.year < 1990
+        """True for exact clock-reset sentinel dates."""
+        return (d.year, d.month, d.day) in _RESET_SENTINELS
 
     def _is_suspicious_date(self, dt: datetime) -> "tuple[bool, str]":
         """Return (is_suspicious, reason).

@@ -89,6 +89,14 @@ class UpdateService:
         self._cache: UpdateInfo | None = None
         self._cache_time: datetime | None = None
 
+    def set_enabled(self, enabled: bool) -> None:
+        """Apply a live configuration change without rebuilding the service."""
+        if self._enabled == enabled:
+            return
+        self._enabled = enabled
+        self._cache = None
+        self._cache_time = None
+
     def _cached(self) -> UpdateInfo | None:
         if self._cache is None or self._cache_time is None:
             return None

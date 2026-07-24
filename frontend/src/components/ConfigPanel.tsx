@@ -54,7 +54,6 @@ const CONFIG_FIELD_MESSAGE_KEYS: Partial<Record<keyof Config, string>> = {
   duplicate_exact_enabled: "config.duplicates.exact",
   duplicate_perceptual_enabled: "config.duplicates.perceptual",
   duplicate_perceptual_threshold: "config.duplicates.threshold",
-  dedup_against_destination: "config.duplicates.destination",
   rename: "config.rename.enabled",
   rename_pattern: "config.rename.pattern",
   convert_images: "config.conversion.images",

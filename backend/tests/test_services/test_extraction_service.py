@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -297,6 +298,60 @@ def test_is_suspicious_date_sentinel_1980_01_01(svc: DateExtractionService) -> N
     dt = datetime(1980, 1, 1)
     is_susp, reason = svc._is_suspicious_date(dt)
     assert is_susp is True
+
+
+def test_video_quicktime_epoch_uses_filename_fallback(
+    svc: DateExtractionService, tmp_path: Path
+) -> None:
+    video = tmp_path / "holiday_2024-05-06.mov"
+    video.write_bytes(b"video")
+    with patch(
+        "app.services.extraction_service.run_ffprobe_json",
+        return_value={"format": {"tags": {"creation_time": "1904-01-01T00:00:00Z"}}},
+    ):
+        result = svc.extract_detailed(video)
+    assert result.extracted_date == date(2024, 5, 6)
+    assert result.source == "filename"
+    assert result.suspicious is True
+    assert result.fallback_date == date(2024, 5, 6)
+
+
+def test_video_non_sentinel_old_date_respects_disabled_policy(
+    svc: DateExtractionService, tmp_path: Path
+) -> None:
+    video = tmp_path / "clip.mov"
+    video.write_bytes(b"video")
+    with patch(
+        "app.services.extraction_service.run_ffprobe_json",
+        return_value={"format": {"tags": {"creation_time": "1985-06-15T00:00:00Z"}}},
+    ):
+        result = svc.extract_detailed(video, check_suspicious=False)
+    assert result.extracted_date == date(1985, 6, 15)
+    assert result.source == "video_metadata"
+    assert result.suspicious is False
+
+
+def test_video_sentinel_without_valid_fallback_is_suspicious_unknown(
+    svc: DateExtractionService, tmp_path: Path
+) -> None:
+    video = tmp_path / "clip.mov"
+    video.write_bytes(b"video")
+    with (
+        patch(
+            "app.services.extraction_service.run_ffprobe_json",
+            return_value={"format": {"tags": {"creation_time": "1904-01-01T00:00:00Z"}}},
+        ),
+        patch.object(svc, "_from_filename", return_value=(None, "none")),
+        patch.object(
+            svc,
+            "_from_filesystem",
+            return_value=(date(1970, 1, 1), "filesystem"),
+        ),
+    ):
+        result = svc.extract_detailed(video)
+    assert result.extracted_date is None
+    assert result.suspicious is True
+    assert result.fallback_date is None
 
 
 def test_extract_detailed_epoch_mtime_is_unknown(

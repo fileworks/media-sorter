@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
@@ -714,11 +715,16 @@ def test_from_dict_ignores_unknown_keys() -> None:
             "preserve_subfolders": True,
             "$schema": "mediasort-config-v1",
             "flatten_output": False,
+            "dedup_against_destination": False,
+            "remove_duplicates": True,
             "some_future_field": 123,
         }
     )
     assert cfg.preserve_subfolders is True
     assert not hasattr(cfg, "flatten_output")
+    assert not hasattr(cfg, "dedup_against_destination")
+    assert "dedup_against_destination" not in cfg.to_dict()
+    assert cfg.remove_duplicates is True
     assert not hasattr(cfg, "some_future_field")
 
 
@@ -907,6 +913,48 @@ async def test_run_keeps_higher_resolution_duplicate_regardless_of_order(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_sort_restores_source_totals_after_destination_index(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for number in range(2):
+        (source / f"{number}.jpg").write_bytes(f"source-{number}".encode())
+    (target / "existing.jpg").write_bytes(b"destination")
+
+    svc = _make_service(
+        tmp_path,
+        remove_duplicates=True,
+        duplicate_exact_enabled=True,
+        duplicate_perceptual_enabled=True,
+    )
+    task = Task(id="sort-phases", operation_kind="sort")
+    with patch.object(
+        svc._extraction,
+        "extract_detailed",
+        return_value=ExtractionResult(extracted_date=date(2024, 1, 1), source="exif"),
+    ):
+        stats = await svc.run(task, dry_run=True)
+
+    phase_totals = {
+        event.phase: event.fields["total"]
+        for event in task.events
+        if event.name == "operation.phase"
+    }
+    destination_total = next(
+        event.fields["total"]
+        for event in task.events
+        if event.name == "operation.destination_total"
+    )
+    assert destination_total == 1
+    assert phase_totals["ranking"] == 2
+    assert phase_totals["sorting"] == 2
+    assert task.progress.phase == "sorting"
+    assert task.progress.total == 2
+    assert stats["total"] == 2
+
+
+@pytest.mark.asyncio
 async def test_run_counts_failed_status(tmp_path: Path) -> None:
     """run() must increment failed when _process_file raises an unhandled error."""
     source = tmp_path / "source"
@@ -980,8 +1028,8 @@ async def test_run_cancel_stops_processing(tmp_path: Path) -> None:
     task.cancel_event.set()  # cancel immediately
     stats = await svc.run(task, dry_run=True)
 
-    # Should report total but sorted must be 0 (nothing was processed)
-    assert stats["total"] == 5
+    # Cancellation is observed by the shared traversal before enumeration.
+    assert stats["total"] == 0
     assert stats["sorted"] == 0
 
 

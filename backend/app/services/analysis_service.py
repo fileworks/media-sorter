@@ -1,16 +1,25 @@
 """Analysis service — fast directory statistics without full date extraction."""
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.filesystem_service import FileSystemService, categorize_media_type
 from app.utils.media_utils import is_media, is_size_included
-from app.utils.path_utils import is_excluded_by_pattern
+from app.utils.path_utils import (
+    is_excluded_by_pattern,
+    validate_source_root,
+    validate_source_target_overlap,
+)
+
+if TYPE_CHECKING:
+    from app.background_tasks.task_manager import Task
 
 logger = get_logger(__name__)
 
@@ -21,12 +30,14 @@ class AnalysisService:
     def __init__(self, filesystem_service: FileSystemService) -> None:
         self._fs = filesystem_service
 
-    async def analyse(self, config: Config) -> dict[str, Any]:
+    async def analyse(self, config: Config, task: Task | None = None) -> dict[str, Any]:
         """Run analysis in a thread pool to avoid blocking the event loop."""
-        return await asyncio.to_thread(self._analyse_sync, config)
+        return await asyncio.to_thread(self._analyse_sync, config, task)
 
-    def _analyse_sync(self, config: Config) -> dict[str, Any]:
-        source = Path(config.source_directory) if config.source_directory else None
+    def _analyse_sync(self, config: Config, task: Task | None = None) -> dict[str, Any]:
+        if task is not None:
+            task.transition("validating")
+        source = validate_source_root(config.source_directory)
         dest = Path(config.target_directory) if config.target_directory else None
         exclude_patterns = config.exclude_patterns or []
         min_file_size_kb = config.min_file_size_kb
@@ -34,36 +45,57 @@ class AnalysisService:
         recursive = config.recursive_scan
         max_depth = config.max_recursion_depth
 
-        if source is None or not source.exists():
-            return self._empty_result()
+        if dest is not None:
+            validate_source_target_overlap(source, dest)
 
         logger.info("Analysis started", source=str(source))
+        if task is not None:
+            task.transition("scanning_source")
+        traversal = self._fs._traverse_sync(
+            source,
+            recursive,
+            max_depth,
+            exclude_patterns,
+            min_file_size_kb,
+            max_file_size_mb,
+            task.cancel_token if task is not None else None,
+        )
+        if task is not None:
+            task.mark_partial([issue.to_dict() for issue in traversal.issues])
+            for issue in traversal.issues:
+                logger.warning(
+                    "operation.partial",
+                    task_id=task.id,
+                    operation_kind=task.operation_kind,
+                    phase=task.progress.phase,
+                    path=issue.path,
+                    error_class=issue.error_class,
+                    error=issue.message,
+                )
+            if task.cancel_token.is_set():
+                return {
+                    **self._empty_result(),
+                    "partial": traversal.partial,
+                    "issues": [issue.to_dict() for issue in traversal.issues],
+                }
+            task.transition("analyzing", total=len(traversal.files))
+
         now = datetime.now(timezone.utc)
         too_early_ts = datetime(1999, 12, 31).timestamp()
         too_late_ts = datetime(now.year + 1, 12, 31).timestamp()
 
         total_files = 0
-        excluded_files = 0
+        excluded_files = traversal.excluded_files
         total_size_bytes = 0
         by_type: dict[str, int] = {}
         earliest: str | None = None
         latest: str | None = None
         no_date_estimate = 0
 
-        # Walk the directory manually for speed (avoid full list_files overhead),
-        # but with the same traversal rules a sort uses (recursion / depth / dot-
-        # dir skipping, excluded directories pruned without entering) so the
-        # report reflects exactly what would be sorted.
-        for file_path in self._iter_candidate_files(source, recursive, max_depth, exclude_patterns):
-            if not file_path.is_file():
-                continue
+        for index, file_path in enumerate(traversal.files):
+            if task is not None and task.cancel_token.is_set():
+                break
             suffix = file_path.suffix.lower()
-            if not is_media(file_path):
-                continue
-
-            if is_excluded_by_pattern(file_path, source, exclude_patterns):
-                excluded_files += 1
-                continue
 
             # One stat per file covers both the size filter and the mtime-based
             # date estimate — this loop is the hot path on large libraries.
@@ -74,10 +106,6 @@ class AnalysisService:
             except OSError:
                 size = 0
                 mtime = None
-
-            if not is_size_included(size, min_file_size_kb, max_file_size_mb):
-                excluded_files += 1
-                continue
 
             total_files += 1
             total_size_bytes += size
@@ -98,6 +126,8 @@ class AnalysisService:
                         latest = mtime_dt_str
             except (OSError, ValueError):
                 no_date_estimate += 1
+            if task is not None:
+                task.update_progress(index + 1)
 
         # Disk space
         mode = "copy" if config.copy_instead_of_move else "move"
@@ -116,6 +146,10 @@ class AnalysisService:
         warnings = []
         if no_date_estimate > 0:
             warnings.append(f"{no_date_estimate} file(s) may have suspicious or missing dates")
+        if traversal.partial:
+            warnings.append(
+                f"Scan completed with {len(traversal.issues)} inaccessible path(s) skipped"
+            )
 
         logger.info(
             "Analysis complete",
@@ -142,6 +176,8 @@ class AnalysisService:
             "excluded_files": excluded_files,
             "estimated_duration_seconds": round(total_files * 0.1),
             "warnings": warnings,
+            "partial": traversal.partial,
+            "issues": [issue.to_dict() for issue in traversal.issues],
         }
 
     async def disk_space_check(self, config: Config) -> dict[str, Any]:
@@ -301,4 +337,6 @@ class AnalysisService:
             "excluded_files": 0,
             "estimated_duration_seconds": 0,
             "warnings": [],
+            "partial": False,
+            "issues": [],
         }
