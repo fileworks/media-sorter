@@ -1,5 +1,5 @@
 # Assets
 
-Drop the app screenshot here as `screenshot.png` — it's referenced from the
-top-level `README.md`. A wide shot of the wizard (e.g. the Preview or Report
-step) works best.
+`screenshot.png` is the current product capture referenced by the top-level
+README. Refresh it from a working app state whenever the primary workflow
+changes materially; do not replace it with a mock or logo.

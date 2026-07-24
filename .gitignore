@@ -69,6 +69,7 @@ backend/build/
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
 .claude/
+CLAUDE.local.md
 
 # ── Graphify knowledge graph ──────────────────────────────────────────────────
 graphify-out/
