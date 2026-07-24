@@ -11,8 +11,10 @@ import { useHardware } from "@/hooks/useHardware";
 import { useAiSuggestions } from "@/hooks/useAiSuggestions";
 import { isLocalAiOff, machineTooWeak } from "@/lib/aiTier";
 import type { SectionProps } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function FoldersSection({ config, updateConfig }: SectionProps) {
+  const { t } = useI18n();
   const { hardware } = useHardware();
   const {
     suggestions,
@@ -27,17 +29,20 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
   const tooWeak = machineTooWeak(hardware);
   const categorizeBlocked = config.preserve_subfolders || localOff;
   const categorizeReason = config.preserve_subfolders
-    ? "Turn off Preserve subfolders first"
+    ? t("config.folder.disablePreserve")
     : localOff
       ? tooWeak
-        ? "This machine is below the minimum for local AI (needs ≥4 CPU cores and ≥4 GB RAM)"
-        : "Turn the local AI model on under AI content tagging first"
+        ? t("config.folder.machineWeak")
+        : t("config.folder.enableLocal")
       : undefined;
 
   const acceptSuggestion = (label: string) => {
     const existing = config.categorize_categories ?? [];
     if (!existing.some((c) => c.toLowerCase() === label.toLowerCase())) {
-      updateConfig({ categorize_categories: [...existing, label] });
+      updateConfig({
+        categorize_categories: [...existing, label],
+        categorize_categories_provenance: "custom",
+      });
     }
     dismiss(label);
   };
@@ -45,7 +50,7 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
   return (
     <>
       <FormRow
-        label="Group by camera model"
+        label={t("config.folder.camera")}
         htmlFor="camera-subfolder"
         help={HELP.cameraSubfolder}
         inline
@@ -58,7 +63,7 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
       </FormRow>
 
       <FormRow
-        label="Smart Categorization"
+        label={t("config.folder.categorize")}
         htmlFor="categorize-enabled"
         help={HELP.categorize}
         inline
@@ -76,8 +81,30 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
       {config.categorize_enabled && !categorizeBlocked && (
         <div className="ml-2 space-y-3 border-l-2 border-border pl-3">
           {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
-          <FormRow label="Categories" help={HELP.categorizeCategories} helpSide="right">
+          <FormRow
+            label={t("config.folder.categories")}
+            help={HELP.categorizeCategories}
+            helpSide="right"
+          >
             <>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  {t(
+                    config.categorize_categories_provenance === "bundled"
+                      ? "config.vocabulary.bundled"
+                      : "config.vocabulary.custom",
+                  )}
+                </span>
+                {config.categorize_categories_provenance === "custom" && (
+                  <button
+                    type="button"
+                    className="text-primary underline underline-offset-2"
+                    onClick={() => updateConfig({ categorize_categories_provenance: "bundled" })}
+                  >
+                    {t("config.vocabulary.restore")}
+                  </button>
+                )}
+              </div>
               {!localOff && (
                 <div className="mb-1.5 flex items-center justify-end">
                   <button
@@ -88,20 +115,27 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
                     }}
                     disabled={suggestLoading}
                     className="text-xs text-primary underline underline-offset-2 transition-colors hover:text-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Suggest category names by analysing a sample of your photos"
+                    title={t("config.folder.suggestTitle")}
                   >
-                    {suggestLoading ? "Analysing…" : "✦ Suggest from photos"}
+                    {suggestLoading ? t("config.folder.suggesting") : t("config.folder.suggest")}
                   </button>
                 </div>
               )}
               <CategoryTagsInput
                 categories={config.categorize_categories ?? []}
-                onChange={(next) => updateConfig({ categorize_categories: next })}
+                onChange={(next) =>
+                  updateConfig({
+                    categorize_categories: next,
+                    categorize_categories_provenance: "custom",
+                  })
+                }
               />
               {suggestError && <p className="mt-1 text-xs text-error">{suggestError}</p>}
               {suggestions.length > 0 && (
                 <div className="mt-2 space-y-1.5">
-                  <p className="text-[11px] text-muted-foreground">Tap to add, × to dismiss:</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("config.folder.suggestions")}
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {suggestions.map((s) => (
                       <span
@@ -119,7 +153,7 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
                           type="button"
                           onClick={() => dismiss(s)}
                           className="text-muted-foreground hover:text-foreground transition-colors leading-none"
-                          aria-label={`Dismiss ${s}`}
+                          aria-label={t("config.folder.dismiss", { label: s })}
                         >
                           ×
                         </button>
@@ -132,14 +166,11 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
           </FormRow>
 
           {(config.categorize_categories ?? []).length === 0 && (
-            <ValidationBadge
-              severity="warning"
-              message="No categories yet — every file will go to _uncategorized/ until you add some."
-            />
+            <ValidationBadge severity="warning" message={t("config.folder.noCategories")} />
           )}
 
           <FormRow
-            label="Only sort when confident"
+            label={t("config.folder.confident")}
             help={HELP.categorizeConfidence}
             helpSide="right"
           >
@@ -150,10 +181,12 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
           </FormRow>
 
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer hover:text-foreground">Advanced</summary>
+            <summary className="cursor-pointer hover:text-foreground">
+              {t("config.folder.advanced")}
+            </summary>
             <div className="mt-2">
               <FormRow
-                label="Minimum margin"
+                label={t("config.folder.margin")}
                 htmlFor="categorize-margin"
                 help={HELP.categorizeMargin}
                 helpSide="right"
@@ -177,14 +210,12 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
       )}
 
       <FormRow
-        label="Preserve source subfolders"
+        label={t("config.folder.preserve")}
         htmlFor="preserve-subfolders"
         help={HELP.preserveSubfolders}
         inline
         disabled={config.categorize_enabled}
-        disabledReason={
-          config.categorize_enabled ? "Off while Smart Categorization is on" : undefined
-        }
+        disabledReason={config.categorize_enabled ? t("config.folder.categorizeActive") : undefined}
       >
         <Toggle
           id="preserve-subfolders"

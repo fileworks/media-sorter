@@ -1,3 +1,5 @@
+import { useI18n } from "@/i18n/I18nContext";
+
 export function ExcludePatternTags({
   patterns,
   onAdd,
@@ -7,6 +9,7 @@ export function ExcludePatternTags({
   onAdd: (p: string) => void;
   onRemove: (p: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-wrap gap-1.5">
       {patterns.map((pattern) => (
@@ -19,7 +22,7 @@ export function ExcludePatternTags({
             type="button"
             onClick={() => onRemove(pattern)}
             className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground"
-            aria-label={`Remove ${pattern}`}
+            aria-label={t("common.removeValue", { value: pattern })}
           >
             ×
           </button>
@@ -27,7 +30,7 @@ export function ExcludePatternTags({
       ))}
       <input
         type="text"
-        placeholder="Add pattern…"
+        placeholder={t("config.input.addPattern")}
         className="h-6 rounded-full border border-input bg-transparent px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === ",") {

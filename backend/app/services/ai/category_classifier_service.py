@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
-from app.services.ai.prompts import ANCHOR_PROMPTS, category_prompts, pool_normalized
+from app.services.ai.prompts import anchor_prompts, pool_normalized, prompt_group
 from app.services.filesystem_service import open_image
 from app.utils.ffmpeg_utils import extract_frame, probe_duration, sample_fractions
 from app.utils.media_utils import is_image, is_video
@@ -88,6 +88,10 @@ class CategoryClassifierService:
         self._config = config
         self._embedder = embedder
 
+    def for_operation(self, config: Config) -> CategoryClassifierService:
+        """Reuse the loaded encoder while freezing config and locale for one operation."""
+        return CategoryClassifierService(config, self._embedder)
+
     def categories(self) -> list[str]:
         """Return the de-duplicated, path-sanitized category folder names.
 
@@ -99,7 +103,7 @@ class CategoryClassifierService:
 
         out: list[str] = []
         seen: set[str] = set()
-        for raw in self._config.categorize_categories:
+        for raw in self._config.resolved_categories():
             safe = sanitize_path_segment(raw)
             if not safe:
                 continue
@@ -161,22 +165,37 @@ class CategoryClassifierService:
 
         cat_prompts: list[str] = []
         cat_sizes: list[int] = []
+        model_id = (
+            str(getattr(self._embedder, "model_id", "unknown"))
+            if self._embedder is not None
+            else "unknown"
+        )
         for c in cats:
-            prompts = category_prompts(c)
+            prompts = prompt_group(
+                c,
+                operation_locale=self._config.language,
+                model_id=model_id,
+                bundled=self._config.categorize_categories_provenance == "bundled",
+            )
             cat_prompts.extend(prompts)
             cat_sizes.append(len(prompts))
 
-        anchor_prompts = list(ANCHOR_PROMPTS)
+        anchors = list(
+            anchor_prompts(
+                self._config.language,
+                model_id,
+            )
+        )
         embedder = self._embedder
         if embedder is None:
             return None
-        raw = embedder.embed_texts(cat_prompts + anchor_prompts)
+        raw = embedder.embed_texts(cat_prompts + anchors)
         if raw is None:
             return None
         raw_arr = np.asarray(raw, dtype=np.float32)
         split = len(cat_prompts)
         cat_vecs = pool_normalized(raw_arr[:split], cat_sizes)
-        anchor_vecs = pool_normalized(raw_arr[split:], [1] * len(anchor_prompts))
+        anchor_vecs = pool_normalized(raw_arr[split:], [1] * len(anchors))
         return cat_vecs, anchor_vecs
 
     # ------------------------------------------------------------------ #

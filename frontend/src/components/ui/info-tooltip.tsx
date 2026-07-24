@@ -12,6 +12,7 @@ import * as React from "react";
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/I18nContext";
 
 interface InfoTooltipProps {
   content: React.ReactNode; // can include <code>, <strong>, examples
@@ -24,6 +25,7 @@ const GAP = 8; // mb-2 / mt-2 equivalent
 const MARGIN = 8; // viewport edge clamp
 
 export function InfoTooltip({ content, side = "top", className }: InfoTooltipProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -107,7 +109,7 @@ export function InfoTooltip({ content, side = "top", className }: InfoTooltipPro
           "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           open && "bg-accent text-accent-foreground",
         )}
-        aria-label="Help"
+        aria-label={t("accessibility.help")}
         aria-expanded={open}
       >
         ?
@@ -132,7 +134,7 @@ export function InfoTooltip({ content, side = "top", className }: InfoTooltipPro
               "animate-fade-in",
             )}
           >
-            {content}
+            {typeof content === "string" && content.startsWith("help.") ? t(content) : content}
           </div>,
           document.body,
         )}

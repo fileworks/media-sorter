@@ -1,3 +1,5 @@
+import { useI18n } from "@/i18n/I18nContext";
+
 export function AiTagsInput({
   labels,
   onCommit,
@@ -7,6 +9,7 @@ export function AiTagsInput({
   onCommit: (next: string[]) => void;
   disabled?: boolean;
 }) {
+  const { t, locale } = useI18n();
   const add = (raw: string) => {
     const tag = raw.trim().toLowerCase();
     if (!tag) return;
@@ -29,7 +32,7 @@ export function AiTagsInput({
               disabled={disabled}
               onClick={() => remove(tag)}
               className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-              aria-label={`Remove ${tag}`}
+              aria-label={t("common.removeValue", { value: tag })}
             >
               ×
             </button>
@@ -38,7 +41,7 @@ export function AiTagsInput({
         <input
           type="text"
           disabled={disabled}
-          placeholder="Add label…"
+          placeholder={t("config.input.addLabel")}
           className="h-6 rounded-full border border-input bg-transparent px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
@@ -51,7 +54,7 @@ export function AiTagsInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {labels.length === 1 ? "1 label" : `${labels.length} labels`}
+        {t("config.input.labelCount", { count: labels.length.toLocaleString(locale) })}
       </p>
     </div>
   );

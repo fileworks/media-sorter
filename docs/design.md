@@ -81,7 +81,7 @@ The backend is around twelve services, each with one job:
 - **`DateExtractionService`** — reads dates in priority order: EXIF → video metadata → filename → filesystem mtime
 - **`FileSystemService`** — copy/move with post-op integrity checks
 - **`DuplicateService`** — SHA-256 exact + perceptual hash (images *and* video)
-- **`RuleEngineService`** — tag files by extension, filename, size, or resolution
+- **`RuleEngineService`** — evaluate typed tag and safe-route rules against source files
 - **`PreviewService`** — dry-run mirror of the sort that writes nothing
 - **`SortingService`** — the orchestrator that ties everything together
 - **`ReportService`** — reads/exports the per-run SQLite log
@@ -89,6 +89,48 @@ The backend is around twelve services, each with one job:
 
 Heavy file I/O is always offloaded with `asyncio.to_thread` so one slow file never
 blocks the event loop or the progress poller.
+
+---
+
+## Locale ownership
+
+`Config.language` is the persisted `en | de` application locale. The React i18n provider owns
+interface strings, accessible names, errors, and locale-aware number/date formatting. The backend
+owns stable message keys and parameters plus application-generated vocabulary. English technical
+identifiers, rename tokens, numeric date paths, user-entered labels, and technical quarantine
+folder names are never translated.
+
+Every analysis, preview, and sort captures the locale from its starting config. Changing the
+setting updates the interface immediately and affects the next operation, but cannot mix languages
+inside an operation already running. Bundled concepts have canonical IDs, aliases, and
+locale-specific labels/prompts. Their provenance distinguishes untouched defaults from custom
+lists, so switching language localizes defaults while preserving custom text verbatim.
+
+---
+
+## Typed rules and shared destination planning
+
+Rules are stored as a strict `RuleSet` v1 discriminated union: tag and route rules share typed
+extension, filename, size, and resolution conditions. All enabled tag matches run; the first
+enabled route match wins after priority and stable saved order. Conditions always inspect the
+source file before conversion or rename.
+
+The winning route is a validated relative suffix appended after the normal
+date/category-or-source/camera base. It is rejected if it is absolute, contains traversal, empty
+segments, platform separators, control characters, or reserved names. Technical quarantine and
+duplicate destinations bypass routes entirely. For example, a filename rule matching
+`screenshot` in July 2026 produces `2026/07/screenshot/<file>`.
+
+Preview and sort use the same pure destination plan and collision reservation (`_001`, `_002`, …).
+Preview remains non-mutating and AI-free, so destination files created after preview are the one
+intentional parity exception: sort reserves the next safe name and reports its actual destination.
+Deterministic and AI tags are merged once with normalized case-insensitive de-duplication and
+metadata is written once behind `embed_tags_in_files`.
+
+Old unversioned tag rules are migrated locally with stable IDs/text/order and sequential
+priorities. The original config is first copied to `config.pre-rules-v1*.json`; malformed entries
+are skipped with keyed warnings, route rules are never invented, and unsupported future versions
+are left untouched. Restoring that backup is the rollback path for older releases.
 
 ---
 
@@ -103,12 +145,15 @@ with a `build_tagger(config)` factory. Taggers are deliberately **synchronous** 
 `_process_file` already runs in a worker thread, so blocking ONNX/HTTP calls need no
 event-loop gymnastics.
 
-The default provider is **local CLIP via `fastembed`** — ONNX Runtime, no PyTorch,
-no API key, no network after the first download. Each label gets an *independent*
+The local providers use canonical concept identity while keeping emitted labels separate from
+model prompts. SigLIP uses English or German templates and descriptions. CLIP may retain English
+semantic prompts for bundled concepts when that improves model behavior, while emitting German
+labels. Custom labels remain verbatim. Each label gets an *independent*
 probability using `sigmoid(slope · (cos(label) − cos(background)))` rather than a
 competing softmax, so legitimately co-occurring tags don't cannibalise each other's
-probability budget. Three free-tier cloud providers (Azure AI Vision, Imagga, Google
-Cloud Vision) are available for an alternative taxonomy via API key.
+probability budget. Azure and Imagga request the operation locale natively. Google
+results are mapped through known canonical aliases; unknown results are dropped with
+a warning when German output cannot be guaranteed.
 
 Everything is best-effort: a missing model, bad key, or network error logs a warning
 and yields no tags rather than failing the sort. Tagging runs on the **sort** path
@@ -167,11 +212,12 @@ folder under the destination so the user can always recover it:
 | `_unknown_dates/` | no date could be extracted |
 | `_future_dates/` | extracted date is in the future |
 | `_duplicates/` | content duplicate of a file seen earlier in this run |
+| `_already_in_destination/` | content already exists in the destination index |
+| `_junk/` | thumbnail or cache debris |
 | `_failed/` | the file operation itself raised an error |
 | `_corrupted/` | failed post-copy integrity check and couldn't be repaired |
 
-Duplicate detection is per-run only — it compares files within one sort, not
-against what's already in the destination. Cross-run dedup isn't built yet.
+These technical names are stable across application locales and rule routes never apply to them.
 
 ---
 

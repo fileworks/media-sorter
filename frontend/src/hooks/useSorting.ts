@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { extractErrorMessage } from "@/lib/errorUtils";
+import { useI18n } from "@/i18n/I18nContext";
 import type { OperationReport } from "@/types/api";
 
 // Outer attempts at loading the report after a sort completes. Each attempt is
@@ -31,7 +32,7 @@ async function fetchReportWithRetry(opId: string): Promise<OperationReport> {
 }
 
 /** Request permission (if needed) and fire a system notification when the sort completes. */
-async function notifyComplete(sorted: number, failed: number): Promise<void> {
+async function notifyComplete(title: string, body: string): Promise<void> {
   try {
     const { isPermissionGranted, requestPermission, sendNotification } =
       await import("@tauri-apps/api/notification");
@@ -43,10 +44,8 @@ async function notifyComplete(sorted: number, failed: number): Promise<void> {
     }
     if (granted) {
       sendNotification({
-        title: "MediaSorter — Sort Complete",
-        body: `${sorted.toLocaleString()} files sorted${
-          failed > 0 ? `, ${failed.toLocaleString()} failed` : ""
-        }`,
+        title,
+        body,
         icon: "icons/icon.png",
       });
     }
@@ -58,6 +57,7 @@ async function notifyComplete(sorted: number, failed: number): Promise<void> {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useSorting() {
+  const { t, formatNumber } = useI18n();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -115,15 +115,24 @@ export function useSorting() {
         const milestones = [
           {
             pct: 25,
-            msg: `25% sorted — ${current.toLocaleString()} of ${total.toLocaleString()} files`,
+            msg: t("sort.milestone.25", {
+              current: formatNumber(current),
+              total: formatNumber(total),
+            }),
           },
           {
             pct: 50,
-            msg: `Halfway! ${current.toLocaleString()} of ${total.toLocaleString()} files sorted`,
+            msg: t("sort.milestone.50", {
+              current: formatNumber(current),
+              total: formatNumber(total),
+            }),
           },
           {
             pct: 75,
-            msg: `Almost done — ${current.toLocaleString()} of ${total.toLocaleString()} files sorted`,
+            msg: t("sort.milestone.75", {
+              current: formatNumber(current),
+              total: formatNumber(total),
+            }),
           },
         ];
         for (const m of milestones) {
@@ -145,7 +154,13 @@ export function useSorting() {
         notifiedRef.current = true;
         const sorted = typeof result?.sorted === "number" ? result.sorted : 0;
         const failed = typeof result?.failed === "number" ? result.failed : 0;
-        void notifyComplete(sorted, failed);
+        void notifyComplete(
+          t("sort.notificationTitle"),
+          t(failed > 0 ? "sort.notificationBodyFailed" : "sort.notificationBody", {
+            sorted: formatNumber(sorted),
+            failed: formatNumber(failed),
+          }),
+        );
       }
 
       const opId = typeof result?.operation_id === "string" ? result.operation_id : null;
@@ -153,7 +168,7 @@ export function useSorting() {
         // No operation record to fetch — surface once and stop polling.
         if (!reportSettled) {
           setReportSettled(true);
-          toast("Sort completed, but no report record was found.", "warning");
+          toast(t("sort.reportMissing"), "warning");
         }
         return;
       }
@@ -171,12 +186,12 @@ export function useSorting() {
           .then((data) => {
             setReport(data);
             setReportSettled(true);
-            toast("Sorting complete! Report is ready.", "success");
+            toast(t("sort.reportReady"), "success");
           })
           .catch(() => {
             if (attempt >= MAX_REPORT_ATTEMPTS) {
               setReportSettled(true);
-              toast("Sort completed but report could not be loaded.", "warning");
+              toast(t("sort.reportLoadFailed"), "warning");
             }
           })
           .finally(() => {
@@ -186,9 +201,9 @@ export function useSorting() {
     }
 
     if (s === "failed") {
-      toast(progress.error ?? "Sort failed. Check logs for details.", "error");
+      toast(progress.error ?? t("sort.failedDetails"), "error");
     }
-  }, [progress, toast, report, reportSettled]);
+  }, [progress, toast, report, reportSettled, t, formatNumber]);
 
   const startSorting = useCallback(
     async (dryRun = false) => {
@@ -210,13 +225,13 @@ export function useSorting() {
         setTaskId(id);
         setUiStatus("running");
       } catch (err) {
-        const msg = extractErrorMessage(err, "Failed to start sort");
+        const msg = extractErrorMessage(err, t("sort.startFailed"));
         setUiStatus("failed");
         setError(msg);
         toast(msg, "error");
       }
     },
-    [toast, queryClient],
+    [toast, queryClient, t],
   );
 
   const cancelSorting = useCallback(async () => {
@@ -234,13 +249,13 @@ export function useSorting() {
     try {
       await api.cancelSort(taskId);
       setUiStatus("cancelled");
-      toast("Sort cancelled.", "info");
+      toast(t("sort.cancelledToast"), "info");
     } catch (err) {
-      const msg = extractErrorMessage(err, "Failed to cancel");
+      const msg = extractErrorMessage(err, t("sort.cancelFailed"));
       setError(msg);
       toast(msg, "error");
     }
-  }, [taskId, toast, progress]);
+  }, [taskId, toast, progress, t]);
 
   // Invalidate report-history cache whenever a sort completes so HistoryPanel
   // automatically shows the new operation without a manual refresh.

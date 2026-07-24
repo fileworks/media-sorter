@@ -14,6 +14,7 @@ import { formatBytes, formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { useCountUp } from "@/hooks/useCountUp";
 import type { AnalysisResult } from "@/hooks/useAnalysis";
+import { useI18n } from "@/i18n/I18nContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,16 +40,16 @@ const COPY_OVERHEAD = 1.05;
 const SIZE_OPTS = { decimals: 1, maxUnit: "TB", nullPlaceholder: "0 B" } as const;
 
 /** Format a byte count for the analysis readout (always 1 decimal, "0 B" zero). */
-function formatSize(bytes: number): string {
-  return formatBytes(bytes, SIZE_OPTS);
+function formatSize(bytes: number, locale: string): string {
+  return formatBytes(bytes, { ...SIZE_OPTS, locale });
 }
 
 /**
  * Month + year label for the date-range row. Returns "" (falsy) for a missing
  * or invalid date so the surrounding range-label logic can fall back cleanly.
  */
-function formatMonthYear(dateStr: string | null): string {
-  return formatDate(dateStr, { type: "month-year", nullPlaceholder: "" });
+function formatMonthYear(dateStr: string | null, locale: string): string {
+  return formatDate(dateStr, { type: "month-year", nullPlaceholder: "", locale });
 }
 
 /** Group raw extension→count map into user-friendly type buckets. */
@@ -90,10 +91,11 @@ function Skeleton({ className }: { className?: string }) {
 }
 
 function AnalysisLoadingSkeleton() {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Scan Results</CardTitle>
+        <CardTitle>{t("analysis.results")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex items-center gap-3">
@@ -116,11 +118,13 @@ function AnalysisLoadingSkeleton() {
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, locale }: { label: string; value: number; locale: string }) {
   const display = useCountUp(value);
   return (
     <div className="rounded-lg bg-muted/50 px-3 py-3 text-center">
-      <p className="text-xl font-bold tabular-nums text-foreground">{display.toLocaleString()}</p>
+      <p className="text-xl font-bold tabular-nums text-foreground">
+        {display.toLocaleString(locale)}
+      </p>
       <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   );
@@ -135,6 +139,8 @@ export function AnalysisPanel({
   onRetry,
   onBackToConfig,
 }: AnalysisPanelProps) {
+  const { t, locale } = useI18n();
+
   // Loading skeleton
   if (loading) return <AnalysisLoadingSkeleton />;
 
@@ -143,13 +149,13 @@ export function AnalysisPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Scan Results</CardTitle>
+          <CardTitle>{t("analysis.results")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ValidationBadge severity="error" message={error} />
           {onRetry && (
             <Button variant="outline" size="sm" onClick={onRetry}>
-              Retry
+              {t("analysis.retry")}
             </Button>
           )}
         </CardContent>
@@ -162,15 +168,12 @@ export function AnalysisPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Scan Results</CardTitle>
+          <CardTitle>{t("analysis.results")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 py-2 text-sm text-muted-foreground">
             <FiSearch className="h-5 w-5 shrink-0 text-muted-foreground/60" />
-            <span>
-              Click <strong className="text-foreground">Analyze →</strong> below to scan your source
-              folder for photos and videos.
-            </span>
+            <span>{t("analysis.emptyPrompt")}</span>
           </div>
         </CardContent>
       </Card>
@@ -192,16 +195,16 @@ export function AnalysisPanel({
 
   const groupedTypes = groupByType(by_type);
 
-  const earliestFmt = formatMonthYear(date_range.earliest);
-  const latestFmt = formatMonthYear(date_range.latest);
+  const earliestFmt = formatMonthYear(date_range.earliest, locale);
+  const latestFmt = formatMonthYear(date_range.latest, locale);
   const dateRangeLabel =
     earliestFmt && latestFmt
       ? `${earliestFmt} → ${latestFmt}`
       : earliestFmt
-        ? `From ${earliestFmt}`
+        ? t("analysis.dateFrom", { date: earliestFmt })
         : latestFmt
-          ? `Until ${latestFmt}`
-          : "Unknown date range";
+          ? t("analysis.dateUntil", { date: latestFmt })
+          : t("analysis.dateUnknown");
 
   // Copy consumes `source * overhead` at the destination; move relocates files
   // and consumes no net destination space, so it needs none. "Remaining" is the
@@ -219,27 +222,26 @@ export function AnalysisPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Scan Results</CardTitle>
+        <CardTitle>{t("analysis.results")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Headline */}
         <p className="text-base font-medium text-foreground">
-          {total_files.toLocaleString()} files found
+          {t(total_files === 1 ? "analysis.filesFound.one" : "analysis.filesFound", {
+            count: total_files.toLocaleString(locale),
+          })}
           <span className="ml-2 text-sm font-normal text-muted-foreground">
-            · {formatSize(total_size_bytes)} total
+            {t("analysis.totalSize", { size: formatSize(total_size_bytes, locale) })}
           </span>
         </p>
 
         {/* No-media empty state — shown right after a scan that finds nothing. */}
         {total_files === 0 && (
           <div className="space-y-3">
-            <ValidationBadge
-              severity="warning"
-              message="No photos or videos were found in the source folder. Check the path or your Scan & filters settings."
-            />
+            <ValidationBadge severity="warning" message={t("analysis.noMedia")} />
             {onBackToConfig && (
               <Button variant="outline" size="sm" onClick={onBackToConfig}>
-                ← Back to Config
+                {t("analysis.backToConfig")}
               </Button>
             )}
           </div>
@@ -249,7 +251,12 @@ export function AnalysisPanel({
         {groupedTypes.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {groupedTypes.map(([type, count]) => (
-              <StatCard key={type} label={type} value={count} />
+              <StatCard
+                key={type}
+                label={type === "Other" ? t("analysis.otherType") : type}
+                value={count}
+                locale={locale}
+              />
             ))}
           </div>
         )}
@@ -257,21 +264,26 @@ export function AnalysisPanel({
         {/* Date range */}
         <div className="space-y-1 text-sm text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Date range:</span> {dateRangeLabel}
+            <span className="font-medium text-foreground">{t("analysis.dateRange")}</span>{" "}
+            {dateRangeLabel}
           </p>
           {date_range.no_date_estimate > 0 && (
-            <p>~{date_range.no_date_estimate.toLocaleString()} files have no extractable date</p>
+            <p>
+              {t("analysis.noDate", {
+                count: date_range.no_date_estimate.toLocaleString(locale),
+              })}
+            </p>
           )}
         </div>
 
         {/* Disk space */}
         <div className="space-y-2">
           <p className="text-sm">
-            <span className="font-medium text-foreground">Disk space:</span>{" "}
+            <span className="font-medium text-foreground">{t("analysis.diskSpace")}</span>{" "}
             <span className="text-muted-foreground">
               {freeKnown
-                ? `${formatSize(freeBytes)} free at destination`
-                : "Free space at destination unknown (check permissions)"}
+                ? t("analysis.freeAtDestination", { size: formatSize(freeBytes, locale) })
+                : t("analysis.freeUnknown")}
             </span>
           </p>
           {freeKnown && (
@@ -290,51 +302,51 @@ export function AnalysisPanel({
               </div>
               {isCopy ? (
                 <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                  <span>Copy needs {formatSize(requiredBytes)}</span>
+                  <span>
+                    {t("analysis.copyNeeds", { size: formatSize(requiredBytes, locale) })}
+                  </span>
                   <span>·</span>
                   {disk_space.sufficient ? (
                     <span className="text-success">
-                      {formatSize(remainingBytes)} would remain free ✓
+                      {t("analysis.wouldRemain", {
+                        size: formatSize(remainingBytes, locale),
+                      })}
                     </span>
                   ) : (
-                    <span className="text-error">not enough space ✕</span>
+                    <span className="text-error">{t("analysis.notEnough")}</span>
                   )}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Move relocates files in place — no extra destination space needed.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("analysis.moveNoSpace")}</p>
               )}
             </>
           )}
           {!freeKnown && isCopy && (
             <p className="text-xs text-muted-foreground">
-              Copy needs {formatSize(requiredBytes)}, but the destination&apos;s free space
-              couldn&apos;t be checked.
+              {t("analysis.copyUnknown", { size: formatSize(requiredBytes, locale) })}
             </p>
           )}
           {!freeKnown && !isCopy && (
-            <p className="text-xs text-muted-foreground">
-              Move relocates files in place — no extra destination space needed.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("analysis.moveNoSpace")}</p>
           )}
         </div>
 
         {/* Disk-space error — only when we actually know it's insufficient */}
         {freeKnown && !disk_space.sufficient && (
-          <ValidationBadge
-            severity="error"
-            message="Not enough disk space for copy. Switch to Move or free up destination space."
-          />
+          <ValidationBadge severity="error" message={t("analysis.noSpaceCopy")} />
         )}
 
         {/* Estimated time */}
         <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Estimated sort time:</span>{" "}
-          {formatDuration(estimated_duration_seconds, { style: "verbose", approximate: true })}
+          <span className="font-medium text-foreground">{t("analysis.estimated")}</span>{" "}
+          {formatDuration(estimated_duration_seconds, {
+            style: "verbose",
+            approximate: true,
+            locale,
+          })}
           {excluded_files > 0 && (
             <span className="ml-2">
-              ({excluded_files.toLocaleString()} files excluded by exclusion patterns)
+              {t("analysis.excluded", { count: excluded_files.toLocaleString(locale) })}
             </span>
           )}
         </p>

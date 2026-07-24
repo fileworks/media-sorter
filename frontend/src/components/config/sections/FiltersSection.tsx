@@ -5,8 +5,10 @@ import { ExcludePatternTags } from "@/components/config/fields/ExcludePatternTag
 import { HELP } from "@/components/config/help";
 import { clampFileSize, MAX_FILE_SIZE_INPUT } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function FiltersSection({ config, updateConfig }: SectionProps) {
+  const { t } = useI18n();
   const excludePatterns = config.exclude_patterns ?? [];
   const addExcludePattern = (pattern: string) => {
     if (!excludePatterns.includes(pattern)) {
@@ -29,7 +31,12 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
 
   return (
     <>
-      <FormRow label="Scan subfolders" htmlFor="recursive-scan" help={HELP.recursiveScan} inline>
+      <FormRow
+        label={t("config.filters.recursive")}
+        htmlFor="recursive-scan"
+        help={HELP.recursiveScan}
+        inline
+      >
         <Toggle
           id="recursive-scan"
           checked={config.recursive_scan}
@@ -39,7 +46,7 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <FormRow
-          label="Min file size (KB)"
+          label={t("config.filters.minSize")}
           htmlFor="min-size"
           help={HELP.minFileSize}
           helpSide="right"
@@ -51,12 +58,12 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
             max={MAX_FILE_SIZE_INPUT}
             value={config.min_file_size_kb ?? ""}
             onChange={(e) => updateConfig({ min_file_size_kb: clampFileSize(e.target.value) })}
-            placeholder="No minimum"
+            placeholder={t("config.filters.noMinimum")}
           />
         </FormRow>
 
         <FormRow
-          label="Max file size (MB)"
+          label={t("config.filters.maxSize")}
           htmlFor="max-size"
           help={HELP.maxFileSize}
           helpSide="right"
@@ -68,12 +75,12 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
             max={MAX_FILE_SIZE_INPUT}
             value={config.max_file_size_mb ?? ""}
             onChange={(e) => updateConfig({ max_file_size_mb: clampFileSize(e.target.value) })}
-            placeholder="No maximum"
+            placeholder={t("config.filters.noMaximum")}
           />
         </FormRow>
       </div>
 
-      <FormRow label="Exclude patterns" help={HELP.excludePatterns} helpSide="right">
+      <FormRow label={t("config.filters.exclude")} help={HELP.excludePatterns} helpSide="right">
         <ExcludePatternTags
           patterns={excludePatterns}
           onAdd={addExcludePattern}
@@ -81,7 +88,7 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
         />
       </FormRow>
 
-      <FormRow label="Junk / thumbnail filter" htmlFor="junk-filter" help={HELP.junkFilter} inline>
+      <FormRow label={t("config.filters.junk")} htmlFor="junk-filter" help={HELP.junkFilter} inline>
         <Toggle
           id="junk-filter"
           checked={config.junk_filter_enabled ?? false}
@@ -93,7 +100,7 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
         <div className="ml-2 space-y-3 border-l-2 border-border pl-3">
           <div className="grid grid-cols-2 gap-3">
             <FormRow
-              label="Junk size floor (KB)"
+              label={t("config.filters.junkSize")}
               htmlFor="junk-min-size"
               help={HELP.junkMinSize}
               helpSide="right"
@@ -111,7 +118,7 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
             </FormRow>
 
             <FormRow
-              label="Resolution floor (px)"
+              label={t("config.filters.resolution")}
               htmlFor="junk-min-dimension"
               help={HELP.junkMinDimension}
               helpSide="right"
@@ -129,7 +136,11 @@ export function FiltersSection({ config, updateConfig }: SectionProps) {
             </FormRow>
           </div>
 
-          <FormRow label="Junk name patterns" help={HELP.junkPatterns} helpSide="right">
+          <FormRow
+            label={t("config.filters.junkPatterns")}
+            help={HELP.junkPatterns}
+            helpSide="right"
+          >
             <ExcludePatternTags
               patterns={junkPatterns}
               onAdd={addJunkPattern}

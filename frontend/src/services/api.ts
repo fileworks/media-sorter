@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface Config {
+  language: "en" | "de";
   source_directory: string;
   target_directory: string;
   sort: boolean;
@@ -40,7 +41,7 @@ export interface Config {
   image_format: "jpeg" | "png" | "webp" | "tiff";
   repair_enabled: boolean;
   rules_enabled: boolean;
-  rules: Rule[];
+  rule_set: RuleSet;
   ai_tagging_enabled: boolean;
   ai_tagging_provider: "local" | "azure_vision" | "imagga" | "google_cloud_vision";
   ai_tagging_confidence_threshold: number;
@@ -48,12 +49,14 @@ export interface Config {
   ai_tagging_api_secret: string | null;
   ai_tagging_endpoint: string | null;
   ai_tagging_max_tags: number;
-  ai_tagging_embed_in_files: boolean;
+  embed_tags_in_files: boolean;
   ai_tagging_labels: string[];
+  ai_tagging_labels_provenance: "bundled" | "custom";
   // Smart Categorization — independent of ai_tagging_*: routes each file into a
   // user-named topic folder under the date hierarchy (…/Y/M/D/<category>/).
   categorize_enabled: boolean;
   categorize_categories: string[];
+  categorize_categories_provenance: "bundled" | "custom";
   categorize_confidence_threshold: number;
   categorize_min_margin: number;
   analyze: boolean;
@@ -105,6 +108,8 @@ export interface UpdateInfo {
  */
 export interface ConfigSectionMeta {
   id: string;
+  label_key: string;
+  description_key: string;
   label: string;
   description: string;
   fields: string[];
@@ -118,6 +123,8 @@ export interface ConfigSectionMeta {
 export interface ConfigIssue {
   field: string | null;
   message: string;
+  message_key: string;
+  params: Record<string, string | number>;
 }
 
 export interface ValidateConfigResult {
@@ -139,11 +146,34 @@ export interface DiskSpaceResult {
   free_space_known?: boolean;
 }
 
-export interface Rule {
+export type NumericOperator = "eq" | "gt" | "lt" | "gte" | "lte";
+
+export type RuleCondition =
+  | { type: "extension"; value: string }
+  | { type: "filename_contains"; value: string }
+  | { type: "size"; operator: NumericOperator; value: number }
+  | { type: "resolution"; operator: NumericOperator; width: number; height: number };
+
+export interface RuleBase {
   id: string;
   name: string;
-  condition: Record<string, unknown>;
+  enabled: boolean;
+  priority: number;
+  condition: RuleCondition;
+}
+
+export interface TagRule extends RuleBase {
   tag: string;
+}
+
+export interface RouteRule extends RuleBase {
+  relative_folder: string;
+}
+
+export interface RuleSet {
+  version: 1;
+  tag_rules: TagRule[];
+  route_rules: RouteRule[];
 }
 
 export interface TaskProgress {

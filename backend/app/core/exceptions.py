@@ -31,12 +31,12 @@ class ConfigValidationError(MediaSortException):
     422 (Unprocessable Entity), mirroring FastAPI's own request-validation
     status, with the offending fields in ``details["errors"]``."""
 
-    def __init__(self, errors: list[str]) -> None:
+    def __init__(self, errors: list[str], issues: list[dict[str, Any]] | None = None) -> None:
         super().__init__(
             "Invalid configuration update",
             "CONFIG_VALIDATION_ERROR",
             422,
-            {"errors": errors},
+            {"errors": errors, "issues": issues or []},
         )
 
 

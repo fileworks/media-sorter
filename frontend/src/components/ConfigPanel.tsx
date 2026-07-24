@@ -22,6 +22,7 @@ import { RulesSection } from "@/components/config/sections/RulesSection";
 import { AiSection } from "@/components/config/sections/AiSection";
 import { OtherSection } from "@/components/config/sections/OtherSection";
 import type { SectionProps } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 const SECTION_BODIES: Record<SectionId, (props: SectionProps) => ReactNode> = {
   essentials: EssentialsSection,
@@ -34,6 +35,81 @@ const SECTION_BODIES: Record<SectionId, (props: SectionProps) => ReactNode> = {
   ai: AiSection,
   other: OtherSection,
 };
+
+const CONFIG_FIELD_MESSAGE_KEYS: Partial<Record<keyof Config, string>> = {
+  language: "config.language.label",
+  source_directory: "config.source.label",
+  target_directory: "config.target.label",
+  sort: "config.field.sortEnabled",
+  sort_criteria: "config.organizeDate",
+  copy_instead_of_move: "config.copyMove",
+  camera_subfolder_enabled: "config.folder.camera",
+  preserve_subfolders: "config.folder.preserve",
+  categorize_enabled: "config.folder.categorize",
+  categorize_categories: "config.folder.categories",
+  categorize_categories_provenance: "config.field.categoryVocabulary",
+  categorize_confidence_threshold: "config.folder.confident",
+  categorize_min_margin: "config.folder.margin",
+  remove_duplicates: "config.duplicates.detect",
+  duplicate_exact_enabled: "config.duplicates.exact",
+  duplicate_perceptual_enabled: "config.duplicates.perceptual",
+  duplicate_perceptual_threshold: "config.duplicates.threshold",
+  dedup_against_destination: "config.duplicates.destination",
+  rename: "config.rename.enabled",
+  rename_pattern: "config.rename.pattern",
+  convert_images: "config.conversion.images",
+  image_format: "config.conversion.imageFormat",
+  convert_videos: "config.conversion.videos",
+  video_format: "config.conversion.videoFormat",
+  recursive_scan: "config.filters.recursive",
+  max_recursion_depth: "config.field.maxDepth",
+  min_file_size_kb: "config.filters.minSize",
+  max_file_size_mb: "config.filters.maxSize",
+  exclude_patterns: "config.filters.exclude",
+  junk_filter_enabled: "config.filters.junk",
+  junk_min_file_size_kb: "config.filters.junkSize",
+  junk_min_image_dimension: "config.filters.resolution",
+  junk_filename_patterns: "config.filters.junkPatterns",
+  rules_enabled: "rules.enable",
+  rule_set: "config.field.ruleSet",
+  ai_tagging_enabled: "config.ai.enabled",
+  ai_tagging_provider: "config.ai.provider",
+  ai_tagging_confidence_threshold: "config.ai.confidence",
+  ai_tagging_api_key: "config.ai.apiKey",
+  ai_tagging_api_secret: "config.ai.apiSecret",
+  ai_tagging_endpoint: "config.ai.endpoint",
+  ai_tagging_max_tags: "config.ai.maxTags",
+  embed_tags_in_files: "config.ai.embed",
+  ai_tagging_labels: "config.ai.labels",
+  ai_tagging_labels_provenance: "config.field.tagVocabulary",
+  ai_model_tier: "config.ai.model",
+  ai_allow_gpu: "config.ai.gpu",
+  override_metadata: "config.other.fixDates",
+  repair_enabled: "config.other.repair",
+  update_check_enabled: "config.field.updateCheck",
+};
+
+function localizedConfigValue(
+  value: unknown,
+  t: (key: string, params?: Record<string, string | number>, fallback?: string) => string,
+): string {
+  if (value === null || value === undefined || value === "") return t("config.value.notSet");
+  if (typeof value === "boolean") return t(value ? "config.value.on" : "config.value.off");
+  if (Array.isArray(value)) {
+    if (value.length === 0) return t("config.value.none");
+    if (value.length <= 3) return value.join(", ");
+    return t("config.value.items", { count: value.length });
+  }
+  if (typeof value === "object" && value && "tag_rules" in value && "route_rules" in value) {
+    const rules = value as { tag_rules?: unknown[]; route_rules?: unknown[] };
+    return t("config.value.rules", {
+      count: (rules.tag_rules?.length ?? 0) + (rules.route_rules?.length ?? 0),
+    });
+  }
+  if (value === "en" || value === "de") return t(`config.language.${value}`);
+  if (value === "bundled" || value === "custom") return t(`config.vocabulary.${value}`);
+  return String(value);
+}
 
 export function ConfigPanel({
   disabled = false,
@@ -49,6 +125,7 @@ export function ConfigPanel({
   const sectionMeta = useConfigSections();
   const defaults = useConfigDefaults();
   const [active, setActive] = useState<SectionId>("essentials");
+  const { t } = useI18n();
 
   // Declared before the hooks/handlers that reference it. Previously this was a
   // `const` defined lower in the body, so the `activeSectionFields` memo below hit
@@ -63,8 +140,15 @@ export function ConfigPanel({
     [config, defaults],
   );
   const diffEntries = useMemo(
-    () => (config && defaults ? diffConfig(config, defaults) : []),
-    [config, defaults],
+    () =>
+      config && defaults
+        ? diffConfig(config, defaults, {
+            label: (key, fallback) =>
+              t(CONFIG_FIELD_MESSAGE_KEYS[key] ?? `config.field.${String(key)}`, {}, fallback),
+            value: (value) => localizedConfigValue(value, t),
+          })
+        : [],
+    [config, defaults, t],
   );
   // Per-section diff: only entries whose field belongs to the active section.
   // sectionMeta is stale=Infinity so section fields are effectively static;
@@ -93,9 +177,7 @@ export function ConfigPanel({
     return (
       <Card>
         <CardContent className="py-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Settings unavailable — check the backend connection.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("common.settingsUnavailable")}</p>
         </CardContent>
       </Card>
     );
@@ -130,7 +212,11 @@ export function ConfigPanel({
 
   const railItems = SECTION_META.map((m) => ({
     id: m.id,
-    label: sectionMeta.get(m.id)?.label ?? m.label,
+    label: t(
+      sectionMeta.get(m.id)?.label_key ?? `config.section.${m.id}.label`,
+      {},
+      sectionMeta.get(m.id)?.label ?? m.label,
+    ),
     icon: m.icon,
     group: m.group,
     active: changed
@@ -142,8 +228,16 @@ export function ConfigPanel({
   }));
 
   const activeMeta = SECTION_META.find((m) => m.id === active) ?? SECTION_META[0];
-  const activeLabel = sectionMeta.get(active)?.label ?? activeMeta.label;
-  const activeDescription = sectionMeta.get(active)?.description ?? activeMeta.description;
+  const activeLabel = t(
+    sectionMeta.get(active)?.label_key ?? `config.section.${active}.label`,
+    {},
+    sectionMeta.get(active)?.label ?? activeMeta.label,
+  );
+  const activeDescription = t(
+    sectionMeta.get(active)?.description_key ?? `config.section.${active}.description`,
+    {},
+    sectionMeta.get(active)?.description ?? activeMeta.description,
+  );
   const Body = SECTION_BODIES[active];
 
   return (
@@ -158,7 +252,7 @@ export function ConfigPanel({
                 onClick={resetAll}
                 className="text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
               >
-                Reset all to defaults
+                {t("common.resetAll")}
               </button>
             </div>
           )}
@@ -168,7 +262,7 @@ export function ConfigPanel({
           {disabled && (
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
               <FiLock className="h-3 w-3 shrink-0" />
-              Settings are locked while a computation is in progress.
+              {t("common.settingsLocked")}
             </div>
           )}
           {/* Per-section "what differs from defaults" summary. Only shown once
@@ -177,7 +271,7 @@ export function ConfigPanel({
             <ChangedFromDefaults
               entries={diffEntries.filter((e) => activeSectionFields.has(e.key as string))}
               onResetAll={() => resetSection(active)}
-              resetLabel="Reset section"
+              resetLabel={t("common.resetSection")}
               disabled={disabled}
             />
           )}
@@ -217,7 +311,7 @@ export function ConfigPanel({
                 onClick={resetAll}
                 className="text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
               >
-                Reset all to defaults
+                {t("common.resetAll")}
               </button>
             </div>
           )}

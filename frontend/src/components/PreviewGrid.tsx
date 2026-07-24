@@ -4,6 +4,7 @@ import { getBasename } from "@/lib/pathUtils";
 import { api } from "@/services/api";
 import type { PreviewItem } from "@/types/api";
 import { FiFile, FiFilm } from "react-icons/fi";
+import { useI18n } from "@/i18n/I18nContext";
 
 const VIDEO_EXTS = new Set([
   ".mp4",
@@ -49,24 +50,24 @@ function getStatusColor(status: string): string {
   }
 }
 
-function getStatusLabel(status: string): string {
+function getStatusKey(status: string): string {
   switch (status) {
     case "sort":
-      return "Will be sorted";
+      return "preview.status.willSort";
     case "suspicious_date":
-      return "Suspicious date";
+      return "preview.status.suspicious";
     case "duplicate":
-      return "Duplicate";
+      return "preview.status.duplicate";
     case "unknown_date":
-      return "Unknown date";
+      return "preview.status.unknown";
     case "future_date":
-      return "Future date";
+      return "preview.status.future";
     case "failed":
-      return "Failed";
+      return "preview.status.failed";
     case "junk":
-      return "Junk/thumbnail";
+      return "preview.status.junk";
     case "already_in_destination":
-      return "Already in destination";
+      return "preview.status.inDestination";
     default:
       return status;
   }
@@ -81,12 +82,13 @@ function ThumbnailCard({
   categorizeEnabled: boolean;
   onOpen: (item: PreviewItem) => void;
 }) {
+  const { t } = useI18n();
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
   const name = getBasename(item.source);
   const video = isVideo(item.source);
   const statusDot = getStatusColor(item.status);
-  const statusLabel = getStatusLabel(item.status);
+  const statusLabel = t(getStatusKey(item.status), {}, item.status);
 
   return (
     <button
@@ -131,7 +133,7 @@ function ThumbnailCard({
         {video && loaded && (
           <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
             <FiFilm className="h-2.5 w-2.5" />
-            video
+            {t("preview.video")}
           </span>
         )}
 
@@ -160,7 +162,11 @@ function ThumbnailCard({
               "mt-1 self-start rounded-full px-1.5 py-px text-[10px] font-medium leading-none",
               item.category ? "bg-category/10 text-category" : "bg-muted text-muted-foreground",
             )}
-            title={item.category ? `Category: ${item.category}` : "Uncategorized"}
+            title={
+              item.category
+                ? t("preview.category", { name: item.category })
+                : t("preview.uncategorizedLabel")
+            }
           >
             {item.category ?? "_uncategorized"}
           </span>
@@ -184,6 +190,7 @@ export interface PreviewGridProps {
  * windowing matches the CSS grid exactly.
  */
 export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: PreviewGridProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [viewportH, setViewportH] = useState(MAX_VIEWPORT);
@@ -215,7 +222,7 @@ export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: Previe
   if (items.length === 0) {
     return (
       <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-        No items match the current filter.
+        {t("preview.noMatches")}
       </div>
     );
   }

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { getBasename } from "@/lib/pathUtils";
 import type { PreviewItem, PreviewResult } from "@/types/api";
 import { FiMaximize2, FiMinimize2, FiList, FiGrid } from "react-icons/fi";
+import { useI18n } from "@/i18n/I18nContext";
 
 // ── Types / constants ─────────────────────────────────────────────────────────
 
@@ -31,13 +32,7 @@ type FilterMode = "all" | "sorted" | "warnings" | "problems" | "duplicates";
 type SortBy = "name" | "date" | "size" | "status";
 type ViewMode = "list" | "grid";
 
-const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "sorted", label: "✓ Sorted" },
-  { key: "warnings", label: "⚠ Warnings" },
-  { key: "problems", label: "✕ Problems" },
-  { key: "duplicates", label: "≈ Duplicates" },
-];
+const FILTER_OPTIONS: FilterMode[] = ["all", "sorted", "warnings", "problems", "duplicates"];
 
 interface PreviewPanelProps {
   result: PreviewResult | null;
@@ -112,10 +107,11 @@ function Skeleton({ className }: { className?: string }) {
 }
 
 function PreviewLoadingSkeleton() {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Preview</CardTitle>
+        <CardTitle>{t("preview.title")}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="flex flex-col lg:flex-row">
@@ -161,6 +157,7 @@ export function PreviewPanel({
   categorizeEnabled = false,
   sortCriteria = ["year", "month", "day"],
 }: PreviewPanelProps) {
+  const { t, locale } = useI18n();
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<Set<string>>(new Set());
@@ -400,7 +397,7 @@ export function PreviewPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Preview</CardTitle>
+          <CardTitle>{t("preview.title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ValidationBadge severity="error" message={error} />
@@ -411,12 +408,10 @@ export function PreviewPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Preview</CardTitle>
+          <CardTitle>{t("preview.title")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Click "Run Preview →" in the footer to see what will happen before sorting.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("preview.empty")}</p>
         </CardContent>
       </Card>
     );
@@ -428,9 +423,11 @@ export function PreviewPanel({
     <Card className="animate-fade-in overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle>
-          Preview
+          {t("preview.title")}
           <span className="ml-2 text-sm font-normal text-muted-foreground">
-            ({items.length.toLocaleString()} files)
+            {t(items.length === 1 ? "preview.files.one" : "preview.files", {
+              count: items.length.toLocaleString(locale),
+            })}
           </span>
         </CardTitle>
       </CardHeader>
@@ -443,20 +440,20 @@ export function PreviewPanel({
             style={{ width: sidebarWidth }}
           >
             <div className="space-y-4 p-3">
-              <SidebarSection title="Search">
+              <SidebarSection title={t("preview.search")}>
                 <input
                   type="search"
-                  placeholder="Filter filenames…"
-                  aria-label="Filter files by name"
+                  placeholder={t("preview.searchPlaceholder")}
+                  aria-label={t("preview.searchLabel")}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
                 />
               </SidebarSection>
 
-              <SidebarSection title="Status">
+              <SidebarSection title={t("preview.status")}>
                 <div className="flex flex-col gap-0.5">
-                  {FILTER_OPTIONS.map(({ key, label }) => (
+                  {FILTER_OPTIONS.map((key) => (
                     <button
                       key={key}
                       className={cn(
@@ -468,7 +465,7 @@ export function PreviewPanel({
                       onClick={() => setFilter(key)}
                       aria-pressed={filter === key}
                     >
-                      <span>{label}</span>
+                      <span>{t(`preview.filter.${key}`)}</span>
                       <span
                         className={cn(
                           "rounded-full px-1.5 py-0 text-[10px] font-normal tabular-nums",
@@ -477,25 +474,25 @@ export function PreviewPanel({
                             : "bg-muted text-muted-foreground",
                         )}
                       >
-                        {(filterCounts[key] ?? 0).toLocaleString()}
+                        {(filterCounts[key] ?? 0).toLocaleString(locale)}
                       </span>
                     </button>
                   ))}
                 </div>
               </SidebarSection>
 
-              <SidebarSection title="Tags">
+              <SidebarSection title={t("preview.tags")}>
                 {allTags.length === 0 ? (
-                  <p className="text-[11px] italic text-muted-foreground">No tags yet.</p>
+                  <p className="text-[11px] italic text-muted-foreground">{t("preview.noTags")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1">
                     {tagFilters.size > 0 && (
                       <button
                         className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground hover:bg-muted/70"
                         onClick={() => setTagFilters(new Set())}
-                        title="Clear tag filter"
+                        title={t("preview.clearTags")}
                       >
-                        ✕ Clear
+                        {t("preview.clear")}
                       </button>
                     )}
                     {allTags.map((tag) => (
@@ -517,18 +514,20 @@ export function PreviewPanel({
               </SidebarSection>
 
               {categorizeEnabled && (
-                <SidebarSection title="Categories">
+                <SidebarSection title={t("preview.categories")}>
                   {allCategories.length === 0 ? (
-                    <p className="text-[11px] italic text-muted-foreground">No categories.</p>
+                    <p className="text-[11px] italic text-muted-foreground">
+                      {t("preview.noCategories")}
+                    </p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {categoryFilters.size > 0 && (
                         <button
                           className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground hover:bg-muted/70"
                           onClick={() => setCategoryFilters(new Set())}
-                          title="Clear category filter"
+                          title={t("preview.clearCategories")}
                         >
-                          ✕ Clear
+                          {t("preview.clear")}
                         </button>
                       )}
                       {allCategories.map((cat) => (
@@ -561,7 +560,7 @@ export function PreviewPanel({
             aria-hidden
             className="hidden lg:flex w-2 shrink-0 cursor-col-resize select-none items-stretch justify-center group"
             onMouseDown={handleSidebarResizeStart}
-            title="Drag to resize sidebar"
+            title={t("preview.resizeSidebar")}
           >
             <div className="w-px bg-border group-hover:bg-primary/40 transition-colors" />
           </div>
@@ -571,15 +570,19 @@ export function PreviewPanel({
             {/* Summary bar */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/30 px-4 py-2 text-xs">
               <span className="font-semibold text-foreground">
-                {stats.total.toLocaleString()} total
+                {t("preview.total", { count: stats.total.toLocaleString(locale) })}
               </span>
               <span className="text-muted-foreground">·</span>
-              <span className="text-success">{stats.will_sort.toLocaleString()} sorted</span>
+              <span className="text-success">
+                {t("preview.sorted", { count: stats.will_sort.toLocaleString(locale) })}
+              </span>
               {stats.will_quarantine_unknown > 0 && (
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-warning">
-                    {stats.will_quarantine_unknown.toLocaleString()} unknown date
+                    {t("preview.unknownDate", {
+                      count: stats.will_quarantine_unknown.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
@@ -587,7 +590,9 @@ export function PreviewPanel({
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-warning">
-                    {stats.will_quarantine_future.toLocaleString()} future date
+                    {t("preview.futureDate", {
+                      count: stats.will_quarantine_future.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
@@ -595,7 +600,9 @@ export function PreviewPanel({
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-info">
-                    {stats.will_skip_duplicate.toLocaleString()} duplicate
+                    {t("preview.duplicate", {
+                      count: stats.will_skip_duplicate.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
@@ -603,7 +610,9 @@ export function PreviewPanel({
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-info">
-                    {stats.will_skip_already_in_destination.toLocaleString()} already in destination
+                    {t("preview.inDestination", {
+                      count: stats.will_skip_already_in_destination.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
@@ -611,7 +620,9 @@ export function PreviewPanel({
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-warning">
-                    {stats.will_quarantine_junk.toLocaleString()} junk
+                    {t("preview.junk", {
+                      count: stats.will_quarantine_junk.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
@@ -619,14 +630,18 @@ export function PreviewPanel({
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground">
-                    {stats.uncategorized.toLocaleString()} uncategorized
+                    {t("preview.uncategorized", {
+                      count: stats.uncategorized.toLocaleString(locale),
+                    })}
                   </span>
                 </>
               )}
               {warningCount > 0 && (
                 <>
                   <span className="text-muted-foreground">·</span>
-                  <span className="text-warning">{warningCount.toLocaleString()} warnings</span>
+                  <span className="text-warning">
+                    {t("preview.warnings", { count: warningCount.toLocaleString(locale) })}
+                  </span>
                 </>
               )}
 
@@ -638,19 +653,19 @@ export function PreviewPanel({
                       type="button"
                       onClick={expandAll}
                       className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                      title="Expand all groups"
+                      title={t("preview.expand")}
                     >
                       <FiMaximize2 className="h-3 w-3" />
-                      Expand all
+                      {t("preview.expand")}
                     </button>
                     <button
                       type="button"
                       onClick={collapseAll}
                       className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                      title="Collapse all groups"
+                      title={t("preview.collapse")}
                     >
                       <FiMinimize2 className="h-3 w-3" />
-                      Collapse all
+                      {t("preview.collapse")}
                     </button>
                     <div className="mx-1 h-3.5 w-px bg-border" />
                   </>
@@ -667,8 +682,8 @@ export function PreviewPanel({
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-muted/70",
                     )}
-                    title="List view"
-                    aria-label="List view"
+                    title={t("preview.listView")}
+                    aria-label={t("preview.listView")}
                     aria-pressed={viewMode === "list"}
                   >
                     <FiList className="h-3.5 w-3.5" />
@@ -682,8 +697,8 @@ export function PreviewPanel({
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-muted/70",
                     )}
-                    title="Grid view"
-                    aria-label="Grid view"
+                    title={t("preview.gridView")}
+                    aria-label={t("preview.gridView")}
                     aria-pressed={viewMode === "grid"}
                   >
                     <FiGrid className="h-3.5 w-3.5" />
@@ -695,23 +710,23 @@ export function PreviewPanel({
             {/* Icon legend (list view only) */}
             {viewMode === "list" && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-4 py-1.5 text-[11px] text-muted-foreground">
-                <span className="font-medium uppercase tracking-wide">Key</span>
+                <span className="font-medium uppercase tracking-wide">{t("preview.legend")}</span>
                 <span>
-                  <span className="text-success">✓</span> sorted
+                  <span className="text-success">✓</span> {t("preview.legendSorted")}
                 </span>
                 <span>
-                  <span className="text-warning">⚠</span> warning
+                  <span className="text-warning">⚠</span> {t("preview.legendWarning")}
                 </span>
                 <span>
-                  <span className="text-info">≈</span> duplicate
+                  <span className="text-info">≈</span> {t("preview.legendDuplicate")}
                 </span>
                 {(stats.will_quarantine_junk ?? 0) > 0 && (
                   <span>
-                    <span className="text-warning">⊘</span> junk
+                    <span className="text-warning">⊘</span> {t("preview.legendJunk")}
                   </span>
                 )}
                 <span>
-                  <span className="text-error">✕</span> problem
+                  <span className="text-error">✕</span> {t("preview.legendProblem")}
                 </span>
               </div>
             )}

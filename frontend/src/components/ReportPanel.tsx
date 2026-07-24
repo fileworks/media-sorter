@@ -7,8 +7,10 @@ import { ValidationBadge } from "@/components/ui/validation-badge";
 import { triggerDownload } from "@/lib/download";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/formatters";
+import { formatMetadataSource } from "@/lib/metadataSource";
 import { useCountUp } from "@/hooks/useCountUp";
 import type { OperationReport, FileOperationRecord } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -18,9 +20,13 @@ export interface ReportPanelProps {
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
-function pct(value: number, total: number): string {
+function pct(value: number, total: number, locale: string): string {
   if (total === 0) return "0.0%";
-  return `${((value / total) * 100).toFixed(1)}%`;
+  return new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(value / total);
 }
 
 // ── Section A — Summary Cards ─────────────────────────────────────────────────
@@ -36,11 +42,14 @@ function SummaryCard({
   subtext: string;
   color: string;
 }) {
+  const { locale } = useI18n();
   const display = useCountUp(value);
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4 text-center">
       <p className="mb-1 text-xs text-muted-foreground">{label}</p>
-      <p className={cn("text-2xl font-bold tabular-nums", color)}>{display.toLocaleString()}</p>
+      <p className={cn("text-2xl font-bold tabular-nums", color)}>
+        {display.toLocaleString(locale)}
+      </p>
       <p className="mt-0.5 text-xs text-muted-foreground">{subtext}</p>
     </div>
   );
@@ -118,6 +127,7 @@ function TypeBar({ data }: { data: Record<string, number> | undefined }) {
 
 /** Top camera models list with percentage bars. */
 function CameraTable({ data }: { data: Record<string, number> }) {
+  const { t, locale } = useI18n();
   const total = Math.max(
     Object.values(data).reduce((a, b) => a + b, 0),
     1,
@@ -127,7 +137,7 @@ function CameraTable({ data }: { data: Record<string, number> }) {
     .slice(0, 8);
 
   if (entries.length === 0) {
-    return <p className="text-xs italic text-muted-foreground">No camera data available</p>;
+    return <p className="text-xs italic text-muted-foreground">{t("report.noCamera")}</p>;
   }
 
   return (
@@ -136,10 +146,11 @@ function CameraTable({ data }: { data: Record<string, number> }) {
         <div key={model} className="space-y-0.5">
           <div className="flex items-center justify-between text-xs">
             <span className="truncate text-foreground" title={model}>
-              {model || "Unknown"}
+              {!model || model.trim().toLowerCase() === "unknown" ? t("report.unknown") : model}
             </span>
             <span className="ml-2 shrink-0 tabular-nums text-muted-foreground">
-              {count} ({((count / total) * 100).toFixed(0)}%)
+              {count.toLocaleString(locale)} (
+              {new Intl.NumberFormat(locale, { style: "percent" }).format(count / total)})
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -165,6 +176,7 @@ function StatsDashboard({
   open: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const hasYears = Object.keys(statistics.files_per_year ?? {}).length > 0;
   const hasTypes = Object.keys(statistics.files_per_type ?? {}).length > 0;
   const hasCameras = Object.keys(statistics.camera_models ?? {}).length > 0;
@@ -175,7 +187,7 @@ function StatsDashboard({
         onClick={onToggle}
         className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/50"
       >
-        <span>Statistics Dashboard</span>
+        <span>{t("report.statistics")}</span>
         <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
@@ -183,7 +195,7 @@ function StatsDashboard({
           {hasYears && (
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Files per year
+                {t("report.filesPerYear")}
               </p>
               <BarChart data={statistics.files_per_year} />
             </div>
@@ -192,7 +204,7 @@ function StatsDashboard({
             {hasTypes && (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  File types
+                  {t("report.fileTypes")}
                 </p>
                 <TypeBar data={statistics.files_per_type} />
               </div>
@@ -200,14 +212,14 @@ function StatsDashboard({
             {hasCameras && (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Top camera models
+                  {t("report.cameraModels")}
                 </p>
                 <CameraTable data={statistics.camera_models} />
               </div>
             )}
           </div>
           {!hasYears && !hasTypes && !hasCameras && (
-            <p className="text-xs italic text-muted-foreground">No statistics data.</p>
+            <p className="text-xs italic text-muted-foreground">{t("report.noStatistics")}</p>
           )}
         </div>
       )}
@@ -225,81 +237,79 @@ type SortCol = keyof Pick<
 
 const FILTER_TABS: {
   id: FilterTab;
-  label: string;
   statuses: string[] | null;
 }[] = [
-  { id: "all", label: "All", statuses: null },
-  { id: "sorted", label: "✓ Sorted", statuses: ["success"] },
+  { id: "all", statuses: null },
+  { id: "sorted", statuses: ["success"] },
   {
     id: "quarantined",
-    label: "⚠ Quarantined",
     statuses: ["unknown_date", "future_date", "corrupted", "junk"],
   },
   {
     id: "duplicates",
-    label: "≈ Duplicates",
     statuses: ["duplicate", "already_in_destination"],
   },
-  { id: "failed", label: "✕ Failed", statuses: ["failed"] },
+  { id: "failed", statuses: ["failed"] },
 ];
 
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
+const STATUS_STYLES: Record<string, { key: string; className: string }> = {
   success: {
-    label: "✓ sorted",
+    key: "report.status.sorted",
     className: "text-success bg-success/10",
   },
   unknown_date: {
-    label: "? unknown date",
+    key: "report.status.unknownDate",
     className: "text-warning bg-warning/10",
   },
   future_date: {
-    label: "future date",
+    key: "report.status.futureDate",
     className: "text-warning bg-warning/10",
   },
   duplicate: {
-    label: "≈ duplicate",
+    key: "report.status.duplicate",
     className: "text-info bg-info/10",
   },
   failed: {
-    label: "✕ failed",
+    key: "report.status.failed",
     className: "text-error bg-error/10",
   },
   corrupted: {
-    label: "⚠ corrupted",
+    key: "report.status.corrupted",
     className: "text-warning bg-warning/10",
   },
   junk: {
-    label: "⊘ junk",
+    key: "report.status.junk",
     className: "text-warning bg-warning/10",
   },
   already_in_destination: {
-    label: "≈ in destination",
+    key: "report.status.inDestination",
     className: "text-info bg-info/10",
   },
 };
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   const s = STATUS_STYLES[status] ?? {
-    label: status,
+    key: status,
     className: "text-muted-foreground bg-muted",
   };
   return (
     <span
       className={cn("whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", s.className)}
     >
-      {s.label}
+      {t(s.key, {}, status)}
     </span>
   );
 }
 
 const FILE_PAGE_SIZE = 50;
 
-const SORT_COLUMNS: { col: SortCol; label: string }[] = [
-  { col: "source_path", label: "Source" },
-  { col: "dest_path", label: "Destination" },
-  { col: "extracted_date", label: "Date" },
-  { col: "metadata_source", label: "Date source" },
-  { col: "status", label: "Status" },
+const SORT_COLUMNS: { col: SortCol; key: string }[] = [
+  { col: "source_path", key: "report.column.source" },
+  { col: "dest_path", key: "report.column.destination" },
+  { col: "extracted_date", key: "report.column.date" },
+  { col: "metadata_source", key: "report.column.dateSource" },
+  { col: "status", key: "report.column.status" },
 ];
 
 function FileTableSection({
@@ -309,6 +319,7 @@ function FileTableSection({
   files: FileOperationRecord[];
   suspiciousCount: number;
 }) {
+  const { t, locale } = useI18n();
   const [tab, setTab] = useState<FilterTab>("all");
   const [search, setSearch] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("source_path");
@@ -382,21 +393,24 @@ function FileTableSection({
       {/* Filters + Search */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex flex-wrap gap-1">
-          {FILTER_TABS.map((t) => (
+          {FILTER_TABS.map((tabOption) => (
             <button
-              key={t.id}
+              key={tabOption.id}
               onClick={() => {
-                setTab(t.id);
+                setTab(tabOption.id);
                 setPage(0);
               }}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                tab === t.id
+                tab === tabOption.id
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               )}
             >
-              {t.label} <span className="tabular-nums">({tabCounts[t.id]})</span>
+              {t(`report.filter.${tabOption.id}`)}{" "}
+              <span className="tabular-nums">
+                ({tabCounts[tabOption.id].toLocaleString(locale)})
+              </span>
             </button>
           ))}
         </div>
@@ -404,8 +418,8 @@ function FileTableSection({
           <FiSearch className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search by path…"
-            aria-label="Search report files by path"
+            placeholder={t("report.searchPlaceholder")}
+            aria-label={t("report.searchLabel")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -421,7 +435,9 @@ function FileTableSection({
         <div className="px-4 pt-3">
           <ValidationBadge
             severity="warning"
-            message={`${suspiciousCount} file${suspiciousCount !== 1 ? "s" : ""} had suspicious EXIF dates (e.g., camera clock reset to 2000). The filename or filesystem date was used instead where available.`}
+            message={t("report.suspiciousDates", {
+              count: suspiciousCount.toLocaleString(locale),
+            })}
           />
         </div>
       )}
@@ -431,7 +447,7 @@ function FileTableSection({
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
             <tr>
-              {SORT_COLUMNS.map(({ col, label }) => (
+              {SORT_COLUMNS.map(({ col, key }) => (
                 <th
                   key={col}
                   className="px-3 py-2 text-left font-medium"
@@ -444,19 +460,21 @@ function FileTableSection({
                     onClick={() => handleSortClick(col)}
                     className="select-none rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
-                    {label}
+                    {t(key)}
                     <SortIcon col={col} />
                   </button>
                 </th>
               ))}
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Tags</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                {t("report.column.tags")}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {pageFiles.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  No files match the current filter.
+                  {t("report.noFilterMatch")}
                 </td>
               </tr>
             ) : (
@@ -478,7 +496,7 @@ function FileTableSection({
                     {f.extracted_date ?? "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 capitalize text-muted-foreground">
-                    {f.metadata_source?.replace(/_/g, " ") ?? "—"}
+                    {formatMetadataSource(f.metadata_source, t)}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
@@ -487,7 +505,11 @@ function FileTableSection({
                         f.duplicate_type && (
                           <span
                             className="rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-info"
-                            title={f.duplicate_of ? `Duplicate of ${f.duplicate_of}` : undefined}
+                            title={
+                              f.duplicate_of
+                                ? t("report.duplicateOf", { path: f.duplicate_of })
+                                : undefined
+                            }
                           >
                             {f.duplicate_type === "exact"
                               ? "exact"
@@ -513,10 +535,11 @@ function FileTableSection({
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">
-            {sorted.length.toLocaleString()} file
-            {sorted.length !== 1 ? "s" : ""} · showing{" "}
-            {(safePage * FILE_PAGE_SIZE + 1).toLocaleString()}–
-            {Math.min((safePage + 1) * FILE_PAGE_SIZE, sorted.length).toLocaleString()}
+            {t("report.pagination", {
+              count: sorted.length.toLocaleString(locale),
+              from: (safePage * FILE_PAGE_SIZE + 1).toLocaleString(locale),
+              to: Math.min((safePage + 1) * FILE_PAGE_SIZE, sorted.length).toLocaleString(locale),
+            })}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -525,10 +548,10 @@ function FileTableSection({
               disabled={safePage === 0}
               onClick={() => setPage((p) => p - 1)}
             >
-              ← Prev
+              {t("report.previous")}
             </Button>
             <span className="tabular-nums text-xs text-muted-foreground">
-              Page {safePage + 1} of {totalPages}
+              {t("report.page", { page: safePage + 1, pages: totalPages })}
             </span>
             <Button
               variant="ghost"
@@ -536,7 +559,7 @@ function FileTableSection({
               disabled={safePage >= totalPages - 1}
               onClick={() => setPage((p) => p + 1)}
             >
-              Next →
+              {t("report.next")}
             </Button>
           </div>
         </div>
@@ -549,6 +572,7 @@ function FileTableSection({
 
 export function ReportPanel({ report }: ReportPanelProps) {
   const { toast } = useToast();
+  const { t, locale } = useI18n();
   const [exporting, setExporting] = useState<"csv" | "json" | null>(null);
   const [statsOpen, setStatsOpen] = useState(true);
 
@@ -561,9 +585,9 @@ export function ReportPanel({ report }: ReportPanelProps) {
         .toISOString()
         .slice(0, 10)}.${format}`;
       await triggerDownload(blob, filename);
-      toast("Report exported successfully", "success");
+      toast(t("report.exportSuccess"), "success");
     } catch {
-      toast("Export failed — try again", "error");
+      toast(t("report.exportFailed"), "error");
     } finally {
       setExporting(null);
     }
@@ -587,41 +611,45 @@ export function ReportPanel({ report }: ReportPanelProps) {
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryCard
-            label="Sorted"
+            label={t("report.summary.sorted")}
             value={summary.sorted}
-            subtext={pct(summary.sorted, total)}
+            subtext={pct(summary.sorted, total, locale)}
             color="text-success"
           />
           <SummaryCard
-            label="Quarantined"
+            label={t("report.summary.quarantined")}
             value={quarantineCount}
-            subtext={pct(quarantineCount, total)}
+            subtext={pct(quarantineCount, total, locale)}
             color="text-warning"
           />
           <SummaryCard
-            label="Duplicates"
+            label={t("report.summary.duplicates")}
             value={duplicateCount}
-            subtext={pct(duplicateCount, total)}
+            subtext={pct(duplicateCount, total, locale)}
             color="text-info"
           />
           <SummaryCard
-            label="Failed"
+            label={t("report.summary.failed")}
             value={summary.failed}
-            subtext={pct(summary.failed, total)}
+            subtext={pct(summary.failed, total, locale)}
             color="text-error"
           />
         </div>
 
         {/* Meta row */}
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>Duration: {formatDuration(report.duration_seconds, { style: "long" })}</span>
+          <span>
+            {t("report.duration", {
+              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
+            })}
+          </span>
           <span>·</span>
           <span className="max-w-[220px] truncate" title={report.source_path}>
-            Source: {report.source_path}
+            {t("report.source", { path: report.source_path })}
           </span>
           <span>·</span>
           <span className="max-w-[220px] truncate" title={report.dest_path}>
-            Dest: {report.dest_path}
+            {t("report.destination", { path: report.dest_path })}
           </span>
         </div>
 
@@ -636,10 +664,10 @@ export function ReportPanel({ report }: ReportPanelProps) {
             {exporting === "csv" ? (
               <span className="flex items-center gap-1.5">
                 <FiLoader className="h-3.5 w-3.5 animate-spin" />
-                Exporting…
+                {t("report.exporting")}
               </span>
             ) : (
-              "↓ Export CSV"
+              t("report.exportCsv")
             )}
           </Button>
           <Button
@@ -651,10 +679,10 @@ export function ReportPanel({ report }: ReportPanelProps) {
             {exporting === "json" ? (
               <span className="flex items-center gap-1.5">
                 <FiLoader className="h-3.5 w-3.5 animate-spin" />
-                Exporting…
+                {t("report.exporting")}
               </span>
             ) : (
-              "↓ Export JSON"
+              t("report.exportJson")
             )}
           </Button>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FiX } from "react-icons/fi";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function DirectoryInput({
   id,
@@ -18,6 +19,7 @@ export function DirectoryInput({
   onCommit: (v: string) => void;
   onBrowse: () => void;
 }) {
+  const { t } = useI18n();
   const [local, setLocal] = useState(value);
   const focused = useRef(false);
 
@@ -59,14 +61,14 @@ export function DirectoryInput({
               onCommit("");
             }}
             className="ml-1 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Clear folder"
+            aria-label={t("common.clearFolder")}
           >
             <FiX className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
       <Button variant="outline" size="sm" onClick={onBrowse}>
-        Browse
+        {t("common.browse")}
       </Button>
     </div>
   );

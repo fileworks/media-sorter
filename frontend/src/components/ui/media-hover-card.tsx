@@ -2,6 +2,7 @@ import { useState, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useMediaInfo, formatResolution } from "@/hooks/useMediaInfo";
+import { useI18n } from "@/i18n/I18nContext";
 import { Thumbnail } from "./thumbnail";
 
 export interface HoverMeta {
@@ -33,6 +34,7 @@ const MARGIN = 8;
  * would run off the bottom of the viewport.
  */
 export function MediaHoverCard({ path, title, meta, children, className }: MediaHoverCardProps) {
+  const { t } = useI18n();
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
@@ -40,7 +42,10 @@ export function MediaHoverCard({ path, title, meta, children, className }: Media
   const { data: info } = useMediaInfo(path, coords !== null);
   const rows: HoverMeta[] =
     info && info.width && info.height
-      ? [...meta, { label: "Resolution", value: formatResolution(info.width, info.height) }]
+      ? [
+          ...meta,
+          { label: t("preview.resolution"), value: formatResolution(info.width, info.height) },
+        ]
       : meta;
 
   const show = () => {

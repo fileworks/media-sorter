@@ -29,6 +29,8 @@ class ConfigSection:
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "label_key": f"config.section.{self.id}.label",
+            "description_key": f"config.section.{self.id}.description",
             "label": self.label,
             "description": self.description,
             "fields": list(self.fields),
@@ -42,6 +44,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "Set your source and destination folders, choose how files are dated, "
         "and whether they're copied or moved.",
         (
+            "language",
             "source_directory",
             "target_directory",
             "sort",
@@ -58,6 +61,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "preserve_subfolders",
             "categorize_enabled",
             "categorize_categories",
+            "categorize_categories_provenance",
             "categorize_confidence_threshold",
             "categorize_min_margin",
         ),
@@ -106,7 +110,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "rules",
         "Tagging rules",
         "Tag files automatically by extension, size, resolution, or filename.",
-        ("rules_enabled", "rules"),
+        ("rules_enabled", "rule_set"),
     ),
     ConfigSection(
         "ai",
@@ -120,8 +124,9 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "ai_tagging_api_secret",
             "ai_tagging_endpoint",
             "ai_tagging_max_tags",
-            "ai_tagging_embed_in_files",
+            "embed_tags_in_files",
             "ai_tagging_labels",
+            "ai_tagging_labels_provenance",
             "ai_model_tier",
             "ai_allow_gpu",
         ),

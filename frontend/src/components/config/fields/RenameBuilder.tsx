@@ -9,6 +9,7 @@ import {
 } from "@/lib/renamePattern";
 import { FiCamera, FiFilm } from "react-icons/fi";
 import { EXAMPLE_DATE } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 function RenamePreviewRow({
   icon,
@@ -41,6 +42,7 @@ export function RenameBuilder({
   configPattern: string;
   onCommit: (v: string) => void;
 }) {
+  const { t } = useI18n();
   const [local, setLocal] = useState(configPattern);
   const prevConfigRef = useRef(configPattern);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -89,32 +91,43 @@ export function RenameBuilder({
       />
 
       <div className="flex flex-wrap gap-1">
-        {RENAME_TOKENS.map((t) => (
+        {RENAME_TOKENS.map((token) => (
           <button
-            key={t.token}
+            key={token.token}
             type="button"
-            onClick={() => insertToken(t.token)}
-            title={`${t.label} — e.g. ${t.example}`}
+            onClick={() => insertToken(token.token)}
+            title={t(
+              "common.example",
+              {
+                label: t(token.labelKey, {}, token.label),
+                example: token.example,
+              },
+              `${token.label} — e.g. ${token.example}`,
+            )}
             className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10"
           >
-            {t.token}
+            {token.token}
           </button>
         ))}
       </div>
 
-      {val.error && <ValidationBadge message={val.error} severity="error" />}
-      {val.warning && <ValidationBadge message={val.warning} severity="warning" />}
+      {val.error && (
+        <ValidationBadge message={t(val.errorKey ?? "", {}, val.error)} severity="error" />
+      )}
+      {val.warning && (
+        <ValidationBadge message={t(val.warningKey ?? "", {}, val.warning)} severity="warning" />
+      )}
 
       {!val.error && local && (
         <div className="space-y-0.5 rounded-md bg-muted/30 p-2">
           <RenamePreviewRow
             icon={<FiCamera className="h-3 w-3 shrink-0" />}
-            label="Photo"
+            label={t("config.rename.photo")}
             parts={renderPatternParts(local, EXAMPLE_DATE, "IMG_001", ".jpg", "IMG")}
           />
           <RenamePreviewRow
             icon={<FiFilm className="h-3 w-3 shrink-0" />}
-            label="Video"
+            label={t("config.rename.video")}
             parts={renderPatternParts(local, EXAMPLE_DATE, "VID_0042", ".mp4", "VID")}
           />
         </div>

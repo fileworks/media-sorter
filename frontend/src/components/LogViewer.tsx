@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLogs } from "@/hooks/useLogs";
 import { formatDate } from "@/lib/dateFormatters";
+import { useI18n } from "@/i18n/I18nContext";
 import type { LogEntry } from "@/types/api";
 import {
   FiX,
@@ -85,13 +86,14 @@ function getEntryStyle(
 }
 
 /** 24-hour clock time for a log entry; falls back to the raw timestamp. */
-function formatTime(timestamp: string): string {
-  return formatDate(timestamp, { type: "time-only", nullPlaceholder: timestamp });
+function formatTime(timestamp: string, locale: string): string {
+  return formatDate(timestamp, { type: "time-only", locale, nullPlaceholder: timestamp });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function LogViewer({ isRunning }: LogViewerProps) {
+  const { t, locale } = useI18n();
   const { logs, isConnected, clear } = useLogs();
   const scrollRef = useRef<HTMLDivElement>(null);
   // Start collapsed by default — user expands it when they want detail
@@ -154,10 +156,16 @@ export function LogViewer({ isRunning }: LogViewerProps) {
   });
 
   const filterLabels: Record<FilterLevel, string> = {
-    all: "All",
-    info: "Info",
-    warnings: warningCount > 0 ? `Warnings (${warningCount})` : "Warnings",
-    errors: errorCount > 0 ? `Errors (${errorCount})` : "Errors",
+    all: t("log.filter.all"),
+    info: t("log.filter.info"),
+    warnings:
+      warningCount > 0
+        ? t("log.filterCount", { label: t("log.filter.warnings"), count: warningCount })
+        : t("log.filter.warnings"),
+    errors:
+      errorCount > 0
+        ? t("log.filterCount", { label: t("log.filter.errors"), count: errorCount })
+        : t("log.filter.errors"),
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -185,7 +193,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
                 isConnected ? "bg-green-400" : "bg-red-400",
               ].join(" ")}
             />
-            <span className="text-xs font-semibold text-gray-200">Live Log</span>
+            <span className="text-xs font-semibold text-gray-200">{t("log.title")}</span>
             <span className="text-xs text-gray-500">({logs.length})</span>
             {errorCount > 0 && (
               <span className="flex items-center gap-0.5 rounded bg-red-900/60 px-1.5 py-0.5 text-xs font-medium text-red-400">
@@ -226,7 +234,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
                 onClick={clear}
                 className="ml-1 rounded px-2 py-0.5 text-xs text-gray-500 hover:text-gray-200"
               >
-                Clear
+                {t("log.clear")}
               </button>
             )}
 
@@ -234,7 +242,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
               type="button"
               onClick={() => setCollapsed((v) => !v)}
               className="p-1 text-gray-400 hover:text-gray-200 rounded"
-              aria-label={collapsed ? "Expand log panel" : "Collapse log panel"}
+              aria-label={collapsed ? t("log.expand") : t("log.collapse")}
             >
               {collapsed ? (
                 <FiChevronUp className="h-3.5 w-3.5" />
@@ -247,7 +255,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
               type="button"
               onClick={() => setVisible(false)}
               className="p-1 text-gray-400 hover:text-gray-200 rounded"
-              aria-label="Dismiss log panel"
+              aria-label={t("log.dismiss")}
             >
               <FiX className="h-3.5 w-3.5" />
             </button>
@@ -263,7 +271,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
           >
             {filtered.length === 0 ? (
               <p className="text-gray-600">
-                {logs.length === 0 ? "No log entries yet…" : "No entries match the current filter."}
+                {logs.length === 0 ? t("log.empty") : t("log.noMatches")}
               </p>
             ) : (
               filtered.map((entry: LogEntry, idx) => {
@@ -289,7 +297,9 @@ export function LogViewer({ isRunning }: LogViewerProps) {
                       )}
                       {ctxError && <span className="block text-red-500">{ctxError}</span>}
                     </span>
-                    <span className="shrink-0 text-gray-600">{formatTime(entry.timestamp)}</span>
+                    <span className="shrink-0 text-gray-600">
+                      {formatTime(entry.timestamp, locale)}
+                    </span>
                   </div>
                 );
               })

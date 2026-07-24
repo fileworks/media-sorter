@@ -13,6 +13,7 @@ from datetime import date
 from pathlib import Path
 
 from app.core.config import UNCATEGORIZED_FOLDER, Config
+from app.core.rules import append_contained_route
 from app.services.conversion_service import predicted_image_suffix, predicted_video_suffix
 from app.utils.media_utils import is_image, is_video
 from app.utils.path_utils import sanitize_path_segment
@@ -57,6 +58,7 @@ def build_dest_dir(
     config: Config,
     category: str | None = None,
     camera: str = "",
+    route_suffix: str | None = None,
 ) -> Path:
     """Compute the destination *directory* for a file. Pure — never mkdirs.
 
@@ -91,7 +93,22 @@ def build_dest_dir(
     if config.camera_subfolder_enabled and camera:
         dest_dir = dest_dir / camera
 
+    if route_suffix:
+        dest_dir = append_contained_route(dest_dir, route_suffix)
+
     return dest_dir
+
+
+def reserve_destination(path: Path, reserved: set[Path]) -> Path:
+    """Return and reserve the first collision-free deterministic path."""
+    candidate = path
+    stem, suffix = path.stem, path.suffix
+    counter = 0
+    while candidate.exists() or candidate.resolve(strict=False) in reserved:
+        counter += 1
+        candidate = path.parent / f"{stem}_{counter:03d}{suffix}"
+    reserved.add(candidate.resolve(strict=False))
+    return candidate
 
 
 def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:

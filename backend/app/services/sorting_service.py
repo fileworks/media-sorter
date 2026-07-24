@@ -15,10 +15,19 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.database import DatabaseManager
 from app.core.logging_config import get_logger
+from app.core.rules import normalized_key
+from app.services.ai.ai_tagging_service import AITaggingService
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
 from app.services.dedup_index import DedupIndex, resolve_index_path
-from app.services.destination import build_dest_dir, quarantine_dir, rename_stem
+from app.services.destination import (
+    build_dest_dir,
+    predicted_filename,
+    quarantine_dir,
+    rename_stem,
+    reserve_destination,
+)
 from app.services.duplicate_service import (
     DuplicateMatch,
     DuplicateRegistry,
@@ -34,14 +43,12 @@ from app.services.filesystem_service import (
 from app.services.junk_filter import classify_junk
 from app.services.metadata_service import MetadataService
 from app.services.repair_service import RepairService
+from app.services.rule_engine_service import RuleEngineService
 from app.utils.media_utils import is_image, is_video
 from app.utils.path_utils import sanitize_path_segment
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
-    from app.services.ai.ai_tagging_service import AITaggingService
-    from app.services.ai.category_classifier_service import CategoryClassifierService
-    from app.services.rule_engine_service import RuleEngineService
 
 logger = get_logger(__name__)
 
@@ -56,6 +63,18 @@ _DUPLICATE_STATUS_BY_SCOPE = {
 def _tags_to_json(tags: list[str]) -> str:
     """Serialise a tag list as JSON so commas inside tag text are preserved."""
     return json.dumps(tags, ensure_ascii=False) if tags else "[]"
+
+
+def _merge_tags(tags: list[str]) -> list[str]:
+    """De-duplicate normalized tags while preserving first spelling and order."""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        key = normalized_key(tag)
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(tag)
+    return merged
 
 
 class SortingService:
@@ -171,6 +190,23 @@ class SortingService:
             quality_processing_order, files, config, self._duplicates, task.cancel_event, task
         )
         records: list[dict[str, Any] | None] = [None] * len(files)
+        reserved_destinations: set[Path] = set()
+        # Snapshot locale-sensitive dependencies. A config update can replace
+        # the container's live services while this coroutine is running; these
+        # instances keep generated content coherent for this operation.
+        operation_rules = (
+            self._rules.for_operation(config)
+            if isinstance(self._rules, RuleEngineService)
+            else self._rules
+        )
+        operation_ai = (
+            self._ai.for_operation(config) if isinstance(self._ai, AITaggingService) else self._ai
+        )
+        operation_classifier = (
+            self._classifier.for_operation(config)
+            if isinstance(self._classifier, CategoryClassifierService)
+            else self._classifier
+        )
 
         # Per-file phase — reset the counter so the bar restarts cleanly from 0.
         task.progress.phase = "sorting"
@@ -193,6 +229,11 @@ class SortingService:
                 registry=registry,
                 operation_id=operation_id,
                 dest_registry=dest_registry,
+                reserved_destinations=reserved_destinations,
+                operation_rules=operation_rules,
+                operation_ai=operation_ai,
+                operation_classifier=operation_classifier,
+                use_operation_services=True,
             )
             records[idx] = record
 
@@ -256,6 +297,11 @@ class SortingService:
         registry: DuplicateRegistry,
         operation_id: str,
         dest_registry: DuplicateRegistry | None = None,
+        reserved_destinations: set[Path] | None = None,
+        operation_rules: RuleEngineService | None = None,
+        operation_ai: AITaggingService | None = None,
+        operation_classifier: CategoryClassifierService | None = None,
+        use_operation_services: bool = False,
     ) -> dict[str, Any]:
         """Process a single file through the full sort pipeline.
 
@@ -288,6 +334,20 @@ class SortingService:
         }
 
         try:
+            rules = operation_rules if use_operation_services else self._rules
+            ai = operation_ai if use_operation_services else self._ai
+            classifier = operation_classifier if use_operation_services else self._classifier
+            rule_tags: list[str] = []
+            route_suffix: str | None = None
+            if rules is not None:
+                try:
+                    evaluation = rules.evaluate_all(file_path)
+                    rule_tags = list(evaluation.tags)
+                    route_suffix = evaluation.route
+                except Exception as exc:
+                    logger.warning("Rule evaluation failed", path=str(file_path), error=str(exc))
+            record["tags"] = rule_tags
+
             # Junk / thumbnail filter — cheapest check first; quarantined to
             # _junk/ with the reason in the record (never deleted).
             junk_reason = classify_junk(file_path, config)
@@ -371,21 +431,12 @@ class SortingService:
                     record.update(status=status, dest_path=str(dest))
                     return record
 
-            # Evaluate rule-based tags before building destination
-            tags: list[str] = []
-            if self._rules is not None:
-                try:
-                    tags = self._rules.evaluate(file_path)
-                except Exception as exc:
-                    logger.warning("Rule evaluation failed", path=str(file_path), error=str(exc))
-            record["tags"] = tags
-
             # Smart Categorization: classify the SOURCE file (it hasn't moved
             # yet) into a topic folder before building the destination. Runs in
             # this worker thread, so CLIP inference never blocks the event loop.
             category: str | None = None
-            if config.categorize_enabled and self._classifier is not None:
-                category = self._classifier.classify_file(file_path).category
+            if config.categorize_enabled and classifier is not None:
+                category = classifier.classify_file(file_path).category
             record["category"] = category
 
             # Extract camera model once; raw value goes to the report, sanitized
@@ -396,7 +447,7 @@ class SortingService:
                 record["camera_model"] = raw_camera
 
             # Build destination
-            dest = self._build_dest(
+            initial_dest, planned_final = self._plan_dest(
                 file_path,
                 extracted_date,
                 source_root,
@@ -404,9 +455,15 @@ class SortingService:
                 config,
                 category,
                 sanitize_path_segment(raw_camera or ""),
+                route_suffix,
+                reserved_destinations,
             )
+            dest = initial_dest
 
             if not dry_run:
+                # Destination contents may have changed since planning. Recheck
+                # immediately before writing and never open an existing path.
+                dest = self._fs.find_available_filename(dest)
                 if config.copy_instead_of_move:
                     self._fs.safe_copy(file_path, dest, verify=True)
                 else:
@@ -449,9 +506,17 @@ class SortingService:
                             error=str(exc),
                         )
 
-                # Apply renaming pattern in-place
-                if config.rename:
-                    dest = self._apply_rename(dest, extracted_date, config)
+                # Conversion/rename planning chooses the final name before any
+                # mutation. If conversion kept the expected suffix, move to that
+                # reserved name; a post-preview destination mutation simply
+                # advances the deterministic suffix and is reported below.
+                if (
+                    dest.suffix.casefold() == planned_final.suffix.casefold()
+                    and dest != planned_final
+                ):
+                    target = self._fs.find_available_filename(planned_final)
+                    dest.rename(target)
+                    dest = target
 
                 # Override EXIF creation date if configured
                 if config.override_metadata:
@@ -463,15 +528,18 @@ class SortingService:
                 # them into the file itself (EXIF / video metadata / XMP sidecar).
                 # Runs before the utime sync (a metadata rewrite changes mtime)
                 # and before validation (so a bad write is still caught).
-                if config.ai_tagging_enabled and self._ai is not None:
+                if config.ai_tagging_enabled and ai is not None:
                     try:
-                        ai_tags = self._ai.tag_file(dest)
+                        ai_tags = ai.tag_file(dest)
                         if ai_tags:
-                            record["tags"] = list(dict.fromkeys([*record["tags"], *ai_tags]))
-                        if config.ai_tagging_embed_in_files and record["tags"]:
-                            self._metadata.write_keywords(dest, record["tags"])
+                            record["tags"] = _merge_tags([*record["tags"], *ai_tags])
                     except Exception as exc:
                         logger.warning("AI tagging step failed", path=str(dest), error=str(exc))
+                if config.embed_tags_in_files and record["tags"]:
+                    try:
+                        self._metadata.write_keywords(dest, record["tags"])
+                    except Exception as exc:
+                        logger.warning("Tag embedding failed", path=str(dest), error=str(exc))
 
                 # Synchronise filesystem timestamps (mtime + atime) to the extracted date
                 # so the file's "date modified" matches the photo/video date in all UIs.
@@ -499,6 +567,8 @@ class SortingService:
                             )
                             return record
                         logger.info("Repaired file after validation failure", path=str(dest))
+            else:
+                dest = planned_final
 
             # A suspicious-EXIF file that recovered via a fallback date may have
             # set error_message above — clear it so success records never carry
@@ -535,6 +605,24 @@ class SortingService:
         category: str | None = None,
         camera: str = "",
     ) -> Path:
+        """Compatibility helper for the pre-planner destination calculation."""
+        dest_dir = build_dest_dir(
+            file_path, extracted_date, source_root, dest_root, config, category, camera
+        )
+        return self._fs.find_available_filename(dest_dir / file_path.name)
+
+    def _plan_dest(
+        self,
+        file_path: Path,
+        extracted_date: date,
+        source_root: Path,
+        dest_root: Path,
+        config: Config,
+        category: str | None = None,
+        camera: str = "",
+        route_suffix: str | None = None,
+        reserved_destinations: set[Path] | None = None,
+    ) -> tuple[Path, Path]:
         """Compute a collision-free destination path. Pure path math — the
         directory tree is created by ``safe_copy``/``safe_move`` at placement
         time, so a dry run never mutates the destination volume.
@@ -543,16 +631,25 @@ class SortingService:
         second EXIF read.
         """
         dest_dir = build_dest_dir(
-            file_path, extracted_date, source_root, dest_root, config, category, camera
+            file_path,
+            extracted_date,
+            source_root,
+            dest_root,
+            config,
+            category,
+            camera,
+            route_suffix,
         )
-        return self._fs.find_available_filename(dest_dir / file_path.name)
+        final = dest_dir / predicted_filename(file_path, extracted_date, config)
+        if reserved_destinations is not None:
+            final = reserve_destination(final, reserved_destinations)
+        else:
+            final = self._fs.find_available_filename(final)
+        initial = final.with_suffix(file_path.suffix)
+        return initial, final
 
     def _apply_rename(self, path: Path, d: date, config: Config) -> Path:
-        """Apply config.rename_pattern to *path*, returning the renamed path.
-
-        Supported tokens: YYYY, MM, DD, NAME, TYPE (substituted by the shared
-        ``rename_stem`` so the preview predicts identical names).
-        """
+        """Compatibility helper using the shared single-pass rename tokens."""
         file_type = "VID" if is_video(path) else "IMG"
         new_stem = rename_stem(config.rename_pattern, d, path.stem, file_type)
         new_path = self._fs.find_available_filename(path.parent / (new_stem + path.suffix))

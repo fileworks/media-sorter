@@ -2,15 +2,20 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import type { Config, ConfigIssue } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
 
 /** Group issues by the config field they target (dropping field-less ones). */
-function byField(issues: ConfigIssue[]): Map<string, string[]> {
+function byField(
+  issues: ConfigIssue[],
+  translate: (key: string, params?: Record<string, string | number>, fallback?: string) => string,
+): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const issue of issues) {
     if (!issue.field) continue;
     const existing = map.get(issue.field);
-    if (existing) existing.push(issue.message);
-    else map.set(issue.field, [issue.message]);
+    const message = translate(issue.message_key, issue.params, issue.message);
+    if (existing) existing.push(message);
+    else map.set(issue.field, [message]);
   }
   return map;
 }
@@ -18,6 +23,7 @@ function byField(issues: ConfigIssue[]): Map<string, string[]> {
 const CONFIG_KEY = ["config"] as const;
 
 export function useConfig() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
 
   const {
@@ -63,7 +69,10 @@ export function useConfig() {
   // Field-keyed view so a section/input can flag itself without re-scanning the
   // flat error list. Keyed off the stable react-query result so it only
   // recomputes when validation actually changes.
-  const fieldErrors = useMemo(() => byField(validationResult?.errors ?? []), [validationResult]);
+  const fieldErrors = useMemo(
+    () => byField(validationResult?.errors ?? [], t),
+    [validationResult, t],
+  );
 
   return {
     config,

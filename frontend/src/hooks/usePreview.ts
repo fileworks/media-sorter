@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
+import { useI18n } from "@/i18n/I18nContext";
 import type { PreviewResult, TaskProgress } from "@/types/api";
 
 /**
@@ -8,6 +9,7 @@ import type { PreviewResult, TaskProgress } from "@/types/api";
  * can show a determinate "N / M files" bar instead of an opaque spinner.
  */
 export function usePreview() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
 
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -45,16 +47,16 @@ export function usePreview() {
       handledRef.current = true;
       setLoading(false);
       if (status.result) setResult(status.result);
-      else setError("Preview produced no result.");
+      else setError(t("preview.noResult"));
     } else if (status.status === "failed") {
       handledRef.current = true;
       setLoading(false);
-      setError(status.error ?? "Preview failed.");
+      setError(status.error ?? t("preview.failed"));
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);
     }
-  }, [status]);
+  }, [status, t]);
 
   const generatePreview = useCallback(async () => {
     // Clear the old task id *before* setting loading so the stale query key
@@ -70,10 +72,10 @@ export function usePreview() {
       const id = await api.startPreview();
       setTaskId(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Preview failed.");
+      setError(err instanceof Error ? err.message : t("preview.failed"));
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, t]);
 
   const clear = useCallback(() => {
     setResult(null);

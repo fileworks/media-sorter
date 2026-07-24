@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { storedLocale, translate } from "@/i18n/I18nContext";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -49,10 +50,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center"
       >
         <div className="max-w-md space-y-2">
-          <h1 className="text-lg font-semibold text-foreground">Something went wrong</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            {translate(storedLocale(), "app.somethingWentWrong")}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            The interface hit an unexpected error and couldn&apos;t continue. Reloading usually
-            fixes it — your files were not modified.
+            {translate(storedLocale(), "app.errorRecovery")}
           </p>
           {error.message && (
             <p className="rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
@@ -66,14 +68,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onClick={this.handleReset}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            Try again
+            {translate(storedLocale(), "app.tryAgain")}
           </button>
           <button
             type="button"
             onClick={this.handleReload}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            Reload app
+            {translate(storedLocale(), "app.reloadApp")}
           </button>
         </div>
       </div>

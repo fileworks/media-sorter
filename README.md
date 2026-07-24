@@ -196,6 +196,7 @@ config directory. The essentials:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| `language` | `"en"` | Interface and future generated labels: English or German |
 | `source_directory` | *(required)* | Folder to scan |
 | `target_directory` | *(required)* | Where organised files go |
 | `copy_instead_of_move` | `false` | `true` keeps originals; `false` moves them |
@@ -203,7 +204,8 @@ config directory. The essentials:
 | `recursive_scan` | `true` | Descend into subfolders |
 | `preserve_subfolders` | `false` | `true` recreates source subfolders under each date folder; `false` flattens |
 | `remove_duplicates` | `true` | Detect duplicates and quarantine them in `_duplicates/` (never deleted) |
-| `rules_enabled` | `true` | Enable rule-based tagging |
+| `rules_enabled` | `true` | Global switch for deterministic rules |
+| `rule_set` | `{"version":1,"tag_rules":[],"route_rules":[]}` | Typed tag and safe-routing rules |
 | `ai_tagging_enabled` | `false` | Analyse photos/videos and tag them by content (metadata only) |
 | `ai_tagging_provider` | `"local"` | `local` (offline, free) · `azure_vision` · `imagga` · `google_cloud_vision` |
 | `categorize_enabled` | `false` | Sort files into your own topic folders (`…/Y/M/D/<category>/`) |
@@ -223,7 +225,7 @@ feature: AI tagging writes *keywords into files*, while categorization decides *
 file goes in* (it writes no tags). You can use either, both, or neither.
 
 Files are only filed when the model is **confident** (tunable with
-`categorize_confidence_threshold`, default 85%); anything it's unsure about goes to a
+`categorize_confidence_threshold`, default 0.55); anything it's unsure about goes to a
 `_uncategorized/` folder rather than being guessed wrong — so nothing is mis-filed silently,
 and the **Preview** step shows you the predicted folder for every file before you commit.
 
@@ -243,7 +245,8 @@ Turn on **AI tagging** to have MediaSorter look at each photo/video and add desc
 tags (e.g. *beach*, *document*, *dog*). The tags are saved into the report **and written
 into the files themselves** — EXIF keywords for JPEG/TIFF (the Windows Explorer "Tags"
 field), a `keywords` metadata tag for videos, or a portable `.xmp` sidecar for anything
-else (PNG/HEIC/RAW). Toggle `ai_tagging_embed_in_files` off to keep tags in the report only.
+else (PNG/HEIC/RAW). Toggle `embed_tags_in_files` off to keep deterministic and AI tags in
+the report only.
 AI tagging runs during a real sort, not in preview.
 
 Choose a **provider**:
@@ -263,20 +266,35 @@ model tier — `lite` (CLIP, runs anywhere) or `standard`/`max` (SigLIP 2, more 
 ~100 MB download). On a machine below the minimum it auto-disables local AI and points you to a
 cloud provider instead. Pick a heavier tier than recommended and the UI flags it *"may be slow"*.
 
-Tagging rules match on `extension`, `filename_contains`, `size` (bytes), or `resolution`
-(`"WxH"`) with operators `eq` / `gt` / `lt` / `gte` / `lte`. Example:
+Rules match the source file on `extension`, `filename_contains`, `size` (bytes), or
+`resolution` (`"WxH"`). All matching tag rules run; the first matching route rule adds a
+strict relative suffix after the normal date/category/camera path. Priorities sort ascending,
+with saved order breaking ties. Preview and sort share `_001`, `_002`, … collision planning.
+Example:
 
 ```json
 {
-  "rules_enabled": true,
-  "rules": [
-    { "id": "r1", "name": "4K Videos", "tag": "4K",
-      "condition": { "type": "resolution", "operator": "gt", "value": "3840x2160" } },
-    { "id": "r2", "name": "RAW photos", "tag": "RAW",
-      "condition": { "type": "extension", "value": "raw" } }
-  ]
+  "rule_set": {
+    "version": 1,
+    "tag_rules": [],
+    "route_rules": [
+      {
+        "id": "screenshots",
+        "name": "Screenshots",
+        "enabled": true,
+        "priority": 10,
+        "condition": {"type": "filename_contains", "value": "screenshot"},
+        "relative_folder": "screenshot"
+      }
+    ]
+  }
 }
 ```
+
+With year/month sorting, `Screenshot 2026-07-04.png` previews as
+`2026/07/screenshot/Screenshot 2026-07-04.png`. Routes never affect technical quarantine
+folders. Legacy tag rules are backed up and migrated once; see the
+[settings reference](docs/settings-reference.md#rules-tagging-and-routing).
 
 ---
 

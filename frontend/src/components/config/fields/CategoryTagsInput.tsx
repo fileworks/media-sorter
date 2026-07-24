@@ -1,4 +1,5 @@
 import { sanitizeCategory } from "@/lib/pathUtils";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function CategoryTagsInput({
   categories,
@@ -9,6 +10,7 @@ export function CategoryTagsInput({
   onChange: (next: string[]) => void;
   disabled?: boolean;
 }) {
+  const { t, locale } = useI18n();
   const add = (raw: string) => {
     const safe = sanitizeCategory(raw);
     if (!safe) return;
@@ -31,7 +33,7 @@ export function CategoryTagsInput({
               disabled={disabled}
               onClick={() => remove(cat)}
               className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-              aria-label={`Remove ${cat}`}
+              aria-label={t("common.removeValue", { value: cat })}
             >
               ×
             </button>
@@ -40,7 +42,7 @@ export function CategoryTagsInput({
         <input
           type="text"
           disabled={disabled}
-          placeholder="Add category…"
+          placeholder={t("config.input.addCategory")}
           className="h-6 rounded-full border border-input bg-transparent px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
@@ -53,7 +55,9 @@ export function CategoryTagsInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {categories.length === 1 ? "1 category" : `${categories.length} categories`}
+        {t("config.input.categoryCount", {
+          count: categories.length.toLocaleString(locale),
+        })}
       </p>
     </div>
   );

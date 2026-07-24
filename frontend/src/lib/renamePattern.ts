@@ -13,15 +13,31 @@
 export interface RenameToken {
   token: string;
   label: string;
+  labelKey: string;
   example: string;
 }
 
 export const RENAME_TOKENS: readonly RenameToken[] = [
-  { token: "YYYY", label: "Year (4 digits)", example: "2024" },
-  { token: "MM", label: "Month", example: "03" },
-  { token: "DD", label: "Day", example: "15" },
-  { token: "NAME", label: "Original filename", example: "IMG_001" },
-  { token: "TYPE", label: "File type — IMG or VID", example: "IMG" },
+  {
+    token: "YYYY",
+    label: "Year (4 digits)",
+    labelKey: "config.rename.token.year",
+    example: "2024",
+  },
+  { token: "MM", label: "Month", labelKey: "config.rename.token.month", example: "03" },
+  { token: "DD", label: "Day", labelKey: "config.rename.token.day", example: "15" },
+  {
+    token: "NAME",
+    label: "Original filename",
+    labelKey: "config.rename.token.name",
+    example: "IMG_001",
+  },
+  {
+    token: "TYPE",
+    label: "File type — IMG or VID",
+    labelKey: "config.rename.token.type",
+    example: "IMG",
+  },
 ] as const;
 
 // Tokens ordered longest-first so the regex never matches a prefix of a longer
@@ -32,12 +48,24 @@ const TOKEN_RE = /YYYY|MM|DD|NAME|TYPE/g;
  * Validate a rename pattern for the UI. Returns at most one of `error`
  * (blocking) or `warning` (advisory); an empty object means "fine".
  */
-export function validateRenamePattern(pattern: string): { error?: string; warning?: string } {
-  if (!pattern) return { error: "Enter a pattern." };
+export function validateRenamePattern(pattern: string): {
+  error?: string;
+  errorKey?: string;
+  warning?: string;
+  warningKey?: string;
+} {
+  if (!pattern) return { error: "Enter a pattern.", errorKey: "config.rename.error.empty" };
   if (pattern.includes("/") || pattern.includes("\\"))
-    return { error: "A pattern can't contain slashes." };
+    return {
+      error: "A pattern can't contain slashes.",
+      errorKey: "config.rename.error.slashes",
+    };
   const hasVar = RENAME_TOKENS.some((t) => pattern.includes(t.token));
-  if (!hasVar) return { warning: "No variables — every file would get the same name." };
+  if (!hasVar)
+    return {
+      warning: "No variables — every file would get the same name.",
+      warningKey: "config.rename.warning.static",
+    };
   return {};
 }
 

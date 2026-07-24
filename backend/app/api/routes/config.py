@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config import (
@@ -39,6 +39,8 @@ class ConfigIssue(BaseModel):
 
     field: str | None
     message: str
+    message_key: str
+    params: dict[str, str | int | float] = Field(default_factory=dict)
 
 
 class ValidateConfigResponse(BaseModel):
@@ -97,7 +99,36 @@ async def save_config(
     """
     coerced, errors = coerce_config_update(body)
     if errors:
-        raise ConfigValidationError(errors)
+        issues: list[dict[str, Any]] = []
+        for message in errors:
+            field = next(
+                (
+                    key
+                    for key in body
+                    if key != "$schema" and (repr(key) in message or key == "rules")
+                ),
+                None,
+            )
+            issues.append(
+                {
+                    "field": field,
+                    "message": message,
+                    "message_key": (
+                        "config.update.legacy_rules"
+                        if field == "rules"
+                        else "config.update.invalid_value"
+                        if message.startswith("Invalid value")
+                        else "config.update.unknown_field"
+                    ),
+                    "params": {"field": field or ""},
+                }
+            )
+        raise ConfigValidationError(errors, issues)
+
+    if "ai_tagging_labels" in coerced and "ai_tagging_labels_provenance" not in coerced:
+        coerced["ai_tagging_labels_provenance"] = "custom"
+    if "categorize_categories" in coerced and "categorize_categories_provenance" not in coerced:
+        coerced["categorize_categories_provenance"] = "custom"
 
     merged = {**config.to_dict(), **coerced}
     new_config = Config.from_dict(merged)
@@ -114,15 +145,43 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
     errors: list[ConfigIssue] = []
     warnings: list[ConfigIssue] = []
 
-    def err(field: str | None, message: str) -> None:
-        errors.append(ConfigIssue(field=field, message=message))
+    def err(
+        field: str | None,
+        message: str,
+        message_key: str = "config.validation.invalid",
+        params: dict[str, str | int | float] | None = None,
+    ) -> None:
+        errors.append(
+            ConfigIssue(
+                field=field,
+                message=message,
+                message_key=message_key,
+                params=params or {},
+            )
+        )
 
-    def warn(field: str | None, message: str) -> None:
-        warnings.append(ConfigIssue(field=field, message=message))
+    def warn(
+        field: str | None,
+        message: str,
+        message_key: str = "config.validation.warning",
+        params: dict[str, str | int | float] | None = None,
+    ) -> None:
+        warnings.append(
+            ConfigIssue(
+                field=field,
+                message=message,
+                message_key=message_key,
+                params=params or {},
+            )
+        )
 
     # ── Source folder ─────────────────────────────────────────────────────────
     if not config.source_directory:
-        err("source_directory", "Pick the folder that holds your photos and videos.")
+        err(
+            "source_directory",
+            "Pick the folder that holds your photos and videos.",
+            "config.source.required",
+        )
     else:
         # exists()/is_dir() hit the filesystem — run them off the event loop.
         exists, is_dir = await asyncio.to_thread(_dir_status, config.source_directory)
@@ -131,20 +190,28 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
                 "source_directory",
                 f'Source folder not found: "{config.source_directory}". '
                 "Check the path and try again.",
+                "config.source.not_found",
+                {"path": config.source_directory},
             )
         elif not is_dir:
             err(
                 "source_directory",
                 f'That path is a file, not a folder: "{config.source_directory}".',
+                "config.source.not_directory",
+                {"path": config.source_directory},
             )
 
     # ── Destination folder ────────────────────────────────────────────────────
     if not config.target_directory:
-        err("target_directory", "Pick where your sorted files should go.")
+        err("target_directory", "Pick where your sorted files should go.", "config.target.required")
     elif config.source_directory and config.source_directory == config.target_directory:
         # Sorting into the source itself would rewrite the tree in place — reject
         # it here so `valid` is truthful (the UI can't rely on a client-only check).
-        err("target_directory", "Source and destination must be different folders.")
+        err(
+            "target_directory",
+            "Source and destination must be different folders.",
+            "config.target.same_as_source",
+        )
 
     # Rename pattern: surface unknown/typo'd tokens as a *warning*, not an error.
     # SortingService._apply_rename substitutes only the known tokens and leaves
@@ -154,16 +221,29 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
     if config.rename:
         pattern_warning = validate_rename_pattern(config.rename_pattern)
         if pattern_warning:
-            warn("rename_pattern", pattern_warning)
+            warn(
+                "rename_pattern",
+                pattern_warning,
+                "config.rename.unknown_tokens",
+                {"pattern": config.rename_pattern},
+            )
 
     # File-size filters can't be negative. The HTML min=0 on the inputs is
     # advisory (bypassable via DevTools / a direct API call / a stale config),
     # and a negative value is meaningless: a negative min is a no-op while a
     # negative max would exclude every file. Reject both server-side.
     if config.min_file_size_kb is not None and config.min_file_size_kb < 0:
-        err("min_file_size_kb", "Minimum file size can't be negative.")
+        err(
+            "min_file_size_kb",
+            "Minimum file size can't be negative.",
+            "config.filters.minimum_negative",
+        )
     if config.max_file_size_mb is not None and config.max_file_size_mb < 0:
-        err("max_file_size_mb", "Maximum file size can't be negative.")
+        err(
+            "max_file_size_mb",
+            "Maximum file size can't be negative.",
+            "config.filters.maximum_negative",
+        )
 
     # Perceptual duplicate threshold must stay within the supported range — but
     # only when perceptual matching is actually enabled. The value is ignored
@@ -178,6 +258,8 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             "duplicate_perceptual_threshold",
             f"Similarity threshold must be between {PERCEPTUAL_THRESHOLD_MIN} "
             f"and {PERCEPTUAL_THRESHOLD_MAX}.",
+            "config.duplicates.threshold_range",
+            {"minimum": PERCEPTUAL_THRESHOLD_MIN, "maximum": PERCEPTUAL_THRESHOLD_MAX},
         )
 
     # Smart Categorization — validate the category list and confidence bar, but
@@ -186,12 +268,17 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
     if config.categorize_enabled:
         category_error = validate_categories(config.categorize_categories)
         if category_error:
-            err("categorize_categories", category_error)
+            err(
+                "categorize_categories",
+                category_error,
+                "config.categories.invalid",
+            )
         elif not config.categorize_categories:
             warn(
                 "categorize_categories",
                 "Smart Categorization is on but no categories are set; "
                 "every file will go to _uncategorized/.",
+                "config.categories.empty",
             )
         if not (
             CATEGORIZE_THRESHOLD_MIN
@@ -202,6 +289,8 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
                 "categorize_confidence_threshold",
                 f"Confidence threshold must be between {CATEGORIZE_THRESHOLD_MIN} "
                 f"and {CATEGORIZE_THRESHOLD_MAX}.",
+                "config.categories.confidence_range",
+                {"minimum": CATEGORIZE_THRESHOLD_MIN, "maximum": CATEGORIZE_THRESHOLD_MAX},
             )
         if not (
             CATEGORIZE_MIN_MARGIN_MIN <= config.categorize_min_margin <= CATEGORIZE_MIN_MARGIN_MAX
@@ -210,7 +299,17 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
                 "categorize_min_margin",
                 f"Decision margin must be between {CATEGORIZE_MIN_MARGIN_MIN} "
                 f"and {CATEGORIZE_MIN_MARGIN_MAX}.",
+                "config.categories.margin_range",
+                {"minimum": CATEGORIZE_MIN_MARGIN_MIN, "maximum": CATEGORIZE_MIN_MARGIN_MAX},
             )
+
+    for migration_warning in config.migration_warnings:
+        warn(
+            "rule_set",
+            migration_warning,
+            "config.rules.migration_warning",
+            {"detail": migration_warning},
+        )
 
     return ValidateConfigResponse(valid=len(errors) == 0, errors=errors, warnings=warnings)
 

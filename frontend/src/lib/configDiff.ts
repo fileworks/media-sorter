@@ -17,6 +17,11 @@ export interface ConfigDiffEntry {
   default: string;
 }
 
+export interface ConfigDiffFormatters {
+  label?: (key: keyof Config, fallback: string) => string;
+  value?: (value: unknown, fallback: string) => string;
+}
+
 // Friendly labels where the auto-humanized key reads poorly. Everything else is
 // derived from the key, so new fields get a sensible label for free.
 const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
@@ -46,7 +51,7 @@ const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
   ai_tagging_provider: "AI provider",
   ai_tagging_confidence_threshold: "Tag confidence",
   ai_tagging_max_tags: "Max tags per file",
-  ai_tagging_embed_in_files: "Embed tags in files",
+  embed_tags_in_files: "Embed tags in files",
   ai_tagging_labels: "Tag labels",
   ai_model_tier: "AI model tier",
   ai_allow_gpu: "Use GPU for AI",
@@ -93,15 +98,22 @@ export function changedKeys(config: Config, defaults: Partial<Config>): Set<stri
 }
 
 /** Full, display-ready list of deviations, sorted by label. */
-export function diffConfig(config: Config, defaults: Partial<Config>): ConfigDiffEntry[] {
+export function diffConfig(
+  config: Config,
+  defaults: Partial<Config>,
+  formatters: ConfigDiffFormatters = {},
+): ConfigDiffEntry[] {
   const entries: ConfigDiffEntry[] = [];
   for (const key of Object.keys(defaults) as (keyof Config)[]) {
     if (eq(config[key], defaults[key])) continue;
+    const label = configFieldLabel(key);
+    const current = formatConfigValue(config[key]);
+    const defaultValue = formatConfigValue(defaults[key]);
     entries.push({
       key,
-      label: configFieldLabel(key),
-      current: formatConfigValue(config[key]),
-      default: formatConfigValue(defaults[key]),
+      label: formatters.label?.(key, label) ?? label,
+      current: formatters.value?.(config[key], current) ?? current,
+      default: formatters.value?.(defaults[key], defaultValue) ?? defaultValue,
     });
   }
   return entries.sort((a, b) => a.label.localeCompare(b.label));

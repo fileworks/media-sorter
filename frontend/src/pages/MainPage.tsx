@@ -35,6 +35,7 @@ import {
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useI18n } from "@/i18n/I18nContext";
 
 // History is a separate page reached only by the header button — defer its
 // bundle (panel + report modal path) until the user actually opens it.
@@ -47,6 +48,7 @@ const HistoryPanel = lazy(() =>
 const WELCOME_KEY = "mediasort_welcome_seen";
 
 function FirstRunWelcome({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="animate-fade-in rounded-xl border border-primary/20 bg-primary/10 px-5 py-4">
       <div className="flex items-start gap-4">
@@ -54,17 +56,14 @@ function FirstRunWelcome({ onDismiss }: { onDismiss: () => void }) {
           <FiCheckCircle className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Welcome to MediaSorter</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Point it at your messy media folder, choose where to put the sorted copies, and click{" "}
-            <strong>Analyze</strong>. Your originals are never moved or deleted.
-          </p>
+          <p className="text-sm font-semibold text-foreground">{t("app.welcome")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("app.welcomeHelp")}</p>
         </div>
         <button
           type="button"
           onClick={onDismiss}
           className="shrink-0 rounded p-1 text-muted-foreground/60 hover:text-muted-foreground"
-          aria-label="Dismiss welcome message"
+          aria-label={t("accessibility.dismiss")}
         >
           <FiX className="h-3.5 w-3.5" />
         </button>
@@ -76,6 +75,7 @@ function FirstRunWelcome({ onDismiss }: { onDismiss: () => void }) {
 // ── Sort-complete celebration banner ──────────────────────────────────────────
 
 function SortCelebration({ report }: { report: OperationReport }) {
+  const { t, locale } = useI18n();
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
@@ -93,15 +93,31 @@ function SortCelebration({ report }: { report: OperationReport }) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-foreground">
-            {summary.sorted.toLocaleString()} files organized
-            {duration_seconds ? ` in ${formatDuration(duration_seconds, { style: "long" })}` : ""}
+            {t(
+              summary.sorted === 1
+                ? duration_seconds
+                  ? "report.organizedIn.one"
+                  : "report.organized.one"
+                : duration_seconds
+                  ? "report.organizedIn"
+                  : "report.organized",
+              {
+                count: summary.sorted.toLocaleString(locale),
+                duration: formatDuration(duration_seconds, { style: "long", locale }),
+              },
+            )}
           </p>
           {(quarantineCount > 0 || duplicateCount > 0) && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {duplicateCount > 0 && `${duplicateCount.toLocaleString()} duplicates quarantined`}
+              {duplicateCount > 0 &&
+                t("report.duplicatesQuarantined", {
+                  count: duplicateCount.toLocaleString(locale),
+                })}
               {duplicateCount > 0 && quarantineCount > 0 && " · "}
               {quarantineCount > 0 &&
-                `${quarantineCount.toLocaleString()} files in special folders`}
+                t("report.specialFolders", {
+                  count: quarantineCount.toLocaleString(locale),
+                })}
             </p>
           )}
         </div>
@@ -109,7 +125,7 @@ function SortCelebration({ report }: { report: OperationReport }) {
           type="button"
           onClick={() => setVisible(false)}
           className="shrink-0 rounded p-1 text-primary/50 hover:text-primary"
-          aria-label="Dismiss"
+          aria-label={t("accessibility.dismiss")}
         >
           <FiX className="h-4 w-4" />
         </button>
@@ -133,6 +149,11 @@ export default function MainPage() {
   const { toast } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
   const { config, isValid, updateConfig } = useConfig();
+  const { setLocale, t, locale } = useI18n();
+
+  useEffect(() => {
+    if (config?.language) setLocale(config.language);
+  }, [config?.language, setLocale]);
 
   // ── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -334,7 +355,7 @@ export default function MainPage() {
 
   const handleAnalyse = async () => {
     if (!canGoToAnalysis) {
-      toast("Set a valid source and destination folder first.", "warning");
+      toast(t("analysis.requiredFolders"), "warning");
       return;
     }
     goToStep(2);
@@ -344,9 +365,9 @@ export default function MainPage() {
   const handlePreview = async () => {
     if (!canGoToPreview) {
       if (!analysisResult) {
-        toast("Run Analysis first.", "warning");
+        toast(t("analysis.runFirst"), "warning");
       } else if (!analysisResult.disk_space.sufficient) {
-        toast("Not enough disk space. Free up space or switch to Move mode.", "warning");
+        toast(t("analysis.noSpace"), "warning");
       }
       return;
     }
@@ -356,7 +377,7 @@ export default function MainPage() {
 
   const handleSort = async () => {
     if (!canGoToSort) {
-      toast("Run Preview first.", "warning");
+      toast(t("preview.runFirst"), "warning");
       return;
     }
     goToStep(4);
@@ -462,10 +483,10 @@ export default function MainPage() {
         : "bg-error";
 
   const backendLabel = health
-    ? `Backend v${health.version}`
+    ? t("backend.connected", { version: health.version })
     : healthLoading
-      ? "Connecting…"
-      : "Backend unreachable";
+      ? t("backend.connecting")
+      : t("backend.unreachable");
 
   // ── HISTORY PAGE ───────────────────────────────────────────────────────────
 
@@ -481,15 +502,17 @@ export default function MainPage() {
                 type="button"
                 onClick={() => setView("wizard")}
                 className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label="Back to sort wizard"
+                aria-label={t("app.back")}
               >
                 <FiArrowLeft className="h-4 w-4" />
-                Back
+                {t("app.back")}
               </button>
               <div className="h-4 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <FiClock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-base font-semibold text-foreground">Sort History</span>
+                <span className="text-base font-semibold text-foreground">
+                  {t("app.sortHistory")}
+                </span>
                 {historyCount > 0 && (
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
                     {historyCount}
@@ -504,7 +527,7 @@ export default function MainPage() {
                 type="button"
                 onClick={toggleTheme}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
               >
                 {theme === "dark" ? <FiSun className="h-4 w-4" /> : <FiMoon className="h-4 w-4" />}
               </button>
@@ -565,8 +588,8 @@ export default function MainPage() {
               type="button"
               onClick={toggleTheme}
               className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
+              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
             >
               {theme === "dark" ? <FiSun className="h-4 w-4" /> : <FiMoon className="h-4 w-4" />}
             </button>
@@ -578,7 +601,7 @@ export default function MainPage() {
               className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <FiClock className="h-3.5 w-3.5" />
-              <span>History</span>
+              <span>{t("app.history")}</span>
               {historyCount > 0 && (
                 <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums">
                   {historyCount}
@@ -614,21 +637,14 @@ export default function MainPage() {
             <div className="flex items-center gap-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
               <FiAlertTriangle className="shrink-0 h-4 w-4 text-warning" />
               <span className="text-warning">
-                {isTauri ? (
-                  "Lost connection to the MediaSorter engine. Reload to reconnect — if it keeps happening, restart the app."
-                ) : (
-                  <>
-                    Cannot reach the backend. Make sure it&apos;s running (
-                    <code className="mx-1 font-mono text-xs">make backend</code>) and try reloading.
-                  </>
-                )}
+                {isTauri ? t("backend.lost") : <>{t("backend.browserLost")}</>}
               </span>
               <button
                 type="button"
                 onClick={() => window.location.reload()}
                 className="ml-auto shrink-0 rounded-md border border-warning/30 bg-warning/15 px-3 py-1 text-xs font-medium text-warning hover:bg-warning/25"
               >
-                Reload
+                {t("app.reload")}
               </button>
             </div>
           )}
@@ -657,7 +673,7 @@ export default function MainPage() {
               <>
                 {analysisLoading && (
                   <div className="rounded-xl border border-border bg-card px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">Scanning source folder…</p>
+                    <p className="text-sm font-medium text-foreground">{t("analysis.scanning")}</p>
                   </div>
                 )}
 
@@ -672,16 +688,14 @@ export default function MainPage() {
                 {analysisResult && !analysisResult.disk_space.sufficient && !analysisLoading && (
                   <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                     <FiXCircle className="shrink-0 h-4 w-4 text-error" />
-                    <span>
-                      Not enough disk space for copy. Free up space or switch to Move mode.
-                    </span>
+                    <span>{t("analysis.noSpace")}</span>
                     <Button
                       variant="outline"
                       size="sm"
                       className="ml-auto shrink-0"
                       onClick={() => setStep(1)}
                     >
-                      ← Back to Config
+                      {t("analysis.backToConfig")}
                     </Button>
                   </div>
                 )}
@@ -727,9 +741,7 @@ export default function MainPage() {
             )}
             {step === 5 && !report && (
               <div className="rounded-xl border border-border bg-muted/30 px-6 py-12 text-center">
-                <p className="text-muted-foreground">
-                  No report yet. Finish a sort to see results here.
-                </p>
+                <p className="text-muted-foreground">{t("report.none")}</p>
               </div>
             )}
           </div>
@@ -746,7 +758,7 @@ export default function MainPage() {
               size="sm"
               onClick={() => goToStep(Math.max(1, step - 1) as WizardStep)}
             >
-              ← Back
+              ← {t("app.back")}
             </Button>
           ) : (
             <div />
@@ -758,23 +770,29 @@ export default function MainPage() {
               <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs">
                 <FiLoader className="h-3 w-3 shrink-0 animate-spin text-primary" />
                 <span className="font-medium text-foreground">
-                  {analysisLoading && "Analyzing files…"}
+                  {analysisLoading && t("progress.analyzingFiles")}
                   {previewLoading &&
                     (previewProgress
-                      ? `Preview: ${previewProgress.current.toLocaleString()} / ${previewProgress.total.toLocaleString()} files`
-                      : `Computing preview… (${previewElapsed}s)`)}
+                      ? t("progress.previewFiles", {
+                          current: previewProgress.current.toLocaleString(locale),
+                          total: previewProgress.total.toLocaleString(locale),
+                        })
+                      : t("progress.computingPreview", { seconds: previewElapsed }))}
                   {isRunning &&
                     (progress?.progress
-                      ? `Sorting: ${progress.progress.current.toLocaleString()} / ${progress.progress.total.toLocaleString()} files`
-                      : "Sorting files…")}
+                      ? t("progress.sortFiles", {
+                          current: progress.progress.current.toLocaleString(locale),
+                          total: progress.progress.total.toLocaleString(locale),
+                        })
+                      : t("progress.sortingFiles"))}
                 </span>
                 {cancellableOp && (
                   <button
                     type="button"
                     onClick={handleCancelRequest}
                     className="ml-1 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-                    title="Cancel current operation"
-                    aria-label="Cancel current operation"
+                    title={t("operation.cancel")}
+                    aria-label={t("operation.cancel")}
                   >
                     <FiXCircle className="h-3.5 w-3.5" />
                   </button>
@@ -782,12 +800,9 @@ export default function MainPage() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                {step === 4 &&
-                  status === "completed" &&
-                  !isRunning &&
-                  "Sort complete — view the report."}
-                {step === 4 && status === "failed" && "Sort failed. Check the logs below."}
-                {step === 5 && report && "Sort complete. Export or start a new sort."}
+                {step === 4 && status === "completed" && !isRunning && t("sort.footerComplete")}
+                {step === 4 && status === "failed" && t("sort.footerFailed")}
+                {step === 5 && report && t("sort.footerReport")}
               </p>
             )}
           </div>
@@ -803,9 +818,9 @@ export default function MainPage() {
                 size="sm"
                 onClick={() => goToStep((step + 1) as WizardStep)}
                 className="flex items-center gap-1"
-                title="Go to next step"
+                title={t("app.next")}
               >
-                Next <FiArrowRight className="h-3.5 w-3.5" />
+                {t("app.next")} <FiArrowRight className="h-3.5 w-3.5" />
               </Button>
             )}
 
@@ -815,16 +830,16 @@ export default function MainPage() {
                 disabled={!canGoToAnalysis || isAnyRunning || !health}
                 title={
                   !health
-                    ? "Backend not connected"
+                    ? t("action.backendDisconnected")
                     : isAnyRunning
-                      ? "Wait for current operation to finish"
+                      ? t("action.waitForOperation")
                       : !canGoToAnalysis
-                        ? "Fix the highlighted settings first"
+                        ? t("action.fixSettings")
                         : undefined
                 }
                 onClick={() => void handleAnalyse()}
               >
-                Analyze →
+                {t("analysis.action")}
               </Button>
             )}
 
@@ -834,18 +849,20 @@ export default function MainPage() {
                 disabled={!canGoToPreview || isAnyRunning}
                 title={
                   isAnyRunning
-                    ? "Wait for current operation to finish"
+                    ? t("action.waitForOperation")
                     : !canGoToPreview
                       ? analysisError
-                        ? "Analysis failed — retry first"
-                        : "Analysis must complete with sufficient disk space"
+                        ? t("action.analysisRetry")
+                        : t("action.analysisRequired")
                       : previewResult !== null
-                        ? "Re-run preview (will discard existing preview)"
+                        ? t("action.previewRerun")
                         : undefined
                 }
                 onClick={handlePreviewClick}
               >
-                {previewResult !== null && !previewLoading ? "Re-run Preview" : "Run Preview →"}
+                {previewResult !== null && !previewLoading
+                  ? t("preview.rerun")
+                  : t("preview.action")}
               </Button>
             )}
 
@@ -855,28 +872,28 @@ export default function MainPage() {
                 disabled={!canGoToSort || isAnyRunning}
                 title={
                   isAnyRunning
-                    ? "Wait for current operation to finish"
+                    ? t("action.waitForOperation")
                     : !canGoToSort
-                      ? "Generate a preview first"
+                      ? t("action.previewRequired")
                       : report !== null
-                        ? "Re-run sort (will start a new sort)"
+                        ? t("action.sortRerun")
                         : undefined
                 }
                 onClick={handleSortClick}
               >
-                Sort Now →
+                {t("sort.action")}
               </Button>
             )}
 
             {step === 4 && !isRunning && status === "completed" && (
               <Button size="sm" onClick={() => goToStep(5)}>
-                View Report →
+                {t("sort.viewReport")}
               </Button>
             )}
 
             {step === 5 && (
               <Button variant="outline" size="sm" onClick={handleNewSort}>
-                New Sort
+                {t("sort.new")}
               </Button>
             )}
           </div>
@@ -889,10 +906,10 @@ export default function MainPage() {
       {/* Config-change confirmation dialog */}
       <ConfirmDialog
         open={pendingConfigPatch !== null}
-        title="Apply setting and reset results?"
-        description="Changing settings will immediately discard your current analysis and preview. You'll need to re-run them before sorting."
-        confirmLabel="Apply & reset"
-        cancelLabel="Cancel"
+        title={t("dialog.applyReset.title")}
+        description={t("dialog.applyReset.description")}
+        confirmLabel={t("dialog.applyReset.confirm")}
+        cancelLabel={t("common.cancel")}
         onClose={handleConfigChangeDismiss}
         onConfirm={handleConfigChangeConfirm}
       >
@@ -902,7 +919,7 @@ export default function MainPage() {
               <li>
                 Analysis:{" "}
                 <span className="font-semibold text-foreground">
-                  {analysisResult.total_files.toLocaleString()} files scanned
+                  {analysisResult.total_files.toLocaleString(locale)} files scanned
                 </span>
               </li>
             )}
@@ -910,7 +927,7 @@ export default function MainPage() {
               <li>
                 Preview:{" "}
                 <span className="font-semibold text-foreground">
-                  {previewResult.items.length.toLocaleString()} items planned
+                  {previewResult.items.length.toLocaleString(locale)} items planned
                 </span>
               </li>
             )}
@@ -921,14 +938,16 @@ export default function MainPage() {
       {/* Re-run confirmation dialog */}
       <ConfirmDialog
         open={rerunConfirmType !== null}
-        title={rerunConfirmType === "preview" ? "Re-run preview?" : "Re-run sort?"}
+        title={t(
+          rerunConfirmType === "preview" ? "dialog.rerunPreview.title" : "dialog.rerunSort.title",
+        )}
         description={
           rerunConfirmType === "preview"
-            ? "This will discard the current preview and compute a new one. Any changes you reviewed will be lost."
-            : "This will start a new sort. The previous sort report will be discarded."
+            ? t("dialog.rerunPreview.description")
+            : t("dialog.rerunSort.description")
         }
-        confirmLabel={rerunConfirmType === "preview" ? "Re-run Preview" : "Re-run Sort"}
-        cancelLabel="Keep existing"
+        confirmLabel={t(rerunConfirmType === "preview" ? "preview.rerun" : "sort.action")}
+        cancelLabel={t("dialog.keepExisting")}
         onClose={() => setRerunConfirmType(null)}
         onConfirm={() => void handleRerunConfirmed()}
       />
@@ -936,14 +955,16 @@ export default function MainPage() {
       {/* Cancel confirmation dialog */}
       <ConfirmDialog
         open={cancelConfirmOpen}
-        title={`Cancel ${cancellableOp === "preview" ? "preview" : "sort"}?`}
+        title={t(
+          cancellableOp === "preview" ? "dialog.cancelPreview.title" : "dialog.cancelSort.title",
+        )}
         description={
           cancellableOp === "preview"
-            ? "The preview computation will be cancelled and progress will be lost. You can re-run it afterwards."
-            : "The sort will stop. Files already processed remain in their new location and a partial report will be shown."
+            ? t("dialog.cancelPreview.description")
+            : t("dialog.cancelSort.description")
         }
-        confirmLabel="Yes, cancel"
-        cancelLabel="Keep going"
+        confirmLabel={t("dialog.yesCancel")}
+        cancelLabel={t("dialog.keepGoing")}
         onClose={() => setCancelConfirmOpen(false)}
         onConfirm={() => void handleCancelConfirmed()}
       />

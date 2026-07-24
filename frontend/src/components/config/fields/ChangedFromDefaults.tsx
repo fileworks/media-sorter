@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FiChevronDown, FiRotateCcw } from "react-icons/fi";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/I18nContext";
 import type { ConfigDiffEntry } from "@/lib/configDiff";
 
 interface ChangedFromDefaultsProps {
@@ -19,9 +20,10 @@ interface ChangedFromDefaultsProps {
 export function ChangedFromDefaults({
   entries,
   onResetAll,
-  resetLabel = "Reset all",
+  resetLabel,
   disabled,
 }: ChangedFromDefaultsProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const count = entries.length;
 
@@ -40,8 +42,7 @@ export function ChangedFromDefaults({
         >
           <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           <span>
-            {count} {count === 1 ? "setting" : "settings"} in this section{" "}
-            {count === 1 ? "differs" : "differ"} from defaults
+            {t(count === 1 ? "common.sectionDiff.one" : "common.sectionDiff.other", { count })}
           </span>
           <FiChevronDown
             className={cn(
@@ -55,10 +56,10 @@ export function ChangedFromDefaults({
             type="button"
             onClick={onResetAll}
             className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-            title="Reset this section's settings to their defaults"
+            title={t("common.resetSectionTitle")}
           >
             <FiRotateCcw className="h-3 w-3" />
-            {resetLabel}
+            {resetLabel ?? t("common.resetAll")}
           </button>
         )}
       </div>
