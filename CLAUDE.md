@@ -50,3 +50,12 @@ CLIP (fastembed) / SigLIP 2 (onnxruntime), tier-gated by a hardware probe.
 - **Building a service?** Check `docs/kb-backend.md` (DI, schemas) and `docs/kb-deprecated.md` (async gotchas)
 - **Writing tests?** Check `docs/kb-testing.md` (fixtures, mocking, isolation)
 - **Uncertain about a pattern?** Start with `docs/kb-deprecated.md` to rule out anti-patterns, then read the other kb files above
+
+---
+
+## Local Overrides
+
+This committed file is the project guidance for both workspace and standalone
+clones. Put machine-specific paths, local commands, or private preferences in an
+ignored `CLAUDE.local.md` at the repository root. Never store credentials or
+other secrets there.

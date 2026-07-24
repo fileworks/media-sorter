@@ -45,7 +45,7 @@ jobs:
     # semantics — this guard suppresses the redundant re-run instead.)
     if: ${{ !contains(github.event.head_commit.message, 'chore(release):') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history so commit-analyzer can see every commit
           persist-credentials: true
@@ -64,10 +64,10 @@ jobs:
             echo "::warning title=No SEMANTIC_RELEASE_TOKEN::Releasing with the default GITHUB_TOKEN — the pushed tag will NOT trigger release.yml, so no installers are built automatically. Add a fine-grained PAT (contents: read/write) as the SEMANTIC_RELEASE_TOKEN repo secret, or build manually: gh workflow run release.yml --ref <new v* tag>."
           fi
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: package-lock.json
 

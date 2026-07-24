@@ -10,10 +10,10 @@ hierarchy. It previews everything first, never deletes anything, and runs entire
 on your machine.
 
 [![CI](https://github.com/fileworks/media-sorter/actions/workflows/ci.yml/badge.svg)](https://github.com/fileworks/media-sorter/actions/workflows/ci.yml)
+[![Latest release: v1.0.6](https://img.shields.io/badge/release-v1.0.6-orange)](https://github.com/fileworks/media-sorter/releases/tag/v1.0.6)
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-blue)
 
-<!-- Drop a screenshot at docs/assets/screenshot.png — see docs/assets/README.md -->
 ![MediaSorter — the 5-step wizard](docs/assets/screenshot.png)
 
 </div>
@@ -73,7 +73,8 @@ A five-step wizard walks you through the whole thing:
    - **Windows** — `MediaSorter_x.x.x_x64_en-US.msi` (or the `…-setup.exe`)
 2. Open / install and launch — the backend starts itself automatically.
 
-First launch on an unsigned build may warn you:
+The current `v1.0.6` installers are unsigned, so the first launch may warn you:
+
 - **macOS** — right-click → **Open** → **Open**.
 - **Windows** — SmartScreen → **More info** → **Run anyway**.
 
@@ -109,6 +110,11 @@ Quality gates: **Ruff** + **mypy --strict** (backend) and **ESLint** + **Prettie
 make ci           # backend gate: ruff + mypy + pytest (≥80% coverage, currently ~86%)
 cd frontend && npm run lint && npm test && npm run build   # frontend gate (eslint + vitest + build)
 ```
+
+For per-clone paths, commands, or preferences, create an ignored
+`CLAUDE.local.md` at the repository root. The committed `CLAUDE.md` remains the
+project guidance for standalone clones. Do not put credentials or other secrets
+in the local file.
 
 📖 **[docs/development.md](docs/development.md)** — setup, testing, building, and the
 release flow in full.
