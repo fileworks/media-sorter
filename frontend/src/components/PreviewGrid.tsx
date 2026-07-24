@@ -43,6 +43,7 @@ function getStatusColor(status: string): string {
     case "already_in_destination":
       return "bg-info";
     case "junk":
+    case "duplicate_unknown":
       return "bg-warning";
     default:
       return "bg-error";
@@ -67,6 +68,8 @@ function getStatusLabel(status: string): string {
       return "Junk/thumbnail";
     case "already_in_destination":
       return "Already in destination";
+    case "duplicate_unknown":
+      return "Duplicate check completes during sort";
     default:
       return status;
   }

@@ -60,7 +60,9 @@ failures are always diagnosable:
 | Linux | `~/.local/share/mediasort/logs/` |
 
 The Rust shell writes `mediasort.log`; the Python backend writes `backend.log`.
-Both rotate at 2 MB (Rust: one backup; Python: three backups via `RotatingFileHandler`).
+The Rust log rotates at 2 MB with one backup. The backend JSON log rotates at
+5 MiB with three backups plus the active file (about 20 MiB maximum); inability
+to create the backend file never blocks startup.
 
 ---
 

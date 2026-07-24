@@ -56,6 +56,11 @@ def test_has_accelerator_coreml() -> None:
     assert _has_accelerator(["CoreMLExecutionProvider"])
 
 
+def test_has_accelerator_directml_uses_onnx_runtime_identifier() -> None:
+    assert _has_accelerator(["CPUExecutionProvider", "DmlExecutionProvider"])
+    assert not _has_accelerator(["DirectMLExecutionProvider"])
+
+
 def test_has_accelerator_cpu_only() -> None:
     assert not _has_accelerator(["CPUExecutionProvider"])
 

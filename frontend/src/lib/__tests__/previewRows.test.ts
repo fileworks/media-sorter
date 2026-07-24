@@ -150,4 +150,23 @@ describe("buildFlatRows — P0 engine outcome buckets", () => {
     // Destination-scope items never join the dated in-run duplicate buckets.
     expect(kinds(rows)).not.toContain("date-dup-header");
   });
+
+  it("keeps unknown video perceptual checks out of promised date destinations", () => {
+    const rows = buildFlatRows(
+      [
+        mk({
+          source: "/clip.mp4",
+          status: "duplicate_unknown",
+          extracted_date: "2024-01-02",
+          duplicate_evaluation: "unknown",
+          duplicate_unknown_reason: "video_perceptual_not_computed",
+        }),
+      ],
+      new Set(["folder-duplicate_unknown"]),
+      ["year"],
+    );
+    expect(ofKind(rows, "year")).toHaveLength(0);
+    expect(ofKind(rows, "folder-header")[0].folderKey).toBe("duplicate_unknown");
+    expect(ofKind(rows, "folder-file")).toHaveLength(1);
+  });
 });

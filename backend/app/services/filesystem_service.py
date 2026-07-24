@@ -1,18 +1,24 @@
 """Filesystem service — file enumeration, safe copy/move, and path helpers."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import os
 import shutil
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from app.background_tasks.task_manager import CancellationToken
 from app.core.exceptions import InsufficientStorageError, SortingError
 
 if TYPE_CHECKING:
     from PIL.Image import Image
+
+    from app.background_tasks.task_manager import Task
 from app.core.logging_config import get_logger
 
 # The media extension registries live in app.utils.media_utils (the single source
@@ -33,7 +39,7 @@ from app.utils.media_utils import (
     is_media,
     is_size_included,
 )
-from app.utils.path_utils import is_excluded_by_pattern
+from app.utils.path_utils import is_excluded_by_pattern, validate_source_root
 
 logger = get_logger(__name__)
 
@@ -120,7 +126,7 @@ def register_heif() -> None:
         pass  # HEIC just won't be openable; callers handle None
 
 
-def _open_raw(path: Path) -> "Image | None":
+def _open_raw(path: Path) -> Image | None:
     """Decode a RAW file to a PIL.Image.
 
     Prefers the embedded JPEG thumbnail; falls back to a half-size demosaic.
@@ -151,7 +157,7 @@ def _open_raw(path: Path) -> "Image | None":
 
 
 @contextlib.contextmanager
-def open_image(path: Path) -> "Iterator[Image | None]":
+def open_image(path: Path) -> Iterator[Image | None]:
     """Yield a PIL.Image for *path* (HEIC and RAW included), or None if it cannot be opened.
 
     - HEIC/HEIF: via pillow-heif (registered on first use).
@@ -185,7 +191,7 @@ def open_image(path: Path) -> "Iterator[Image | None]":
                 img.close()
 
 
-def load_exif_dict(path: Path) -> "dict[str, Any] | None":
+def load_exif_dict(path: Path) -> dict[str, Any] | None:
     """Return a piexif-format EXIF dict for *path*, or None if unavailable.
 
     The single shared EXIF-blob loader (date extraction, camera detection and
@@ -213,7 +219,7 @@ def load_exif_dict(path: Path) -> "dict[str, Any] | None":
         return None
 
 
-def image_dimensions(path: Path) -> "tuple[int, int] | None":
+def image_dimensions(path: Path) -> tuple[int, int] | None:
     """Return ``(width, height)`` of an image in pixels, or None if unreadable.
 
     Reads dimensions without a full pixel decode where possible:
@@ -274,19 +280,7 @@ def validate_source_directory(directory: str | None) -> Path:
     finish with a green tick and "0 files sorted", which reads as "my library is
     empty" rather than "MediaSorter never saw it".
     """
-    if not directory or not directory.strip():
-        raise SortingError("No source folder is set — choose one in Settings, then sort.")
-    root = Path(directory)
-    if not root.exists():
-        raise SortingError(
-            f"Source folder not found: {root}. If it lives on an external drive or a "
-            "network share, check that it is plugged in and mounted."
-        )
-    if not root.is_dir():
-        raise SortingError(f"The source path is a file, not a folder: {root}.")
-    if not os.access(root, os.R_OK | os.X_OK):
-        raise SortingError(f"Source folder cannot be read (permission denied): {root}.")
-    return root
+    return validate_source_root(directory)
 
 
 def validate_target_directory(directory: str | None) -> Path:
@@ -309,6 +303,39 @@ def validate_target_directory(directory: str | None) -> Path:
     return root
 
 
+@dataclass(frozen=True)
+class TraversalIssue:
+    path: str
+    error_class: str
+    message: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "path": self.path,
+            "error_class": self.error_class,
+            "message": self.message,
+        }
+
+
+@dataclass
+class TraversalResult:
+    files: list[Path] = field(default_factory=list)
+    issues: list[TraversalIssue] = field(default_factory=list)
+    excluded_by_pattern: int = 0
+    excluded_by_size: int = 0
+    excluded_by_type: int = 0
+    excluded_directories: int = 0
+    cancelled: bool = False
+
+    @property
+    def partial(self) -> bool:
+        return bool(self.issues)
+
+    @property
+    def excluded_files(self) -> int:
+        return self.excluded_by_pattern + self.excluded_by_size + self.excluded_by_type
+
+
 class FileSystemService:
     MEDIA_EXTENSIONS = MEDIA_EXTENSIONS
 
@@ -325,6 +352,8 @@ class FileSystemService:
         min_file_size_kb: int | None = None,
         max_file_size_mb: int | None = None,
         counters: dict[str, int] | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
     ) -> list[Path]:
         """Return all media files under *directory* that pass the given filters.
 
@@ -334,26 +363,195 @@ class FileSystemService:
         the return type.
         """
         root = Path(directory)
-        if not root.exists():
+        try:
+            exists = root.exists()
+        except OSError:
+            exists = False
+        if not exists:
             return []
-        results: list[Path] = []
-        # The recursive walk is pure blocking syscalls (iterdir/stat); run it in
-        # a worker thread so a large or network-mounted library never freezes
-        # the event loop (and with it progress polling and the log WebSocket).
-        await asyncio.to_thread(
-            self._walk,
+        result = await self.traverse(
+            root,
+            recursive=recursive,
+            max_depth=max_depth,
+            exclude_patterns=exclude_patterns,
+            min_file_size_kb=min_file_size_kb,
+            max_file_size_mb=max_file_size_mb,
+            cancel_token=cancel_token,
+            task=task,
+        )
+        if counters is not None:
+            counters["skipped"] = counters.get("skipped", 0) + (
+                result.excluded_by_pattern + result.excluded_by_size
+            )
+            counters["issues"] = len(result.issues)
+        return result.files
+
+    async def traverse(
+        self,
+        root: Path,
+        *,
+        recursive: bool = True,
+        max_depth: int | None = None,
+        exclude_patterns: list[str] | None = None,
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
+    ) -> TraversalResult:
+        """Enumerate eligible media with cancellation and partial-error details."""
+        result = await asyncio.to_thread(
+            self._traverse_sync,
+            root,
+            recursive,
+            max_depth,
+            exclude_patterns or [],
+            min_file_size_kb,
+            max_file_size_mb,
+            cancel_token,
+        )
+        if task is not None and result.issues:
+            task.mark_partial([issue.to_dict() for issue in result.issues])
+            for issue in result.issues:
+                logger.warning(
+                    "operation.partial",
+                    task_id=task.id,
+                    operation_kind=task.operation_kind,
+                    phase=task.progress.phase,
+                    path=issue.path,
+                    error_class=issue.error_class,
+                    error=issue.message,
+                )
+        return result
+
+    def _traverse_sync(
+        self,
+        root: Path,
+        recursive: bool,
+        max_depth: int | None,
+        exclude_patterns: list[str],
+        min_file_size_kb: int | None,
+        max_file_size_mb: int | None,
+        cancel_token: CancellationToken | None,
+    ) -> TraversalResult:
+        result = TraversalResult()
+        self._walk_result(
             root,
             root,
             recursive,
             max_depth,
             0,
-            results,
-            exclude_patterns or [],
+            result,
+            exclude_patterns,
             min_file_size_kb,
             max_file_size_mb,
-            counters,
+            cancel_token,
+            is_root=True,
         )
-        return results
+        return result
+
+    def _walk_result(
+        self,
+        root: Path,
+        current: Path,
+        recursive: bool,
+        max_depth: int | None,
+        depth: int,
+        result: TraversalResult,
+        exclude_patterns: list[str],
+        min_file_size_kb: int | None,
+        max_file_size_mb: int | None,
+        cancel_token: CancellationToken | None,
+        *,
+        is_root: bool,
+    ) -> None:
+        if cancel_token is not None and cancel_token.is_set():
+            result.cancelled = True
+            return
+        try:
+            entries: list[Path] = []
+            for entry in current.iterdir():
+                if cancel_token is not None and cancel_token.is_set():
+                    result.cancelled = True
+                    return
+                entries.append(entry)
+            entries.sort()
+        except OSError as exc:
+            if is_root:
+                # validate_source_root normally catches this; preserve failure
+                # if the source disappears between validation and traversal.
+                from app.core.exceptions import SourceUnavailableError
+
+                raise SourceUnavailableError(
+                    f"Source folder cannot be enumerated: {current}.",
+                    path=str(current),
+                    reason="root_inaccessible",
+                ) from exc
+            issue = TraversalIssue(str(current), type(exc).__name__, str(exc))
+            result.issues.append(issue)
+            logger.warning(
+                "operation.partial",
+                path=str(current),
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return
+        for entry in entries:
+            if cancel_token is not None and cancel_token.is_set():
+                result.cancelled = True
+                return
+            try:
+                is_file_entry = entry.is_file()
+                is_dir_entry = entry.is_dir()
+            except OSError as exc:
+                result.issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
+                continue
+
+            if is_file_entry:
+                if not is_media(entry):
+                    result.excluded_by_type += 1
+                    continue
+                # Check exclusion
+                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
+                    logger.debug("Excluded file", path=str(entry))
+                    result.excluded_by_pattern += 1
+                    continue
+                # Check size filters
+                try:
+                    size = entry.stat().st_size
+                    if not is_size_included(size, min_file_size_kb, max_file_size_mb):
+                        too_small = min_file_size_kb is not None and size < min_file_size_kb * 1024
+                        logger.debug(
+                            "Skipping file",
+                            reason="small" if too_small else "large",
+                            path=str(entry),
+                            size=size,
+                        )
+                        result.excluded_by_size += 1
+                        continue
+                except OSError as exc:
+                    result.issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
+                    continue
+                result.files.append(entry)
+            elif is_dir_entry and recursive and not entry.name.startswith("."):
+                # Check directory exclusion
+                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
+                    logger.debug("Excluded directory", path=str(entry))
+                    result.excluded_directories += 1
+                    continue
+                if max_depth is None or depth < max_depth:
+                    self._walk_result(
+                        root,
+                        entry,
+                        recursive,
+                        max_depth,
+                        depth + 1,
+                        result,
+                        exclude_patterns,
+                        min_file_size_kb,
+                        max_file_size_mb,
+                        cancel_token,
+                        is_root=False,
+                    )
 
     def _walk(
         self,
@@ -368,54 +566,26 @@ class FileSystemService:
         max_file_size_mb: int | None = None,
         counters: dict[str, int] | None = None,
     ) -> None:
-        try:
-            entries = sorted(current.iterdir())
-        except PermissionError:
-            logger.warning("Permission denied scanning directory", path=str(current))
-            return
-        for entry in entries:
-            if entry.is_file() and is_media(entry):
-                # Check exclusion
-                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
-                    logger.debug("Excluded file", path=str(entry))
-                    if counters is not None:
-                        counters["skipped"] = counters.get("skipped", 0) + 1
-                    continue
-                # Check size filters
-                try:
-                    size = entry.stat().st_size
-                    if not is_size_included(size, min_file_size_kb, max_file_size_mb):
-                        too_small = min_file_size_kb is not None and size < min_file_size_kb * 1024
-                        logger.debug(
-                            "Skipping file",
-                            reason="small" if too_small else "large",
-                            path=str(entry),
-                            size=size,
-                        )
-                        if counters is not None:
-                            counters["skipped"] = counters.get("skipped", 0) + 1
-                        continue
-                except OSError:
-                    pass
-                results.append(entry)
-            elif entry.is_dir() and recursive and not entry.name.startswith("."):
-                # Check directory exclusion
-                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
-                    logger.debug("Excluded directory", path=str(entry))
-                    continue
-                if max_depth is None or depth < max_depth:
-                    self._walk(
-                        root,
-                        entry,
-                        recursive,
-                        max_depth,
-                        depth + 1,
-                        results,
-                        exclude_patterns,
-                        min_file_size_kb,
-                        max_file_size_mb,
-                        counters,
-                    )
+        """Compatibility wrapper for older focused tests/internal callers."""
+        traversal = TraversalResult()
+        self._walk_result(
+            root,
+            current,
+            recursive,
+            max_depth,
+            depth,
+            traversal,
+            exclude_patterns,
+            min_file_size_kb,
+            max_file_size_mb,
+            None,
+            is_root=current == root,
+        )
+        results.extend(traversal.files)
+        if counters is not None:
+            counters["skipped"] = counters.get("skipped", 0) + (
+                traversal.excluded_by_pattern + traversal.excluded_by_size
+            )
 
     # ------------------------------------------------------------------ #
     # Safe copy / move                                                      #

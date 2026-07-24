@@ -112,13 +112,14 @@ Both the Rust shell and the Python backend write to a shared log directory:
 | Platform | Path |
 |----------|------|
 | macOS | `~/Library/Logs/MediaSorter/` |
-| Windows | `%APPDATA%\MediaSorter\logs\` |
+| Windows | `%LOCALAPPDATA%\MediaSorter\logs\` (`%APPDATA%` fallback) |
 | Linux | `~/.local/share/mediasort/logs/` |
 
 `mediasort.log` contains the Rust shell's startup/port-negotiation events.
 `backend.log` contains structured JSON log lines from the Python backend (one
-`structlog` JSON entry per line). Both rotate at 2 MB so they never grow
-unbounded.
+`structlog` JSON entry per line). It rotates at 5 MiB and retains three backups
+plus the active file (about 20 MiB maximum). A file-handler failure is non-fatal,
+so startup and console logging continue.
 
 ---
 

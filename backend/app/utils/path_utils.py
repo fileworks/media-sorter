@@ -1,8 +1,11 @@
 """Path matching helpers shared by the filesystem and analysis services."""
 
 import fnmatch
+import os
 import re
 from pathlib import Path
+
+from app.core.exceptions import PathOverlapError, SourceUnavailableError
 
 # Characters that are illegal in a path segment on Windows (a superset of what
 # POSIX forbids), plus ASCII control characters. Stripped from any user-supplied
@@ -76,3 +79,99 @@ def is_excluded_by_pattern(path: Path, source_root: Path, patterns: list[str]) -
     except ValueError:
         return False
     return any(fnmatch.fnmatch(part, pattern) for part in rel.parts for pattern in patterns)
+
+
+def validate_source_root(directory: str | None) -> Path:
+    """Resolve and probe a source directory, raising one actionable error shape."""
+    raw = (directory or "").strip()
+    if not raw:
+        raise SourceUnavailableError(
+            "No source folder is set. Choose the folder that contains your media.",
+            reason="unset",
+        )
+    candidate = Path(raw)
+    try:
+        root = candidate.resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise SourceUnavailableError(
+            f"Source folder was not found or is unavailable: {candidate}. "
+            "If it is on an external drive or "
+            "network share, check that it is connected and mounted.",
+            path=str(candidate),
+            reason="missing",
+        ) from exc
+    if not root.is_dir():
+        raise SourceUnavailableError(
+            f"The source path is a file, not a folder: {root}.",
+            path=str(root),
+            reason="not_directory",
+        )
+    try:
+        # An access-bit check is insufficient for removable/network storage:
+        # probe the root enumeration every operation actually needs.
+        with os.scandir(root) as entries:
+            next(entries, None)
+    except OSError as exc:
+        raise SourceUnavailableError(
+            f"Source folder cannot be read: {root}. Check its permissions or connection.",
+            path=str(root),
+            reason="root_inaccessible",
+        ) from exc
+    return root
+
+
+def canonicalize_target(directory: str) -> Path:
+    """Resolve existing target identity while preserving a non-existent tail."""
+    candidate = Path(directory).expanduser()
+    tail: list[str] = []
+    current = candidate
+    while True:
+        try:
+            if current.exists():
+                resolved = current.resolve(strict=True)
+                break
+        except OSError as exc:
+            raise SourceUnavailableError(
+                f"Destination path cannot be inspected: {candidate}.",
+                path=str(candidate),
+                reason="target_inaccessible",
+            ) from exc
+        if current.parent == current:
+            resolved = current.resolve(strict=False)
+            break
+        tail.append(current.name)
+        current = current.parent
+    for component in reversed(tail):
+        resolved /= component
+    return resolved
+
+
+def _identity_parts(path: Path) -> tuple[str, ...]:
+    if os.name == "nt":
+        return tuple(os.path.normcase(part) for part in path.parts)
+    return path.parts
+
+
+def _is_component_prefix(parent: tuple[str, ...], child: tuple[str, ...]) -> bool:
+    return len(parent) <= len(child) and child[: len(parent)] == parent
+
+
+def validate_source_target_overlap(source: Path, target: str | Path) -> tuple[Path, Path]:
+    """Return canonical paths, rejecting equality and nesting in either direction."""
+    canonical_source = source.resolve(strict=True)
+    canonical_target = canonicalize_target(str(target))
+
+    try:
+        same = canonical_target.exists() and os.path.samefile(canonical_source, canonical_target)
+    except OSError:
+        same = False
+
+    source_parts = _identity_parts(canonical_source)
+    target_parts = _identity_parts(canonical_target)
+    if same or source_parts == target_parts:
+        raise PathOverlapError(str(canonical_source), str(canonical_target), "equal")
+    if _is_component_prefix(source_parts, target_parts):
+        raise PathOverlapError(str(canonical_source), str(canonical_target), "target_inside_source")
+    if _is_component_prefix(target_parts, source_parts):
+        raise PathOverlapError(str(canonical_source), str(canonical_target), "source_inside_target")
+    return canonical_source, canonical_target

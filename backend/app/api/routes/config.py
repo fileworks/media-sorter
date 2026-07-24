@@ -22,7 +22,8 @@ from app.core.config import (
     validate_rename_pattern,
 )
 from app.core.config_sections import SECTIONS
-from app.core.exceptions import ConfigValidationError
+from app.core.exceptions import ConfigValidationError, MediaSortException
+from app.utils.path_utils import validate_source_root, validate_source_target_overlap
 
 router = APIRouter()
 
@@ -121,30 +122,25 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
         warnings.append(ConfigIssue(field=field, message=message))
 
     # ── Source folder ─────────────────────────────────────────────────────────
-    if not config.source_directory:
-        err("source_directory", "Pick the folder that holds your photos and videos.")
-    else:
-        # exists()/is_dir() hit the filesystem — run them off the event loop.
-        exists, is_dir = await asyncio.to_thread(_dir_status, config.source_directory)
-        if not exists:
-            err(
-                "source_directory",
-                f'Source folder not found: "{config.source_directory}". '
-                "Check the path and try again.",
-            )
-        elif not is_dir:
-            err(
-                "source_directory",
-                f'That path is a file, not a folder: "{config.source_directory}".',
-            )
+    source_root: Path | None = None
+    try:
+        source_root = await asyncio.to_thread(validate_source_root, config.source_directory)
+    except MediaSortException as exc:
+        err("source_directory", exc.message)
 
     # ── Destination folder ────────────────────────────────────────────────────
     if not config.target_directory:
         err("target_directory", "Pick where your sorted files should go.")
-    elif config.source_directory and config.source_directory == config.target_directory:
-        # Sorting into the source itself would rewrite the tree in place — reject
-        # it here so `valid` is truthful (the UI can't rely on a client-only check).
-        err("target_directory", "Source and destination must be different folders.")
+
+    if source_root is not None and config.target_directory:
+        try:
+            await asyncio.to_thread(
+                validate_source_target_overlap,
+                source_root,
+                config.target_directory,
+            )
+        except MediaSortException as exc:
+            err("target_directory", exc.message)
 
     # Rename pattern: surface unknown/typo'd tokens as a *warning*, not an error.
     # SortingService._apply_rename substitutes only the known tokens and leaves
@@ -213,9 +209,3 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             )
 
     return ValidateConfigResponse(valid=len(errors) == 0, errors=errors, warnings=warnings)
-
-
-def _dir_status(path_str: str) -> tuple[bool, bool]:
-    """Return ``(exists, is_dir)`` for *path_str* — blocking, call via to_thread."""
-    p = Path(path_str)
-    return p.exists(), p.is_dir()

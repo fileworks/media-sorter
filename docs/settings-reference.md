@@ -57,8 +57,14 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 | Exact-match duplicates | `duplicate_exact_enabled` | `true` | SHA-256 byte-identical detection. |
 | Visual-similarity duplicates | `duplicate_perceptual_enabled` | `true` | Perceptual-hash near-duplicate detection (images and video). |
 | Similarity threshold | `duplicate_perceptual_threshold` | `95` | 0–100; how visually similar two files must be to count as duplicates. Higher = stricter. |
-| Compare against destination | `dedup_against_destination` | `false` | Index the destination's existing media (persisted across runs in a small SQLite file inside the destination) and quarantine source files already present there to `_already_in_destination/`. Also catches duplicates *between* runs (source B after source A). |
 | Dedup index path | `dedup_index_path` | `null` | Override where the index database lives. `null` → `<destination>/.mediasort-dedup-index.sqlite3`. |
+
+When duplicate detection is enabled, MediaSorter always compares source files with
+existing destination media before checking duplicates within the current source.
+Destination matches are quarantined to `_already_in_destination/`; the index also
+catches duplicates across separate runs. Preview performs the same comparison
+through a temporary read-only index. A legacy `dedup_against_destination` value
+is accepted when loading old config files but is ignored and is not saved.
 
 ## Rename
 
@@ -144,7 +150,11 @@ allowed but flagged **"may be slow"**, so the choice is always informed.
 
 - **Config + database:** `~/Library/Application Support/mediasort/` (macOS) ·
   `%APPDATA%\mediasort\` (Windows). Override with `MEDIASORT_CONFIG_DIR`.
-- **Logs:** see the table in the [README](../README.md#download--install).
+- **Backend logs:** `~/Library/Logs/MediaSorter/backend.log` (macOS) ·
+  `%LOCALAPPDATA%\MediaSorter\logs\backend.log` (Windows, with `%APPDATA%` as a
+  fallback) · `~/.local/share/mediasort/logs/backend.log` (Linux, respecting
+  `XDG_DATA_HOME`). The JSON log rotates at 5 MiB and retains three backups plus
+  the active file, so backend retention is at most about 20 MiB.
 - **Live API docs:** `http://127.0.0.1:<port>/api/docs` (OpenAPI) while the backend runs.
 
 See [`docs/design.md`](design.md) for architecture and [`docs/development.md`](development.md)

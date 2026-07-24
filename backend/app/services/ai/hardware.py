@@ -26,7 +26,7 @@ ModelTier = Literal["off", "lite", "standard", "max"]
 _ACCELERATOR_EPS = {
     "CUDAExecutionProvider",
     "CoreMLExecutionProvider",
-    "DirectMLExecutionProvider",
+    "DmlExecutionProvider",
     "ROCMExecutionProvider",
     "TensorrtExecutionProvider",
 }

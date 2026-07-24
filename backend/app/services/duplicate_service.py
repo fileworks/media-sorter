@@ -8,7 +8,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from app.core.config import Config
 from app.core.logging_config import get_logger
@@ -17,7 +17,7 @@ from app.utils.ffmpeg_utils import extract_frame, probe_duration, sample_fractio
 from app.utils.media_utils import is_image, is_video
 
 if TYPE_CHECKING:
-    from app.background_tasks.task_manager import Task
+    from app.background_tasks.task_manager import CancellationToken, Task
 
 logger = get_logger(__name__)
 
@@ -37,6 +37,10 @@ _PHASH_SIZE = 16
 _S = TypeVar("_S")
 
 
+class DuplicateCheckCancelled(Exception):
+    """Raised at a safe read-only signature boundary after cancellation."""
+
+
 # ------------------------------------------------------------------ #
 # Result + registry types                                              #
 # ------------------------------------------------------------------ #
@@ -54,6 +58,8 @@ class DuplicateMatch:
     # "destination" (a file already in the destination index). None when not
     # a duplicate.
     scope: str | None = None
+    evaluation: Literal["known", "unknown"] = "known"
+    unknown_reason: str | None = None
 
 
 @dataclass
@@ -74,12 +80,79 @@ class _VideoSig:
 
 
 @dataclass
+class _HammingNode:
+    value: int
+    item_indices: list[int] = field(default_factory=list)
+    children: dict[int, _HammingNode] = field(default_factory=dict)
+
+
+class _HammingIndex:
+    """Exact BK-tree over fixed-width perceptual hashes."""
+
+    def __init__(self) -> None:
+        self._root: _HammingNode | None = None
+        self.comparisons = 0
+
+    @staticmethod
+    def _distance(a: int, b: int) -> int:
+        return (a ^ b).bit_count()
+
+    def add(self, value: int, item_index: int) -> None:
+        if self._root is None:
+            self._root = _HammingNode(value, [item_index])
+            return
+        node = self._root
+        while True:
+            distance = self._distance(value, node.value)
+            if distance == 0:
+                node.item_indices.append(item_index)
+                return
+            child = node.children.get(distance)
+            if child is None:
+                node.children[distance] = _HammingNode(value, [item_index])
+                return
+            node = child
+
+    def query(self, value: int, radius: int) -> set[int]:
+        self.comparisons = 0
+        matches: set[int] = set()
+        if self._root is None:
+            return matches
+        stack = [self._root]
+        while stack:
+            node = stack.pop()
+            distance = self._distance(value, node.value)
+            self.comparisons += 1
+            if distance <= radius:
+                matches.update(node.item_indices)
+            low, high = distance - radius, distance + radius
+            stack.extend(child for edge, child in node.children.items() if low <= edge <= high)
+        return matches
+
+
+@dataclass
 class DuplicateRegistry:
     """Per-run, in-memory record of everything seen so far. Mutated by check_duplicate."""
 
     exact: dict[str, str] = field(default_factory=dict)  # sha256 hex -> first-seen path
     images: list[_ImageSig] = field(default_factory=list)
     videos: list[_VideoSig] = field(default_factory=list)
+    image_index: _HammingIndex | None = field(default=None, repr=False)
+    video_indexes: list[_HammingIndex] = field(default_factory=list, repr=False)
+
+    def build_perceptual_indexes(self) -> None:
+        self.image_index = _HammingIndex()
+        for index, image_signature in enumerate(self.images):
+            self.image_index.add(int(str(image_signature.phash), 16), index)
+
+        frame_count = max(
+            (len(video_signature.frames) for video_signature in self.videos), default=0
+        )
+        self.video_indexes = [_HammingIndex() for _ in range(frame_count)]
+        for index, video_signature in enumerate(self.videos):
+            for frame_index, frame in enumerate(video_signature.frames):
+                if frame is not None:
+                    self.video_indexes[frame_index].add(int(str(frame[0]), 16), index)
 
 
 # ------------------------------------------------------------------ #
@@ -117,6 +190,9 @@ def _color_distance(c1: tuple[float, float, float], c2: tuple[float, float, floa
 class DuplicateService:
     """Detect duplicate files by SHA-256 hash and perceptual image/video hash."""
 
+    def __init__(self) -> None:
+        self.last_candidate_comparisons = 0
+
     # ------------------------------------------------------------------ #
     # Public API                                                            #
     # ------------------------------------------------------------------ #
@@ -131,6 +207,7 @@ class DuplicateService:
         threshold: int = 95,
         sample_video: bool = True,
         destination_registry: DuplicateRegistry | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> DuplicateMatch:
         """Return a DuplicateMatch for *file_path* against *registry*.
 
@@ -145,11 +222,12 @@ class DuplicateService:
         the two outcomes to different quarantine folders. Signatures are
         computed once and shared across both checks.
         """
+        self._check_cancelled(cancel_token)
         # 1. Exact SHA-256 (any file type): destination → this run.
         h: str | None = None
         if exact:
             try:
-                h = self._sha256(file_path)
+                h = self.compute_hash(file_path, cancel_token=cancel_token)
             except OSError as exc:
                 logger.warning("Could not hash file", path=str(file_path), error=str(exc))
                 return DuplicateMatch(False)
@@ -179,8 +257,9 @@ class DuplicateService:
         # later byte-identical copies at a file that was never kept — instead
         # those copies are mapped straight to the kept original.
         if perceptual:
+            self._check_cancelled(cancel_token)
             if self._is_image(file_path):
-                image_sig = self.image_signature(file_path)
+                image_sig = self.image_signature(file_path, cancel_token=cancel_token)
                 if image_sig is None:
                     # P0-3: never a *silent* drop — a HEIC/RAW/odd image that
                     # cannot produce a perceptual signature is still exact-hash
@@ -191,7 +270,16 @@ class DuplicateService:
                     )
                 else:
                     match = self._match_and_label(
-                        lambda sigs: self._best_image_match(image_sig, sigs, threshold),
+                        lambda sigs, destination: self._best_image_match(
+                            image_sig,
+                            sigs,
+                            threshold,
+                            (
+                                destination_registry.image_index
+                                if destination and destination_registry is not None
+                                else None
+                            ),
+                        ),
                         registry.images,
                         destination_registry.images if destination_registry else None,
                         registry,
@@ -201,11 +289,28 @@ class DuplicateService:
                     if match is not None:
                         return match
                     registry.images.append(image_sig)
-            elif self._is_video(file_path) and sample_video:
-                video_sig = self.video_signature(file_path)
+            elif self._is_video(file_path):
+                if not sample_video:
+                    if h is not None:
+                        registry.exact[h] = str(file_path)
+                    return DuplicateMatch(
+                        False,
+                        evaluation="unknown",
+                        unknown_reason="video_perceptual_not_computed",
+                    )
+                video_sig = self.video_signature(file_path, cancel_token=cancel_token)
                 if video_sig is not None:
                     match = self._match_and_label(
-                        lambda sigs: self._best_video_match(video_sig, sigs, threshold),
+                        lambda sigs, destination: self._best_video_match(
+                            video_sig,
+                            sigs,
+                            threshold,
+                            (
+                                destination_registry.video_indexes
+                                if destination and destination_registry is not None
+                                else None
+                            ),
+                        ),
                         registry.videos,
                         destination_registry.videos if destination_registry else None,
                         registry,
@@ -222,7 +327,7 @@ class DuplicateService:
 
     def _match_and_label(
         self,
-        matcher: Callable[[list[_S]], DuplicateMatch | None],
+        matcher: Callable[[list[_S], bool], DuplicateMatch | None],
         run_sigs: list[_S],
         dest_sigs: list[_S] | None,
         registry: DuplicateRegistry,
@@ -240,7 +345,7 @@ class DuplicateService:
         for scope, sigs in (("destination", dest_sigs), ("run", run_sigs)):
             if sigs is None:
                 continue
-            match = matcher(sigs)
+            match = matcher(sigs, scope == "destination")
             if match is not None:
                 match.scope = scope
                 if h is not None:
@@ -285,22 +390,31 @@ class DuplicateService:
     # Signature builders                                                    #
     # ------------------------------------------------------------------ #
 
-    def image_signature(self, path: Path) -> _ImageSig | None:
+    def image_signature(
+        self, path: Path, *, cancel_token: CancellationToken | None = None
+    ) -> _ImageSig | None:
         """Return phash + mean_rgb + path for an image, or None on failure."""
         try:
+            self._check_cancelled(cancel_token)
             import imagehash
 
             with open_image(path) as img:
+                self._check_cancelled(cancel_token)
                 if img is None:
                     return None
                 ph = imagehash.phash(img, hash_size=_PHASH_SIZE)
+                self._check_cancelled(cancel_token)
                 mean_color = _mean_rgb_of_image(img)
                 return _ImageSig(phash=ph, mean_rgb=mean_color, path=str(path))
+        except DuplicateCheckCancelled:
+            raise
         except Exception as exc:
             logger.debug("image_signature failed", path=str(path), error=str(exc))
             return None
 
-    def video_signature(self, path: Path) -> _VideoSig | None:
+    def video_signature(
+        self, path: Path, *, cancel_token: CancellationToken | None = None
+    ) -> _VideoSig | None:
         """Sample frames via ffmpeg; return per-frame (phash, mean_rgb).
 
         Returns None if the file is unreadable, ffmpeg is unavailable, or no
@@ -311,6 +425,7 @@ class DuplicateService:
         same footage will produce highly similar hashes.  This is **not** robust
         to large trims or offsets — an accepted limitation.
         """
+        self._check_cancelled(cancel_token)
         duration = probe_duration(path)
         if duration is None or duration <= 0:
             return None
@@ -321,6 +436,7 @@ class DuplicateService:
         # frame would shift every later comparison onto the wrong timestamp.
         frames: list[tuple[Any, tuple[float, float, float] | None] | None] = []
         for frac in sample_fractions(_VIDEO_SAMPLE_COUNT):
+            self._check_cancelled(cancel_token)
             img = extract_frame(path, duration * frac)
             if img is None:
                 frames.append(None)
@@ -371,7 +487,11 @@ class DuplicateService:
     # ------------------------------------------------------------------ #
 
     def _best_image_match(
-        self, sig: _ImageSig, sigs: list[_ImageSig], threshold: int
+        self,
+        sig: _ImageSig,
+        sigs: list[_ImageSig],
+        threshold: int,
+        index: _HammingIndex | None = None,
     ) -> DuplicateMatch | None:
         """Return the best perceptual match for *sig* among *sigs*, or None.
 
@@ -385,7 +505,16 @@ class DuplicateService:
         """
         best_similarity = -1
         best: _ImageSig | None = None
-        for stored in sigs:
+        candidate_indices = (
+            sorted(index.query(int(str(sig.phash), 16), self._threshold_radius(threshold)))
+            if index is not None
+            else list(range(len(sigs)))
+        )
+        self.last_candidate_comparisons = (
+            index.comparisons if index is not None else len(candidate_indices)
+        )
+        for candidate_index in candidate_indices:
+            stored = sigs[candidate_index]
             if (
                 sig.mean_rgb is not None
                 and stored.mean_rgb is not None
@@ -402,7 +531,11 @@ class DuplicateService:
         return DuplicateMatch(True, "perceptual", best_similarity, best.path)
 
     def _best_video_match(
-        self, sig: _VideoSig, sigs: list[_VideoSig], threshold: int
+        self,
+        sig: _VideoSig,
+        sigs: list[_VideoSig],
+        threshold: int,
+        indexes: list[_HammingIndex] | None = None,
     ) -> DuplicateMatch | None:
         """Return the best perceptual match for *sig* among *sigs*, or None.
 
@@ -410,7 +543,23 @@ class DuplicateService:
         """
         best_similarity = -1
         best: _VideoSig | None = None
-        for stored in sigs:
+        if indexes:
+            radius = self._threshold_radius(threshold)
+            candidates: set[int] = set()
+            comparisons = 0
+            for frame_index, frame in enumerate(sig.frames):
+                if frame is None or frame_index >= len(indexes):
+                    continue
+                candidates.update(indexes[frame_index].query(int(str(frame[0]), 16), radius))
+                comparisons += indexes[frame_index].comparisons
+            candidate_indices = sorted(candidates)
+            self.last_candidate_comparisons = comparisons
+        else:
+            candidate_indices = list(range(len(sigs)))
+            self.last_candidate_comparisons = len(candidate_indices)
+
+        for candidate_index in candidate_indices:
+            stored = sigs[candidate_index]
             sim = self.video_similarity(sig, stored)
             if sim >= threshold and sim > best_similarity:
                 best_similarity = sim
@@ -420,16 +569,31 @@ class DuplicateService:
             return None
         return DuplicateMatch(True, "perceptual", best_similarity, best.path)
 
+    @staticmethod
+    def _threshold_radius(threshold: int) -> int:
+        """Largest Hamming distance that can round to the configured similarity."""
+        return max(
+            distance
+            for distance in range(_PHASH_SIZE * _PHASH_SIZE + 1)
+            if round((1 - distance / (_PHASH_SIZE * _PHASH_SIZE)) * 100) >= threshold
+        )
+
     # ------------------------------------------------------------------ #
     # Static helpers                                                        #
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def compute_hash(file_path: Path, algorithm: str = "sha256") -> str:
+    def compute_hash(
+        file_path: Path,
+        algorithm: str = "sha256",
+        *,
+        cancel_token: CancellationToken | None = None,
+    ) -> str:
         """Compute a hex digest of *file_path* using the given algorithm."""
         h = hashlib.new(algorithm)
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(65536), b""):
+                DuplicateService._check_cancelled(cancel_token)
                 h.update(chunk)
         return h.hexdigest()
 
@@ -444,12 +608,17 @@ class DuplicateService:
     def _sha256(self, path: Path) -> str:
         return self.compute_hash(path, "sha256")
 
+    @staticmethod
+    def _check_cancelled(cancel_token: CancellationToken | None) -> None:
+        if cancel_token is not None and cancel_token.is_set():
+            raise DuplicateCheckCancelled
+
 
 def quality_processing_order(
     files: list[Path],
     config: Config,
     duplicates: DuplicateService | None,
-    cancel_event: asyncio.Event | None = None,
+    cancel_event: asyncio.Event | CancellationToken | None = None,
     task: Task | None = None,
 ) -> list[int]:
     """Return indices into *files* in the order to process them.
@@ -476,15 +645,12 @@ def quality_processing_order(
         return list(range(len(files)))
     total = len(files)
     if task is not None:
-        task.progress.phase = "ranking"
-        task.progress.current = 0
-        task.progress.percentage = 0.0
+        task.transition("ranking", total=total)
     keys: list[tuple[int, int]] = []
     for i, f in enumerate(files):
         if cancel_event is not None and cancel_event.is_set():
             return list(range(len(files)))
         keys.append(duplicates.quality_key(f))
         if task is not None:
-            task.progress.current = i + 1
-            task.progress.percentage = round((i + 1) / total * 100, 1) if total else 0.0
+            task.update_progress(i + 1)
     return sorted(range(len(files)), key=lambda i: keys[i], reverse=True)

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import tempfile
 import time
 import uuid
 from datetime import date, datetime, timezone
@@ -20,6 +21,7 @@ from app.services.conversion_service import ConversionService
 from app.services.dedup_index import DedupIndex, resolve_index_path
 from app.services.destination import build_dest_dir, quarantine_dir, rename_stem
 from app.services.duplicate_service import (
+    DuplicateCheckCancelled,
     DuplicateMatch,
     DuplicateRegistry,
     DuplicateService,
@@ -35,7 +37,11 @@ from app.services.junk_filter import classify_junk
 from app.services.metadata_service import MetadataService
 from app.services.repair_service import RepairService
 from app.utils.media_utils import is_image, is_video
-from app.utils.path_utils import sanitize_path_segment
+from app.utils.path_utils import (
+    canonicalize_target,
+    sanitize_path_segment,
+    validate_source_target_overlap,
+)
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
@@ -44,6 +50,38 @@ if TYPE_CHECKING:
     from app.services.rule_engine_service import RuleEngineService
 
 logger = get_logger(__name__)
+
+
+def _transition_task(task: Any, phase: str, *, total: int = 0) -> None:
+    transition = getattr(task, "transition", None)
+    if callable(transition):
+        transition(phase, total=total)
+        return
+    task.progress.phase = phase
+    task.progress.current = 0
+    task.progress.total = max(0, total)
+    task.progress.percentage = 0.0
+
+
+def _update_task(
+    task: Any,
+    current: int,
+    *,
+    total: int | None = None,
+    eta_seconds: float | None = None,
+) -> None:
+    update = getattr(task, "update_progress", None)
+    if callable(update):
+        update(current, total=total, eta_seconds=eta_seconds)
+        return
+    if total is not None:
+        task.progress.total = max(0, total)
+    task.progress.current = max(0, current)
+    task.progress.percentage = (
+        round(task.progress.current / task.progress.total * 100, 1) if task.progress.total else 0.0
+    )
+    task.progress.estimated_time_remaining_seconds = eta_seconds
+
 
 # Which sort-record status a duplicate match's scope produces; the same key
 # selects the quarantine folder in QUARANTINE_FOLDERS.
@@ -98,19 +136,53 @@ class SortingService:
         - Any other error         → _failed/
         """
         config = self._config_service.get()
-        source_root = validate_source_directory(config.source_directory)
-        dest_root = validate_target_directory(config.target_directory)
-
-        counters: dict[str, int] = {"skipped": 0}
-        files = await self._fs.list_files(
+        rich_task = (
+            task
+            if all(
+                hasattr(task, name) for name in ("transition", "update_progress", "mark_partial")
+            )
+            else None
+        )
+        cancel_signal = getattr(task, "cancel_token", task.cancel_event)
+        _transition_task(task, "validating")
+        source_root = await asyncio.to_thread(
+            validate_source_directory,
             config.source_directory,
+        )
+        if config.target_directory:
+            await asyncio.to_thread(
+                validate_source_target_overlap,
+                source_root,
+                config.target_directory,
+            )
+        if dry_run:
+            if not config.target_directory.strip():
+                dest_root = await asyncio.to_thread(
+                    validate_target_directory,
+                    config.target_directory,
+                )
+            else:
+                dest_root = canonicalize_target(config.target_directory)
+        else:
+            dest_root = await asyncio.to_thread(
+                validate_target_directory,
+                config.target_directory,
+            )
+        # Re-check after creation to close a symlink/junction identity change.
+        await asyncio.to_thread(validate_source_target_overlap, source_root, dest_root)
+
+        _transition_task(task, "scanning_source")
+        traversal = await self._fs.traverse(
+            source_root,
             recursive=config.recursive_scan,
             max_depth=config.max_recursion_depth,
             exclude_patterns=config.exclude_patterns,
             min_file_size_kb=config.min_file_size_kb,
             max_file_size_mb=config.max_file_size_mb,
-            counters=counters,
+            cancel_token=cancel_signal,
+            task=rich_task,
         )
+        files = traversal.files
 
         logger.info(
             "Sort started",
@@ -119,12 +191,14 @@ class SortingService:
             total=len(files),
             action="copy" if config.copy_instead_of_move else "move",
         )
-        task.progress.total = len(files)
+        _update_task(task, 0, total=len(files))
         stats: dict[str, Any] = {
             "total": len(files),
             "sorted": 0,
             "failed": 0,
-            "skipped": counters["skipped"],
+            "skipped": traversal.excluded_by_pattern + traversal.excluded_by_size,
+            "partial": traversal.partial,
+            "issues": [issue.to_dict() for issue in traversal.issues],
             "duplicates": 0,
             "future_dates": 0,
             "unknown_dates": 0,
@@ -140,24 +214,41 @@ class SortingService:
         # Per-operation in-memory duplicate registry
         registry = DuplicateRegistry()
 
-        # Destination-aware / cross-run dedup (opt-in): refresh the persistent
+        # Destination-aware / cross-run dedup: refresh the persistent
         # index of what already lives in the destination and load it as a
         # read-only registry. The refresh is incremental (stat-only for
         # unchanged files) and reports its own "indexing" phase so the bar
         # never sits frozen.
         dest_registry: DuplicateRegistry | None = None
-        if config.remove_duplicates and config.dedup_against_destination:
-            index = DedupIndex(resolve_index_path(config))
-            await asyncio.to_thread(
-                index.refresh,
-                dest_root,
-                self._duplicates,
-                perceptual=config.duplicate_perceptual_enabled,
-                sample_video=True,
-                cancel_event=task.cancel_event,
-                task=task,
+        if config.remove_duplicates and not cancel_signal.is_set():
+            temporary_index: tempfile.TemporaryDirectory[str] | None = None
+            try:
+                if dry_run:
+                    temporary_index = tempfile.TemporaryDirectory(prefix="mediasort-preview-index-")
+                    index_path = Path(temporary_index.name) / "dedup.sqlite3"
+                else:
+                    index_path = resolve_index_path(config)
+                index = DedupIndex(index_path)
+                await asyncio.to_thread(
+                    index.refresh,
+                    dest_root,
+                    self._duplicates,
+                    perceptual=config.duplicate_perceptual_enabled,
+                    sample_video=True,
+                    cancel_event=cancel_signal,
+                    task=rich_task,
+                )
+                dest_registry = await asyncio.to_thread(index.load_registry)
+            finally:
+                if temporary_index is not None:
+                    temporary_index.cleanup()
+
+        if cancel_signal.is_set():
+            logger.info(
+                "operation.cancellation_observed",
+                task_id=getattr(task, "id", ""),
+                phase="scanning_source",
             )
-            dest_registry = await asyncio.to_thread(index.load_registry)
 
         # Keeper selection: when perceptual de-dup is on, process files in
         # descending quality order so the first file seen in each duplicate group
@@ -167,18 +258,26 @@ class SortingService:
         # Run the (blocking, header-reading) ordering pass off the event loop so
         # progress polling stays responsive; it bails on cancel. The pass reports
         # its own "ranking" phase so the bar moves during setup (plan Item 8).
-        order = await asyncio.to_thread(
-            quality_processing_order, files, config, self._duplicates, task.cancel_event, task
+        order = (
+            []
+            if cancel_signal.is_set()
+            else await asyncio.to_thread(
+                quality_processing_order,
+                files,
+                config,
+                self._duplicates,
+                cancel_signal,
+                rich_task,
+            )
         )
         records: list[dict[str, Any] | None] = [None] * len(files)
 
         # Per-file phase — reset the counter so the bar restarts cleanly from 0.
-        task.progress.phase = "sorting"
-        task.progress.current = 0
-        task.progress.percentage = 0.0
+        if not cancel_signal.is_set():
+            _transition_task(task, "sorting", total=len(files))
 
         for rank, idx in enumerate(order):
-            if task.cancel_event.is_set():
+            if cancel_signal.is_set():
                 logger.info("Sort cancelled by user", processed=rank, total=len(files))
                 break
 
@@ -193,7 +292,10 @@ class SortingService:
                 registry=registry,
                 operation_id=operation_id,
                 dest_registry=dest_registry,
+                cancel_signal=cancel_signal,
             )
+            if record["status"] == "cancelled":
+                break
             records[idx] = record
 
             status = record["status"]
@@ -215,13 +317,13 @@ class SortingService:
                 stats["failed"] += 1
 
             # Progress + ETA
-            task.progress.current = rank + 1
-            task.progress.percentage = round((rank + 1) / len(files) * 100, 1) if files else 0.0
             elapsed = time.monotonic() - start_time
+            eta: float | None = None
             if elapsed > 0 and rank > 0:
                 rate = (rank + 1) / elapsed
                 remaining = len(files) - (rank + 1)
-                task.progress.estimated_time_remaining_seconds = remaining / rate
+                eta = remaining / rate
+            _update_task(task, rank + 1, eta_seconds=eta)
 
         # Drop any unprocessed slots (e.g. after a cancel); keep original order.
         file_records: list[dict[str, Any]] = [r for r in records if r is not None]
@@ -256,6 +358,7 @@ class SortingService:
         registry: DuplicateRegistry,
         operation_id: str,
         dest_registry: DuplicateRegistry | None = None,
+        cancel_signal: Any | None = None,
     ) -> dict[str, Any]:
         """Process a single file through the full sort pipeline.
 
@@ -345,6 +448,7 @@ class SortingService:
                     perceptual=config.duplicate_perceptual_enabled,
                     threshold=config.duplicate_perceptual_threshold,
                     destination_registry=dest_registry,
+                    cancel_token=cancel_signal,
                 )
                 if match.is_duplicate:
                     status = _DUPLICATE_STATUS_BY_SCOPE.get(match.scope or "run", "duplicate")
@@ -407,6 +511,8 @@ class SortingService:
             )
 
             if not dry_run:
+                if cancel_signal is not None and cancel_signal.is_set():
+                    raise DuplicateCheckCancelled
                 if config.copy_instead_of_move:
                     self._fs.safe_copy(file_path, dest, verify=True)
                 else:
@@ -505,6 +611,9 @@ class SortingService:
             # failure evidence (the `suspicious` fields keep the reason).
             record.update(status="success", dest_path=str(dest), error_message=None)
 
+        except DuplicateCheckCancelled:
+            record["status"] = "cancelled"
+            return record
         except Exception as exc:
             logger.error("Failed to process file", path=str(file_path), error=str(exc))
             try:

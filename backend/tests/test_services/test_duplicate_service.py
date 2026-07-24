@@ -8,10 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
+from app.background_tasks.task_manager import CancellationToken
 from app.core.config import Config
 from app.services.duplicate_service import (
+    DuplicateCheckCancelled,
     DuplicateRegistry,
     DuplicateService,
+    _ImageSig,
     _VideoSig,
     quality_processing_order,
 )
@@ -45,6 +48,15 @@ def test_compute_hash_differs_for_different_content(tmp_path: Path) -> None:
     a.write_bytes(b"aaa")
     b.write_bytes(b"bbb")
     assert DuplicateService.compute_hash(a) != DuplicateService.compute_hash(b)
+
+
+def test_compute_hash_observes_thread_safe_cancellation(tmp_path: Path) -> None:
+    media = tmp_path / "large.bin"
+    media.write_bytes(b"x" * 200_000)
+    token = CancellationToken()
+    token.set()
+    with pytest.raises(DuplicateCheckCancelled):
+        DuplicateService.compute_hash(media, cancel_token=token)
 
 
 # ------------------------------------------------------------------ #
@@ -771,3 +783,73 @@ def test_keeper_selection_does_not_cross_talk_between_groups(
                 kept.append(f)
 
         assert sorted(kept) == sorted([best_a, best_b]), f"seed={seed}: kept {kept}"
+
+
+# ------------------------------------------------------------------ #
+# Destination candidate index differential and scale                    #
+# ------------------------------------------------------------------ #
+
+
+def _hash256(value: int):
+    import imagehash
+
+    return imagehash.hex_to_hash(f"{value:064x}")
+
+
+def test_indexed_image_matching_agrees_with_exhaustive_across_thresholds() -> None:
+    service = DuplicateService()
+    rng = random.Random(42)
+    signatures = [
+        _ImageSig(_hash256(rng.getrandbits(256)), (100.0, 100.0, 100.0), f"/{i}.jpg")
+        for i in range(250)
+    ]
+    # Include a tie; stable candidate ordering must keep the first path.
+    source = _ImageSig(signatures[30].phash, (100.0, 100.0, 100.0), "/source.jpg")
+    signatures.insert(
+        31,
+        _ImageSig(signatures[30].phash, (100.0, 100.0, 100.0), "/tie.jpg"),
+    )
+    registry = DuplicateRegistry(images=signatures)
+    registry.build_perceptual_indexes()
+
+    for threshold in (85, 90, 95, 100):
+        exhaustive = service._best_image_match(source, signatures, threshold)
+        indexed = service._best_image_match(source, signatures, threshold, registry.image_index)
+        assert indexed == exhaustive
+        assert indexed is not None
+        assert indexed.original_path == "/30.jpg"
+
+
+def test_indexed_video_matching_agrees_with_failed_frames_and_color_checks() -> None:
+    service = DuplicateService()
+    rng = random.Random(7)
+    videos: list[_VideoSig] = []
+    for number in range(100):
+        frames = [
+            (_hash256(rng.getrandbits(256)), (20.0, 30.0, 40.0)),
+            None if number % 5 == 0 else (_hash256(rng.getrandbits(256)), None),
+            (_hash256(rng.getrandbits(256)), (50.0, 60.0, 70.0)),
+        ]
+        videos.append(_VideoSig(frames=frames, path=f"/{number}.mp4"))
+    source = _VideoSig(frames=list(videos[12].frames), path="/source.mp4")
+    registry = DuplicateRegistry(videos=videos)
+    registry.build_perceptual_indexes()
+
+    for threshold in (85, 95, 100):
+        exhaustive = service._best_video_match(source, videos, threshold)
+        indexed = service._best_video_match(source, videos, threshold, registry.video_indexes)
+        assert indexed == exhaustive
+
+
+def test_large_normal_registry_uses_sublinear_candidate_search() -> None:
+    service = DuplicateService()
+    rng = random.Random(99)
+    signatures = [
+        _ImageSig(_hash256(rng.getrandbits(256)), None, f"/{i}.jpg") for i in range(2_000)
+    ]
+    registry = DuplicateRegistry(images=signatures)
+    registry.build_perceptual_indexes()
+    source = _ImageSig(_hash256(rng.getrandbits(256)), None, "/source.jpg")
+
+    service._best_image_match(source, signatures, 95, registry.image_index)
+    assert service.last_candidate_comparisons < len(signatures)
