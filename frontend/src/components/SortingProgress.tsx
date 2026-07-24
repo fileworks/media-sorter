@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { formatCount, formatDuration } from "@/lib/formatters";
 import type { SortingStatus } from "@/types/api";
 import type { SortTaskResult } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
 
 // Sort timings read as approximate, spelled-out, and rounded up (e.g.
 // "~2 min 31 sec") to match the live-progress tone.
@@ -41,6 +42,7 @@ export function SortingProgress({
   onViewReport,
   onRetry,
 }: SortingProgressProps) {
+  const { t, locale } = useI18n();
   const taskProgress = progress?.progress;
   const pct = taskProgress?.percentage ?? 0;
   const isRunning = status === "running" || status === "pending";
@@ -106,7 +108,7 @@ export function SortingProgress({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{status === "pending" ? "Starting…" : "Sorting in progress"}</CardTitle>
+          <CardTitle>{t(status === "pending" ? "sort.starting" : "sort.inProgress")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Progress bar */}
@@ -115,7 +117,11 @@ export function SortingProgress({
             {taskProgress && taskProgress.total > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {formatCount(taskProgress.current)} / {formatCount(taskProgress.total)} files
+                  {t("progress.files", {
+                    current: formatCount(taskProgress.current, locale),
+                    total: formatCount(taskProgress.total, locale),
+                    percentage: Math.round(pct),
+                  })}
                 </span>
                 <span className="font-semibold">{Math.round(pct)}%</span>
               </div>
@@ -128,13 +134,20 @@ export function SortingProgress({
               {etaSeconds !== null && (
                 <span className="flex items-center gap-1.5">
                   <FiClock className="h-3.5 w-3.5 shrink-0" />
-                  Estimated remaining: {formatDuration(etaSeconds, DURATION_OPTS)}
+                  {t("progress.remaining", {
+                    duration: formatDuration(etaSeconds, { ...DURATION_OPTS, locale }),
+                  })}
                 </span>
               )}
               {speed !== null && (
                 <span className="flex items-center gap-1.5">
                   <FiZap className="h-3.5 w-3.5 shrink-0" />
-                  {speed.toFixed(1)} files/sec
+                  {t("sort.speed", {
+                    speed: new Intl.NumberFormat(locale, {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    }).format(speed),
+                  })}
                 </span>
               )}
             </div>
@@ -143,7 +156,7 @@ export function SortingProgress({
           {/* Cancel button */}
           <div className="flex justify-end">
             <Button variant="destructive" size="sm" onClick={onCancel}>
-              Cancel Sort
+              {t("sort.cancel")}
             </Button>
           </div>
         </CardContent>
@@ -158,7 +171,7 @@ export function SortingProgress({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-success">
             <FiCheckCircle className="inline-block h-5 w-5 animate-badge-pop" />
-            Sort complete
+            {t("sort.complete")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -167,13 +180,13 @@ export function SortingProgress({
               <>
                 <p className="flex items-center gap-1.5">
                   <FiCheckCircle className="shrink-0 h-3.5 w-3.5 text-success" />
-                  <strong>{formatCount(result.sorted)}</strong> files sorted successfully
+                  {t("sort.sorted", { count: formatCount(result.sorted, locale) })}
                 </p>
 
                 {quarantined > 0 && (
                   <p className="flex items-center gap-1.5">
                     <FiAlertTriangle className="shrink-0 h-3.5 w-3.5 text-warning" />
-                    <strong>{formatCount(quarantined)}</strong> quarantined
+                    {t("sort.quarantined", { count: formatCount(quarantined, locale) })}
                     {(result.unknown_dates > 0 || result.future_dates > 0) && (
                       <span className="text-muted-foreground">
                         {" "}
@@ -192,26 +205,29 @@ export function SortingProgress({
                 {result.duplicates > 0 && (
                   <p className="flex items-center gap-1.5 text-muted-foreground">
                     <span className="shrink-0 font-mono text-xs">≈</span>
-                    <strong className="text-foreground">
-                      {formatCount(result.duplicates)}
-                    </strong>{" "}
-                    duplicates moved to _duplicates/
+                    <span className="text-foreground">
+                      {t("sort.duplicates", {
+                        count: formatCount(result.duplicates, locale),
+                      })}
+                    </span>
                   </p>
                 )}
 
                 <p className="flex items-center gap-1.5">
                   <FiX className="shrink-0 h-3.5 w-3.5 text-error" />
-                  <strong>{formatCount(result.failed)}</strong> failed
+                  {t("sort.failureCount", { count: formatCount(result.failed, locale) })}
                 </p>
               </>
             ) : (
-              <p className="text-muted-foreground">Sort finished. Loading summary…</p>
+              <p className="text-muted-foreground">{t("sort.loadingSummary")}</p>
             )}
 
             {durationSecs !== null && (
               <p className="flex items-center gap-1.5 text-muted-foreground">
                 <FiClock className="shrink-0 h-3.5 w-3.5" />
-                Completed in {formatDuration(durationSecs, DURATION_OPTS)}
+                {t("sort.completedIn", {
+                  duration: formatDuration(durationSecs, { ...DURATION_OPTS, locale }),
+                })}
               </p>
             )}
           </div>
@@ -219,7 +235,7 @@ export function SortingProgress({
           {onViewReport && (
             <div className="flex justify-end">
               <Button size="sm" onClick={onViewReport}>
-                View Report →
+                {t("sort.viewReport")}
               </Button>
             </div>
           )}
@@ -235,34 +251,34 @@ export function SortingProgress({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-error">
             <FiX className="inline-block h-5 w-5 animate-badge-pop" />
-            Sort failed
+            {t("sort.failed")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md bg-error/10 px-3 py-2 text-sm text-error">
-            {error ?? progress?.error ?? "An unexpected error stopped the sort."}
+            {error ?? progress?.error ?? t("sort.unexpected")}
           </div>
 
           {taskProgress && taskProgress.total > 0 && (
             <p className="text-sm text-muted-foreground">
-              Files processed before failure:{" "}
-              <strong>
-                {formatCount(taskProgress.current)} / {formatCount(taskProgress.total)}
-              </strong>
+              {t("sort.processedBeforeFailure", {
+                current: formatCount(taskProgress.current, locale),
+                total: formatCount(taskProgress.total, locale),
+              })}
             </p>
           )}
 
-          <p className="text-xs text-muted-foreground">Check the log below for details.</p>
+          <p className="text-xs text-muted-foreground">{t("sort.checkLog")}</p>
 
           <div className="flex justify-end gap-2">
             {onRetry && (
               <Button variant="outline" size="sm" onClick={onRetry}>
-                Try Again
+                {t("app.tryAgain")}
               </Button>
             )}
             {onViewReport && (
               <Button size="sm" onClick={onViewReport}>
-                View Partial Report
+                {t("sort.viewPartialReport")}
               </Button>
             )}
           </div>
@@ -276,16 +292,17 @@ export function SortingProgress({
     return (
       <Card className="animate-fade-in">
         <CardHeader>
-          <CardTitle className="text-muted-foreground">Sort cancelled</CardTitle>
+          <CardTitle className="text-muted-foreground">{t("sort.cancelled")}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            The sort was cancelled.
+            {t("sort.cancelled")}{" "}
             {taskProgress && taskProgress.total > 0 && (
               <>
-                {" "}
-                {formatCount(taskProgress.current)} of {formatCount(taskProgress.total)} files were
-                processed.
+                {t("sort.cancelledCount", {
+                  current: formatCount(taskProgress.current, locale),
+                  total: formatCount(taskProgress.total, locale),
+                })}
               </>
             )}
           </p>
@@ -298,12 +315,10 @@ export function SortingProgress({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-muted-foreground">Ready to sort</CardTitle>
+        <CardTitle className="text-muted-foreground">{t("sort.ready")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Click Sort Now below to start organizing your files.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("sort.readyHelp")}</p>
       </CardContent>
     </Card>
   );

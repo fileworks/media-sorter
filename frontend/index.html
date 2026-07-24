@@ -20,6 +20,8 @@
             t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
           }
           if (t === "dark") document.documentElement.classList.add("dark");
+          document.documentElement.lang =
+            localStorage.getItem("mediasort_language") === "de" ? "de" : "en";
         } catch (e) {
           /* localStorage unavailable — fall back to light */
         }
@@ -89,8 +91,14 @@
       <div id="app-splash" role="status" aria-live="polite" aria-label="Loading MediaSorter">
         <div class="app-splash__spinner"></div>
         <div class="app-splash__title">MediaSorter</div>
-        <div class="app-splash__hint">Starting up…</div>
+        <div id="app-splash-hint" class="app-splash__hint">Starting up…</div>
       </div>
+      <script>
+        if (document.documentElement.lang === "de") {
+          document.getElementById("app-splash").setAttribute("aria-label", "MediaSorter wird geladen");
+          document.getElementById("app-splash-hint").textContent = "Wird gestartet…";
+        }
+      </script>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

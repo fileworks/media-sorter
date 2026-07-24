@@ -10,11 +10,13 @@ import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { FiTrash2, FiAlertTriangle, FiSearch, FiX } from "react-icons/fi";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useI18n } from "@/i18n/I18nContext";
 import type { OperationReport } from "@/types/api";
 
 // ── Report Modal ──────────────────────────────────────────────────────────────
 
 function ReportModal({ operationId, onClose }: { operationId: string; onClose: () => void }) {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, true);
 
@@ -37,7 +39,7 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-label={`Sort report ${operationId}`}
+      aria-label={t("history.reportLabel", { id: operationId })}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -48,11 +50,13 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
         className="relative flex h-[90vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-2xl outline-none"
       >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-sm font-semibold text-foreground">Sort Report — {operationId}</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("history.reportTitle", { id: operationId })}
+          </h2>
           <button
             onClick={onClose}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            aria-label="Close report"
+            aria-label={t("history.closeReport")}
           >
             <FiX className="h-4 w-4" />
           </button>
@@ -68,7 +72,7 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
             <ReportPanel report={report} />
           ) : (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              Failed to load report. Try again.
+              {t("history.loadFailed")}
             </p>
           )}
         </div>
@@ -80,6 +84,7 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
 // ── Clear History confirmation ────────────────────────────────────────────────
 
 function ClearHistoryButton() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -91,9 +96,9 @@ function ClearHistoryButton() {
       await api.clearHistory();
       // Invalidate all report-related queries so the list refreshes immediately
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
-      toast("History cleared", "success");
+      toast(t("history.cleared"), "success");
     } catch {
-      toast("Could not clear history — try again", "error");
+      toast(t("history.clearFailed"), "error");
     } finally {
       setClearing(false);
       setConfirming(false);
@@ -104,7 +109,7 @@ function ClearHistoryButton() {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2">
         <FiAlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-        <span className="text-xs text-destructive">Delete all history?</span>
+        <span className="text-xs text-destructive">{t("history.deleteAll")}</span>
         <Button
           size="sm"
           variant="destructive"
@@ -112,7 +117,7 @@ function ClearHistoryButton() {
           onClick={() => void handleClear()}
           className="h-6 px-2 text-xs"
         >
-          {clearing ? "Deleting…" : "Yes, delete"}
+          {clearing ? t("history.deleting") : t("history.confirmDelete")}
         </Button>
         <Button
           size="sm"
@@ -121,7 +126,7 @@ function ClearHistoryButton() {
           onClick={() => setConfirming(false)}
           className="h-6 px-2 text-xs"
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
     );
@@ -135,7 +140,7 @@ function ClearHistoryButton() {
       className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1.5"
     >
       <FiTrash2 className="h-3.5 w-3.5" />
-      Clear history
+      {t("history.clear")}
     </Button>
   );
 }
@@ -145,6 +150,7 @@ function ClearHistoryButton() {
 const PAGE_SIZE = 10;
 
 export function HistoryPanel() {
+  const { t, locale, formatNumber } = useI18n();
   const { toast } = useToast();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
@@ -169,9 +175,9 @@ export function HistoryPanel() {
       const blob = await api.exportReport(operationId, "csv");
       const filename = `mediasort_${operationId}_${new Date().toISOString().slice(0, 10)}.csv`;
       await triggerDownload(blob, filename);
-      toast("Report exported", "success");
+      toast(t("history.exported"), "success");
     } catch {
-      toast("Export failed", "error");
+      toast(t("history.exportFailed"), "error");
     } finally {
       setExportingId(null);
     }
@@ -192,10 +198,8 @@ export function HistoryPanel() {
   if (total === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-sm font-medium text-foreground">No past sorts yet</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Your sort history will appear here after your first run.
-        </p>
+        <p className="text-sm font-medium text-foreground">{t("history.empty")}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("history.emptyHelp")}</p>
       </div>
     );
   }
@@ -209,8 +213,8 @@ export function HistoryPanel() {
           <FiSearch className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search by path…"
-            aria-label="Search sort history by path"
+            placeholder={t("history.searchPlaceholder")}
+            aria-label={t("history.searchLabel")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -225,7 +229,7 @@ export function HistoryPanel() {
       {/* Search empty state */}
       {filteredOps.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center">
-          <p className="text-sm text-muted-foreground">No operations match your search.</p>
+          <p className="text-sm text-muted-foreground">{t("history.noMatches")}</p>
         </div>
       ) : (
         <>
@@ -244,10 +248,21 @@ export function HistoryPanel() {
                     {op.source_path} → {op.dest_path}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatDate(op.execution_date)} · {op.total_files.toLocaleString()} files ·{" "}
-                    {op.files_sorted.toLocaleString()} sorted ·{" "}
-                    {((op.files_sorted / Math.max(op.total_files, 1)) * 100).toFixed(1)}% ·{" "}
-                    {formatDuration(op.duration_seconds)}
+                    {t(
+                      op.total_files === 1
+                        ? "history.operationSummary.one"
+                        : "history.operationSummary",
+                      {
+                        date: formatDate(op.execution_date, { locale }),
+                        total: formatNumber(op.total_files),
+                        sorted: formatNumber(op.files_sorted),
+                        percentage: new Intl.NumberFormat(locale, {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        }).format((op.files_sorted / Math.max(op.total_files, 1)) * 100),
+                        duration: formatDuration(op.duration_seconds, { locale }),
+                      },
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -257,10 +272,10 @@ export function HistoryPanel() {
                     disabled={exportingId === op.id}
                     onClick={() => void handleExport(op.id)}
                   >
-                    {exportingId === op.id ? "…" : "↓ Export"}
+                    {exportingId === op.id ? "…" : t("history.export")}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setModalId(op.id)}>
-                    View
+                    {t("history.view")}
                   </Button>
                 </div>
               </div>
@@ -276,10 +291,10 @@ export function HistoryPanel() {
                 disabled={page === 0}
                 onClick={() => setPage((p) => p - 1)}
               >
-                ← Prev
+                {t("history.previous")}
               </Button>
               <span className="tabular-nums text-xs text-muted-foreground">
-                Page {page + 1} of {totalPages}
+                {t("history.page", { page: page + 1, pages: totalPages })}
               </span>
               <Button
                 variant="ghost"
@@ -287,7 +302,7 @@ export function HistoryPanel() {
                 disabled={(page + 1) * PAGE_SIZE >= total}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next →
+                {t("history.next")}
               </Button>
             </div>
           )}

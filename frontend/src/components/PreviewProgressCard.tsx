@@ -10,13 +10,14 @@
 import { ProgressBar } from "@/components/ui/progress";
 import { formatCount, formatDuration } from "@/lib/formatters";
 import type { TaskProgress } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
 
 // Human label per backend phase. "scanning" has no incremental count (a
 // directory walk isn't easily made incremental), so it renders indeterminate.
-const PHASE_LABELS: Record<string, string> = {
-  scanning: "Scanning folder…",
-  ranking: "Analyzing image quality…",
-  previewing: "Reading dates…",
+const PHASE_KEYS: Record<string, string> = {
+  scanning: "progress.scanning",
+  ranking: "progress.ranking",
+  previewing: "progress.previewing",
 };
 
 interface PreviewProgressCardProps {
@@ -26,11 +27,12 @@ interface PreviewProgressCardProps {
 }
 
 export function PreviewProgressCard({ progress, elapsed }: PreviewProgressCardProps) {
+  const { t, locale } = useI18n();
   const phase = progress?.phase ?? null;
   // Determinate only once a real count is flowing (the per-file / ranking
   // phases). During "scanning" total is still 0, so the bar is indeterminate.
   const determinate = !!progress && progress.total > 0 && phase !== "scanning";
-  const label = (phase && PHASE_LABELS[phase]) || "Generating preview…";
+  const label = phase && PHASE_KEYS[phase] ? t(PHASE_KEYS[phase]) : t("progress.preview");
   const eta = progress?.estimated_time_remaining_seconds ?? null;
 
   return (
@@ -39,13 +41,16 @@ export function PreviewProgressCard({ progress, elapsed }: PreviewProgressCardPr
         <p className="text-sm font-medium text-foreground">{label}</p>
         {determinate && progress ? (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {formatCount(progress.current)} / {formatCount(progress.total)} files ·{" "}
-            {Math.round(progress.percentage)}%
+            {t("progress.files", {
+              current: formatCount(progress.current, locale),
+              total: formatCount(progress.total, locale),
+              percentage: Math.round(progress.percentage),
+            })}
           </span>
         ) : (
           elapsed > 0 && (
             <span className="text-xs tabular-nums text-muted-foreground">
-              {formatDuration(elapsed, { style: "short" })}
+              {formatDuration(elapsed, { style: "short", locale })}
             </span>
           )
         )}
@@ -58,7 +63,9 @@ export function PreviewProgressCard({ progress, elapsed }: PreviewProgressCardPr
 
       {determinate && eta != null && eta > 1 && (
         <p className="text-xs text-muted-foreground">
-          About {formatDuration(eta, { style: "verbose", rounding: "ceil" })} remaining
+          {t("progress.remaining", {
+            duration: formatDuration(eta, { style: "verbose", rounding: "ceil", locale }),
+          })}
         </p>
       )}
     </div>

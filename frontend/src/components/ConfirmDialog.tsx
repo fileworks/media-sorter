@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useI18n } from "@/i18n/I18nContext";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -19,13 +20,14 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   variant = "destructive",
   children,
   onClose,
   onConfirm,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Move focus into the panel while open, keep Tab inside it, and restore
@@ -65,10 +67,10 @@ export function ConfirmDialog({
         {children && <div className="mt-3">{children}</div>}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </Button>
           <Button variant={variant} size="sm" onClick={onConfirm}>
-            {confirmLabel}
+            {confirmLabel ?? t("common.confirm")}
           </Button>
         </div>
       </div>

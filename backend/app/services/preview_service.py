@@ -11,8 +11,14 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
 from app.core.logging_config import get_logger
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.dedup_index import DedupIndex, resolve_index_path
-from app.services.destination import build_dest_dir, predicted_filename, quarantine_dir
+from app.services.destination import (
+    build_dest_dir,
+    predicted_filename,
+    quarantine_dir,
+    reserve_destination,
+)
 from app.services.duplicate_service import (
     DuplicateMatch,
     DuplicateRegistry,
@@ -22,12 +28,11 @@ from app.services.duplicate_service import (
 from app.services.extraction_service import DateExtractionService
 from app.services.filesystem_service import FileSystemService, validate_source_directory
 from app.services.junk_filter import classify_junk
+from app.services.rule_engine_service import RuleEngineService
 from app.utils.path_utils import sanitize_path_segment
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
-    from app.services.ai.category_classifier_service import CategoryClassifierService
-    from app.services.rule_engine_service import RuleEngineService
 
 logger = get_logger(__name__)
 
@@ -138,6 +143,17 @@ class PreviewService:
             quality_processing_order, files, config, self._dups, cancel_event, task
         )
         slots: list[dict[str, Any] | None] = [None] * total
+        reserved_destinations: set[Path] = set()
+        operation_rules = (
+            self._rules.for_operation(config)
+            if isinstance(self._rules, RuleEngineService)
+            else self._rules
+        )
+        operation_classifier = (
+            self._classifier.for_operation(config)
+            if isinstance(self._classifier, CategoryClassifierService)
+            else self._classifier
+        )
 
         # Phase 3 — per-file prediction. Reset the counter so the bar restarts
         # cleanly from 0 under the "previewing" label.
@@ -162,8 +178,15 @@ class PreviewService:
                 registry,
                 check_suspicious,
                 dest_registry,
+                operation_rules,
+                operation_classifier,
+                True,
             )
             slots[idx] = item
+            if item.get("destination"):
+                item["destination"] = str(
+                    reserve_destination(Path(item["destination"]), reserved_destinations)
+                )
             self._bump_stats(stats, item["status"])
             # A "sort" item with no category (and categorization enabled) is
             # routed to _uncategorized/ — count it for the summary.
@@ -223,6 +246,9 @@ class PreviewService:
         registry: DuplicateRegistry,
         check_suspicious: bool,
         dest_registry: DuplicateRegistry | None = None,
+        operation_rules: RuleEngineService | None = None,
+        operation_classifier: CategoryClassifierService | None = None,
+        use_operation_services: bool = False,
     ) -> dict[str, Any]:
         """Predict the outcome for a single file.
 
@@ -282,11 +308,17 @@ class PreviewService:
         extracted_date = extr.extracted_date
         source = extr.source
 
-        # Apply rule-based tags
+        # Apply deterministic rules to the untouched source. The route result is
+        # used only if the file reaches the normal dated path below.
+        rules = operation_rules if use_operation_services else self._rules
+        classifier = operation_classifier if use_operation_services else self._classifier
         tags: list[str] = []
-        if self._rules is not None:
+        route_suffix: str | None = None
+        if rules is not None:
             with contextlib.suppress(Exception):
-                tags = self._rules.evaluate(file_path)
+                result = rules.evaluate_all(file_path)
+                tags = list(result.tags)
+                route_suffix = result.route
 
         status: str
         dest: str | None
@@ -347,9 +379,15 @@ class PreviewService:
                     scope=match.scope or "run",
                 )
             else:
-                category = self._classify(file_path, config)
+                category = self._classify(file_path, config, classifier)
                 status, dest = self._build_dest_path(
-                    file_path, extracted_date, source_root, dest_root, config, category
+                    file_path,
+                    extracted_date,
+                    source_root,
+                    dest_root,
+                    config,
+                    category,
+                    route_suffix,
                 )
                 if category:
                     logger.info(
@@ -360,9 +398,15 @@ class PreviewService:
                     )
 
         else:
-            category = self._classify(file_path, config)
+            category = self._classify(file_path, config, classifier)
             status, dest = self._build_dest_path(
-                file_path, extracted_date, source_root, dest_root, config, category
+                file_path,
+                extracted_date,
+                source_root,
+                dest_root,
+                config,
+                category,
+                route_suffix,
             )
             if category:
                 logger.info(
@@ -393,11 +437,17 @@ class PreviewService:
     # Helpers                                                               #
     # ------------------------------------------------------------------ #
 
-    def _classify(self, file_path: Path, config: Config) -> str | None:
+    def _classify(
+        self,
+        file_path: Path,
+        config: Config,
+        classifier: CategoryClassifierService | None = None,
+    ) -> str | None:
         """Predict the topic category for *file_path*, or ``None`` (uncategorized)."""
-        if not config.categorize_enabled or self._classifier is None:
+        active_classifier = classifier if classifier is not None else self._classifier
+        if not config.categorize_enabled or active_classifier is None:
             return None
-        return self._classifier.classify_file(file_path).category
+        return active_classifier.classify_file(file_path).category
 
     def _build_dest_path(
         self,
@@ -407,6 +457,7 @@ class PreviewService:
         dest_root: Path,
         config: Config,
         category: str | None = None,
+        route_suffix: str | None = None,
     ) -> tuple[str, str]:
         """Predict the destination via the shared builder SortingService uses.
 
@@ -418,7 +469,14 @@ class PreviewService:
         if config.camera_subfolder_enabled:
             camera = sanitize_path_segment(self._extraction.extract_camera_model(file_path) or "")
         dest_dir = build_dest_dir(
-            file_path, extracted_date, source_root, dest_root, config, category, camera
+            file_path,
+            extracted_date,
+            source_root,
+            dest_root,
+            config,
+            category,
+            camera,
+            route_suffix,
         )
         return "sort", str(dest_dir / predicted_filename(file_path, extracted_date, config))
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FiDownload, FiX, FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import { openExternal } from "@/lib/reveal";
+import { useI18n } from "@/i18n/I18nContext";
 import type { UpdateInfo } from "@/services/api";
 
 interface UpdateBannerProps {
@@ -27,6 +28,7 @@ function setDismissedVersion(version: string): void {
 }
 
 export function UpdateBanner({ info }: UpdateBannerProps) {
+  const { t } = useI18n();
   const [showNotes, setShowNotes] = useState(false);
   const [dismissed, setDismissed] = useState(() => getDismissedVersion() === info.latest_version);
 
@@ -46,8 +48,10 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
       <div className="flex items-center gap-3">
         <FiInfo className="shrink-0 h-4 w-4 text-primary" />
         <span className="text-primary">
-          <span className="font-semibold">MediaSorter {info.latest_version}</span> is available —
-          you&apos;re on {info.current_version}.
+          {t("update.available", {
+            product: `MediaSorter ${info.latest_version}`,
+            current: info.current_version,
+          })}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {info.release_notes && (
@@ -56,7 +60,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
               onClick={() => setShowNotes((n) => !n)}
               className="rounded-md px-2.5 py-1 text-xs font-medium text-primary/80 hover:bg-primary/15"
             >
-              {showNotes ? "Hide notes" : "What's new"}
+              {showNotes ? t("update.hideNotes") : t("update.whatsNew")}
             </button>
           )}
           <button
@@ -68,12 +72,12 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             )}
           >
             <FiDownload className="h-3 w-3" />
-            Download
+            {t("update.download")}
           </button>
           <button
             type="button"
             onClick={handleDismiss}
-            aria-label="Dismiss update notification"
+            aria-label={t("update.dismiss")}
             className="rounded-md p-1 text-primary/60 hover:bg-primary/15 hover:text-primary"
           >
             <FiX className="h-4 w-4" />

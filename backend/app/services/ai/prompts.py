@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.core.concepts import CATALOG, Locale
+
 if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
@@ -28,6 +30,14 @@ TEMPLATES: tuple[str, ...] = (
     "a {}",
     "{}",
 )
+GERMAN_TEMPLATES: tuple[str, ...] = (
+    "ein Foto von {}",
+    "ein Bild von {}",
+    "eine Aufnahme von {}",
+    "ein hochwertiges Foto von {}",
+    "{} auf einem Foto",
+    "{}",
+)
 
 # Generic background / distractor prompts. These sit in the categoriser's
 # softmax *denominator only* (never selectable as an output) so an
@@ -40,6 +50,13 @@ ANCHOR_PROMPTS: tuple[str, ...] = (
     "an ordinary picture",
     "a photo of an unrelated subject",
     "a nondescript image",
+)
+GERMAN_ANCHOR_PROMPTS: tuple[str, ...] = (
+    "ein Foto",
+    "ein zufälliger Schnappschuss",
+    "ein gewöhnliches Bild",
+    "ein Foto eines anderen Motivs",
+    "eine unspezifische Aufnahme",
 )
 
 # Short descriptions for visually-distinctive topics whose bare folder name is a
@@ -119,16 +136,47 @@ DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def category_prompts(name: str) -> list[str]:
+def category_prompts(name: str, locale: Locale = "en") -> list[str]:
     """Ensembled prompts for a category folder, enriched with a description for
     well-known visually-distinctive topics. The folder name itself is unchanged —
     only the prompt the model scores against is enriched."""
-    prompts = [t.format(name) for t in TEMPLATES]
-    desc = DESCRIPTIONS.get(name.lower())
+    templates = GERMAN_TEMPLATES if locale == "de" else TEMPLATES
+    prompts = [template.format(name) for template in templates]
+    concept = CATALOG.resolve(name)
+    if locale == "de":
+        desc = concept.prompts["de"] if concept is not None else None
+    else:
+        desc = DESCRIPTIONS.get(name.lower())
+        if desc is None and concept is not None:
+            desc = concept.prompts["en"]
     if desc:
         prompts.append(desc)
-        prompts.append(f"a photo of {desc}")
+        prompts.append(f"ein Foto von {desc}" if locale == "de" else f"a photo of {desc}")
     return prompts
+
+
+def prompt_group(
+    emitted_label: str,
+    *,
+    operation_locale: Locale,
+    model_id: str,
+    bundled: bool,
+) -> list[str]:
+    """Build model-appropriate prompts without changing the emitted label."""
+    multilingual = "siglip" in model_id.casefold()
+    prompt_locale: Locale = operation_locale if multilingual else "en"
+    prompt_label = emitted_label
+    if bundled:
+        concept = CATALOG.resolve(emitted_label)
+        if concept is not None:
+            prompt_label = concept.labels[prompt_locale]
+    return category_prompts(prompt_label, prompt_locale)
+
+
+def anchor_prompts(operation_locale: Locale, model_id: str) -> tuple[str, ...]:
+    if operation_locale == "de" and "siglip" in model_id.casefold():
+        return GERMAN_ANCHOR_PROMPTS
+    return ANCHOR_PROMPTS
 
 
 def pool_normalized(raw: NDArray[np.float32], sizes: list[int]) -> NDArray[np.float32]:

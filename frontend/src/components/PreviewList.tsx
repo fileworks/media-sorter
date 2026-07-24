@@ -19,11 +19,13 @@ import { createPortal } from "react-dom";
 import { MediaHoverCard, type HoverMeta } from "@/components/ui/media-hover-card";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/formatters";
+import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
 import { copyPath as copyPathToClipboard } from "@/lib/reveal";
 import type { PreviewItem } from "@/types/api";
-import { type FlatRow, buildFlatRows, MONTH_NAMES } from "@/lib/previewRows";
+import { type FlatRow, buildFlatRows } from "@/lib/previewRows";
 import { FiArrowUp, FiArrowDown } from "react-icons/fi";
+import { useI18n } from "@/i18n/I18nContext";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -39,12 +41,6 @@ const COL_LIMITS: Record<keyof ColWidths, [number, number]> = {
   source: [48, 160],
   date: [72, 160],
 };
-const COL_LABELS: Record<keyof ColWidths, string> = {
-  name: "Name",
-  source: "Source",
-  date: "Date",
-};
-
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface ContextMenuState {
@@ -93,27 +89,33 @@ function getStatusColor(status: string): string {
   }
 }
 
-function getStatusTooltip(status: string): string {
+function getStatusTooltipKey(status: string): string {
   switch (status) {
     case "sort":
-      return "Will be sorted";
+      return "preview.status.willSort";
     case "suspicious_date":
-      return "Warning: suspicious date";
+      return "preview.status.suspicious";
     case "duplicate":
-      return "Duplicate file";
+      return "preview.status.duplicate";
     case "unknown_date":
-      return "Problem: unknown date";
+      return "preview.status.unknown";
     case "future_date":
-      return "Problem: future date";
+      return "preview.status.future";
     case "failed":
-      return "Problem: processing failed";
+      return "preview.status.failed";
     case "junk":
-      return "Junk/thumbnail — quarantined to _junk/";
+      return "preview.status.junk";
     case "already_in_destination":
-      return "Already in destination — quarantined to _already_in_destination/";
+      return "preview.status.inDestination";
     default:
       return status;
   }
+}
+
+function localizedMonth(year: string, month: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { month: "long" }).format(
+    new Date(Number(year), Number(month) - 1, 1),
+  );
 }
 
 function getRowKey(row: FlatRow, index: number): string {
@@ -149,42 +151,59 @@ const YearRow: FC<{
   row: Extract<FlatRow, { kind: "year" }>;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ row, isExpanded, onToggle }) => (
-  <button
-    className="flex w-full items-center gap-2 px-3 py-0 text-left font-semibold hover:bg-muted/50"
-    style={{ height: ITEM_HEIGHT }}
-    onClick={onToggle}
-    aria-expanded={isExpanded}
-  >
-    <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
-    <span className="text-sm">{row.year}</span>
-    <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
-  </button>
-);
+}> = ({ row, isExpanded, onToggle }) => {
+  const { t, locale } = useI18n();
+  return (
+    <button
+      className="flex w-full items-center gap-2 px-3 py-0 text-left font-semibold hover:bg-muted/50"
+      style={{ height: ITEM_HEIGHT }}
+      onClick={onToggle}
+      aria-expanded={isExpanded}
+    >
+      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-sm">{row.year}</span>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
+    </button>
+  );
+};
 
 const MonthRow: FC<{
   row: Extract<FlatRow, { kind: "month" }>;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ row, isExpanded, onToggle }) => (
-  <button
-    className="flex w-full items-center gap-2 px-3 py-0 pl-8 text-left hover:bg-muted/50"
-    style={{ height: ITEM_HEIGHT }}
-    onClick={onToggle}
-    aria-expanded={isExpanded}
-  >
-    <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
-    <span className="text-sm text-muted-foreground">{row.monthName}</span>
-    <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
-  </button>
-);
+}> = ({ row, isExpanded, onToggle }) => {
+  const { t, locale } = useI18n();
+  return (
+    <button
+      className="flex w-full items-center gap-2 px-3 py-0 pl-8 text-left hover:bg-muted/50"
+      style={{ height: ITEM_HEIGHT }}
+      onClick={onToggle}
+      aria-expanded={isExpanded}
+    >
+      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-sm text-muted-foreground">
+        {localizedMonth(row.year, row.month, locale)}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
+    </button>
+  );
+};
 
 const DayRow: FC<{
   row: Extract<FlatRow, { kind: "day" }>;
   isExpanded: boolean;
   onToggle: () => void;
 }> = ({ row, isExpanded, onToggle }) => {
-  const monthName = MONTH_NAMES[parseInt(row.month, 10) - 1] ?? row.month;
+  const { t, locale } = useI18n();
+  const monthName = localizedMonth(row.year, row.month, locale);
   return (
     <button
       className="flex w-full items-center gap-2 px-3 py-0 pl-14 text-left hover:bg-muted/50"
@@ -196,7 +215,11 @@ const DayRow: FC<{
       <span className="text-xs text-muted-foreground">
         {parseInt(row.day, 10)} {monthName}
       </span>
-      <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
     </button>
   );
 };
@@ -213,48 +236,62 @@ const CatHeaderRow: FC<{
   row: Extract<FlatRow, { kind: "cat-header" }>;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ row, isExpanded, onToggle }) => (
-  <button
-    className={cn(
-      "flex w-full items-center gap-2 px-3 py-0 text-left hover:bg-muted/50",
-      FILE_DEPTH_PADDING[row.depth] ?? "pl-20",
-    )}
-    style={{ height: ITEM_HEIGHT }}
-    onClick={onToggle}
-    aria-expanded={isExpanded}
-  >
-    <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
-    <code
+}> = ({ row, isExpanded, onToggle }) => {
+  const { t, locale } = useI18n();
+  return (
+    <button
       className={cn(
-        "text-xs font-medium",
-        row.isUncategorized ? "text-muted-foreground" : "text-category",
+        "flex w-full items-center gap-2 px-3 py-0 text-left hover:bg-muted/50",
+        FILE_DEPTH_PADDING[row.depth] ?? "pl-20",
       )}
+      style={{ height: ITEM_HEIGHT }}
+      onClick={onToggle}
+      aria-expanded={isExpanded}
     >
-      {row.name}/
-    </code>
-    <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
-  </button>
-);
+      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <code
+        className={cn(
+          "text-xs font-medium",
+          row.isUncategorized ? "text-muted-foreground" : "text-category",
+        )}
+      >
+        {row.name}/
+      </code>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
+    </button>
+  );
+};
 
 const DateDupHeaderRow: FC<{
   row: Extract<FlatRow, { kind: "date-dup-header" }>;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ row, isExpanded, onToggle }) => (
-  <button
-    className={cn(
-      "flex w-full items-center gap-2 px-3 py-0 text-left hover:bg-muted/50",
-      FILE_DEPTH_PADDING[row.depth] ?? "pl-20",
-    )}
-    style={{ height: ITEM_HEIGHT }}
-    onClick={onToggle}
-    aria-expanded={isExpanded}
-  >
-    <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
-    <code className="text-xs font-medium text-info">_duplicates/</code>
-    <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
-  </button>
-);
+}> = ({ row, isExpanded, onToggle }) => {
+  const { t, locale } = useI18n();
+  return (
+    <button
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-0 text-left hover:bg-muted/50",
+        FILE_DEPTH_PADDING[row.depth] ?? "pl-20",
+      )}
+      style={{ height: ITEM_HEIGHT }}
+      onClick={onToggle}
+      aria-expanded={isExpanded}
+    >
+      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <code className="text-xs font-medium text-info">_duplicates/</code>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
+    </button>
+  );
+};
 
 const FileRow: FC<{
   item: PreviewItem;
@@ -276,17 +313,22 @@ const FileRow: FC<{
     onOpen,
     onContextMenu,
   }) => {
+    const { t, locale } = useI18n();
     const cw = colWidths ?? DEFAULT_COL_WIDTHS;
     const icon = getStatusIcon(item.status);
     const iconColor = getStatusColor(item.status);
-    const statusTooltip = getStatusTooltip(item.status);
+    const tooltipKey = getStatusTooltipKey(item.status);
+    const statusTooltip = t(tooltipKey, {}, item.status);
     const basename = getBasename(item.source);
     const destDisplay = getDestDisplay(item.destination);
 
     const hoverMeta: HoverMeta[] = [
-      { label: "Date", value: item.extracted_date ?? "—" },
-      { label: "Source", value: item.metadata_source || "—" },
-      { label: "Size", value: formatBytes(item.file_size) },
+      { label: t("preview.column.date"), value: item.extracted_date ?? "—" },
+      { label: t("preview.column.source"), value: formatMetadataSource(item.metadata_source, t) },
+      {
+        label: t("preview.column.size"),
+        value: formatBytes(item.file_size, { locale }),
+      },
     ];
 
     const isDuplicate =
@@ -322,8 +364,8 @@ const FileRow: FC<{
               role: "button" as const,
               tabIndex: 0,
               "aria-label": isDuplicate
-                ? `Compare duplicate ${basename}`
-                : `Open preview of ${basename}`,
+                ? t("preview.compareFile", { name: basename })
+                : t("preview.openFile", { name: basename }),
               onClick: handleClick,
               onKeyDown: (e: KeyboardEvent) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -352,7 +394,7 @@ const FileRow: FC<{
           className="hidden shrink-0 truncate text-muted-foreground sm:block"
           style={{ width: cw.source }}
         >
-          {item.metadata_source || "—"}
+          {formatMetadataSource(item.metadata_source, t)}
         </span>
         <span className="hidden shrink-0 text-muted-foreground sm:block" style={{ width: cw.date }}>
           {item.extracted_date ?? "—"}
@@ -370,14 +412,14 @@ const FileRow: FC<{
           (item.category ? (
             <span
               className="shrink-0 rounded-full bg-category/10 px-1.5 py-0.5 text-[10px] font-medium text-category"
-              title={`Category: ${item.category}`}
+              title={t("preview.category", { name: item.category })}
             >
               {item.category}
             </span>
           ) : (
             <span
               className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-              title="No confident category → _uncategorized/"
+              title={t("preview.noConfidentCategory")}
             >
               _uncategorized
             </span>
@@ -386,9 +428,15 @@ const FileRow: FC<{
           item.duplicate_type && (
             <span
               className="ml-2 shrink-0 rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-info"
-              title={item.duplicate_of ? `Duplicate of ${item.duplicate_of}` : undefined}
+              title={
+                item.duplicate_of
+                  ? t("preview.duplicateOf", { path: item.duplicate_of })
+                  : undefined
+              }
             >
-              {item.duplicate_type === "exact" ? "exact" : `~${item.duplicate_similarity ?? 0}%`}
+              {item.duplicate_type === "exact"
+                ? t("preview.exact")
+                : `~${item.duplicate_similarity ?? 0}%`}
             </span>
           )}
         {item.status !== "duplicate" && (item.tags ?? []).length > 0 && (
@@ -416,18 +464,25 @@ const FolderHeaderRow: FC<{
   row: Extract<FlatRow, { kind: "folder-header" }>;
   isExpanded: boolean;
   onToggle: () => void;
-}> = ({ row, isExpanded, onToggle }) => (
-  <button
-    className="flex w-full items-center gap-2 border-t border-border px-3 py-0 text-left hover:bg-muted/50"
-    style={{ height: ITEM_HEIGHT }}
-    onClick={onToggle}
-    aria-expanded={isExpanded}
-  >
-    <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
-    <code className="text-sm font-medium text-foreground">{row.label}</code>
-    <span className="text-xs text-muted-foreground">({row.count.toLocaleString()} files)</span>
-  </button>
-);
+}> = ({ row, isExpanded, onToggle }) => {
+  const { t, locale } = useI18n();
+  return (
+    <button
+      className="flex w-full items-center gap-2 border-t border-border px-3 py-0 text-left hover:bg-muted/50"
+      style={{ height: ITEM_HEIGHT }}
+      onClick={onToggle}
+      aria-expanded={isExpanded}
+    >
+      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <code className="text-sm font-medium text-foreground">{row.label}</code>
+      <span className="text-xs text-muted-foreground">
+        {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
+          count: row.count.toLocaleString(locale),
+        })}
+      </span>
+    </button>
+  );
+};
 
 const ContextMenu: FC<{
   state: ContextMenuState;
@@ -435,6 +490,7 @@ const ContextMenu: FC<{
   onCompare: (item: PreviewItem) => void;
   onClose: () => void;
 }> = ({ state, onPreview, onCompare, onClose }) => {
+  const { t } = useI18n();
   const { item } = state;
   const isDuplicate = item.status === "duplicate" && !!item.duplicate_of;
   const x = Math.min(state.x, window.innerWidth - 200);
@@ -461,7 +517,8 @@ const ContextMenu: FC<{
             onClose();
           }}
         >
-          <span className="text-info text-sm leading-none">≈</span>Compare Duplicate
+          <span className="text-info text-sm leading-none">≈</span>
+          {t("preview.context.compare")}
         </button>
       ) : (
         <button
@@ -471,12 +528,14 @@ const ContextMenu: FC<{
             onClose();
           }}
         >
-          <span className="text-muted-foreground text-sm leading-none">⌕</span>Open Preview
+          <span className="text-muted-foreground text-sm leading-none">⌕</span>
+          {t("preview.context.open")}
         </button>
       )}
       <div className="my-0.5 border-t border-border" />
       <button className={menuItemCls} onClick={copyPath}>
-        <span className="text-muted-foreground text-sm leading-none">⎘</span>Copy Source Path
+        <span className="text-muted-foreground text-sm leading-none">⎘</span>
+        {t("preview.context.copy")}
       </button>
     </div>,
     document.body,
@@ -604,6 +663,7 @@ function TreeColumnHeader({
   colWidths: ColWidths;
   onResizeStart: (col: keyof ColWidths, e: ReactMouseEvent) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div
       className="flex select-none items-center gap-2 border-b border-border bg-muted/30 px-3"
@@ -621,7 +681,7 @@ function TreeColumnHeader({
           style={{ width: colWidths[col] }}
         >
           <span className="truncate pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {COL_LABELS[col]}
+            {t(`preview.column.${col}`)}
           </span>
           <div
             className="absolute right-0 top-0 z-10 flex h-full w-3 cursor-col-resize items-center justify-center"
@@ -633,7 +693,7 @@ function TreeColumnHeader({
       ))}
       <span className="hidden shrink-0 text-transparent sm:block">→</span>
       <span className="hidden min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:block">
-        Destination
+        {t("preview.column.destination")}
       </span>
     </div>
   );
@@ -657,12 +717,7 @@ export interface PreviewListProps {
   onSortDirToggle: () => void;
 }
 
-const SORT_OPTIONS: { key: string; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "date", label: "Date" },
-  { key: "size", label: "Size" },
-  { key: "status", label: "Status" },
-];
+const SORT_OPTIONS = ["name", "date", "size", "status"] as const;
 
 export function PreviewList({
   items,
@@ -678,6 +733,7 @@ export function PreviewList({
   onSortByChange,
   onSortDirToggle,
 }: PreviewListProps) {
+  const { t, locale } = useI18n();
   const [scrollTop, setScrollTop] = useState(0);
   const [colWidths, setColWidths] = useState<ColWidths>(DEFAULT_COL_WIDTHS);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
@@ -757,11 +813,11 @@ export function PreviewList({
         dayLabel = "";
         sectionLabel = "";
       } else if (row.kind === "month") {
-        monthName = row.monthName;
+        monthName = localizedMonth(row.year, row.month, locale);
         dayLabel = "";
         sectionLabel = "";
       } else if (row.kind === "day") {
-        dayLabel = `${parseInt(row.day, 10)} ${MONTH_NAMES[parseInt(row.month, 10) - 1] ?? row.month}`;
+        dayLabel = `${parseInt(row.day, 10)} ${localizedMonth(row.year, row.month, locale)}`;
         sectionLabel = "";
       } else if (row.kind === "cat-header") {
         sectionLabel = row.name;
@@ -780,7 +836,7 @@ export function PreviewList({
       out[i] = parts.join(" › ");
     }
     return out;
-  }, [flatRows]);
+  }, [flatRows, locale]);
 
   const scrollContextLabel =
     breadcrumbs.length === 0
@@ -803,27 +859,23 @@ export function PreviewList({
       {/* Sort toolbar */}
       <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-1.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Sort
+          {t("preview.sort")}
         </span>
         <select
           value={sortBy}
           onChange={(e) => onSortByChange(e.target.value)}
           className="h-6 flex-none rounded border border-input bg-background px-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         >
-          {SORT_OPTIONS.map(({ key, label }) => (
+          {SORT_OPTIONS.map((key) => (
             <option key={key} value={key}>
-              {label}
+              {t(`preview.sort.${key}`)}
             </option>
           ))}
         </select>
         <button
           onClick={onSortDirToggle}
           className="flex h-6 w-6 items-center justify-center rounded border border-input bg-background text-xs text-foreground transition-colors hover:bg-muted/70"
-          title={
-            sortDir === "asc"
-              ? "Ascending — click for descending"
-              : "Descending — click for ascending"
-          }
+          title={sortDir === "asc" ? t("preview.sortAscending") : t("preview.sortDescending")}
         >
           {sortDir === "asc" ? (
             <FiArrowUp className="h-3 w-3" />
@@ -851,7 +903,7 @@ export function PreviewList({
       >
         {flatRows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            No items match the current filter.
+            {t("preview.noMatches")}
           </div>
         ) : (
           <div style={{ height: totalListHeight, position: "relative" }}>

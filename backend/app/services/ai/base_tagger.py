@@ -24,11 +24,13 @@ from __future__ import annotations
 
 import base64
 import io
+import unicodedata
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from app.core.concepts import CATALOG, Locale
 from app.core.logging_config import get_logger
 from app.services.ai.clip_embedder import ClipEmbedder
 from app.services.ai.encoder_protocol import VisionEncoder
@@ -89,6 +91,10 @@ class AITagger(ABC):
         error, bad credentials, unreadable image) — they log and return ``[]``.
         """
 
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return ()
+
 
 # --------------------------------------------------------------------------- #
 # Local — CLIP zero-shot via fastembed                                          #
@@ -119,8 +125,12 @@ class LocalClipTagger(AITagger):
         embedder: VisionEncoder | None = None,
         image_model: Any | None = None,
         text_model: Any | None = None,
+        locale: Locale = "en",
+        bundled: bool = False,
     ) -> None:
         self._labels = [lbl.strip() for lbl in labels if lbl.strip()]
+        self._locale = locale
+        self._bundled = bundled
         self._threshold = threshold
         if embedder is None:
             embedder = ClipEmbedder(image_model=image_model, text_model=text_model)
@@ -144,15 +154,20 @@ class LocalClipTagger(AITagger):
 
         import numpy as np
 
-        from app.services.ai.prompts import ANCHOR_PROMPTS, category_prompts, pool_normalized
+        from app.services.ai.prompts import anchor_prompts, pool_normalized, prompt_group
 
         prompts: list[str] = []
         sizes: list[int] = []
         for lbl in self._labels:
-            group = category_prompts(lbl)
+            group = prompt_group(
+                lbl,
+                operation_locale=self._locale,
+                model_id=self._embedder.model_id,
+                bundled=self._bundled,
+            )
             prompts.extend(group)
             sizes.append(len(group))
-        anchors = list(ANCHOR_PROMPTS)
+        anchors = list(anchor_prompts(self._locale, self._embedder.model_id))
         raw = self._embedder.embed_texts(prompts + anchors)
         if raw is None:
             return None
@@ -211,15 +226,40 @@ class LocalClipTagger(AITagger):
 # --------------------------------------------------------------------------- #
 
 
-class AzureVisionTagger(AITagger):
+def _display_label(value: object) -> str:
+    return " ".join(unicodedata.normalize("NFKC", str(value)).split())
+
+
+class _WarningTagger(AITagger):
+    def __init__(self) -> None:
+        self._warnings: list[str] = []
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return tuple(self._warnings)
+
+    def _warn(self, message: str) -> None:
+        self._warnings.append(message)
+        logger.warning(message)
+
+
+class AzureVisionTagger(_WarningTagger):
     """Azure AI Vision Image Analysis ('tags' feature). Free F0 tier ≈ 5,000/mo."""
 
     _API_VERSION = "2024-02-01"
 
-    def __init__(self, endpoint: str, api_key: str, threshold: float = 0.2) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        api_key: str,
+        threshold: float = 0.2,
+        locale: Locale = "en",
+    ) -> None:
+        super().__init__()
         self._endpoint = endpoint.rstrip("/")
         self._api_key = api_key
         self._threshold = threshold
+        self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
         try:
@@ -227,7 +267,11 @@ class AzureVisionTagger(AITagger):
             url = f"{self._endpoint}/computervision/imageanalysis:analyze"
             resp = httpx.post(
                 url,
-                params={"api-version": self._API_VERSION, "features": "tags"},
+                params={
+                    "api-version": self._API_VERSION,
+                    "features": "tags",
+                    "language": self._locale,
+                },
                 headers={
                     "Ocp-Apim-Subscription-Key": self._api_key,
                     "Content-Type": "application/octet-stream",
@@ -243,7 +287,7 @@ class AzureVisionTagger(AITagger):
                 name = v.get("name")
                 conf = float(v.get("confidence", 0.0))
                 if name and conf >= self._threshold:
-                    out.append((str(name), conf))
+                    out.append((_display_label(name), conf))
             out.sort(key=lambda p: p[1], reverse=True)
             return out
         except Exception as exc:
@@ -251,14 +295,22 @@ class AzureVisionTagger(AITagger):
             return []
 
 
-class ImaggaTagger(AITagger):
+class ImaggaTagger(_WarningTagger):
     """Imagga tagging API. Free hobby tier ≈ 1,000/mo. Auth: key + secret."""
 
     _URL = "https://api.imagga.com/v2/tags"
 
-    def __init__(self, api_key: str, api_secret: str, threshold: float = 0.2) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        api_secret: str,
+        threshold: float = 0.2,
+        locale: Locale = "en",
+    ) -> None:
+        super().__init__()
         self._auth = (api_key, api_secret)
         self._threshold = threshold
+        self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
         try:
@@ -266,6 +318,7 @@ class ImaggaTagger(AITagger):
             resp = httpx.post(
                 self._URL,
                 files={"image": ("image.jpg", payload, "image/jpeg")},
+                data={"language": self._locale},
                 auth=self._auth,
                 timeout=_HTTP_TIMEOUT,
             )
@@ -274,10 +327,10 @@ class ImaggaTagger(AITagger):
             tags = (data.get("result") or {}).get("tags") or []
             out: list[tuple[str, float]] = []
             for t in tags:
-                name = (t.get("tag") or {}).get("en")
+                name = (t.get("tag") or {}).get(self._locale)
                 conf = float(t.get("confidence", 0.0)) / 100.0  # Imagga reports 0..100
                 if name and conf >= self._threshold:
-                    out.append((str(name), conf))
+                    out.append((_display_label(name), conf))
             out.sort(key=lambda p: p[1], reverse=True)
             return out
         except Exception as exc:
@@ -285,15 +338,23 @@ class ImaggaTagger(AITagger):
             return []
 
 
-class GoogleCloudVisionTagger(AITagger):
+class GoogleCloudVisionTagger(_WarningTagger):
     """Google Cloud Vision LABEL_DETECTION via a plain API key. Free ≈ 1,000/mo."""
 
     _URL = "https://vision.googleapis.com/v1/images:annotate"
 
-    def __init__(self, api_key: str, threshold: float = 0.2, max_results: int = 20) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        threshold: float = 0.2,
+        max_results: int = 20,
+        locale: Locale = "en",
+    ) -> None:
+        super().__init__()
         self._api_key = api_key
         self._threshold = threshold
         self._max_results = max_results
+        self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
         try:
@@ -321,8 +382,16 @@ class GoogleCloudVisionTagger(AITagger):
             for lbl in labels:
                 name = lbl.get("description")
                 conf = float(lbl.get("score", 0.0))
-                if name and conf >= self._threshold:
-                    out.append((str(name), conf))
+                if not name or conf < self._threshold:
+                    continue
+                normalized = _display_label(name)
+                if self._locale == "de":
+                    mapped = CATALOG.localized_label(normalized, "de")
+                    if mapped is None:
+                        self._warn(f"provider.google.unmapped_label:{normalized}")
+                        continue
+                    normalized = mapped
+                out.append((normalized, conf))
             out.sort(key=lambda p: p[1], reverse=True)
             return out
         except Exception as exc:
@@ -359,7 +428,11 @@ def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITag
             logger.info("Local AI tagging selected but no encoder available; AI tagging disabled")
             return None
         return LocalClipTagger(
-            labels=config.ai_tagging_labels, threshold=threshold, embedder=embedder
+            labels=config.resolved_ai_tagging_labels(),
+            threshold=threshold,
+            embedder=embedder,
+            locale=config.language,
+            bundled=config.ai_tagging_labels_provenance == "bundled",
         )
 
     if provider == "azure_vision":
@@ -368,6 +441,7 @@ def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITag
                 endpoint=config.ai_tagging_endpoint,
                 api_key=config.ai_tagging_api_key,
                 threshold=threshold,
+                locale=config.language,
             )
         logger.warning("Azure Vision selected but endpoint/api_key missing; AI tagging disabled")
         return None
@@ -378,13 +452,18 @@ def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITag
                 api_key=config.ai_tagging_api_key,
                 api_secret=config.ai_tagging_api_secret,
                 threshold=threshold,
+                locale=config.language,
             )
         logger.warning("Imagga selected but api_key/api_secret missing; AI tagging disabled")
         return None
 
     if provider == "google_cloud_vision":
         if config.ai_tagging_api_key:
-            return GoogleCloudVisionTagger(api_key=config.ai_tagging_api_key, threshold=threshold)
+            return GoogleCloudVisionTagger(
+                api_key=config.ai_tagging_api_key,
+                threshold=threshold,
+                locale=config.language,
+            )
         logger.warning("Google Vision selected but api_key missing; AI tagging disabled")
         return None
 

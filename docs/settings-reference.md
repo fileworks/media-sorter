@@ -17,6 +17,7 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
+| Language | `language` | `"en"` | Interface language and language for application-generated labels in future operations: `en` or `de`. Switching is immediate and prospective; existing files, reports, user-entered names, and an operation already in progress are not translated. |
 | Source folder | `source_directory` | *(required)* | The messy folder to scan. Never modified except for a `move`. |
 | Destination folder | `target_directory` | *(required)* | Where the organised library is written. |
 | Copy instead of move | `copy_instead_of_move` | `false` | `true` leaves your originals untouched and writes copies; `false` moves files. Copy needs enough free disk space (checked in **Analyse**). |
@@ -78,12 +79,41 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 | Image format | `image_format` | `"jpeg"` | Target format: `jpeg` · `png` · `webp` · `tiff`. |
 | Repair corrupted files | `repair_enabled` | `true` | Validate sorted files; attempt a safe repair; quarantine if unrepairable. |
 
-## Rules (rule-based tagging)
+## Rules (tagging and routing)
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Tagging rules | `rules_enabled` | `true` | Enable deterministic, non-AI tagging rules. |
-| Rules | `rules` | `[]` | List of `{ id, name, tag, condition }`. Conditions match on `extension`, `filename_contains`, `size` (bytes), or `resolution` (`"WxH"`) with operators `eq` / `gt` / `lt` / `gte` / `lte`. |
+| Rules enabled | `rules_enabled` | `true` | Global switch for deterministic rules. Each rule also has its own `enabled` switch. |
+| Version | `rule_set.version` | `1` | Version of the strict rule model. Unknown future versions are rejected and never silently rewritten. |
+| Tag rules | `rule_set.tag_rules` | `[]` | Ordered tag rules with stable IDs, names, priorities, typed conditions, and a `tag` value. |
+| Route rules | `rule_set.route_rules` | `[]` | Ordered route rules with stable IDs, names, priorities, typed conditions, and a `relative_folder` suffix. |
+
+Conditions inspect the **source** file before conversion or renaming:
+
+- `extension` uses the final suffix (`archive.tar.jpg` → `jpg`).
+- `filename_contains` searches the filename stem with Unicode-aware, case-insensitive matching.
+- `size` compares source bytes with `eq`, `gt`, `lt`, `gte`, or `lte`.
+- `resolution` compares source width and height with the same operators.
+
+Rules are evaluated by ascending numeric priority; equal priorities retain their saved order.
+Every matching tag rule contributes its tag, while only the first matching route rule contributes
+a route. Tags are de-duplicated case-insensitively in stable order before being reported or
+written.
+
+A route is a strict relative suffix such as `screenshots/mobile`. It is appended after the
+normal date/category-or-source/camera hierarchy. Absolute paths, empty or dot segments,
+backslashes, control characters, drive/UNC paths, and reserved device names are rejected rather
+than cleaned up. Routes never apply to technical folders such as `_duplicates/`, `_junk/`,
+`_failed/`, or `_already_in_destination/`.
+
+Preview and sort share destination planning. Existing and same-batch conflicts receive
+deterministic `_001`, `_002`, … suffixes without overwriting. If the destination changes after
+preview, the report records the safe path actually used by sort.
+
+Legacy `rules` arrays are migrated once to tag rules with sequential priorities. Before the
+config is rewritten, MediaSorter saves `config.pre-rules-v1.json` (or a numbered variant).
+Malformed entries are skipped with a warning. To roll back, close MediaSorter, replace
+`config.json` with that backup, and use an older release.
 
 ## AI
 
@@ -116,15 +146,22 @@ allowed but flagged **"may be slow"**, so the choice is always informed.
 | API key / secret / endpoint | `ai_tagging_api_key`, `ai_tagging_api_secret`, `ai_tagging_endpoint` | `null` | Cloud credentials. Azure needs endpoint + key; Imagga needs key + secret; Google needs key. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
-| Save tags into files | `ai_tagging_embed_in_files` | `true` | Embed tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Off = tags stay in the report only. |
-| Tag labels | `ai_tagging_labels` | ~50 starters | The vocabulary the **local** tagger scores each image against. Editable. |
+| Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Off = tags stay in preview/report only. The old `ai_tagging_embed_in_files` key is read for compatibility. |
+| Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
+
+Azure and Imagga receive the selected operation locale and request native German output. Google
+Vision does not guarantee German labels, so known English results are mapped through bundled
+concept aliases and unknown results are omitted with a warning. Local SigLIP uses localized
+descriptions and templates. Local CLIP may use stable English semantic prompts for model quality,
+but still emits the selected localized label. Provider failures remain best-effort and never fail
+the sort.
 
 ### Smart Categorization
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | Smart Categorization | `categorize_enabled` | `false` | File each photo/video into your own topic folders (`…/Y/M/D/<category>/`). Local-model only. Mutually exclusive with *Preserve source subfolders*. |
-| Categories | `categorize_categories` | 11 starters² | Your topic folder names. Works best for visually distinct topics (`screenshots`, `documents`, `food`, `pets`); abstract ideas like `work`/`personal` classify poorly. Use **"Suggest from photos"** to auto-propose names by clustering a sample of your source images. |
+| Categories | `categorize_categories` | bundled concepts² | Untouched bundled concepts display and emit in the selected language. Editing marks the list custom; custom names remain verbatim across language changes. Works best for visually distinct topics. |
 | Categorization confidence | `categorize_confidence_threshold` | `0.55` | Top-1 probability floor (0.50–0.99). Files below it go to `_uncategorized/` rather than being guessed wrong. |
 | Categorization margin | `categorize_min_margin` | `0.15` | Required separation between the top and second-best category, so ambiguous files aren't force-filed. |
 

@@ -1,84 +1,112 @@
-"""Rule engine service — evaluate simple if/then tagging rules."""
+"""Typed deterministic tag and route rule evaluation."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from app.core.config import Config
-from app.core.logging_config import get_logger
+from app.core.rules import (
+    ExtensionCondition,
+    FilenameContainsCondition,
+    NumericOperator,
+    ResolutionCondition,
+    RouteRule,
+    SizeCondition,
+    TagRule,
+    normalized_key,
+)
+from app.services.filesystem_service import image_dimensions
 
-logger = get_logger(__name__)
+
+@dataclass(frozen=True)
+class RuleEvaluation:
+    tags: tuple[str, ...]
+    route: str | None
+    matched_tag_rule_ids: tuple[str, ...]
+    matched_route_rule_id: str | None
+
+
+_EMPTY = RuleEvaluation((), None, (), None)
 
 
 class RuleEngineService:
     def __init__(self, config: Config) -> None:
         self._config = config
 
-    def evaluate(self, file_path: Path) -> list[str]:
-        """Return list of tags that apply to the given file."""
+    def for_operation(self, config: Config) -> RuleEngineService:
+        """Return a rule engine bound to an operation's immutable config snapshot."""
+        return RuleEngineService(config)
+
+    def evaluate_all(self, file_path: Path) -> RuleEvaluation:
+        """Evaluate enabled rules against the untouched source file."""
         if not self._config.rules_enabled:
-            return []
+            return _EMPTY
+        rule_set = self._config.rule_set
         tags: list[str] = []
-        for rule in self._config.rules:
+        tag_ids: list[str] = []
+        seen_tags: set[str] = set()
+        for _, rule in sorted(
+            enumerate(rule_set.tag_rules),
+            key=lambda item: (item[1].priority, item[0]),
+        ):
+            if not rule.enabled or not self._matches(file_path, rule):
+                continue
+            key = normalized_key(rule.tag)
+            if key not in seen_tags:
+                seen_tags.add(key)
+                tags.append(rule.tag)
+            tag_ids.append(rule.id)
+
+        route_rule: RouteRule | None = None
+        for _, candidate in sorted(
+            enumerate(rule_set.route_rules),
+            key=lambda item: (item[1].priority, item[0]),
+        ):
+            if candidate.enabled and self._matches(file_path, candidate):
+                route_rule = candidate
+                break
+        return RuleEvaluation(
+            tags=tuple(tags),
+            route=route_rule.relative_folder if route_rule else None,
+            matched_tag_rule_ids=tuple(tag_ids),
+            matched_route_rule_id=route_rule.id if route_rule else None,
+        )
+
+    def evaluate(self, file_path: Path) -> list[str]:
+        """Compatibility helper returning only tag-rule results."""
+        return list(self.evaluate_all(file_path).tags)
+
+    @staticmethod
+    def _matches(path: Path, rule: TagRule | RouteRule) -> bool:
+        condition = rule.condition
+        if isinstance(condition, ExtensionCondition):
+            return path.suffix.casefold().removeprefix(".") == condition.value
+        if isinstance(condition, FilenameContainsCondition):
+            return normalized_key(condition.value) in normalized_key(path.stem)
+        if isinstance(condition, SizeCondition):
             try:
-                if self._matches(file_path, rule):
-                    tags.append(rule.get("tag", ""))
-            except Exception as exc:
-                logger.warning("Rule evaluation failed", rule=rule, error=str(exc))
-        return [t for t in tags if t]
-
-    def _matches(self, path: Path, rule: dict[str, Any]) -> bool:
-        condition = rule.get("condition", {})
-        ctype = condition.get("type")
-        operator = condition.get("operator", "eq")
-        value = condition.get("value", "")
-
-        if ctype == "extension":
-            return path.suffix.lower().lstrip(".") == str(value).lower()
-
-        if ctype == "filename_contains":
-            return str(value) in path.stem
-
-        if ctype == "size":
-            try:
-                file_size = path.stat().st_size
-                threshold = int(value)
-                return self._compare(file_size, operator, threshold)
-            except (OSError, ValueError):
+                return _compare(path.stat().st_size, condition.operator, condition.value)
+            except OSError:
                 return False
-
-        if ctype == "resolution":
-            return self._check_resolution(path, operator, str(value))
-
+        if isinstance(condition, ResolutionCondition):
+            dimensions = image_dimensions(path)
+            if dimensions is None:
+                return False
+            width, height = dimensions
+            return _compare(width, condition.operator, condition.width) and _compare(
+                height, condition.operator, condition.height
+            )
         return False
 
-    @staticmethod
-    def _compare(actual: int, operator: str, threshold: int) -> bool:
-        if operator in ("gt", ">"):
-            return actual > threshold
-        if operator in ("lt", "<"):
-            return actual < threshold
-        if operator in ("gte", ">="):
-            return actual >= threshold
-        if operator in ("lte", "<="):
-            return actual <= threshold
-        return actual == threshold
 
-    @staticmethod
-    def _check_resolution(path: Path, operator: str, value: str) -> bool:
-        """Compare image resolution. *value* is "WxH" e.g. "3840x2160".
-
-        Both axes must satisfy the comparison independently — that way a
-        5120×1440 ultrawide doesn't accidentally match a "≥ 4K UHD" rule
-        just because total pixel count happens to be equal.
-        """
-        try:
-            from PIL import Image
-
-            tw, th = (int(x) for x in value.lower().split("x"))
-            with Image.open(path) as img:
-                w, h = img.size
-            return RuleEngineService._compare(w, operator, tw) and RuleEngineService._compare(
-                h, operator, th
-            )
-        except Exception:
-            return False
+def _compare(actual: int, operator: NumericOperator, threshold: int) -> bool:
+    if operator == "gt":
+        return actual > threshold
+    if operator == "lt":
+        return actual < threshold
+    if operator == "gte":
+        return actual >= threshold
+    if operator == "lte":
+        return actual <= threshold
+    return actual == threshold

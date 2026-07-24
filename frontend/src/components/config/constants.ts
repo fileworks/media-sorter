@@ -107,6 +107,7 @@ export function clampMargin(raw: string): number {
 
 export const SECTION_DEFAULTS = {
   essentials: {
+    language: "en" as const,
     sort: true,
     sort_criteria: ["year"],
     copy_instead_of_move: false,
@@ -116,6 +117,7 @@ export const SECTION_DEFAULTS = {
     preserve_subfolders: false,
     categorize_enabled: false,
     categorize_categories: DEFAULT_CATEGORIES,
+    categorize_categories_provenance: "bundled" as const,
     categorize_confidence_threshold: 0.55,
     categorize_min_margin: 0.15,
   },
@@ -152,7 +154,7 @@ export const SECTION_DEFAULTS = {
   },
   rules: {
     rules_enabled: true,
-    rules: [],
+    rule_set: { version: 1 as const, tag_rules: [], route_rules: [] },
   },
   ai: {
     ai_tagging_enabled: false,
@@ -162,8 +164,9 @@ export const SECTION_DEFAULTS = {
     ai_tagging_api_secret: null,
     ai_tagging_endpoint: null,
     ai_tagging_max_tags: 10,
-    ai_tagging_embed_in_files: true,
+    embed_tags_in_files: true,
     ai_tagging_labels: DEFAULT_AI_LABELS,
+    ai_tagging_labels_provenance: "bundled" as const,
   },
   other: {
     override_metadata: false,

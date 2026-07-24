@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { SectionId } from "@/components/config/constants";
 import type { SectionGroup } from "@/components/config/sectionMeta";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function SettingsRail({
   items,
@@ -19,9 +20,10 @@ export function SettingsRail({
   selected: SectionId;
   onSelect: (id: SectionId) => void;
 }) {
+  const { t } = useI18n();
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t("accessibility.settingsSections")}
       className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0.5 lg:overflow-visible"
     >
       {items.map((it, i) => {
@@ -39,7 +41,7 @@ export function SettingsRail({
                 )}
                 aria-hidden
               >
-                {it.group}
+                {t(`config.group.${it.group.toLocaleLowerCase()}`)}
               </p>
             )}
             <button
@@ -58,9 +60,9 @@ export function SettingsRail({
               {it.error ? (
                 <span
                   className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error/15 text-[9px] font-bold leading-none text-error lg:ml-auto"
-                  title="This section has an error that needs fixing"
+                  title={t("common.hasError")}
                   role="img"
-                  aria-label="Has an error"
+                  aria-label={t("common.hasError")}
                 >
                   !
                 </span>
@@ -68,8 +70,8 @@ export function SettingsRail({
                 it.active && (
                   <span
                     className="h-1.5 w-1.5 rounded-full bg-primary lg:ml-auto"
-                    title="Modified"
-                    aria-label="Modified from default"
+                    title={t("common.modified")}
+                    aria-label={t("common.modified")}
                   />
                 )
               )}

@@ -4,14 +4,22 @@ import json
 import logging
 import os
 import re
+import shutil
 import types
 import typing
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal, Union, get_args, get_origin
 
 from platformdirs import user_config_dir
 from pydantic import BaseModel, TypeAdapter, ValidationError, field_validator
+
+from app.core.concepts import Locale, bundled_labels
+from app.core.rules import RuleSet, migrate_legacy_rules, normalized_key
+
+
+class UnsupportedRuleSetVersionError(RuntimeError):
+    """Persisted rules require a newer application and must not be rewritten."""
 
 
 class SortCriteria(BaseModel):
@@ -30,6 +38,8 @@ class SortCriteria(BaseModel):
 @dataclass
 class Config:
     """Application configuration."""
+
+    language: Locale = "en"
 
     # Directories
     source_directory: str = ""
@@ -75,6 +85,9 @@ class Config:
 
     # Rule-based tagging
     rules_enabled: bool = True
+    rule_set: RuleSet = field(default_factory=RuleSet)
+    # Read-only constructor/file compatibility. This is converted to ``rule_set``
+    # and never returned by the API or persisted again.
     rules: list[dict[str, Any]] = field(default_factory=list)
 
     # ── AI content tagging (descriptive keywords) ────────────────────────────
@@ -98,6 +111,9 @@ class Config:
     ai_tagging_endpoint: str | None = None
     # Max tags written per file; whether to embed tags into the media files.
     ai_tagging_max_tags: int = 10
+    embed_tags_in_files: bool = True
+    # Compatibility input for configurations saved before the common setting.
+    # ``None`` means the canonical setting was used.
     ai_tagging_embed_in_files: bool = True
     # Editable label vocabulary scored by the local CLIP zero-shot tagger.
     ai_tagging_labels: list[str] = field(
@@ -161,6 +177,7 @@ class Config:
             "map",
         ]
     )
+    ai_tagging_labels_provenance: Literal["bundled", "custom"] | None = None
 
     # ── Smart Categorization (local CLIP routing into topic folders) ──────────
     # Independent of the ai_tagging_* group above: this decides WHERE a file is
@@ -184,6 +201,7 @@ class Config:
             "memes",
         ]
     )
+    categorize_categories_provenance: Literal["bundled", "custom"] | None = None
     # Top-1 softmax probability floor. The softmax is now computed over the
     # categories *plus* background anchors at an un-saturated temperature (see
     # CategoryClassifierService), so this is a genuinely discriminating bar — a
@@ -268,20 +286,114 @@ class Config:
     # reproducibility).
     ai_allow_gpu: bool = True
 
+    # Ephemeral load metadata used to surface migration warnings and decide
+    # whether ConfigLoader must create a pre-migration backup. Never persisted.
+    migration_warnings: list[str] = field(default_factory=list, repr=False, compare=False)
+    migrated_legacy_rules: bool = field(default=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.rule_set, dict):
+            self.rule_set = RuleSet.model_validate(self.rule_set)
+        if self.rules and not self.rule_set.tag_rules and not self.rule_set.route_rules:
+            migrated, warnings = migrate_legacy_rules(self.rules)
+            self.rule_set = migrated
+            self.migration_warnings.extend(warnings)
+            self.migrated_legacy_rules = True
+        if not self.ai_tagging_embed_in_files:
+            self.embed_tags_in_files = False
+        self.ai_tagging_embed_in_files = self.embed_tags_in_files
+        if self.ai_tagging_labels_provenance is None:
+            self.ai_tagging_labels_provenance = (
+                "bundled"
+                if _same_vocabulary(self.ai_tagging_labels, bundled_labels("tag", "en"))
+                else "custom"
+            )
+        if self.categorize_categories_provenance is None:
+            self.categorize_categories_provenance = (
+                "bundled"
+                if _same_vocabulary(self.categorize_categories, bundled_labels("category", "en"))
+                else "custom"
+            )
+
     @classmethod
     def defaults(cls) -> "Config":
         return cls()
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        omitted = {
+            "rules",
+            "ai_tagging_embed_in_files",
+            "migration_warnings",
+            "migrated_legacy_rules",
+        }
+        result: dict[str, Any] = {}
+        for config_field in fields(self):
+            if config_field.name in omitted:
+                continue
+            value = getattr(self, config_field.name)
+            if isinstance(value, BaseModel):
+                value = value.model_dump(mode="json")
+            result[config_field.name] = value
+        if self.ai_tagging_labels_provenance == "bundled":
+            result["ai_tagging_labels"] = self.resolved_ai_tagging_labels()
+        if self.categorize_categories_provenance == "bundled":
+            result["categorize_categories"] = self.resolved_categories()
+        return result
+
+    def resolved_ai_tagging_labels(self) -> list[str]:
+        if self.ai_tagging_labels_provenance == "bundled":
+            return bundled_labels("tag", self.language)
+        return list(self.ai_tagging_labels)
+
+    def resolved_categories(self) -> list[str]:
+        if self.categorize_categories_provenance == "bundled":
+            return bundled_labels("category", self.language)
+        return list(self.categorize_categories)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
         # Drop unknown keys (the "$schema" marker, or fields written by a newer
         # build) so a stray key never raises a TypeError in the constructor.
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        filtered = {k: v for k, v in data.items() if k in known}
+        source = dict(data)
+        migrated = "rule_set" not in source and "rules" in source
+        warnings: list[str] = []
+        if migrated:
+            source["rule_set"], warnings = migrate_legacy_rules(source.get("rules"))
+        if "rule_set" in source and not isinstance(source["rule_set"], RuleSet):
+            source["rule_set"] = RuleSet.model_validate(source["rule_set"])
+
+        if "embed_tags_in_files" not in source and "ai_tagging_embed_in_files" in source:
+            source["embed_tags_in_files"] = source["ai_tagging_embed_in_files"]
+
+        english_tags = bundled_labels("tag", "en")
+        english_categories = bundled_labels("category", "en")
+        if "ai_tagging_labels_provenance" not in source:
+            source["ai_tagging_labels_provenance"] = (
+                "bundled"
+                if _same_vocabulary(source.get("ai_tagging_labels"), english_tags)
+                else "custom"
+            )
+        if "categorize_categories_provenance" not in source:
+            source["categorize_categories_provenance"] = (
+                "bundled"
+                if _same_vocabulary(source.get("categorize_categories"), english_categories)
+                else "custom"
+            )
+
+        known = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in source.items() if k in known}
+        filtered["migration_warnings"] = warnings
+        filtered["migrated_legacy_rules"] = migrated
+        filtered["rules"] = []
         return cls(**filtered)
+
+
+def _same_vocabulary(raw: object, expected: list[str]) -> bool:
+    if raw is None:
+        return True
+    if not isinstance(raw, list) or not all(isinstance(value, str) for value in raw):
+        return False
+    return [normalized_key(value) for value in raw] == [normalized_key(value) for value in expected]
 
 
 def coerce_config_update(body: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
@@ -306,6 +418,11 @@ def coerce_config_update(body: dict[str, Any]) -> tuple[dict[str, Any], list[str
     for key, value in body.items():
         if key == "$schema":
             continue
+        if key == "rules":
+            errors.append("config.rules.legacy_payload_rejected")
+            continue
+        if key == "ai_tagging_embed_in_files":
+            key = "embed_tags_in_files"
         if key not in hints:
             errors.append(f"Unknown config field: {key!r}")
             continue
@@ -422,11 +539,34 @@ class ConfigLoader:
         try:
             with open(self.config_file) as f:
                 data = json.load(f)
-            # from_dict drops unknown keys, so the "$schema" marker we write on
-            # save (and any stray keys) are filtered out without special-casing.
-            return Config.from_dict(data)
+            rule_set = data.get("rule_set")
+            if isinstance(rule_set, dict) and rule_set.get("version", 1) != 1:
+                raise UnsupportedRuleSetVersionError(
+                    f"Unsupported rule-set version: {rule_set.get('version')!r}"
+                )
+            config = Config.from_dict(data)
+            if config.migrated_legacy_rules:
+                self._backup_before_rule_migration()
+                self.save(config)
+            return config
         except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(f"Invalid config file: {e}") from e
+
+    def _backup_before_rule_migration(self) -> Path:
+        """Retain the exact pre-migration file before writing RuleSet v1."""
+        backup = self.config_file.with_name("config.pre-rules-v1.json")
+        if backup.exists():
+            if backup.read_bytes() == self.config_file.read_bytes():
+                return backup
+            index = 1
+            while True:
+                candidate = self.config_file.with_name(f"config.pre-rules-v1-{index}.json")
+                if not candidate.exists():
+                    backup = candidate
+                    break
+                index += 1
+        shutil.copy2(self.config_file, backup)
+        return backup
 
     def _apply_env_overrides(self, config: Config) -> Config:
         """Apply MEDIASORT_* environment variables over loaded config.

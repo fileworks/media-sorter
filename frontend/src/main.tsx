@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
+import { I18nProvider, storedLocale, translate } from "@/i18n/I18nContext";
 
 // ── Error boundary ────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ class ErrorBoundary extends React.Component<
         >
           <div style={{ maxWidth: "28rem" }}>
             <h1 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.75rem" }}>
-              MediaSorter crashed
+              {translate(storedLocale(), "app.crashed")}
             </h1>
             <p style={{ fontSize: "0.875rem", color: "#666", marginBottom: "1.25rem" }}>
               {this.state.error.message}
@@ -52,7 +53,7 @@ class ErrorBoundary extends React.Component<
                 fontSize: "0.875rem",
               }}
             >
-              Reload
+              {translate(storedLocale(), "app.reload")}
             </button>
           </div>
         </div>
@@ -78,9 +79,11 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      <I18nProvider>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </I18nProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

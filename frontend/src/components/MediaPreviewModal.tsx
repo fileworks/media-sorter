@@ -5,9 +5,11 @@ import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { copyPath, revealPath } from "@/lib/reveal";
 import { formatBytes } from "@/lib/formatters";
+import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
 import { useMediaInfo, formatResolution } from "@/hooks/useMediaInfo";
 import type { PreviewItem } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
 import {
   FiX,
   FiCopy,
@@ -59,8 +61,6 @@ function ModalImage({ path, maxPx = 2048 }: { path: string; maxPx?: number }) {
 }
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
-const REVEAL_LABEL = isMac ? "Reveal in Finder" : "Reveal in Explorer";
-
 /**
  * A selectable monospace path field with "Copy path" + "Reveal" actions. Shared
  * by the full preview modal and the duplicate comparison so both expose the same
@@ -68,7 +68,9 @@ const REVEAL_LABEL = isMac ? "Reveal in Finder" : "Reveal in Explorer";
  * state on success.
  */
 export function PathActions({ path, compact = false }: { path: string; compact?: boolean }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const revealLabel = t(isMac ? "preview.revealFinder" : "preview.revealExplorer");
 
   const onCopy = async () => {
     await copyPath(path);
@@ -90,16 +92,21 @@ export function PathActions({ path, compact = false }: { path: string; compact?:
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onCopy} className={btn} aria-label="Copy full path">
+        <button
+          type="button"
+          onClick={onCopy}
+          className={btn}
+          aria-label={t("preview.copyFullPath")}
+        >
           {copied ? (
             <>
               <FiCheck className="h-3.5 w-3.5 text-primary" />
-              <span className="text-primary">Copied!</span>
+              <span className="text-primary">{t("preview.copied")}</span>
             </>
           ) : (
             <>
               <FiCopy className="h-3.5 w-3.5" />
-              <span>Copy path</span>
+              <span>{t("preview.copyPath")}</span>
             </>
           )}
         </button>
@@ -107,10 +114,10 @@ export function PathActions({ path, compact = false }: { path: string; compact?:
           type="button"
           onClick={() => void revealPath(path)}
           className={btn}
-          aria-label={REVEAL_LABEL}
+          aria-label={revealLabel}
         >
           <FiFolder className="h-3.5 w-3.5" />
-          <span>{compact ? "Reveal" : REVEAL_LABEL}</span>
+          <span>{compact ? t("preview.reveal") : revealLabel}</span>
         </button>
       </div>
     </div>
@@ -124,24 +131,24 @@ interface MediaPreviewModalProps {
   onClose: () => void;
 }
 
-function getStatusLabel(status: PreviewItem["status"]): string {
+function getStatusKey(status: PreviewItem["status"]): string {
   switch (status) {
     case "sort":
-      return "Will be sorted";
+      return "preview.status.willSort";
     case "suspicious_date":
-      return "Suspicious date — sorted with warning";
+      return "preview.status.suspicious";
     case "duplicate":
-      return "Duplicate";
+      return "preview.status.duplicate";
     case "unknown_date":
-      return "Unknown date";
+      return "preview.status.unknown";
     case "future_date":
-      return "Future date";
+      return "preview.status.future";
     case "failed":
-      return "Failed";
+      return "preview.status.failed";
     case "junk":
-      return "Junk/thumbnail";
+      return "preview.status.junk";
     case "already_in_destination":
-      return "Already in destination";
+      return "preview.status.inDestination";
     default:
       return status;
   }
@@ -170,6 +177,7 @@ function getStatusColor(status: PreviewItem["status"]): string {
  * (also via arrow keys).
  */
 export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewModalProps) {
+  const { t, locale } = useI18n();
   const [current, setCurrent] = useState(item);
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, true);
@@ -207,10 +215,13 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
   const { data: info } = useMediaInfo(current.source);
 
   const meta: { label: string; value: string }[] = [
-    { label: "Date", value: current.extracted_date ?? "—" },
-    { label: "Source", value: current.metadata_source || "—" },
-    { label: "Size", value: formatBytes(current.file_size) },
-    { label: "Resolution", value: formatResolution(info?.width, info?.height) },
+    { label: t("preview.column.date"), value: current.extracted_date ?? "—" },
+    {
+      label: t("preview.column.source"),
+      value: formatMetadataSource(current.metadata_source, t),
+    },
+    { label: t("preview.column.size"), value: formatBytes(current.file_size, { locale }) },
+    { label: t("preview.resolution"), value: formatResolution(info?.width, info?.height) },
   ];
 
   const tags = current.tags ?? [];
@@ -222,7 +233,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`Preview of ${name}`}
+      aria-label={t("preview.dialogLabel", { name })}
     >
       <div
         ref={panelRef}
@@ -242,7 +253,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                 getStatusColor(current.status),
               )}
             >
-              {getStatusLabel(current.status)}
+              {t(getStatusKey(current.status), {}, current.status)}
             </span>
           </div>
 
@@ -259,7 +270,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                   onClick={goPrev}
                   disabled={!hasPrev}
                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Previous file"
+                  aria-label={t("preview.previousFile")}
                 >
                   <FiChevronLeft className="h-4 w-4" />
                 </button>
@@ -268,7 +279,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                   onClick={goNext}
                   disabled={!hasNext}
                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Next file"
+                  aria-label={t("preview.nextFile")}
                 >
                   <FiChevronRight className="h-4 w-4" />
                 </button>
@@ -278,7 +289,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               type="button"
               onClick={onClose}
               className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Close preview"
+              aria-label={t("preview.close")}
             >
               <FiX className="h-4 w-4" />
             </button>
@@ -293,7 +304,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               onClick={goPrev}
               disabled={!hasPrev}
               className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label="Previous file"
+              aria-label={t("preview.previousFile")}
             >
               <FiChevronLeft className="h-5 w-5" />
             </button>
@@ -308,7 +319,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               onClick={goNext}
               disabled={!hasNext}
               className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label="Next file"
+              aria-label={t("preview.nextFile")}
             >
               <FiChevronRight className="h-5 w-5" />
             </button>
@@ -337,7 +348,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               {tags.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Tags
+                    {t("preview.tags")}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {tags.map((tag) => (
@@ -354,7 +365,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               {category && (
                 <div className="space-y-1">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Category
+                    {t("preview.categoryLabel")}
                   </p>
                   <span className="inline-flex items-center gap-1 rounded-full bg-category/10 px-2.5 py-0.5 text-[11px] font-medium text-category">
                     <FiFolder className="h-3 w-3 shrink-0" />
@@ -368,7 +379,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
           {/* Source path */}
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Source
+              {t("preview.column.source")}
             </p>
             <PathActions path={current.source} />
           </div>
@@ -377,7 +388,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
           {current.destination && (
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Destination
+                {t("preview.column.destination")}
               </p>
               <p
                 className="select-all break-all rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-xs text-foreground"
@@ -392,7 +403,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
         {/* Footer: keyboard hint */}
         {showNav && (
           <p className="border-t border-border px-5 py-2 text-[11px] text-muted-foreground">
-            Use ← → arrow keys or the arrows above to navigate between files.
+            {t("preview.navigationHelp")}
           </p>
         )}
       </div>

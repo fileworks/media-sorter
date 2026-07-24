@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import type { AnalysisResult } from "@/services/api";
 import { extractErrorMessage } from "@/lib/errorUtils";
+import { useI18n } from "@/i18n/I18nContext";
 
 export type { AnalysisResult };
 
@@ -22,6 +23,7 @@ export interface UseAnalysisReturn {
  * shape is unchanged so callers need no updates.
  */
 export function useAnalysis(): UseAnalysisReturn {
+  const { t } = useI18n();
   const { mutateAsync, reset, data, isPending, error } = useMutation({
     mutationFn: () => api.analyse(),
   });
@@ -40,7 +42,7 @@ export function useAnalysis(): UseAnalysisReturn {
   return {
     result: data ?? null,
     loading: isPending,
-    error: error ? extractErrorMessage(error, "Analysis failed") : null,
+    error: error ? extractErrorMessage(error, t("analysis.failed")) : null,
     runAnalysis,
     clear,
   };

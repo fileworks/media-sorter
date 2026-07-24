@@ -89,6 +89,17 @@ instantiate a service directly inside a route.
 container, and raise a `MediaSortException` subclass for errors (the bootstrap
 handler turns those into the `{error, code, details}` JSON envelope automatically).
 
+**A new user-facing string or generated concept** — add the same typed key to both
+frontend locale catalogs. Backend validation returns stable message keys with typed
+parameters rather than translated prose. Add bundled vocabulary to
+`app/resources/concepts.json` with a canonical ID, complete English/German labels,
+aliases, and prompts; do not translate user-entered values or technical folder names.
+
+**A new rule condition or action** — extend the strict Python and TypeScript
+discriminated unions together, then use the shared rule evaluator and destination
+planner. Never accept a generic action dictionary and never sanitize a route into a
+different path.
+
 **A backend dependency with native code** — add `--collect-all=<pkg>` to the
 `bundle-backend` Makefile target so PyInstaller picks up the compiled extension.
 
@@ -102,6 +113,11 @@ handler turns those into the `{error, code, details}` JSON envelope automaticall
 - Always `pathlib.Path`, never string path concatenation.
 - `task_id` (UUID, for polling long-running operations) is **not** the same as
   `operation_id` (`"sort_<hash>"`, the stable DB key for a sort run).
+- Run backend pytest from `backend/` so its `asyncio_mode = "auto"` configuration
+  is loaded.
+- Rule migrations write `config.pre-rules-v1*.json` before changing `config.json`.
+  Keep that backup for rollback testing; future rule-set versions must fail closed
+  without rewriting the file.
 
 ---
 

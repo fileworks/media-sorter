@@ -4,12 +4,14 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PerceptualSlider } from "@/components/config/fields/PerceptualSlider";
 import { HELP } from "@/components/config/help";
 import type { SectionProps } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function DuplicatesSection({ config, updateConfig }: SectionProps) {
+  const { t } = useI18n();
   const threshold = config.duplicate_perceptual_threshold ?? 95;
   return (
     <>
-      <FormRow label="Detect duplicates" htmlFor="remove-duplicates" inline>
+      <FormRow label={t("config.duplicates.detect")} htmlFor="remove-duplicates" inline>
         <Toggle
           id="remove-duplicates"
           checked={config.remove_duplicates}
@@ -20,7 +22,7 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
       {config.remove_duplicates && (
         <div className="ml-2 space-y-3 border-l-2 border-border pl-3">
           <FormRow
-            label="Exact match (SHA-256)"
+            label={t("config.duplicates.exact")}
             htmlFor="dup-exact"
             help={HELP.duplicateExact}
             inline
@@ -33,7 +35,7 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
           </FormRow>
 
           <FormRow
-            label="Perceptual match"
+            label={t("config.duplicates.perceptual")}
             htmlFor="dup-perceptual"
             help={HELP.duplicatePerceptual}
             inline
@@ -48,7 +50,9 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
           {(config.duplicate_perceptual_enabled ?? true) && (
             <div className="pl-2">
               <div className="mb-1 flex items-center gap-1.5">
-                <p className="text-xs font-medium text-foreground">Similarity threshold</p>
+                <p className="text-xs font-medium text-foreground">
+                  {t("config.duplicates.threshold")}
+                </p>
                 <InfoTooltip content={HELP.duplicateThreshold} side="right" />
               </div>
               <PerceptualSlider
@@ -58,13 +62,10 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
             </div>
           )}
 
-          <p className="text-xs text-muted-foreground">
-            Duplicates are set aside in <code className="font-mono">_duplicates/</code> — never
-            deleted, so every match is recoverable.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("config.duplicates.recovery")}</p>
 
           <FormRow
-            label="Compare against destination"
+            label={t("config.duplicates.destination")}
             htmlFor="dedup-destination"
             help={HELP.dedupAgainstDestination}
             inline

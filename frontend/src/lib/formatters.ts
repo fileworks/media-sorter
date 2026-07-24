@@ -26,6 +26,8 @@ export interface FormatBytesOptions {
    * while bytes always render whole.
    */
   decimals?: number | "auto";
+  /** BCP 47 locale for the numeric portion. */
+  locale?: string;
 }
 
 const BYTE_UNITS: ByteUnit[] = ["B", "KB", "MB", "GB", "TB"];
@@ -46,7 +48,7 @@ export function formatBytes(
   bytes: number | null | undefined,
   options: FormatBytesOptions = {},
 ): string {
-  const { maxUnit = "GB", nullPlaceholder = NULL_PLACEHOLDER, decimals = "auto" } = options;
+  const { maxUnit = "GB", nullPlaceholder = NULL_PLACEHOLDER, decimals = "auto", locale } = options;
 
   if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) {
     return nullPlaceholder;
@@ -60,7 +62,15 @@ export function formatBytes(
 
   const places = decimals === "auto" ? (i > 0 && value < 10 ? 1 : 0) : i === 0 ? 0 : decimals;
 
-  return `${places > 0 ? value.toFixed(places) : Math.round(value)} ${BYTE_UNITS[i]}`;
+  const numeric = locale
+    ? new Intl.NumberFormat(locale, {
+        minimumFractionDigits: places,
+        maximumFractionDigits: places,
+      }).format(value)
+    : places > 0
+      ? value.toFixed(places)
+      : String(Math.round(value));
+  return `${numeric} ${BYTE_UNITS[i]}`;
 }
 
 // ── Durations ───────────────────────────────────────────────────────────────
@@ -82,6 +92,8 @@ export interface FormatDurationOptions {
   rounding?: "round" | "ceil";
   /** Returned for `null`/`undefined`/non-finite input. Default `"—"`. */
   nullPlaceholder?: string;
+  /** BCP 47 locale for unit words and numeric formatting. */
+  locale?: string;
 }
 
 /**
@@ -108,6 +120,7 @@ export function formatDuration(
     approximate = false,
     rounding = "round",
     nullPlaceholder = NULL_PLACEHOLDER,
+    locale,
   } = options;
 
   if (seconds == null || !Number.isFinite(seconds)) {
@@ -115,6 +128,7 @@ export function formatDuration(
   }
 
   const prefix = approximate ? "~" : "";
+  const german = locale?.toLocaleLowerCase().startsWith("de") ?? false;
   const roundFn = rounding === "ceil" ? Math.ceil : Math.round;
 
   if (style === "verbose") {
@@ -124,21 +138,28 @@ export function formatDuration(
     // prevents the off-by-one display. Long durations roll on through hours into
     // days so a multi-hour ETA never renders as "91.0 hours".
     const secs = roundFn(seconds);
-    if (secs < 60) return `${prefix}${secs} seconds`;
+    if (secs < 60) return `${prefix}${secs} ${german ? "Sekunden" : "seconds"}`;
     const mins = Math.round(seconds / 60);
-    if (mins < 60) return `${prefix}${mins} minutes`;
+    if (mins < 60) return `${prefix}${mins} ${german ? "Minuten" : "minutes"}`;
     const hours = seconds / 3600;
-    if (hours < 24) return `${prefix}${hours.toFixed(1)} hours`;
-    return `${prefix}${(seconds / 86400).toFixed(1)} days`;
+    const formatDecimal = (value: number) =>
+      locale
+        ? new Intl.NumberFormat(locale, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          }).format(value)
+        : value.toFixed(1);
+    if (hours < 24) return `${prefix}${formatDecimal(hours)} ${german ? "Stunden" : "hours"}`;
+    return `${prefix}${formatDecimal(seconds / 86400)} ${german ? "Tage" : "days"}`;
   }
 
   const long = style === "long";
   // Unit suffixes (long keeps the abbreviated, non-pluralising convention of the
   // existing "min"/"sec": "1 day", "2 hr", "1 min").
-  const dayUnit = long ? " day" : "d";
-  const hourUnit = long ? " hr" : "h";
+  const dayUnit = long ? (german ? " Tag" : " day") : "d";
+  const hourUnit = long ? (german ? " Std." : " hr") : "h";
   const minUnit = long ? " min" : "m";
-  const secUnit = long ? " sec" : "s";
+  const secUnit = long ? (german ? " Sek." : " sec") : "s";
 
   // Round the whole duration first, then split into d/h/m/s. Rounding only the
   // smallest component lets it round up to 60 (e.g. 119.6s → "1m 60s"); rounding

@@ -4,11 +4,18 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { HELP } from "@/components/config/help";
 import type { Config } from "@/types/api";
 import type { SectionProps } from "@/components/config/constants";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function ConversionSection({ config, updateConfig }: SectionProps) {
+  const { t } = useI18n();
   return (
     <>
-      <FormRow label="Convert images" htmlFor="convert-images" help={HELP.convertImages} inline>
+      <FormRow
+        label={t("config.conversion.images")}
+        htmlFor="convert-images"
+        help={HELP.convertImages}
+        inline
+      >
         <Toggle
           id="convert-images"
           checked={config.convert_images ?? false}
@@ -17,7 +24,7 @@ export function ConversionSection({ config, updateConfig }: SectionProps) {
       </FormRow>
 
       {(config.convert_images ?? false) && (
-        <FormRow label="Image format" htmlFor="image-format">
+        <FormRow label={t("config.conversion.imageFormat")} htmlFor="image-format">
           <Select
             id="image-format"
             value={config.image_format ?? "jpeg"}
@@ -32,7 +39,12 @@ export function ConversionSection({ config, updateConfig }: SectionProps) {
         </FormRow>
       )}
 
-      <FormRow label="Convert videos" htmlFor="convert-videos" help={HELP.convertVideos} inline>
+      <FormRow
+        label={t("config.conversion.videos")}
+        htmlFor="convert-videos"
+        help={HELP.convertVideos}
+        inline
+      >
         <Toggle
           id="convert-videos"
           checked={config.convert_videos ?? false}
@@ -41,7 +53,7 @@ export function ConversionSection({ config, updateConfig }: SectionProps) {
       </FormRow>
 
       {(config.convert_videos ?? false) && (
-        <FormRow label="Video format" htmlFor="video-format">
+        <FormRow label={t("config.conversion.videoFormat")} htmlFor="video-format">
           <Select
             id="video-format"
             value={config.video_format ?? "mp4"}

@@ -9,10 +9,10 @@ import {
   TIER_LABEL,
   TIER_RANK,
   effectiveTier,
-  machineSummary,
   machineTooWeak,
   type ResolvedTier,
 } from "@/lib/aiTier";
+import { useI18n } from "@/i18n/I18nContext";
 
 /**
  * Capability chip: tells the user, in one line, whether their machine can run
@@ -20,17 +20,22 @@ import {
  * the probe says "off", this reads as a clear blocker, not a silent greying-out.
  */
 export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo; config: Config }) {
+  const { t, locale } = useI18n();
   const tooWeak = machineTooWeak(hardware);
   const eff = effectiveTier(config, hardware);
+  const summary = t("config.ai.machineSummary", {
+    cores: hardware.logical_cpus.toLocaleString(locale),
+    ram: Math.round(hardware.total_ram_gb).toLocaleString(locale),
+    gpu: hardware.has_accelerator ? " · GPU" : "",
+  });
 
   if (tooWeak) {
     return (
       <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
         <FiAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          This machine is below the minimum for local AI (needs ≥4 CPU cores and ≥4 GB RAM). Smart
-          Categorization is unavailable; for AI tagging, use a cloud provider below.
-          <span className="mt-0.5 block text-warning/80">{machineSummary(hardware)}</span>
+          {t("config.ai.machineWeak")}
+          <span className="mt-0.5 block text-warning/80">{summary}</span>
         </span>
       </div>
     );
@@ -40,12 +45,13 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
     <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <FiCpu className="h-3.5 w-3.5 shrink-0 text-primary" />
       <span>
-        <span className="font-medium text-foreground">{machineSummary(hardware)}</span>
+        <span className="font-medium text-foreground">{summary}</span>
         {" · "}
-        Recommended:{" "}
-        <span className="font-medium text-foreground">{TIER_LABEL[hardware.recommended_tier]}</span>
+        <span className="font-medium text-foreground">
+          {t("config.ai.recommended", { tier: TIER_LABEL[hardware.recommended_tier] })}
+        </span>
         {eff !== "off" && eff !== hardware.recommended_tier && (
-          <span className="text-warning"> · running {TIER_LABEL[eff]}</span>
+          <span className="text-warning"> {t("config.ai.running", { tier: TIER_LABEL[eff] })}</span>
         )}
       </span>
       {hardware.has_accelerator && (
@@ -71,18 +77,27 @@ export function ModelTierSelect({
   config: Config;
   updateConfig: (patch: Partial<Config>) => void;
 }) {
+  const { t } = useI18n();
   const recommended = hardware.recommended_tier;
   const tier = config.ai_model_tier ?? "auto";
 
-  const slowFlag = (t: ResolvedTier): string =>
-    recommended !== "off" && TIER_RANK[t] > TIER_RANK[recommended] ? " · may be slow" : "";
+  const slowFlag = (tierValue: ResolvedTier): string =>
+    recommended !== "off" && TIER_RANK[tierValue] > TIER_RANK[recommended]
+      ? t("config.ai.slow")
+      : "";
 
   const options: { value: AiModelTier; label: string }[] = [
-    { value: "auto", label: `Auto — use ${TIER_LABEL[recommended]} (recommended)` },
-    { value: "lite", label: `Lite — fast, runs anywhere${slowFlag("lite")}` },
-    { value: "standard", label: `Standard — more accurate${slowFlag("standard")}` },
-    { value: "max", label: `Max — best quality${slowFlag("max")}` },
-    { value: "off", label: "Off — disable the local model" },
+    {
+      value: "auto",
+      label: t("config.ai.tier.auto", { tier: TIER_LABEL[recommended] }),
+    },
+    { value: "lite", label: t("config.ai.tier.lite", { slow: slowFlag("lite") }) },
+    {
+      value: "standard",
+      label: t("config.ai.tier.standard", { slow: slowFlag("standard") }),
+    },
+    { value: "max", label: t("config.ai.tier.max", { slow: slowFlag("max") }) },
+    { value: "off", label: t("config.ai.tier.off") },
   ];
 
   const eff = effectiveTier(config, hardware);
@@ -90,7 +105,7 @@ export function ModelTierSelect({
   return (
     <div className="space-y-3">
       <FormRow
-        label="Local AI model"
+        label={t("config.ai.model")}
         htmlFor="ai-model-tier"
         help={HELP.aiModelTier}
         helpSide="right"
@@ -111,7 +126,7 @@ export function ModelTierSelect({
 
       {/* GPU toggle only matters when an accelerator EP is actually present. */}
       {hardware.has_accelerator && eff !== "off" && (
-        <FormRow label="Use GPU acceleration" htmlFor="ai-allow-gpu" help={HELP.aiAllowGpu} inline>
+        <FormRow label={t("config.ai.gpu")} htmlFor="ai-allow-gpu" help={HELP.aiAllowGpu} inline>
           <Toggle
             id="ai-allow-gpu"
             checked={config.ai_allow_gpu ?? true}
@@ -120,10 +135,7 @@ export function ModelTierSelect({
         </FormRow>
       )}
 
-      <p className={cn("text-xs text-muted-foreground")}>
-        Standard / Max download a one-time model (~100 MB) on first use and run fully offline
-        afterwards.
-      </p>
+      <p className={cn("text-xs text-muted-foreground")}>{t("config.ai.download")}</p>
     </div>
   );
 }

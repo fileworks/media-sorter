@@ -9,8 +9,12 @@ import { DirectoryInput } from "@/components/config/fields/DirectoryInput";
 import { HELP } from "@/components/config/help";
 import { DISK_BYTES_OPTS } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
+import type { Config } from "@/types/api";
+import { Select, SelectItem } from "@/components/ui/select";
+import { useI18n } from "@/i18n/I18nContext";
 
 export function EssentialsSection({ config, updateConfig, fieldErrors }: SectionProps) {
+  const { t, setLocale } = useI18n();
   const { diskSpace } = useDiskSpace();
 
   const pickDirectory = async (field: "source_directory" | "target_directory") => {
@@ -42,6 +46,26 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
 
   return (
     <>
+      <FormRow
+        label={t("config.language.label")}
+        htmlFor="application-language"
+        help={t("config.language.help")}
+        helpSide="right"
+      >
+        <Select
+          id="application-language"
+          value={config.language}
+          onValueChange={(value) => {
+            const language = value as Config["language"];
+            setLocale(language);
+            updateConfig({ language });
+          }}
+          className="max-w-xs"
+        >
+          <SelectItem value="en">{t("config.language.en")}</SelectItem>
+          <SelectItem value="de">{t("config.language.de")}</SelectItem>
+        </Select>
+      </FormRow>
       <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
         <div className="space-y-1.5">
           <label
@@ -49,7 +73,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
             className="flex items-center gap-1.5 text-xs font-medium text-foreground"
           >
             <FiFolder className="h-3.5 w-3.5 text-muted-foreground" />
-            Source folder{" "}
+            {t("config.source.label")}{" "}
             <span className="text-destructive" aria-hidden>
               *
             </span>
@@ -57,7 +81,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
           <DirectoryInput
             id="source-dir"
             value={src}
-            placeholder="Select or type a path…"
+            placeholder={t("config.pathPlaceholder")}
             invalid={srcErrors.length > 0}
             onCommit={(v) => updateConfig({ source_directory: v })}
             onBrowse={() => void pickDirectory("source_directory")}
@@ -73,7 +97,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
             className="flex items-center gap-1.5 text-xs font-medium text-foreground"
           >
             <FiFolderPlus className="h-3.5 w-3.5 text-muted-foreground" />
-            Destination folder{" "}
+            {t("config.target.label")}{" "}
             <span className="text-destructive" aria-hidden>
               *
             </span>
@@ -81,7 +105,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
           <DirectoryInput
             id="target-dir"
             value={dest}
-            placeholder="Select or type a path…"
+            placeholder={t("config.pathPlaceholder")}
             invalid={destErrors.length > 0}
             onCommit={(v) => updateConfig({ target_directory: v })}
             onBrowse={() => void pickDirectory("target_directory")}
@@ -94,8 +118,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
             (diskSpace.free_space_known === false ? (
               <div className="flex items-center gap-1.5 rounded-md border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning">
                 <FiAlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Couldn&apos;t read free space at the destination — check the folder&apos;s
-                permissions.
+                {t("config.diskUnknown")}
               </div>
             ) : (
               <div
@@ -109,17 +132,18 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
                 {diskSpace.sufficient ? (
                   <>
                     <FiCheckCircle className="h-3.5 w-3.5 shrink-0" />
-                    {formatBytes(diskSpace.destination_free_bytes, DISK_BYTES_OPTS)} free —
-                    sufficient for copy (needs{" "}
-                    {formatBytes(diskSpace.source_size_bytes, DISK_BYTES_OPTS)})
+                    {t("config.diskEnough", {
+                      free: formatBytes(diskSpace.destination_free_bytes, DISK_BYTES_OPTS),
+                      needed: formatBytes(diskSpace.source_size_bytes, DISK_BYTES_OPTS),
+                    })}
                   </>
                 ) : (
                   <>
                     <FiAlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    Only {formatBytes(diskSpace.destination_free_bytes, DISK_BYTES_OPTS)} free — not
-                    enough for copy (needs{" "}
-                    {formatBytes(diskSpace.source_size_bytes, DISK_BYTES_OPTS)}). Switch to Move or
-                    free up space.
+                    {t("config.diskInsufficient", {
+                      free: formatBytes(diskSpace.destination_free_bytes, DISK_BYTES_OPTS),
+                      needed: formatBytes(diskSpace.source_size_bytes, DISK_BYTES_OPTS),
+                    })}
                   </>
                 )}
               </div>
@@ -127,14 +151,14 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
         </div>
       </div>
 
-      <FormRow label="Organize by date" help={HELP.sortBy} helpSide="right">
+      <FormRow label={t("config.organizeDate")} help={HELP.sortBy} helpSide="right">
         <SortCriteriaGroup
           value={config.sort_criteria ?? ["year"]}
           onChange={(v) => updateConfig({ sort_criteria: v })}
         />
       </FormRow>
 
-      <FormRow label="Copy or move" help={HELP.copyVsMove} helpSide="right">
+      <FormRow label={t("config.copyMove")} help={HELP.copyVsMove} helpSide="right">
         <div className="flex gap-4">
           {(["copy", "move"] as const).map((mode) => (
             <label key={mode} className="flex cursor-pointer items-center gap-1.5">
@@ -148,7 +172,7 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
                 onChange={() => updateConfig({ copy_instead_of_move: mode === "copy" })}
                 className="accent-primary"
               />
-              <span className="text-sm capitalize">{mode}</span>
+              <span className="text-sm">{t(mode === "copy" ? "config.copy" : "config.move")}</span>
             </label>
           ))}
         </div>

@@ -5,9 +5,11 @@ import { PathActions } from "@/components/MediaPreviewModal";
 import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { formatBytes } from "@/lib/formatters";
+import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useMediaInfo, formatResolution } from "@/hooks/useMediaInfo";
+import { useI18n } from "@/i18n/I18nContext";
 import type { MediaInfo, PreviewItem } from "@/types/api";
 import { FiX, FiAward, FiZoomIn, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
@@ -21,35 +23,35 @@ interface DetailRow {
   dupValue: string;
 }
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function buildDetailRows(
   origInfo: MediaInfo | undefined,
   dupInfo: MediaInfo | undefined,
   item: PreviewItem,
+  t: Translate,
+  locale: string,
 ): DetailRow[] {
-  const origSource =
-    origInfo?.metadata_source && origInfo.metadata_source !== "none"
-      ? origInfo.metadata_source
-      : "—";
   return [
     {
-      label: "Date",
+      label: t("duplicate.date"),
       origValue: origInfo?.extracted_date ?? "—",
       dupValue: item.extracted_date ?? "—",
     },
     {
-      label: "Source",
-      origValue: origSource,
-      dupValue: item.metadata_source || "—",
+      label: t("duplicate.source"),
+      origValue: formatMetadataSource(origInfo?.metadata_source, t),
+      dupValue: formatMetadataSource(item.metadata_source, t),
     },
     {
-      label: "Size",
-      origValue: formatBytes(origInfo?.file_size),
-      dupValue: formatBytes(item.file_size),
+      label: t("duplicate.size"),
+      origValue: formatBytes(origInfo?.file_size, { locale }),
+      dupValue: formatBytes(item.file_size, { locale }),
     },
     {
-      label: "Resolution",
+      label: t("duplicate.resolution"),
       origValue: formatResolution(origInfo?.width, origInfo?.height),
       dupValue: formatResolution(dupInfo?.width, dupInfo?.height),
     },
@@ -60,8 +62,10 @@ function getWinnerReason(
   origInfo: MediaInfo | undefined,
   dupInfo: MediaInfo | undefined,
   item: PreviewItem,
+  t: Translate,
+  locale: string,
 ): string | null {
-  if (item.duplicate_type === "exact") return "Exact byte-for-byte match — identical content";
+  if (item.duplicate_type === "exact") return t("duplicate.reason.exact");
   if (!origInfo || !dupInfo) return null;
 
   const isImageComparison = origInfo.media_type === "image" || dupInfo.media_type === "image";
@@ -70,40 +74,55 @@ function getWinnerReason(
     const origMp = (origInfo.width ?? 0) * (origInfo.height ?? 0);
     const dupMp = (dupInfo.width ?? 0) * (dupInfo.height ?? 0);
     if (origMp > dupMp)
-      return `Higher resolution (${origInfo.width}×${origInfo.height} vs ${dupInfo.width ?? "?"}×${dupInfo.height ?? "?"})`;
+      return t("duplicate.reason.higherResolution", {
+        original: `${origInfo.width}×${origInfo.height}`,
+        duplicate: `${dupInfo.width ?? "?"}×${dupInfo.height ?? "?"}`,
+      });
     if (dupMp > origMp)
-      return `Lower resolution (${dupInfo.width ?? "?"}×${dupInfo.height ?? "?"} vs ${origInfo.width}×${origInfo.height}) — seen first`;
+      return t("duplicate.reason.lowerResolution", {
+        original: `${origInfo.width}×${origInfo.height}`,
+        duplicate: `${dupInfo.width ?? "?"}×${dupInfo.height ?? "?"}`,
+      });
     const origSize = origInfo.file_size ?? 0;
     const dupSize = item.file_size ?? 0;
     if (origSize > dupSize)
-      return `Same resolution, larger file (${formatBytes(origSize)} vs ${formatBytes(dupSize)})`;
-    if (dupSize > origSize) return "Same resolution, smaller file — seen first";
-    return "Identical quality — seen first wins";
+      return t("duplicate.reason.largerSameResolution", {
+        original: formatBytes(origSize, { locale }),
+        duplicate: formatBytes(dupSize, { locale }),
+      });
+    if (dupSize > origSize) return t("duplicate.reason.smallerSameResolution");
+    return t("duplicate.reason.identicalQuality");
   } else {
     const origSize = origInfo.file_size ?? 0;
     const dupSize = item.file_size ?? 0;
     if (origSize > dupSize)
-      return `Larger file (${formatBytes(origSize)} vs ${formatBytes(dupSize)})`;
-    if (dupSize > origSize) return "Smaller file — seen first";
-    return "Same size — seen first wins";
+      return t("duplicate.reason.larger", {
+        original: formatBytes(origSize, { locale }),
+        duplicate: formatBytes(dupSize, { locale }),
+      });
+    if (dupSize > origSize) return t("duplicate.reason.smaller");
+    return t("duplicate.reason.sameSize");
   }
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function AlignedDetailTable({ rows }: { rows: DetailRow[] }) {
+  const { t } = useI18n();
   return (
     <div className="overflow-hidden rounded-md border border-border">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border bg-muted/50">
             <th className="py-1.5 pl-3 pr-2 text-left text-[11px] font-semibold text-muted-foreground">
-              Field
+              {t("duplicate.field")}
             </th>
             <th className="py-1.5 pr-2 text-left text-[11px] font-semibold text-success">
-              Original
+              {t("duplicate.original")}
             </th>
-            <th className="py-1.5 pr-3 text-left text-[11px] font-semibold text-info">Duplicate</th>
+            <th className="py-1.5 pr-3 text-left text-[11px] font-semibold text-info">
+              {t("duplicate.duplicate")}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -146,6 +165,7 @@ function ClickableThumb({
   onEnlarge: () => void;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -154,7 +174,7 @@ function ClickableThumb({
         className,
       )}
       onClick={onEnlarge}
-      aria-label="View image enlarged"
+      aria-label={t("duplicate.viewEnlarged")}
     >
       <Thumbnail path={path} maxPx={640} className="h-44 w-full" />
       <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-all group-hover:bg-black/25">
@@ -177,6 +197,7 @@ function ImageComparisonSlider({
   onEnlargeOriginal: () => void;
   onEnlargeDuplicate: () => void;
 }) {
+  const { t } = useI18n();
   const [sliderPos, setSliderPos] = useState(50);
   const [origLoaded, setOrigLoaded] = useState(false);
   const [dupLoaded, setDupLoaded] = useState(false);
@@ -243,7 +264,7 @@ function ImageComparisonSlider({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(sliderPos)}
-        aria-label="Image comparison slider — drag to compare original and duplicate"
+        aria-label={t("duplicate.sliderLabel")}
       >
         {/* Loading spinner — shown until both images are ready */}
         {!imagesReady && (
@@ -255,7 +276,7 @@ function ImageComparisonSlider({
         {/* Duplicate image — full width background */}
         <img
           src={api.thumbnailUrl(duplicatePath, 900)}
-          alt="Duplicate"
+          alt={t("duplicate.duplicate")}
           draggable={false}
           onLoad={() => setDupLoaded(true)}
           className={cn(
@@ -272,7 +293,7 @@ function ImageComparisonSlider({
         >
           <img
             src={api.thumbnailUrl(originalPath, 900)}
-            alt="Original"
+            alt={t("duplicate.original")}
             draggable={false}
             onLoad={() => setOrigLoaded(true)}
             className="h-full w-full select-none object-contain"
@@ -282,12 +303,12 @@ function ImageComparisonSlider({
         {/* Corner labels */}
         <div className="pointer-events-none absolute left-2 top-2">
           <span className="rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
-            Original
+            {t("duplicate.original")}
           </span>
         </div>
         <div className="pointer-events-none absolute right-2 top-2">
           <span className="rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
-            Duplicate
+            {t("duplicate.duplicate")}
           </span>
         </div>
 
@@ -318,7 +339,7 @@ function ImageComparisonSlider({
           className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <FiZoomIn className="h-3 w-3" />
-          View Original
+          {t("duplicate.viewOriginal")}
         </button>
         <button
           type="button"
@@ -326,12 +347,10 @@ function ImageComparisonSlider({
           className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <FiZoomIn className="h-3 w-3" />
-          View Duplicate
+          {t("duplicate.viewDuplicate")}
         </button>
       </div>
-      <p className="text-center text-[11px] text-muted-foreground">
-        Drag the divider to compare — original on the left, duplicate on the right.
-      </p>
+      <p className="text-center text-[11px] text-muted-foreground">{t("duplicate.sliderHelp")}</p>
     </div>
   );
 }
@@ -339,6 +358,7 @@ function ImageComparisonSlider({
 // ── Enlarged image overlay ─────────────────────────────────────────────────────
 
 function EnlargedOverlay({ url, onClose }: { url: string; onClose: () => void }) {
+  const { t } = useI18n();
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -355,13 +375,13 @@ function EnlargedOverlay({ url, onClose }: { url: string; onClose: () => void })
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Enlarged image"
+      aria-label={t("duplicate.enlarged")}
     >
       <button
         type="button"
         onClick={onClose}
         className="absolute right-4 top-4 rounded-full bg-white/15 p-2 text-white transition-colors hover:bg-white/30"
-        aria-label="Close enlarged view"
+        aria-label={t("duplicate.closeEnlarged")}
       >
         <FiX className="h-5 w-5" />
       </button>
@@ -377,7 +397,7 @@ function EnlargedOverlay({ url, onClose }: { url: string; onClose: () => void })
       >
         <img
           src={url}
-          alt="Enlarged view"
+          alt={t("duplicate.enlargedAlt")}
           onLoad={() => setLoaded(true)}
           className={cn(
             "max-h-[88vh] max-w-[88vw] cursor-default object-contain transition-opacity duration-200",
@@ -406,6 +426,7 @@ export function DuplicateComparison({
   copyInsteadOfMove,
   onClose,
 }: DuplicateComparisonProps) {
+  const { t, locale } = useI18n();
   const [item, setItem] = useState(initialItem);
   const [viewMode, setViewMode] = useState<ViewMode>("side-by-side");
   const [diffBroken, setDiffBroken] = useState(false);
@@ -465,8 +486,8 @@ export function DuplicateComparison({
 
   const isExact = item.duplicate_type === "exact";
   const similarityLabel = isExact
-    ? "Exact match · 100%"
-    : `~${item.duplicate_similarity ?? 0}% similar`;
+    ? t("duplicate.exact")
+    : t("duplicate.similar", { percentage: item.duplicate_similarity ?? 0 });
   const original = item.duplicate_of ?? "";
 
   // Look up the original file's destination (it's a "sort" item in allItems)
@@ -479,18 +500,16 @@ export function DuplicateComparison({
   const canDiff = bothImages && !diffBroken && !!original;
   const canSlider = !!original;
 
-  const winnerReason = getWinnerReason(origInfo, dupInfo, item);
-  const detailRows = buildDetailRows(origInfo, dupInfo, item);
+  const winnerReason = getWinnerReason(origInfo, dupInfo, item, t, locale);
+  const detailRows = buildDetailRows(origInfo, dupInfo, item, t, locale);
 
   // Footer message adapts to whether it's a copy or move operation
-  const footerHint = copyInsteadOfMove
-    ? "The duplicate will be copied to _duplicates/ — your source files stay untouched."
-    : "The duplicate will be moved to _duplicates/. The original stays in place.";
+  const footerHint = copyInsteadOfMove ? t("duplicate.copyHint") : t("duplicate.moveHint");
 
   const viewOptions: { key: ViewMode; label: string }[] = [
-    { key: "side-by-side", label: "Side by side" },
-    ...(canSlider ? [{ key: "slider" as ViewMode, label: "Slider" }] : []),
-    ...(canDiff ? [{ key: "diff" as ViewMode, label: "Diff" }] : []),
+    { key: "side-by-side", label: t("duplicate.sideBySide") },
+    ...(canSlider ? [{ key: "slider" as ViewMode, label: t("duplicate.slider") }] : []),
+    ...(canDiff ? [{ key: "diff" as ViewMode, label: t("duplicate.diff") }] : []),
   ];
 
   return createPortal(
@@ -500,7 +519,7 @@ export function DuplicateComparison({
         onClick={onClose}
         role="dialog"
         aria-modal="true"
-        aria-label="Duplicate comparison"
+        aria-label={t("duplicate.dialog")}
       >
         <div
           ref={panelRef}
@@ -510,7 +529,7 @@ export function DuplicateComparison({
         >
           {/* Header */}
           <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
-            <h2 className="text-sm font-semibold text-foreground">Compare duplicate</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("duplicate.compare")}</h2>
             <div className="flex items-center gap-2">
               {/* View mode toggle */}
               {viewOptions.length > 1 && (
@@ -544,7 +563,7 @@ export function DuplicateComparison({
                     onClick={goPrev}
                     disabled={!hasPrev}
                     className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                    aria-label="Previous duplicate"
+                    aria-label={t("duplicate.previous")}
                   >
                     <FiChevronLeft className="h-4 w-4" />
                   </button>
@@ -553,7 +572,7 @@ export function DuplicateComparison({
                     onClick={goNext}
                     disabled={!hasNext}
                     className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                    aria-label="Next duplicate"
+                    aria-label={t("duplicate.next")}
                   >
                     <FiChevronRight className="h-4 w-4" />
                   </button>
@@ -569,7 +588,7 @@ export function DuplicateComparison({
                 type="button"
                 onClick={onClose}
                 className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label="Close comparison"
+                aria-label={t("duplicate.close")}
               >
                 <FiX className="h-4 w-4" />
               </button>
@@ -585,7 +604,7 @@ export function DuplicateComparison({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-success">
-                      Original (kept)
+                      {t("duplicate.originalKept")}
                     </p>
                     <ClickableThumb
                       path={original}
@@ -600,15 +619,13 @@ export function DuplicateComparison({
                         <span>{winnerReason}</span>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">
-                        First file seen with this content. This copy is kept.
-                      </p>
+                      <p className="text-xs text-muted-foreground">{t("duplicate.firstKept")}</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-info">
-                      Duplicate
+                      {t("duplicate.duplicate")}
                     </p>
                     <ClickableThumb
                       path={item.source}
@@ -628,7 +645,7 @@ export function DuplicateComparison({
                   {/* Original (left / kept) */}
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Source
+                      {t("duplicate.source")}
                     </p>
                     <p
                       className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-foreground"
@@ -640,7 +657,7 @@ export function DuplicateComparison({
                     {originalDestination && (
                       <>
                         <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Destination
+                          {t("duplicate.destination")}
                         </p>
                         <p
                           className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-muted-foreground"
@@ -655,7 +672,7 @@ export function DuplicateComparison({
                   {/* Duplicate (right) */}
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Source
+                      {t("duplicate.source")}
                     </p>
                     <p
                       className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-foreground"
@@ -667,7 +684,7 @@ export function DuplicateComparison({
                     {item.destination && (
                       <>
                         <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Destination
+                          {t("duplicate.destination")}
                         </p>
                         <p
                           className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-muted-foreground"
@@ -698,7 +715,7 @@ export function DuplicateComparison({
             {viewMode === "diff" && canDiff && (
               <div className="space-y-3 px-5 py-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Pixel difference heat-map
+                  {t("duplicate.diffTitle")}
                 </p>
                 {diffLoading && (
                   <div className="flex h-40 items-center justify-center">
@@ -709,11 +726,11 @@ export function DuplicateComparison({
                   type="button"
                   className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setEnlargedUrl(api.diffUrl(original, item.source, 1400))}
-                  aria-label="View diff image enlarged"
+                  aria-label={t("duplicate.viewDiff")}
                 >
                   <img
                     src={api.diffUrl(original, item.source, 768)}
-                    alt="Pixel difference heat-map between the two images"
+                    alt={t("duplicate.diffAlt")}
                     loading="lazy"
                     decoding="async"
                     onLoad={() => setDiffLoading(false)}
@@ -729,10 +746,7 @@ export function DuplicateComparison({
                   />
                 </button>
                 {!diffLoading && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Brightly lit areas differ between the two files; near-black areas are identical.
-                    Click to enlarge.
-                  </p>
+                  <p className="text-[11px] text-muted-foreground">{t("duplicate.diffHelp")}</p>
                 )}
               </div>
             )}

@@ -26,8 +26,10 @@ import contextlib
 from pathlib import Path
 from typing import Any
 
+from app.core.concepts import CATALOG
 from app.core.config import Config
 from app.core.logging_config import get_logger
+from app.core.rules import normalized_key
 from app.services.ai.base_tagger import AITagger, build_tagger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.filesystem_service import open_image
@@ -113,6 +115,10 @@ class AITaggingService:
         self._provider: AITagger | None = None
         self._provider_built = False
 
+    def for_operation(self, config: Config) -> AITaggingService:
+        """Reuse the loaded encoder while freezing config and locale for one operation."""
+        return AITaggingService(config, self._embedder)
+
     def _get_provider(self) -> AITagger | None:
         """Build (once) and cache the configured tagger, or ``None`` if unusable."""
         if not self._provider_built:
@@ -148,13 +154,17 @@ class AITaggingService:
 
         # Deduplicate keeping the highest score per label (EXIF score=1.0 wins
         # over any CLIP probability for the same label), then rank and cap.
-        seen: dict[str, float] = {}
+        seen: dict[str, tuple[str, float]] = {}
         for label, score in scored:
-            if score > seen.get(label, -1.0):
-                seen[label] = score
+            key = normalized_key(label)
+            previous = seen.get(key)
+            if previous is None or score > previous[1]:
+                seen[key] = (label, score)
         return [
             label
-            for label, _ in sorted(seen.items(), key=lambda p: p[1], reverse=True)[: self._max_tags]
+            for label, _ in sorted(seen.values(), key=lambda pair: pair[1], reverse=True)[
+                : self._max_tags
+            ]
         ]
 
     # ------------------------------------------------------------------ #
@@ -193,7 +203,12 @@ class AITaggingService:
                 scene_key = exif.get(41990)  # 41990 = SceneCaptureType
                 scene = _SCENE_TAGS.get(scene_key) if isinstance(scene_key, int) else None
                 if scene:
-                    tags.append((scene, 1.0))
+                    tags.append(
+                        (
+                            CATALOG.localized_label(scene, self._config.language) or scene,
+                            1.0,
+                        )
+                    )
 
         except Exception:
             pass
