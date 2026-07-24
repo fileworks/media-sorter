@@ -66,21 +66,6 @@ export const HELP = {
       <em>Going below 85% sharply increases false positives.</em>
     </>
   ),
-  dedupAgainstDestination: (
-    <>
-      <strong>Also compare against media already in the destination.</strong>
-      <br />
-      Indexes what your destination already contains (kept up to date across runs), so a source file
-      that's already in your library lands in <code>_already_in_destination/</code> instead of being
-      added twice. Sorting a second source after a first one also catches duplicates between the two
-      runs.
-      <br />
-      <em>
-        The index is a small hidden file inside the destination; the first run over a large library
-        takes a while, re-runs are fast.
-      </em>
-    </>
-  ),
   junkFilter: (
     <>
       <strong>Set aside thumbnails and cache debris.</strong>

@@ -14,7 +14,6 @@ destination tree itself — only to its own database file.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -24,14 +23,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app.background_tasks.task_manager import CancellationToken
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.duplicate_service import (
+    DuplicateCheckCancelled,
     DuplicateRegistry,
     DuplicateService,
     _ImageSig,
     _VideoSig,
 )
+from app.services.filesystem_service import TraversalIssue
 from app.utils.media_utils import is_image, is_media, is_video
 
 if TYPE_CHECKING:
@@ -71,6 +73,9 @@ class RefreshStats:
     indexed: int = 0
     reused: int = 0
     removed: int = 0
+    partial: bool = False
+    issue_count: int = 0
+    cancelled: bool = False
 
 
 class DedupIndex:
@@ -130,7 +135,7 @@ class DedupIndex:
         *,
         perceptual: bool,
         sample_video: bool,
-        cancel_event: asyncio.Event | None = None,
+        cancel_event: CancellationToken | None = None,
         task: Task | None = None,
     ) -> RefreshStats:
         """Bring the index in line with what is actually in the destination.
@@ -141,31 +146,72 @@ class DedupIndex:
         *computing* missing video signatures (an ffmpeg subprocess per file)
         but keeps any already stored.
         """
-        media = self._destination_media(dest_root)
         if task is not None:
-            task.progress.phase = "indexing"
-            task.progress.total = len(media)
-            task.progress.current = 0
-            task.progress.percentage = 0.0
+            task.transition("indexing_destination")
+        media, issues, enumeration_cancelled = self._destination_media(
+            dest_root,
+            cancel_event=cancel_event,
+        )
+        if task is not None:
+            task.update_progress(0, total=len(media))
+            task.add_event("operation.destination_total", total=len(media))
+            logger.info(
+                "operation.destination_total",
+                task_id=task.id,
+                operation_kind=task.operation_kind,
+                phase="indexing_destination",
+                total=len(media),
+            )
+            task.mark_partial([issue.to_dict() for issue in issues])
+            for issue in issues:
+                logger.warning(
+                    "operation.partial",
+                    task_id=task.id,
+                    operation_kind=task.operation_kind,
+                    phase="indexing_destination",
+                    path=issue.path,
+                    error_class=issue.error_class,
+                    error=issue.message,
+                )
 
         indexed = reused = 0
-        seen: list[str] = []
         with self._connect() as conn:
+            conn.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS seen_paths (path TEXT PRIMARY KEY) WITHOUT ROWID"
+            )
+            conn.execute("DELETE FROM seen_paths")
             known = {
                 row["path"]: (row["size"], row["mtime"], row["phash"], row["video_frames"])
                 for row in conn.execute("SELECT path, size, mtime, phash, video_frames FROM files")
             }
             pending = 0
+            seen_batch: list[tuple[str]] = []
             for i, file_path in enumerate(media):
                 if cancel_event is not None and cancel_event.is_set():
                     logger.info("Destination indexing cancelled", processed=i, total=len(media))
-                    return RefreshStats(indexed=indexed, reused=reused, removed=0)
+                    if seen_batch:
+                        conn.executemany(
+                            "INSERT OR IGNORE INTO seen_paths(path) VALUES (?)",
+                            seen_batch,
+                        )
+                    return RefreshStats(
+                        indexed=indexed,
+                        reused=reused,
+                        removed=0,
+                        partial=bool(issues),
+                        issue_count=len(issues),
+                        cancelled=True,
+                    )
                 try:
                     stat = file_path.stat()
-                except OSError:
+                except OSError as exc:
+                    issue = TraversalIssue(str(file_path), type(exc).__name__, str(exc))
+                    issues.append(issue)
+                    if task is not None:
+                        task.mark_partial([issue.to_dict()])
                     continue
                 key = str(file_path)
-                seen.append(key)
+                seen_batch.append((key,))
                 prior = known.get(key)
                 if prior is not None and prior[0] == stat.st_size and prior[1] == stat.st_mtime:
                     # Unchanged file: only fill in a signature kind that is newly
@@ -178,7 +224,38 @@ class DedupIndex:
                     if not needs_phash and not needs_video:
                         reused += 1
                         self._report(task, i, len(media))
+                        if len(seen_batch) >= _COMMIT_BATCH:
+                            conn.executemany(
+                                "INSERT OR IGNORE INTO seen_paths(path) VALUES (?)",
+                                seen_batch,
+                            )
+                            seen_batch.clear()
+                            conn.commit()
                         continue
+                try:
+                    row = self._build_row(
+                        file_path,
+                        stat.st_size,
+                        stat.st_mtime,
+                        duplicates,
+                        perceptual,
+                        sample_video,
+                        cancel_event,
+                    )
+                except DuplicateCheckCancelled:
+                    if seen_batch:
+                        conn.executemany(
+                            "INSERT OR IGNORE INTO seen_paths(path) VALUES (?)",
+                            seen_batch,
+                        )
+                    return RefreshStats(
+                        indexed=indexed,
+                        reused=reused,
+                        removed=0,
+                        partial=bool(issues),
+                        issue_count=len(issues),
+                        cancelled=True,
+                    )
                 conn.execute(
                     """
                     INSERT INTO files (path, size, mtime, sha256, phash, mean_rgb,
@@ -190,56 +267,110 @@ class DedupIndex:
                         video_frames=excluded.video_frames, kind=excluded.kind,
                         indexed_at=excluded.indexed_at
                     """,
-                    self._build_row(
-                        file_path, stat.st_size, stat.st_mtime, duplicates, perceptual, sample_video
-                    ),
+                    row,
                 )
                 indexed += 1
                 pending += 1
                 if pending >= _COMMIT_BATCH:
+                    conn.executemany(
+                        "INSERT OR IGNORE INTO seen_paths(path) VALUES (?)",
+                        seen_batch,
+                    )
+                    seen_batch.clear()
                     conn.commit()
                     pending = 0
                 self._report(task, i, len(media))
 
-            placeholders = ",".join("?" for _ in seen) or "''"
-            removed = conn.execute(
-                f"DELETE FROM files WHERE path NOT IN ({placeholders})", seen
-            ).rowcount
+            if seen_batch:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO seen_paths(path) VALUES (?)",
+                    seen_batch,
+                )
+            cancellation_observed = enumeration_cancelled or (
+                cancel_event is not None and cancel_event.is_set()
+            )
+            complete = not issues and not cancellation_observed
+            removed = (
+                conn.execute(
+                    "DELETE FROM files "
+                    "WHERE NOT EXISTS (SELECT 1 FROM seen_paths "
+                    "WHERE seen_paths.path = files.path)"
+                ).rowcount
+                if complete
+                else 0
+            )
 
-        stats = RefreshStats(indexed=indexed, reused=reused, removed=removed)
+        stats = RefreshStats(
+            indexed=indexed,
+            reused=reused,
+            removed=removed,
+            partial=bool(issues),
+            issue_count=len(issues),
+            cancelled=cancellation_observed,
+        )
         logger.info(
             "Destination index refreshed",
             path=str(self._path),
             indexed=indexed,
             reused=reused,
             removed=removed,
+            partial=stats.partial,
+            issue_count=stats.issue_count,
         )
         return stats
 
     @staticmethod
     def _report(task: Task | None, i: int, total: int) -> None:
         if task is not None:
-            task.progress.current = i + 1
-            task.progress.percentage = round((i + 1) / total * 100, 1) if total else 0.0
+            task.update_progress(i + 1, total=total)
 
-    def _destination_media(self, dest_root: Path) -> list[Path]:
+    def _destination_media(
+        self,
+        dest_root: Path,
+        *,
+        cancel_event: CancellationToken | None = None,
+    ) -> tuple[list[Path], list[TraversalIssue], bool]:
         """All media files under the destination, minus quarantine outcomes."""
         if not dest_root.is_dir():
-            return []
+            return [], [], False
         results: list[Path] = []
-        try:
-            top = sorted(dest_root.iterdir())
-        except OSError:
-            return []
-        for entry in top:
-            if entry.name in _EXCLUDED_TOP_LEVEL_DIRS:
+        issues: list[TraversalIssue] = []
+        stack: list[tuple[Path, bool]] = [(dest_root, True)]
+        while stack:
+            current, is_root = stack.pop()
+            if cancel_event is not None and cancel_event.is_set():
+                return results, issues, True
+            try:
+                entries: list[Path] = []
+                for entry in current.iterdir():
+                    if cancel_event is not None and cancel_event.is_set():
+                        return results, issues, True
+                    entries.append(entry)
+                entries.sort()
+            except OSError as exc:
+                issues.append(TraversalIssue(str(current), type(exc).__name__, str(exc)))
+                logger.warning(
+                    "operation.partial",
+                    phase="indexing_destination",
+                    path=str(current),
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
                 continue
-            if entry.is_file():
-                if is_media(entry):
-                    results.append(entry)
-            elif entry.is_dir():
-                results.extend(p for p in sorted(entry.rglob("*")) if p.is_file() and is_media(p))
-        return results
+            for entry in entries:
+                if cancel_event is not None and cancel_event.is_set():
+                    return results, issues, True
+                if is_root and entry.name in _EXCLUDED_TOP_LEVEL_DIRS:
+                    continue
+                try:
+                    if entry.is_file():
+                        if is_media(entry):
+                            results.append(entry)
+                    elif entry.is_dir():
+                        stack.append((entry, False))
+                except OSError as exc:
+                    issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
+        return sorted(results), issues, False
 
     def _build_row(
         self,
@@ -249,8 +380,9 @@ class DedupIndex:
         duplicates: DuplicateService,
         perceptual: bool,
         sample_video: bool,
+        cancel_event: CancellationToken | None,
     ) -> tuple[Any, ...]:
-        sha256 = duplicates.compute_hash(file_path)
+        sha256 = duplicates.compute_hash(file_path, cancel_token=cancel_event)
         phash: str | None = None
         mean_rgb: str | None = None
         video_frames: str | None = None
@@ -258,7 +390,7 @@ class DedupIndex:
         if is_image(file_path):
             kind = "image"
             if perceptual:
-                sig = duplicates.image_signature(file_path)
+                sig = duplicates.image_signature(file_path, cancel_token=cancel_event)
                 if sig is not None:
                     phash = str(sig.phash)
                     if sig.mean_rgb is not None:
@@ -266,7 +398,7 @@ class DedupIndex:
         elif is_video(file_path):
             kind = "video"
             if perceptual and sample_video:
-                vsig = duplicates.video_signature(file_path)
+                vsig = duplicates.video_signature(file_path, cancel_token=cancel_event)
                 if vsig is not None:
                     video_frames = json.dumps(
                         [
@@ -297,10 +429,10 @@ class DedupIndex:
         registry = DuplicateRegistry()
         with self._connect() as conn:
             for row in conn.execute(
-                "SELECT path, sha256, phash, mean_rgb, video_frames FROM files"
+                "SELECT path, sha256, phash, mean_rgb, video_frames FROM files ORDER BY path"
             ):
                 path = row["path"]
-                # First-seen wins, matching in-run semantics; ties are harmless.
+                # Stable lexical order gives deterministic destination tie-breaking.
                 registry.exact.setdefault(row["sha256"], path)
                 if row["phash"]:
                     registry.images.append(
@@ -324,6 +456,7 @@ class DedupIndex:
                                 )
                             )
                     registry.videos.append(_VideoSig(frames=frames, path=path))
+        registry.build_perceptual_indexes()
         return registry
 
     @staticmethod

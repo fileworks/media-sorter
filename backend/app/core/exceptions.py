@@ -40,6 +40,33 @@ class ConfigValidationError(MediaSortException):
         )
 
 
+class SourceUnavailableError(MediaSortException):
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: str = "",
+        reason: str = "unavailable",
+    ) -> None:
+        super().__init__(
+            message,
+            "SOURCE_UNAVAILABLE",
+            422,
+            {"path": path, "reason": reason},
+        )
+
+
+class PathOverlapError(MediaSortException):
+    def __init__(self, source: str, target: str, relationship: str) -> None:
+        super().__init__(
+            "Source and destination folders must be different and separate; "
+            "neither may contain the other.",
+            "PATH_OVERLAP",
+            422,
+            {"source": source, "target": target, "relationship": relationship},
+        )
+
+
 class SortingError(MediaSortException):
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(message, "SORTING_ERROR", 500, details)

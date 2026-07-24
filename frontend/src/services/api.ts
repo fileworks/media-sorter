@@ -25,9 +25,6 @@ export interface Config {
   duplicate_exact_enabled: boolean;
   duplicate_perceptual_enabled: boolean;
   duplicate_perceptual_threshold: number;
-  // Destination-aware / cross-run dedup: compare sources against media already
-  // in the destination (persistent index).
-  dedup_against_destination: boolean;
   dedup_index_path: string | null;
   // Junk / thumbnail filter → _junk/ (never deletes).
   junk_filter_enabled: boolean;
@@ -154,18 +151,46 @@ export interface TaskProgress {
   /**
    * Coarse setup/processing stage, so the UI can show meaningful feedback during
    * work that happens before the per-file loop instead of a frozen 0%.
-   * "scanning" (indeterminate dir scan) | "ranking" (quality pre-pass) |
-   * "previewing" | "sorting". Absent on older backends / synchronous calls.
+   * Validation, source scan, destination index, ranking, and per-file phases.
+   * Absent on older backends / synchronous calls.
    */
-  phase?: "scanning" | "ranking" | "previewing" | "sorting" | null;
+  phase?:
+    | "validating"
+    | "scanning_source"
+    | "indexing_destination"
+    | "ranking"
+    | "analyzing"
+    | "previewing"
+    | "sorting"
+    | null;
 }
 
-export interface SortingStatus {
+export interface TaskEvent {
+  sequence: number;
+  name: string;
+  timestamp: string;
+  phase: TaskProgress["phase"];
+  fields: Record<string, unknown>;
+}
+
+export interface TaskFailure {
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface TaskStatus<TResult extends Record<string, unknown>> {
   task_id: string;
+  operation_kind: "analysis" | "scan" | "preview" | "sort";
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: TaskProgress;
-  error?: string;
-  result?: { operation_id?: string } & Record<string, unknown>;
+  partial: boolean;
+  issues: Array<Record<string, unknown>>;
+  events: TaskEvent[];
+  last_event_sequence: number;
+  error: string | null;
+  failure: TaskFailure | null;
+  result: TResult | null;
 }
 
 export interface PreviewItem {
@@ -184,13 +209,16 @@ export interface PreviewItem {
     | "failed"
     | "suspicious_date"
     | "junk"
-    | "already_in_destination";
+    | "already_in_destination"
+    | "duplicate_unknown";
   file_size?: number;
   /** Why the junk filter quarantined this file (junk status only). */
   quarantine_reason?: string | null;
   duplicate_type?: "exact" | "perceptual" | null;
   duplicate_similarity?: number | null;
   duplicate_of?: string | null;
+  duplicate_evaluation?: "known" | "unknown";
+  duplicate_unknown_reason?: "video_perceptual_not_computed" | null;
 }
 
 /**
@@ -227,6 +255,8 @@ export interface AnalysisResult {
   excluded_files: number;
   estimated_duration_seconds: number;
   warnings: string[];
+  partial: boolean;
+  issues: Array<Record<string, unknown>>;
 }
 
 export interface PreviewResult {
@@ -242,19 +272,29 @@ export interface PreviewResult {
     will_quarantine_junk: number;
     /** Files already present in the destination (destination-aware dedup). */
     will_skip_already_in_destination: number;
+    /** Videos whose perceptual result is deferred until the real sort. */
+    duplicate_unknown?: number;
     /** Sorted files predicted to land in _uncategorized/ (0 when categorize off). */
     uncategorized: number;
+    partial?: boolean;
+    issue_count?: number;
   };
+  partial: boolean;
+  issues: Array<Record<string, unknown>>;
 }
 
-/** Progress envelope for a preview run started via POST /api/preview/start. */
-export interface PreviewStatus {
-  task_id: string;
-  status: "pending" | "running" | "completed" | "failed" | "cancelled";
-  progress: TaskProgress;
-  error?: string;
-  result?: PreviewResult | null;
-}
+export type SortingStatus = TaskStatus<{ operation_id?: string } & Record<string, unknown>>;
+export type PreviewStatus = TaskStatus<PreviewResult & Record<string, unknown>>;
+export type AnalysisStatus = TaskStatus<AnalysisResult & Record<string, unknown>>;
+export type ScanStatus = TaskStatus<
+  {
+    files: string[];
+    total: number;
+    excluded_files: number;
+    partial: boolean;
+    issues: Array<Record<string, unknown>>;
+  } & Record<string, unknown>
+>;
 
 export interface ApiError {
   error: string;
@@ -342,9 +382,9 @@ export interface OperationListResponse {
 //
 // The app-wide "computing" bar should reflect only genuinely long operations
 // (analysis, preview, sort, duplicate scan) — never config GETs, saves,
-// validation, or background polling. Heavy calls are wrapped in `withLoader`,
-// which bumps this counter; everything else leaves it untouched. Components
-// subscribe via the `useGlobalLoader` hook.
+// validation, or unrelated background polling. Task hooks acquire this counter
+// when an operation starts and release it only after a terminal status is
+// observed. Components subscribe via the `useGlobalLoader` hook.
 
 type LoaderListener = () => void;
 
@@ -367,9 +407,27 @@ function bumpLoader(delta: number): void {
   loaderListeners.forEach((l) => l());
 }
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isTransientStartError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  if (!error.response) return true;
+  const status = error.response.status;
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return axios.isAxiosError(error) && (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT");
+}
+
 // ── Client ─────────────────────────────────────────────────────────────────────
 
-class MediaSorterApiClient {
+export class MediaSorterApiClient {
   private http: AxiosInstance;
   private ready: Promise<void>;
 
@@ -403,17 +461,104 @@ class MediaSorterApiClient {
     await this.ready;
   }
 
-  /**
-   * Run a heavy request behind the global "computing" indicator. Tags exactly
-   * the long-running operations (analysis, preview, sort, duplicate scan) so
-   * the top bar never fires for trivial calls like config saves or GETs.
-   */
-  private async withLoader<T>(fn: () => Promise<T>): Promise<T> {
+  /** Keep the global loader active until the caller observes a terminal task state. */
+  beginOperation(): () => void {
     bumpLoader(1);
-    try {
-      return await fn();
-    } finally {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
       bumpLoader(-1);
+    };
+  }
+
+  private async startTask(
+    path: string,
+    body: Record<string, unknown>,
+    idempotencyKey = newIdempotencyKey(),
+  ): Promise<string> {
+    await this.ensureReady();
+    const delays = [250, 750];
+    let lastError: unknown;
+    let priorTimedOut = false;
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+      try {
+        const { data } = await this.http.post<{ task_id: string }>(
+          path,
+          {
+            ...body,
+            idempotency_key: idempotencyKey,
+          },
+          {
+            headers:
+              attempt > 0
+                ? {
+                    "X-MediaSorter-Retry-Attempt": String(attempt),
+                    "X-MediaSorter-Transport-Event": priorTimedOut ? "timeout" : "retry",
+                  }
+                : undefined,
+          },
+        );
+        return data.task_id;
+      } catch (error) {
+        lastError = error;
+        priorTimedOut = isTimeoutError(error);
+        if (!isTransientStartError(error) || attempt === delays.length) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
+    }
+    throw lastError;
+  }
+
+  private async taskStatus<T>(path: string, afterSequence: number): Promise<T> {
+    await this.ensureReady();
+    const delays = [250, 750];
+    let priorTimedOut = false;
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+      try {
+        const { data } = await this.http.get<T>(path, {
+          params: { after_sequence: afterSequence },
+          headers:
+            attempt > 0
+              ? {
+                  "X-MediaSorter-Retry-Attempt": String(attempt),
+                  "X-MediaSorter-Transport-Event": priorTimedOut ? "timeout" : "retry",
+                }
+              : undefined,
+        });
+        return data;
+      } catch (error) {
+        lastError = error;
+        priorTimedOut = isTimeoutError(error);
+        if (!isTransientStartError(error) || attempt === delays.length) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
+    }
+    throw lastError;
+  }
+
+  private async cancelTask(path: string): Promise<void> {
+    await this.ensureReady();
+    const delays = [250, 750];
+    let priorTimedOut = false;
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+      try {
+        await this.http.post(path, undefined, {
+          headers:
+            attempt > 0
+              ? {
+                  "X-MediaSorter-Retry-Attempt": String(attempt),
+                  "X-MediaSorter-Transport-Event": priorTimedOut ? "timeout" : "retry",
+                }
+              : undefined,
+        });
+        return;
+      } catch (error) {
+        priorTimedOut = isTimeoutError(error);
+        if (!isTransientStartError(error) || attempt === delays.length) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
     }
   }
 
@@ -473,56 +618,58 @@ class MediaSorterApiClient {
 
   // ── Analysis ─────────────────────────────────────────────────────────────────
 
-  async analyse(): Promise<AnalysisResult> {
-    await this.ensureReady();
-    return this.withLoader(async () => {
-      const { data } = await this.http.post<AnalysisResult>("/api/analysis");
-      return data;
-    });
+  async startAnalysis(idempotencyKey?: string): Promise<string> {
+    return this.startTask("/api/analysis/start", {}, idempotencyKey);
+  }
+
+  async getAnalysisStatus(taskId: string, afterSequence = 0): Promise<AnalysisStatus> {
+    return this.taskStatus<AnalysisStatus>(`/api/analysis/${taskId}`, afterSequence);
+  }
+
+  async cancelAnalysis(taskId: string): Promise<void> {
+    await this.cancelTask(`/api/analysis/${taskId}/cancel`);
+  }
+
+  // ── Source scan ──────────────────────────────────────────────────────────────
+
+  async startScan(idempotencyKey?: string): Promise<string> {
+    return this.startTask("/api/scan/start", {}, idempotencyKey);
+  }
+
+  async getScanStatus(taskId: string, afterSequence = 0): Promise<ScanStatus> {
+    return this.taskStatus<ScanStatus>(`/api/scan/${taskId}`, afterSequence);
+  }
+
+  async cancelScan(taskId: string): Promise<void> {
+    await this.cancelTask(`/api/scan/${taskId}/cancel`);
   }
 
   // ── Preview (background task + progress polling) ──────────────────────────────
 
-  async startPreview(): Promise<string> {
-    await this.ensureReady();
-    return this.withLoader(async () => {
-      const { data } = await this.http.post<{ task_id: string }>("/api/preview/start", {});
-      return data.task_id;
-    });
+  async startPreview(idempotencyKey?: string): Promise<string> {
+    return this.startTask("/api/preview/start", {}, idempotencyKey);
   }
 
-  async getPreviewStatus(taskId: string): Promise<PreviewStatus> {
-    await this.ensureReady();
-    const { data } = await this.http.get<PreviewStatus>(`/api/preview/${taskId}`);
-    return data;
+  async getPreviewStatus(taskId: string, afterSequence = 0): Promise<PreviewStatus> {
+    return this.taskStatus<PreviewStatus>(`/api/preview/${taskId}`, afterSequence);
   }
 
   async cancelPreview(taskId: string): Promise<void> {
-    await this.ensureReady();
-    await this.http.post(`/api/preview/${taskId}/cancel`);
+    await this.cancelTask(`/api/preview/${taskId}/cancel`);
   }
 
   // ── Sorting ──────────────────────────────────────────────────────────────────
 
-  async startSort(dryRun = false): Promise<string> {
-    await this.ensureReady();
-    return this.withLoader(async () => {
-      const { data } = await this.http.post<{ task_id: string }>("/api/sorting/start", {
-        dry_run: dryRun,
-      });
-      return data.task_id;
-    });
+  async startSort(dryRun = false, idempotencyKey?: string): Promise<string> {
+    return this.startTask("/api/sorting/start", { dry_run: dryRun }, idempotencyKey);
   }
 
-  async getSortStatus(taskId: string): Promise<SortingStatus> {
-    await this.ensureReady();
-    const { data } = await this.http.get<SortingStatus>(`/api/sorting/${taskId}`);
-    return data;
+  async getSortStatus(taskId: string, afterSequence = 0): Promise<SortingStatus> {
+    return this.taskStatus<SortingStatus>(`/api/sorting/${taskId}`, afterSequence);
   }
 
   async cancelSort(taskId: string): Promise<void> {
-    await this.ensureReady();
-    await this.http.post(`/api/sorting/${taskId}/cancel`);
+    await this.cancelTask(`/api/sorting/${taskId}/cancel`);
   }
 
   // ── Reports ──────────────────────────────────────────────────────────────────

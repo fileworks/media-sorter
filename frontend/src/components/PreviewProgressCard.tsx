@@ -11,10 +11,11 @@ import { ProgressBar } from "@/components/ui/progress";
 import { formatCount, formatDuration } from "@/lib/formatters";
 import type { TaskProgress } from "@/types/api";
 
-// Human label per backend phase. "scanning" has no incremental count (a
-// directory walk isn't easily made incremental), so it renders indeterminate.
+// Human labels for the typed backend phases.
 const PHASE_LABELS: Record<string, string> = {
-  scanning: "Scanning folder…",
+  validating: "Validating folders…",
+  scanning_source: "Scanning source…",
+  indexing_destination: "Indexing destination…",
   ranking: "Analyzing image quality…",
   previewing: "Reading dates…",
 };
@@ -27,9 +28,8 @@ interface PreviewProgressCardProps {
 
 export function PreviewProgressCard({ progress, elapsed }: PreviewProgressCardProps) {
   const phase = progress?.phase ?? null;
-  // Determinate only once a real count is flowing (the per-file / ranking
-  // phases). During "scanning" total is still 0, so the bar is indeterminate.
-  const determinate = !!progress && progress.total > 0 && phase !== "scanning";
+  // Determinate only once a real count is flowing.
+  const determinate = !!progress && progress.total > 0;
   const label = (phase && PHASE_LABELS[phase]) || "Generating preview…";
   const eta = progress?.estimated_time_remaining_seconds ?? null;
 

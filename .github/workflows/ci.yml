@@ -69,6 +69,32 @@ jobs:
           name: coverage-xml
           path: backend/coverage.xml
 
+  backend-windows:
+    name: Backend — Windows path / DirectML contracts
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: Run Windows identity and provider tests
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_utils/test_path_utils.py
+          tests/test_services/test_hardware.py
+          -v
+
   # ── Frontend: typecheck / build ──────────────────────────────────────────────
   frontend:
     name: Frontend — typecheck / build

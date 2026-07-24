@@ -36,7 +36,8 @@ def test_analysis_returns_400_without_source(tmp_path) -> None:
     app = AppFactory.create(config=config)
     c = TestClient(app)
     response = c.post("/api/analysis")
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert response.json()["code"] == "SOURCE_UNAVAILABLE"
 
 
 def test_disk_space_returns_200(client: TestClient) -> None:

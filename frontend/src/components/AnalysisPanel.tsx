@@ -235,7 +235,7 @@ export function AnalysisPanel({
           <div className="space-y-3">
             <ValidationBadge
               severity="warning"
-              message="No photos or videos were found in the source folder. Check the path or your Scan & filters settings."
+              message="The source folder is available, but no supported files matched the current Scan & filters settings."
             />
             {onBackToConfig && (
               <Button variant="outline" size="sm" onClick={onBackToConfig}>

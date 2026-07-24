@@ -77,6 +77,13 @@ export function useSorting() {
   // Guards against overlapping report fetches while the status poll keeps ticking.
   const reportInFlightRef = useRef(false);
   const reportAttemptsRef = useRef(0);
+  const releaseLoaderRef = useRef<(() => void) | null>(null);
+  const lastEventSequenceRef = useRef(0);
+
+  const releaseLoader = useCallback(() => {
+    releaseLoaderRef.current?.();
+    releaseLoaderRef.current = null;
+  }, []);
 
   // Keep polling the (cheap, idempotent) status endpoint while the sort runs and
   // — crucially — after it completes until the report has been fetched (or we
@@ -88,16 +95,21 @@ export function useSorting() {
       uiStatus === "running" ||
       (uiStatus === "completed" && report === null && !reportSettled));
 
-  const { data: progress } = useQuery({
+  const { data: progress, error: progressError } = useQuery({
     queryKey: ["sorting", taskId],
-    queryFn: () => (taskId ? api.getSortStatus(taskId) : null),
+    queryFn: () => (taskId ? api.getSortStatus(taskId, lastEventSequenceRef.current) : null),
     enabled: isPolling,
     refetchInterval: isPolling ? 1000 : false,
+    retry: false,
   });
 
   // Sync backend status → UI status and fetch report when done
   useEffect(() => {
     if (!progress) return;
+    lastEventSequenceRef.current = Math.max(
+      lastEventSequenceRef.current,
+      progress.last_event_sequence,
+    );
 
     const s = progress.status;
     if (s === "running" || s === "completed" || s === "failed" || s === "cancelled") {
@@ -136,6 +148,7 @@ export function useSorting() {
     }
 
     if (s === "completed") {
+      releaseLoader();
       // `result` is optional and loosely typed — read every field defensively
       // with runtime checks rather than an unsafe `as` cast.
       const result = progress.result;
@@ -186,9 +199,26 @@ export function useSorting() {
     }
 
     if (s === "failed") {
-      toast(progress.error ?? "Sort failed. Check logs for details.", "error");
+      releaseLoader();
+      toast(
+        progress.failure?.message ?? progress.error ?? "Sort failed. Check logs for details.",
+        "error",
+      );
+    } else if (s === "cancelled") {
+      releaseLoader();
     }
-  }, [progress, toast, report, reportSettled]);
+  }, [progress, toast, report, reportSettled, releaseLoader]);
+
+  useEffect(() => {
+    if (!progressError || uiStatus === "failed") return;
+    const message = extractErrorMessage(progressError, "Sort status could not be read");
+    setUiStatus("failed");
+    setError(message);
+    releaseLoader();
+    toast(message, "error");
+  }, [progressError, uiStatus, releaseLoader, toast]);
+
+  useEffect(() => releaseLoader, [releaseLoader]);
 
   const startSorting = useCallback(
     async (dryRun = false) => {
@@ -204,19 +234,23 @@ export function useSorting() {
       milestonesRef.current = new Set();
       reportInFlightRef.current = false;
       reportAttemptsRef.current = 0;
+      lastEventSequenceRef.current = 0;
+      releaseLoader();
+      releaseLoaderRef.current = api.beginOperation();
       setUiStatus("pending");
       try {
         const id = await api.startSort(dryRun);
         setTaskId(id);
         setUiStatus("running");
       } catch (err) {
+        releaseLoader();
         const msg = extractErrorMessage(err, "Failed to start sort");
         setUiStatus("failed");
         setError(msg);
         toast(msg, "error");
       }
     },
-    [toast, queryClient],
+    [toast, queryClient, releaseLoader],
   );
 
   const cancelSorting = useCallback(async () => {
@@ -233,8 +267,7 @@ export function useSorting() {
     }
     try {
       await api.cancelSort(taskId);
-      setUiStatus("cancelled");
-      toast("Sort cancelled.", "info");
+      toast("Cancellation requested.", "info");
     } catch (err) {
       const msg = extractErrorMessage(err, "Failed to cancel");
       setError(msg);
@@ -261,8 +294,10 @@ export function useSorting() {
     milestonesRef.current = new Set();
     reportInFlightRef.current = false;
     reportAttemptsRef.current = 0;
+    lastEventSequenceRef.current = 0;
+    releaseLoader();
     void queryClient.removeQueries({ queryKey: ["sorting"] });
-  }, [queryClient]);
+  }, [queryClient, releaseLoader]);
 
   return {
     progress,

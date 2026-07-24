@@ -1,11 +1,17 @@
 """Tests for app.utils.path_utils helpers."""
 
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from app.utils.path_utils import is_excluded_by_pattern, sanitize_path_segment
+from app.core.exceptions import PathOverlapError
+from app.utils.path_utils import (
+    is_excluded_by_pattern,
+    sanitize_path_segment,
+    validate_source_target_overlap,
+)
 
 
 def test_empty_patterns_never_excludes() -> None:
@@ -106,3 +112,71 @@ def test_sanitize_path_segment_keeps_unicode() -> None:
     # Non-ASCII letters are valid in filenames and must be preserved.
     assert sanitize_path_segment("Münchën") == "Münchën"
     assert sanitize_path_segment("日本") == "日本"
+
+
+# ------------------------------------------------------------------ #
+# canonical source/destination identity                                 #
+# ------------------------------------------------------------------ #
+
+
+def test_rejects_equal_and_nested_paths(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(source, source)
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(source, source / "new" / "target")
+
+    parent = tmp_path / "library"
+    nested_source = parent / "incoming"
+    nested_source.mkdir(parents=True)
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(nested_source, parent)
+
+
+def test_nonexistent_target_tail_is_canonicalized_and_siblings_are_allowed(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "media"
+    source.mkdir()
+    canonical_source, canonical_target = validate_source_target_overlap(
+        source, tmp_path / "media-output" / "new"
+    )
+    assert canonical_source == source.resolve()
+    assert canonical_target == (tmp_path / "media-output" / "new").resolve()
+
+
+def test_symlink_alias_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(source, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable")
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(source, alias)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path identity case")
+def test_windows_case_alias_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "MixedCase"
+    source.mkdir()
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(source, Path(str(source).swapcase()))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows junction identity")
+def test_windows_junction_alias_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    junction = tmp_path / "junction"
+    completed = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(source)],
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        pytest.skip("junction creation is unavailable")
+    with pytest.raises(PathOverlapError):
+        validate_source_target_overlap(source, junction)

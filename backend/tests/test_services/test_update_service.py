@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.core.bootstrap import ServiceContainer
+from app.core.config import Config
 from app.services.update_service import UpdateService, _is_newer, _parse_semver
 
 # ──────────────────────────────────────────────────────────── helpers ──
@@ -146,6 +148,32 @@ async def test_disabled_returns_unavailable() -> None:
     info = await svc.check()
     assert info.update_available is False
     assert info.latest_version is None
+
+
+@pytest.mark.asyncio
+async def test_live_enable_disable_invalidates_cache_and_changes_network_policy() -> None:
+    svc = UpdateService(enabled=False)
+    with patch.object(svc, "_fetch_sync", return_value=svc._make_unavailable()) as fetch:
+        await svc.check(force=True)
+        fetch.assert_not_called()
+
+        svc.set_enabled(True)
+        await svc.check(force=True)
+        fetch.assert_called_once()
+
+        svc.set_enabled(False)
+        await svc.check(force=True)
+        assert fetch.call_count == 1
+
+
+def test_service_container_propagates_live_update_setting() -> None:
+    container = ServiceContainer(Config(update_check_enabled=False))
+    service = container.update_service
+    assert service._enabled is False
+
+    container.set_config(Config(update_check_enabled=True))
+    assert container.update_service is service
+    assert service._enabled is True
 
 
 @pytest.mark.asyncio

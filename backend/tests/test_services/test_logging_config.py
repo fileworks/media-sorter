@@ -5,7 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from app.core.logging_config import LogQueueBroadcast, _to_jsonable
+from app.core.logging_config import (
+    LOG_BACKUP_COUNT,
+    LOG_FILE_MAX_BYTES,
+    LOG_RETENTION_MAX_BYTES,
+    LogQueueBroadcast,
+    _redact_sensitive_fields,
+    _to_jsonable,
+    setup_logging,
+)
 
 # ------------------------------------------------------------------ #
 # _to_jsonable                                                          #
@@ -164,3 +172,40 @@ def test_log_queue_broadcast_returns_event_dict_unchanged() -> None:
         result = broadcast(MagicMock(), "info", event_dict)
 
     assert result is event_dict
+
+
+def test_rotating_log_constants_match_documented_retention() -> None:
+    assert LOG_FILE_MAX_BYTES == 5 * 1024 * 1024
+    assert LOG_BACKUP_COUNT == 3
+    assert LOG_RETENTION_MAX_BYTES == 20 * 1024 * 1024
+
+
+def test_file_handler_failure_is_nonfatal() -> None:
+    with patch(
+        "app.core.logging_config._get_log_dir",
+        side_effect=PermissionError("no log directory"),
+    ):
+        setup_logging("INFO")
+
+
+def test_sensitive_context_is_redacted_recursively_before_broadcast() -> None:
+    event = {
+        "event": "operation.started",
+        "task_id": "safe-task-id",
+        "path": "/safe/media",
+        "authorization": "Bearer live-secret",
+        "nested": {
+            "api_key": "key-value",
+            "items": [{"refresh_token": "token-value"}, {"count": 3}],
+        },
+    }
+
+    redacted = _redact_sensitive_fields(None, "info", event)
+
+    assert redacted["task_id"] == "safe-task-id"
+    assert redacted["path"] == "/safe/media"
+    assert redacted["authorization"] == "[REDACTED]"
+    assert redacted["nested"] == {
+        "api_key": "[REDACTED]",
+        "items": [{"refresh_token": "[REDACTED]"}, {"count": 3}],
+    }

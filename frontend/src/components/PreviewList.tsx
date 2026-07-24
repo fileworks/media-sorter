@@ -73,6 +73,8 @@ function getStatusIcon(status: string): string {
       return "≈";
     case "junk":
       return "⊘";
+    case "duplicate_unknown":
+      return "?";
     default:
       return "✕";
   }
@@ -84,6 +86,7 @@ function getStatusColor(status: string): string {
       return "text-success";
     case "suspicious_date":
     case "junk":
+    case "duplicate_unknown":
       return "text-warning";
     case "duplicate":
     case "already_in_destination":
@@ -111,6 +114,8 @@ function getStatusTooltip(status: string): string {
       return "Junk/thumbnail — quarantined to _junk/";
     case "already_in_destination":
       return "Already in destination — quarantined to _already_in_destination/";
+    case "duplicate_unknown":
+      return "Video perceptual match is checked during the full sort";
     default:
       return status;
   }

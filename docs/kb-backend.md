@@ -32,8 +32,8 @@ There is **no ORM**. `core/database.py` owns SQLite:
 
 ## Async & Blocking I/O
 - `async def` routes everywhere; **all** blocking work (file ops, ffmpeg/ffprobe subprocess, PIL, sqlite, model inference) runs in a worker thread via `await asyncio.to_thread(...)`
-- Long operations run as background tasks: `TaskManager.create_task()` → poll `TaskProgressResponse` (`api/schemas.py`)
-- **Cancellation is cooperative**: `cancel_task` only sets `task.cancel_event`; the sort/preview loops check it between files, break, and persist partial results. Hard `asyncio.Task.cancel()` is reserved for `TaskManager.shutdown()` (process exit)
+- Analysis, scan, preview, and sort use `TaskManager.start_task(kind, idempotency_key, …)` and the shared `TaskProgressResponse`.
+- **Cancellation is cooperative and thread-safe**: routes set a cancellation token checked by source/destination traversal, hashing/signature boundaries, ranking, and per-file loops. Hard `asyncio.Task.cancel()` is reserved for process shutdown.
 - Cross-thread logging is safe: structlog processor marshals onto the captured main loop (`core/logging_config.py`)
 
 ## Config

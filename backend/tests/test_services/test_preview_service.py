@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
@@ -513,6 +516,7 @@ async def test_preview_reports_phases(tmp_path: Path) -> None:
     target.mkdir()
     for i in range(3):
         (source / f"p_{i}.jpg").write_bytes(b"\xff\xd8\xff")
+    (target / "existing.jpg").write_bytes(b"destination")
 
     # Perceptual de-dup on → there is a "ranking" pre-pass before "previewing".
     cfg = _make_config(
@@ -551,6 +555,19 @@ async def test_preview_reports_phases(tmp_path: Path) -> None:
     assert task.progress.phase == "previewing"
     assert task.progress.percentage == 100.0
     assert len(result["items"]) == 3
+    phase_totals = {
+        event.phase: event.fields["total"]
+        for event in task.events
+        if event.name == "operation.phase"
+    }
+    destination_total = next(
+        event.fields["total"]
+        for event in task.events
+        if event.name == "operation.destination_total"
+    )
+    assert destination_total == 1
+    assert phase_totals["ranking"] == 3
+    assert phase_totals["previewing"] == 3
 
 
 @pytest.mark.asyncio
@@ -573,4 +590,171 @@ async def test_preview_honors_cancellation(tmp_path: Path) -> None:
     result = await svc.preview(cfg, task=task)
 
     assert result["items"] == []
-    assert task.progress.total == 3  # total is set before the loop runs
+    assert task.progress.total == 0  # traversal observes cancellation immediately
+
+
+@pytest.mark.asyncio
+async def test_ranking_worker_cancellation_prevents_preview_phase(tmp_path: Path) -> None:
+    from app.background_tasks.task_manager import Task
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for number in range(2):
+        (source / f"{number}.jpg").write_bytes(b"image")
+
+    cfg = _make_config(
+        source,
+        target,
+        remove_duplicates=True,
+        duplicate_exact_enabled=False,
+        duplicate_perceptual_enabled=True,
+    )
+    svc = _make_preview_service(cfg)
+    task = Task(id="ranking-cancel", operation_kind="preview")
+    entered = threading.Event()
+
+    def waiting_quality_key(path: Path) -> tuple[int, int]:
+        entered.set()
+        while not task.cancel_token.is_set():
+            time.sleep(0.001)
+        return (0, path.stat().st_size)
+
+    with patch.object(svc._dups, "quality_key", side_effect=waiting_quality_key):
+        pending = asyncio.create_task(svc.preview(cfg, task=task))
+        assert await asyncio.to_thread(entered.wait, 1)
+        task.cancel()
+        result = await pending
+
+    phases = [event.phase for event in task.events if event.name == "operation.phase"]
+    assert "ranking" in phases
+    assert "previewing" not in phases
+    assert result["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_per_file_worker_observes_cancellation_and_finishes_in_flight_item(
+    tmp_path: Path,
+) -> None:
+    from app.background_tasks.task_manager import Task
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for number in range(2):
+        (source / f"{number}.jpg").write_bytes(b"image")
+
+    cfg = _make_config(source, target, remove_duplicates=False)
+    svc = _make_preview_service(cfg)
+    task = Task(id="file-cancel", operation_kind="preview")
+    entered = threading.Event()
+    worker_threads: list[int] = []
+    main_thread = threading.get_ident()
+
+    def finish_current_item(*args, **kwargs) -> dict[str, object]:
+        worker_threads.append(threading.get_ident())
+        entered.set()
+        while not task.cancel_token.is_set():
+            time.sleep(0.001)
+        return {
+            "source": str(args[0]),
+            "status": "sort",
+            "category": None,
+            "duplicate_evaluation": "known",
+        }
+
+    with patch.object(svc, "_preview_file", side_effect=finish_current_item):
+        pending = asyncio.create_task(svc.preview(cfg, task=task))
+        assert await asyncio.to_thread(entered.wait, 1)
+        task.cancel()
+        result = await pending
+
+    assert worker_threads and worker_threads[0] != main_thread
+    assert len(result["items"]) == 1
+    assert task.progress.phase == "previewing"
+
+
+@pytest.mark.asyncio
+async def test_video_perceptual_preview_is_unknown_without_promised_destination(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    video = source / "clip.mp4"
+    video.write_bytes(b"not-a-real-video")
+    cfg = _make_config(
+        source,
+        target,
+        remove_duplicates=True,
+        duplicate_exact_enabled=False,
+        duplicate_perceptual_enabled=True,
+    )
+    service = _make_preview_service(cfg)
+    with patch.object(
+        service._extraction,
+        "extract_detailed",
+        return_value=ExtractionResult(date(2024, 1, 2), "video_metadata"),
+    ):
+        result = await service.preview(cfg)
+
+    item = result["items"][0]
+    assert item["status"] == "duplicate_unknown"
+    assert item["destination"] is None
+    assert item["duplicate_evaluation"] == "unknown"
+    assert item["duplicate_unknown_reason"] == "video_perceptual_not_computed"
+    assert result["stats"]["duplicate_unknown"] == 1
+    assert result["stats"]["will_sort"] == 0
+
+
+@pytest.mark.asyncio
+async def test_video_exact_destination_match_is_known(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    placed = target / "placed.mp4"
+    placed.write_bytes(b"same-video")
+    video = source / "clip.mp4"
+    video.write_bytes(placed.read_bytes())
+    cfg = _make_config(source, target, remove_duplicates=True)
+    service = _make_preview_service(cfg)
+    with patch.object(
+        service._extraction,
+        "extract_detailed",
+        return_value=ExtractionResult(date(2024, 1, 2), "video_metadata"),
+    ):
+        result = await service.preview(cfg)
+
+    item = result["items"][0]
+    assert item["status"] == "already_in_destination"
+    assert item["duplicate_evaluation"] == "known"
+    assert item["duplicate_type"] == "exact"
+
+
+@pytest.mark.asyncio
+async def test_video_perceptual_disabled_has_known_sort_prediction(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "clip.mp4").write_bytes(b"unique")
+    cfg = _make_config(
+        source,
+        target,
+        remove_duplicates=True,
+        duplicate_perceptual_enabled=False,
+    )
+    service = _make_preview_service(cfg)
+    with patch.object(
+        service._extraction,
+        "extract_detailed",
+        return_value=ExtractionResult(date(2024, 1, 2), "video_metadata"),
+    ):
+        result = await service.preview(cfg)
+
+    assert result["items"][0]["status"] == "sort"
+    assert result["items"][0]["duplicate_evaluation"] == "known"

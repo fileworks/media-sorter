@@ -142,6 +142,8 @@ function getStatusLabel(status: PreviewItem["status"]): string {
       return "Junk/thumbnail";
     case "already_in_destination":
       return "Already in destination";
+    case "duplicate_unknown":
+      return "Duplicate check completes during sort";
     default:
       return status;
   }
@@ -152,6 +154,7 @@ function getStatusColor(status: PreviewItem["status"]): string {
     case "sort":
       return "text-success";
     case "suspicious_date":
+    case "duplicate_unknown":
       return "text-warning";
     case "duplicate":
     case "already_in_destination":

@@ -128,6 +128,7 @@ export function buildFlatRows(
   // Destination-aware dedup outcomes get their own quarantine folder, exactly
   // like in-run duplicates — always quarantined, never deleted.
   const alreadyInDestItems = items.filter((i) => i.status === "already_in_destination");
+  const duplicateUnknownItems = items.filter((i) => i.status === "duplicate_unknown");
 
   const datedMoveDuplicates = duplicateItems.filter((i) => !!i.extracted_date);
   const undatedMoveDuplicates = duplicateItems.filter((i) => !i.extracted_date);
@@ -329,6 +330,13 @@ export function buildFlatRows(
       dest: "_already_in_destination/",
       icon: "≈",
       items: alreadyInDestItems,
+    },
+    {
+      key: "duplicate_unknown",
+      label: "Needs full sort check",
+      dest: "",
+      icon: "?",
+      items: duplicateUnknownItems,
     },
   ];
   folderSections.sort((a, b) => a.label.localeCompare(b.label));

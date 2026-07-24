@@ -62,19 +62,10 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
             Duplicates are set aside in <code className="font-mono">_duplicates/</code> — never
             deleted, so every match is recoverable.
           </p>
-
-          <FormRow
-            label="Compare against destination"
-            htmlFor="dedup-destination"
-            help={HELP.dedupAgainstDestination}
-            inline
-          >
-            <Toggle
-              id="dedup-destination"
-              checked={config.dedup_against_destination ?? false}
-              onChange={(v) => updateConfig({ dedup_against_destination: v })}
-            />
-          </FormRow>
+          <p className="text-xs text-muted-foreground">
+            Existing destination media is always indexed and compared when duplicate detection is
+            enabled, including across separate runs.
+          </p>
         </div>
       )}
     </>
