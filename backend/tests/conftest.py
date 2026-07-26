@@ -28,6 +28,8 @@ from app.core.database import DatabaseManager
 # ------------------------------------------------------------------ #
 _TEST_CONFIG_DIR = tempfile.mkdtemp(prefix="mediasort-tests-")
 os.environ["MEDIASORT_CONFIG_DIR"] = _TEST_CONFIG_DIR
+os.environ["MEDIASORT_DATA_DIR"] = _TEST_CONFIG_DIR
+os.environ["MEDIASORT_LOG_DIR"] = str(Path(_TEST_CONFIG_DIR) / "logs")
 # A stale absolute DB path would override the isolated dir — drop it.
 os.environ.pop("MEDIASORT_DB_PATH", None)
 

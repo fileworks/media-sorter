@@ -185,12 +185,12 @@ the sort.
 
 ## Where things live
 
-- **Config + database:** `~/Library/Application Support/mediasort/` (macOS) ·
-  `%APPDATA%\mediasort\` (Windows). Override with `MEDIASORT_CONFIG_DIR`.
-- **Backend logs:** `~/Library/Logs/MediaSorter/backend.log` (macOS) ·
-  `%LOCALAPPDATA%\MediaSorter\logs\backend.log` (Windows, with `%APPDATA%` as a
-  fallback) · `~/.local/share/mediasort/logs/backend.log` (Linux, respecting
-  `XDG_DATA_HOME`). The JSON log rotates at 5 MiB and retains three backups plus
+- **Config, database, and logs:** use distinct platform config/data/log
+  semantics with `MEDIASORT_CONFIG_DIR`, `MEDIASORT_DATA_DIR`,
+  `MEDIASORT_DB_PATH`, and `MEDIASORT_LOG_DIR` overrides. Exact current,
+  historical, conflict, and recovery paths are in
+  [state-and-recovery.md](state-and-recovery.md).
+- **Backend logs:** the JSON log rotates at 5 MiB and retains three backups plus
   the active file, so backend retention is at most about 20 MiB.
 - **Live API docs:** `http://127.0.0.1:<port>/api/docs` (OpenAPI) while the backend runs.
 

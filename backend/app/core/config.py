@@ -1,20 +1,22 @@
 """Application configuration management."""
 
+import hashlib
 import json
 import logging
 import os
 import re
-import shutil
+import tempfile
+import time
 import types
 import typing
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal, Union, get_args, get_origin
 
-from platformdirs import user_config_dir
 from pydantic import BaseModel, TypeAdapter, ValidationError, field_validator
 
 from app.core.concepts import Locale, bundled_labels
+from app.core.paths import resolve_app_paths
 from app.core.rules import RuleSet, migrate_legacy_rules, normalized_key
 
 
@@ -494,59 +496,113 @@ def validate_rename_pattern(pattern: str) -> str | None:
     return None
 
 
+CURRENT_CONFIG_SCHEMA = 1
+CONFIG_SCHEMA_PREFIX = "mediasort-config-v"
+
+
+class UnsupportedConfigVersion(ValueError):
+    """Raised when a config was written by a newer MediaSorter."""
+
+
 class ConfigLoader:
     """Load and save configuration with validation."""
 
     def __init__(self) -> None:
-        # Allow Docker / headless deployments to redirect config via env var.
-        base = os.environ.get("MEDIASORT_CONFIG_DIR") or user_config_dir("mediasort", "mediasort")
-        self.config_dir = Path(base)
-        self.config_file = self.config_dir / "config.json"
+        paths = resolve_app_paths()
+        self.config_dir = paths.config_dir
+        self.config_file = paths.config_file
+        self.backup_file = self.config_dir / "config.json.bak"
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
     def load(self) -> Config:
         """Load config from disk, then apply env-var overrides."""
-        try:
-            config = self._load_from_file()
-        except ValueError as exc:
-            import logging
-
-            logging.getLogger(__name__).warning("Malformed config.json, using defaults: %s", exc)
+        if not hasattr(self, "backup_file"):
+            self.backup_file = self.config_dir / "config.json.bak"
+        if not self.config_file.exists():
             config = Config.defaults()
+            self._write_document(self._document_for(config), rotate_backup=False)
+            return self._apply_env_overrides(config)
+        try:
+            config, migrated = self._load_config_path(self.config_file)
+            if migrated:
+                self._write_document(self._document_for(config), rotate_backup=True)
+        except UnsupportedConfigVersion:
+            raise
+        except ValueError as exc:
+            primary_preserved = self._preserve_corrupt(self.config_file)
+            try:
+                config, _ = self._load_config_path(self.backup_file)
+                self._write_document(self._document_for(config), rotate_backup=False)
+                logging.getLogger(__name__).error(
+                    "Recovered malformed config from last-known-good backup",
+                    extra={
+                        "config": str(self.config_file),
+                        "preserved": str(primary_preserved),
+                        "backup": str(self.backup_file),
+                    },
+                )
+            except UnsupportedConfigVersion:
+                raise
+            except ValueError as backup_exc:
+                backup_preserved = self._preserve_corrupt(self.backup_file)
+                logging.getLogger(__name__).error(
+                    "No recoverable config copy; using defaults. primary=%s preserved=%s "
+                    "backup=%s backup_preserved=%s primary_error=%s backup_error=%s",
+                    self.config_file,
+                    primary_preserved,
+                    self.backup_file,
+                    backup_preserved,
+                    exc,
+                    backup_exc,
+                )
+                config = Config.defaults()
         config = self._apply_env_overrides(config)
         return config
 
     def save(self, config: Config) -> None:
-        """Persist config to disk."""
+        """Validate and atomically persist config with a last-known-good backup."""
+        if not hasattr(self, "backup_file"):
+            self.backup_file = self.config_dir / "config.json.bak"
+        document = self._document_for(config)
+        self._validate_values(document)
         try:
-            with open(self.config_file, "w") as f:
-                # "$schema" is a conventional, parser-ignored marker key.
-                json.dump(
-                    {"$schema": "mediasort-config-v1", **config.to_dict()},
-                    f,
-                    indent=2,
-                    default=str,
-                )
+            self._write_document(document, rotate_backup=True)
         except OSError as e:
             raise OSError(f"Failed to save config to {self.config_file}: {e}") from e
 
     def _load_from_file(self) -> Config:
-        if not self.config_file.exists():
-            return Config.defaults()
+        config, _ = self._load_config_path(self.config_file)
+        return config
+
+    def _load_config_path(self, path: Path) -> tuple[Config, bool]:
+        if not path.exists():
+            raise ValueError(f"Config file does not exist: {path}")
         try:
-            with open(self.config_file) as f:
+            with path.open(encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("configuration root must be an object")
             rule_set = data.get("rule_set")
             if isinstance(rule_set, dict) and rule_set.get("version", 1) != 1:
                 raise UnsupportedRuleSetVersionError(
                     f"Unsupported rule-set version: {rule_set.get('version')!r}"
                 )
-            config = Config.from_dict(data)
-            if config.migrated_legacy_rules:
+            migrated_data, schema_migrated = self._migrate_document(data)
+            validated = self._validate_values(migrated_data)
+            config = Config.from_dict(validated)
+            rules_migrated = config.migrated_legacy_rules
+            if rules_migrated and path == self.config_file:
                 self._backup_before_rule_migration()
-                self.save(config)
-            return config
-        except (json.JSONDecodeError, ValueError) as e:
+            return config, schema_migrated or rules_migrated
+        except (
+            OSError,
+            json.JSONDecodeError,
+            ValidationError,
+            TypeError,
+            ValueError,
+        ) as e:
+            if isinstance(e, UnsupportedConfigVersion):
+                raise
             raise ValueError(f"Invalid config file: {e}") from e
 
     def _backup_before_rule_migration(self) -> Path:
@@ -562,8 +618,134 @@ class ConfigLoader:
                     backup = candidate
                     break
                 index += 1
-        shutil.copy2(self.config_file, backup)
+        self._atomic_copy(self.config_file, backup)
         return backup
+
+    def _migrate_document(self, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        raw_schema = data.get("$schema")
+        if raw_schema is None:
+            version = 0
+        elif isinstance(raw_schema, str) and raw_schema.startswith(CONFIG_SCHEMA_PREFIX):
+            raw_version = raw_schema.removeprefix(CONFIG_SCHEMA_PREFIX)
+            try:
+                version = int(raw_version)
+            except ValueError as exc:
+                raise ValueError(f"Invalid config schema marker: {raw_schema!r}") from exc
+        else:
+            raise ValueError(f"Invalid config schema marker: {raw_schema!r}")
+
+        if version > CURRENT_CONFIG_SCHEMA:
+            raise UnsupportedConfigVersion(
+                f"Config schema v{version} is newer than supported v{CURRENT_CONFIG_SCHEMA}; "
+                f"upgrade MediaSorter or restore {self.backup_file}"
+            )
+
+        migrated = version != CURRENT_CONFIG_SCHEMA
+        document = dict(data)
+        while version < CURRENT_CONFIG_SCHEMA:
+            if version == 0:
+                version = 1
+                document["$schema"] = f"{CONFIG_SCHEMA_PREFIX}{version}"
+            else:  # pragma: no cover - registry guard for future additions
+                raise ValueError(f"No config migration registered from v{version}")
+            self._validate_values(document)
+        return document, migrated
+
+    @staticmethod
+    def _validate_values(document: dict[str, Any]) -> dict[str, Any]:
+        hints = typing.get_type_hints(Config)
+        validated = dict(document)
+        for key, target_type in hints.items():
+            if key in document:
+                validated[key] = TypeAdapter(target_type).validate_python(document[key])
+        return validated
+
+    @staticmethod
+    def _document_for(config: Config) -> dict[str, Any]:
+        return {
+            "$schema": f"{CONFIG_SCHEMA_PREFIX}{CURRENT_CONFIG_SCHEMA}",
+            **config.to_dict(),
+        }
+
+    def _write_document(self, document: dict[str, Any], *, rotate_backup: bool) -> None:
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        if rotate_backup and self.config_file.exists():
+            try:
+                self._load_config_path(self.config_file)
+            except (ValueError, UnsupportedConfigVersion):
+                pass
+            else:
+                self._atomic_copy(self.config_file, self.backup_file)
+
+        descriptor, raw_temp = tempfile.mkstemp(
+            prefix=".config-",
+            suffix=".tmp",
+            dir=self.config_dir,
+        )
+        temp_path = Path(raw_temp)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(document, handle, indent=2, default=str)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.config_file)
+            self._fsync_parent(self.config_file)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+
+    def _atomic_copy(self, source: Path, destination: Path) -> None:
+        descriptor, raw_temp = tempfile.mkstemp(
+            prefix=".config-backup-",
+            suffix=".tmp",
+            dir=self.config_dir,
+        )
+        temp_path = Path(raw_temp)
+        try:
+            with os.fdopen(descriptor, "wb") as target, source.open("rb") as source_handle:
+                for chunk in iter(lambda: source_handle.read(1024 * 1024), b""):
+                    target.write(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            os.replace(temp_path, destination)
+            self._fsync_parent(destination)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _fsync_parent(path: Path) -> None:
+        try:
+            descriptor = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def _preserve_corrupt(self, path: Path) -> Path | None:
+        if not path.exists():
+            return None
+        try:
+            content = path.read_bytes()
+        except OSError:
+            content = str(path).encode()
+        digest = hashlib.sha256(content).hexdigest()[:12]
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        candidate = self.config_dir / f"corrupt-{path.stem}-{stamp}-{digest}{path.suffix}"
+        counter = 1
+        while candidate.exists():
+            candidate = (
+                self.config_dir / f"corrupt-{path.stem}-{stamp}-{digest}-{counter}{path.suffix}"
+            )
+            counter += 1
+        try:
+            self._atomic_copy(path, candidate)
+        except OSError:
+            return None
+        return candidate
 
     def _apply_env_overrides(self, config: Config) -> Config:
         """Apply MEDIASORT_* environment variables over loaded config.

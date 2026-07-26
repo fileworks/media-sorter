@@ -4,14 +4,14 @@ import asyncio
 import contextlib
 import logging
 import logging.handlers
-import os
-import platform
 import sys
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any, cast
 
 import structlog
+
+from app.core.paths import resolve_app_paths
 
 LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
@@ -37,16 +37,7 @@ _main_loop: asyncio.AbstractEventLoop | None = None
 
 def _get_log_dir() -> Path:
     """Return the OS-appropriate log directory for MediaSorter, creating it if needed."""
-    system = platform.system()
-    if system == "Darwin":
-        log_dir = Path.home() / "Library" / "Logs" / "MediaSorter"
-    elif system == "Windows":
-        # Prefer LocalAppData — logs are ephemeral and should not roam to domain servers.
-        appdata = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
-        log_dir = Path(appdata) / "MediaSorter" / "logs"
-    else:
-        xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-        log_dir = Path(xdg) / "mediasort" / "logs"
+    log_dir = resolve_app_paths().log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 

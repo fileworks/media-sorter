@@ -50,7 +50,14 @@ make ci                # Backend CI gate (lint + typecheck + test-ci)
 
 ## Configuration
 
-Stored as `config.json` in the platform config dir (macOS: `~/Library/Application Support/mediasort/`; Linux/Docker: `~/.config/mediasort/`; override with `MEDIASORT_CONFIG_DIR`). Override any field with `MEDIASORT_<FIELD_UPPER>`:
+Desktop state uses the stable `MediaSorter` platform config, non-roaming data,
+and log roots. Override those roles with `MEDIASORT_CONFIG_DIR`,
+`MEDIASORT_DATA_DIR`, `MEDIASORT_DB_PATH`, and `MEDIASORT_LOG_DIR`. The Docker
+image maps all state to `/config` explicitly. Exact current/legacy paths,
+non-destructive migration behavior, and recovery filenames are documented in
+[state-and-recovery.md](../docs/state-and-recovery.md).
+
+Override any configuration field with `MEDIASORT_<FIELD_UPPER>`:
 
 ```bash
 MEDIASORT_SOURCE_DIRECTORY=/Volumes/Photos make backend

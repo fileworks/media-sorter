@@ -20,10 +20,14 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      draft:
-        description: "Publish as a draft GitHub Release (only has effect when run on a v* tag)"
+      publish_release:
+        description: "Publish the release after all clean-machine evidence is attached"
         type: boolean
         default: false
+      smoke_evidence:
+        description: "URL or identifier for completed macOS/Windows clean-machine evidence"
+        type: string
+        default: ""
       ffmpeg_win_tag:
         description: "BtbN Windows ffmpeg tag for reproducible builds (e.g. autobuild-2025-01-30-12-56). Leave blank for rolling 'latest'."
         type: string
@@ -66,6 +70,9 @@ jobs:
         working-directory: backend
         run: pip install -e ".[dev]"
 
+      - name: Verify deterministic branding
+        run: make branding-check
+
       - name: Lint — ruff
         working-directory: backend
         run: python -m ruff check app tests
@@ -93,24 +100,35 @@ jobs:
       matrix:
         include:
           - os: macos-14 # Apple Silicon runner → arm64 DMG
+            platform: macos
             label: macOS (Apple Silicon)
             artifact: MediaSorter-macos-arm64
-            paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            paths: |
+              frontend/src-tauri/target/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-macos.json
           # macos-13 was RETIRED on 2025-12-04 — that label has no runners left, so
           # the job queued forever and the release could never finish. macos-15-intel
           # is GitHub's replacement and the LAST x86_64 image (available until
           # Aug 2027; Apple/GitHub drop Intel entirely after that).
           - os: macos-15-intel # Intel runner → x86_64 DMG
+            platform: macos
             label: macOS (Intel)
             artifact: MediaSorter-macos-x64
-            paths: frontend/src-tauri/target/release/bundle/dmg/*.dmg
+            paths: |
+              frontend/src-tauri/target/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-macos.json
           - os: windows-latest # x64 → NSIS installer .exe + portable .zip
+            platform: windows
             label: Windows (x64)
             artifact: MediaSorter-windows-x64
             paths: |
               frontend/src-tauri/target/release/bundle/msi/*.msi
               frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
               frontend/src-tauri/target/release/bundle/portable/*.zip
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-windows.json
 
     defaults:
       run:
@@ -120,6 +138,56 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Classify release signing credentials
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py preflight \
+            --platform "${{ matrix.platform }}" \
+            --output "$RUNNER_TEMP/release-signing-state.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Import Apple Developer ID certificate
+        if: matrix.platform == 'macos' && steps.signing.outputs.mode == 'signed'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          python -c "import base64, os, pathlib; pathlib.Path(os.environ['RUNNER_TEMP'], 'developer-id.p12').write_bytes(base64.b64decode(os.environ['APPLE_CERTIFICATE']))"
+          keychain="$RUNNER_TEMP/mediasorter-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list \
+            -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -150,6 +218,9 @@ jobs:
       - name: Install project dependencies
         run: make install
 
+      - name: Verify deterministic branding
+        run: make branding-check
+
       - name: Bundle Python backend (PyInstaller)
         run: make bundle-backend
 
@@ -168,8 +239,82 @@ jobs:
         # local-ai extra, installed by `make install` above.
         run: make bundle-clip
 
+      - name: Finalize permissions and sign nested native payloads
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py normalize --platform "${{ matrix.platform }}"
+          python scripts/release_integrity.py sign-nested \
+            --state "$RUNNER_TEMP/release-signing-state.json"
+          python scripts/release_integrity.py snapshot \
+            --output "$RUNNER_TEMP/release-payload-snapshot.json"
+
       - name: Build desktop app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          PYTHONPATH: ${{ github.workspace }}
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: make build-tauri
+
+      - name: Reject post-sign payload mutation
+        run: |
+          python scripts/release_integrity.py verify-snapshot \
+            --snapshot "$RUNNER_TEMP/release-payload-snapshot.json"
+
+      - name: Sign and verify outer packages
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py sign-outer \
+            --state "$RUNNER_TEMP/release-signing-state.json"
 
       - name: Create Windows portable ZIP
         # Produces a run-in-place archive: extract and double-click MediaSorter.exe,
@@ -177,44 +322,29 @@ jobs:
         if: runner.os == 'Windows'
         run: make bundle-portable
 
-      - name: Verify macOS artifacts
-        if: runner.os == 'macOS'
+      - name: Verify package contents, checksums, smoke paths, and signing state
+        env:
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          echo "==> Verifying macOS artifacts…"
-          ok=true
-          for f in frontend/src-tauri/target/release/bundle/dmg/*.dmg; do
-            [ -f "$f" ] || { echo "✗ No DMG found"; ok=false; break; }
-            sz=$(wc -c < "$f" | tr -d ' ')
-            min=$((20 * 1024 * 1024))
-            [ "$sz" -ge "$min" ] || { echo "✗ DMG suspiciously small: $f ($sz bytes)"; ok=false; break; }
-            echo "  ✓ $(basename "$f"): $((sz / 1048576)) MB"
-          done
-          $ok || exit 1
-
-      - name: Verify Windows artifacts
-        if: runner.os == 'Windows'
-        run: |
-          echo "==> Verifying Windows artifacts…"
-          ok=true
-          check() {
-            local pat="$1" min="$2"
-            local found
-            found=$(ls $pat 2>/dev/null | head -1)
-            if [ -z "$found" ]; then
-              echo "✗ No file matches: $pat"; return 1
-            fi
-            local sz
-            sz=$(wc -c < "$found" | tr -d ' ')
-            if [ "$sz" -lt "$min" ]; then
-              echo "✗ $found is too small: $sz bytes (< $min expected)"; return 1
-            fi
-            echo "  ✓ $(basename "$found"): $((sz / 1048576)) MB"
-          }
-          min=$((20 * 1024 * 1024))
-          check "frontend/src-tauri/target/release/bundle/msi/*.msi"         "$min" || ok=false
-          check "frontend/src-tauri/target/release/bundle/nsis/*-setup.exe"  "$min" || ok=false
-          check "frontend/src-tauri/target/release/bundle/portable/*.zip"    "$min" || ok=false
-          $ok || exit 1
+          mkdir -p frontend/src-tauri/target/release/bundle
+          cp "$RUNNER_TEMP/release-signing-state.json" \
+            frontend/src-tauri/target/release/bundle/release-signing-state.json
+          python scripts/release_integrity.py verify \
+            --platform "${{ matrix.platform }}" \
+            --state "$RUNNER_TEMP/release-signing-state.json"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -225,7 +355,7 @@ jobs:
 
   # ── Publish a GitHub Release (only for v* tags) ───────────────────────────────
   publish:
-    name: Publish GitHub Release
+    name: Create draft or approved GitHub Release
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -238,13 +368,10 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create GitHub Release and upload distributables
+      - name: Create draft or publish only with recorded smoke evidence
         uses: softprops/action-gh-release@v2
         with:
-          # inputs.draft is a real boolean (input is type: boolean); comparing it to
-          # the string 'true' would always be false (GitHub coerces to 1 == NaN), so
-          # use the boolean directly.
-          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+          draft: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_release || inputs.smoke_evidence == '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
@@ -252,3 +379,5 @@ jobs:
             artifacts/**/*.msi
             artifacts/**/*.exe
             artifacts/**/*.zip
+            artifacts/**/SHA256SUMS
+            artifacts/**/release-signing-state-*.json

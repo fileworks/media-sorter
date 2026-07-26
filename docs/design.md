@@ -56,8 +56,8 @@ failures are always diagnosable:
 | Platform | Log location |
 |----------|-------------|
 | macOS | `~/Library/Logs/MediaSorter/` |
-| Windows | `%APPDATA%\MediaSorter\logs\` |
-| Linux | `~/.local/share/mediasort/logs/` |
+| Windows | `%LOCALAPPDATA%\MediaSorter\Logs\` |
+| Linux | `${XDG_STATE_HOME:-~/.local/state}/MediaSorter/log/` |
 
 The Rust shell writes `mediasort.log`; the Python backend writes `backend.log`.
 The Rust log rotates at 2 MB with one backup. The backend JSON log rotates at
@@ -201,9 +201,21 @@ never escape the destination.
 
 ## Data and the "never delete" rule
 
-State lives in the platform config dir (`platformdirs`): `config.json` plus a
-SQLite DB (`mediasort.db`) with two tables — `operations` (one row per sort run)
-and `file_operations` (one row per file). SQLite is plenty for the scale and needs
+State uses `PlatformDirs("MediaSorter", appauthor=False)` semantics: config is
+stored under the config root, SQLite history under the non-roaming data root,
+and logs under the log root. Some operating systems map config and data roles
+to the same physical directory; code still resolves them independently.
+
+Before any subsystem opens state, a locked migration coordinator copies
+historical lowercase config/database and split-log sources without deleting
+them. It uses SQLite snapshots for WAL consistency, preserves conflicts beside
+the current destination, and records fingerprints in an atomic manifest.
+Config saves and schema upgrades are atomic/recoverable; database upgrades use
+transactional `PRAGMA user_version` steps and verified pre-upgrade backups. See
+[state-and-recovery.md](state-and-recovery.md) for exact paths and names.
+
+The SQLite DB has two tables — `operations` (one row per sort run) and
+`file_operations` (one row per file). SQLite is plenty for the scale and needs
 zero setup.
 
 Files are **never deleted**. Anything unplaceable goes to a clearly named quarantine
