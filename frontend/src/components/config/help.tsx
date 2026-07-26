@@ -11,7 +11,6 @@ export const HELP = {
   duplicateExact: "help.duplicateExact",
   duplicatePerceptual: "help.duplicatePerceptual",
   duplicateThreshold: "help.duplicateThreshold",
-  dedupAgainstDestination: "help.dedupAgainstDestination",
   junkFilter: "help.junkFilter",
   junkMinSize: "help.junkMinSize",
   junkMinDimension: "help.junkMinDimension",

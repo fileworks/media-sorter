@@ -131,7 +131,7 @@ class TestJunkRouting:
 
 class TestDestinationAwareDedup:
     def test_source_file_already_in_destination_is_quarantined(self, tmp_path: Path) -> None:
-        cfg = _config(tmp_path, remove_duplicates=True, dedup_against_destination=True)
+        cfg = _config(tmp_path, remove_duplicates=True)
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "a.jpg", seed=7)
         source_copy = tmp_path / "source" / "2024-03-10_a.jpg"
         source_copy.parent.mkdir(exist_ok=True)
@@ -145,8 +145,8 @@ class TestDestinationAwareDedup:
         assert quarantined.is_file()
         assert source_copy.is_file()  # copy mode: source untouched
 
-    def test_off_by_default_readds_the_file(self, tmp_path: Path) -> None:
-        cfg = _config(tmp_path, remove_duplicates=True)  # destination dedup NOT enabled
+    def test_destination_comparison_is_mandatory(self, tmp_path: Path) -> None:
+        cfg = _config(tmp_path, remove_duplicates=True)
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "a.jpg", seed=7)
         source_copy = tmp_path / "source" / "2024-03-10_a.jpg"
         source_copy.parent.mkdir(exist_ok=True)
@@ -154,12 +154,12 @@ class TestDestinationAwareDedup:
 
         stats = _run(_service(cfg))
 
-        assert stats["already_in_destination"] == 0
-        assert stats["sorted"] == 1  # per-run registry knows nothing of the destination
+        assert stats["already_in_destination"] == 1
+        assert stats["sorted"] == 0
 
     def test_cross_run_dedup_source_b_after_source_a(self, tmp_path: Path) -> None:
         """Sorting source B after source A quarantines A↔B duplicates (P0-1 acceptance)."""
-        cfg_a = _config(tmp_path, remove_duplicates=True, dedup_against_destination=True)
+        cfg_a = _config(tmp_path, remove_duplicates=True)
         _photo(tmp_path / "source" / "2024-03-10_holiday.jpg", seed=3)
         stats_a = _run(_service(cfg_a))
         assert stats_a["sorted"] == 1
@@ -174,7 +174,6 @@ class TestDestinationAwareDedup:
             tmp_path,
             source_directory=str(source_b),
             remove_duplicates=True,
-            dedup_against_destination=True,
         )
         stats_b = _run(_service(cfg_b))
 
@@ -183,7 +182,7 @@ class TestDestinationAwareDedup:
         assert (tmp_path / "target" / "2024" / "04" / "01" / "2024-04-01_new.jpg").is_file()
 
     def test_dry_run_does_not_touch_destination(self, tmp_path: Path) -> None:
-        cfg = _config(tmp_path, remove_duplicates=True, dedup_against_destination=True)
+        cfg = _config(tmp_path, remove_duplicates=True)
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "a.jpg", seed=7)
         source_copy = tmp_path / "source" / "2024-03-10_a.jpg"
         source_copy.parent.mkdir(exist_ok=True)
@@ -231,7 +230,6 @@ class TestNeverDeleteInvariant:
             tmp_path,
             junk_filter_enabled=True,
             remove_duplicates=True,
-            dedup_against_destination=True,
         )
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "old.jpg", seed=1)
 
@@ -271,7 +269,6 @@ class TestPreviewParity:
             tmp_path,
             junk_filter_enabled=True,
             remove_duplicates=True,
-            dedup_against_destination=True,
         )
         # already-in-destination case
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "a.jpg", seed=7)

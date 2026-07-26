@@ -69,6 +69,8 @@ function getStatusIcon(status: string): string {
       return "≈";
     case "junk":
       return "⊘";
+    case "duplicate_unknown":
+      return "?";
     default:
       return "✕";
   }
@@ -80,6 +82,7 @@ function getStatusColor(status: string): string {
       return "text-success";
     case "suspicious_date":
     case "junk":
+    case "duplicate_unknown":
       return "text-warning";
     case "duplicate":
     case "already_in_destination":
@@ -107,6 +110,8 @@ function getStatusTooltipKey(status: string): string {
       return "preview.status.junk";
     case "already_in_destination":
       return "preview.status.inDestination";
+    case "duplicate_unknown":
+      return "preview.status.duplicateUnknown";
     default:
       return status;
   }

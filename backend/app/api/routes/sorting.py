@@ -2,60 +2,92 @@
 
 from typing import Any
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Header, Query
 
 from app.api.deps import ContainerDep
-from app.api.schemas import TaskProgressResponse
+from app.api.schemas import (
+    TaskCancelResponse,
+    TaskProgressResponse,
+    TaskStartRequest,
+    TaskStartResponse,
+)
 from app.core.exceptions import ConflictError, TaskNotFoundError
 
 router = APIRouter()
 
 
-class StartSortRequest(BaseModel):
+class StartSortRequest(TaskStartRequest):
     dry_run: bool = False
 
 
-@router.post("/sorting/start")
-async def start_sorting(body: StartSortRequest, container: ContainerDep) -> dict[str, str]:
-    if container.task_manager.has_non_terminal_task("run"):
-        raise ConflictError("A sort is already in progress. Cancel it before starting a new one.")
-    task = container.task_manager.create_task(
+@router.post("/sorting/start", response_model=TaskStartResponse)
+async def start_sorting(
+    container: ContainerDep,
+    body: StartSortRequest | None = None,
+    retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
+    transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
+) -> TaskStartResponse:
+    request = body or StartSortRequest()
+    task, replayed = container.task_manager.start_task(
+        "sort",
+        request.idempotency_key,
         container.sorting_service.run,
-        dry_run=body.dry_run,
+        dry_run=request.dry_run,
     )
-    return {"task_id": task.id}
+    if retry_attempt is not None:
+        task.record_transport_retry(
+            retry_attempt,
+            timed_out=transport_event == "timeout",
+        )
+    return TaskStartResponse(
+        task_id=task.id,
+        operation_kind=task.operation_kind,
+        status=task.status,
+        replayed=replayed,
+    )
 
 
 @router.get("/sorting/{task_id}", response_model=TaskProgressResponse)
-async def get_sorting_progress(task_id: str, container: ContainerDep) -> TaskProgressResponse:
+async def get_sorting_progress(
+    task_id: str,
+    container: ContainerDep,
+    after_sequence: int = Query(default=0, ge=0),
+    retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
+    transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
+) -> TaskProgressResponse:
     task = container.task_manager.get_task(task_id)
     if not task:
         raise TaskNotFoundError(task_id)
-    return TaskProgressResponse(
-        task_id=task.id,
-        status=task.status,
-        progress={
-            "current": task.progress.current,
-            "total": task.progress.total,
-            "percentage": task.progress.percentage,
-            "estimated_time_remaining_seconds": task.progress.estimated_time_remaining_seconds,
-            "phase": task.progress.phase,
-        },
-        error=task.error,
-        result=task.result,
-    )
+    if retry_attempt is not None:
+        task.record_transport_retry(
+            retry_attempt,
+            timed_out=transport_event == "timeout",
+        )
+    return TaskProgressResponse.from_task(task, after_sequence=after_sequence)
 
 
-@router.post("/sorting/{task_id}/cancel")
-async def cancel_sorting(task_id: str, container: ContainerDep) -> dict[str, str]:
+@router.post("/sorting/{task_id}/cancel", response_model=TaskCancelResponse)
+async def cancel_sorting(
+    task_id: str,
+    container: ContainerDep,
+    retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
+    transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
+) -> TaskCancelResponse:
     task = container.task_manager.get_task(task_id)
     if not task:
         raise TaskNotFoundError(task_id)
+    if retry_attempt is not None:
+        task.record_transport_retry(
+            retry_attempt,
+            timed_out=transport_event == "timeout",
+        )
     cancelled = container.task_manager.cancel_task(task_id)
-    if not cancelled:
-        return {"status": task.status}
-    return {"status": "cancelled"}
+    return TaskCancelResponse(
+        task_id=task.id,
+        operation_kind=task.operation_kind,
+        status=task.status,
+        cancellation_requested=cancelled,
+    )
 
 
 @router.get("/sorting/{task_id}/report")

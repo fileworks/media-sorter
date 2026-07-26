@@ -58,7 +58,9 @@ function filterItems(
       filtered = filtered.filter((i) => i.status === "sort");
       break;
     case "warnings":
-      filtered = filtered.filter((i) => i.status === "suspicious_date");
+      filtered = filtered.filter((i) =>
+        ["suspicious_date", "duplicate_unknown"].includes(i.status),
+      );
       break;
     case "problems":
       filtered = filtered.filter((i) =>
@@ -230,6 +232,7 @@ export function PreviewPanel({
       "failed",
       "junk",
       "already_in_destination",
+      "duplicate_unknown",
     ].forEach((k) => s.add(`folder-${k}`));
     if (categorizeEnabled) {
       for (const item of result.items) {
@@ -281,6 +284,7 @@ export function PreviewPanel({
           counts.sorted++;
           break;
         case "suspicious_date":
+        case "duplicate_unknown":
           counts.warnings++;
           break;
         case "duplicate":
@@ -433,6 +437,16 @@ export function PreviewPanel({
       </CardHeader>
 
       <CardContent className="p-0">
+        {result.partial && (
+          <div className="border-b border-border px-4 py-2">
+            <ValidationBadge
+              severity="warning"
+              message={t("preview.partial", {
+                count: result.issues.length.toLocaleString(locale),
+              })}
+            />
+          </div>
+        )}
         <div className="flex flex-col lg:flex-row">
           {/* ── Left sidebar ── */}
           <aside
@@ -613,6 +627,17 @@ export function PreviewPanel({
                     {t("preview.inDestination", {
                       count: stats.will_skip_already_in_destination.toLocaleString(locale),
                     })}
+                  </span>
+                </>
+              )}
+              {(stats.duplicate_unknown ?? 0) > 0 && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span
+                    className="text-warning"
+                    title="Video perceptual matching completes during the real sort."
+                  >
+                    {stats.duplicate_unknown!.toLocaleString()} pending duplicate check
                   </span>
                 </>
               )}

@@ -25,7 +25,7 @@
 ### Patterns
 - **Optional deps**: guard with `pytest.importorskip("PIL.Image")` — the `[local-ai]` extra is absent in CI, and all AI model code must stay testable through injected fakes (fake encoders / sessions / tokenizers; see `test_siglip_encoder.py`, `test_ai_tagging_service.py`)
 - **Mock at the collaborator boundary** with `unittest.mock.patch.object(svc._extraction, "extract_detailed", ...)` — not whole services when testing a route
-- **Background tasks**: unit-test coroutines with a minimal fake task (`_FakeTask` with `progress` + `cancel_event`); cooperative-cancel behaviour is covered in `test_task_manager.py`
+- **Background tasks**: use the real typed `Task` when phase/event/partial behavior matters; focused legacy service tests may use a progress/cancel stand-in. Worker-thread cancellation and retention/idempotency behavior belong in `test_task_manager.py`.
 - `pytest.mark.parametrize` for edge-case tables (see `test_config.py` rename-pattern tests)
 - Never touch the network — the update checker and cloud taggers are tested with mocked `httpx`
 

@@ -12,10 +12,11 @@ import { formatCount, formatDuration } from "@/lib/formatters";
 import type { TaskProgress } from "@/types/api";
 import { useI18n } from "@/i18n/I18nContext";
 
-// Human label per backend phase. "scanning" has no incremental count (a
-// directory walk isn't easily made incremental), so it renders indeterminate.
+// Human labels for the typed backend phases.
 const PHASE_KEYS: Record<string, string> = {
-  scanning: "progress.scanning",
+  validating: "progress.validating",
+  scanning_source: "progress.scanningSource",
+  indexing_destination: "progress.indexingDestination",
   ranking: "progress.ranking",
   previewing: "progress.previewing",
 };
@@ -29,9 +30,8 @@ interface PreviewProgressCardProps {
 export function PreviewProgressCard({ progress, elapsed }: PreviewProgressCardProps) {
   const { t, locale } = useI18n();
   const phase = progress?.phase ?? null;
-  // Determinate only once a real count is flowing (the per-file / ranking
-  // phases). During "scanning" total is still 0, so the bar is indeterminate.
-  const determinate = !!progress && progress.total > 0 && phase !== "scanning";
+  // Determinate only once a phase has a real item count.
+  const determinate = !!progress && progress.total > 0;
   const label = phase && PHASE_KEYS[phase] ? t(PHASE_KEYS[phase]) : t("progress.preview");
   const eta = progress?.estimated_time_remaining_seconds ?? null;
 

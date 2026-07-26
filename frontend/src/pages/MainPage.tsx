@@ -20,6 +20,7 @@ import { LogViewer } from "@/components/LogViewer";
 import { Button } from "@/components/ui/button";
 import { cn, isTauri } from "@/lib/utils";
 import { formatDuration } from "@/lib/formatters";
+import { canStartSort, getAnalysisGate } from "@/lib/operationStates";
 import {
   FiSun,
   FiMoon,
@@ -162,6 +163,7 @@ export default function MainPage() {
     loading: analysisLoading,
     error: analysisError,
     runAnalysis,
+    cancelAnalysis,
     clear: clearAnalysis,
   } = useAnalysis();
 
@@ -273,20 +275,13 @@ export default function MainPage() {
   // settings. Each problem is surfaced in-place: the offending section is
   // flagged in the settings rail and the field itself shows the message.
 
-  // Gating only — the *message* for "no media" lives in AnalysisPanel (the one
-  // place that actually has the scan result), not as a flaky step-1 guess.
-  const sourceHasNoMedia =
-    analysisResult !== null && !analysisLoading && analysisResult.total_files === 0;
+  const analysisGate = getAnalysisGate(analysisResult, analysisLoading, analysisError);
 
   // ── Wizard step gating ─────────────────────────────────────────────────────
 
   const canGoToAnalysis = isValid;
-  const canGoToPreview =
-    analysisResult !== null &&
-    !analysisError &&
-    analysisResult.disk_space.sufficient === true &&
-    !sourceHasNoMedia;
-  const canGoToSort = previewResult !== null;
+  const canGoToPreview = analysisGate.canPreview;
+  const canGoToSort = canStartSort(previewResult);
   const isRunning = status === "running" || status === "pending";
   const isAnyRunning = analysisLoading || previewLoading || isRunning;
 
@@ -328,8 +323,8 @@ export default function MainPage() {
 
   // App-wide busy signal for the top bar: only genuinely long operations drive
   // it. `isAnyRunning` covers analysis/preview/sort continuously across their
-  // poll cadence; `loaderActive` covers any other heavy one-shot request tagged
-  // via `withLoader`. Config saves, toggles, validation, and GETs are excluded
+  // poll cadence; `loaderActive` is acquired for the full background-task
+  // lifetime. Config saves, toggles, validation, and ordinary GETs are excluded
   // by construction, so the bar no longer blinks on every setting change.
   const loaderActive = useGlobalLoader();
   const globalBusy = isAnyRunning || loaderActive;
@@ -385,7 +380,13 @@ export default function MainPage() {
   };
 
   // Determine which computation is cancellable (only one active at a time)
-  const cancellableOp = previewLoading ? "preview" : isRunning ? "sort" : null;
+  const cancellableOp = analysisLoading
+    ? "analysis"
+    : previewLoading
+      ? "preview"
+      : isRunning
+        ? "sort"
+        : null;
 
   const handleCancelRequest = () => {
     if (!cancellableOp) return;
@@ -394,7 +395,9 @@ export default function MainPage() {
 
   const handleCancelConfirmed = async () => {
     setCancelConfirmOpen(false);
-    if (cancellableOp === "preview") {
+    if (cancellableOp === "analysis") {
+      await cancelAnalysis();
+    } else if (cancellableOp === "preview") {
       await cancelPreview();
     } else if (cancellableOp === "sort") {
       void cancelSorting();
@@ -853,7 +856,9 @@ export default function MainPage() {
                     : !canGoToPreview
                       ? analysisError
                         ? t("action.analysisRetry")
-                        : t("action.analysisRequired")
+                        : analysisGate.empty
+                          ? t("action.analysisEmpty")
+                          : t("action.analysisRequired")
                       : previewResult !== null
                         ? t("action.previewRerun")
                         : undefined
@@ -874,7 +879,9 @@ export default function MainPage() {
                   isAnyRunning
                     ? t("action.waitForOperation")
                     : !canGoToSort
-                      ? t("action.previewRequired")
+                      ? previewResult
+                        ? t("action.noSortableFiles")
+                        : t("action.previewRequired")
                       : report !== null
                         ? t("action.sortRerun")
                         : undefined
@@ -917,17 +924,19 @@ export default function MainPage() {
           <ul className="space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             {analysisResult && (
               <li>
-                Analysis:{" "}
                 <span className="font-semibold text-foreground">
-                  {analysisResult.total_files.toLocaleString(locale)} files scanned
+                  {t("dialog.applyReset.analysisSummary", {
+                    count: analysisResult.total_files.toLocaleString(locale),
+                  })}
                 </span>
               </li>
             )}
             {previewResult && (
               <li>
-                Preview:{" "}
                 <span className="font-semibold text-foreground">
-                  {previewResult.items.length.toLocaleString(locale)} items planned
+                  {t("dialog.applyReset.previewSummary", {
+                    count: previewResult.items.length.toLocaleString(locale),
+                  })}
                 </span>
               </li>
             )}
@@ -956,12 +965,18 @@ export default function MainPage() {
       <ConfirmDialog
         open={cancelConfirmOpen}
         title={t(
-          cancellableOp === "preview" ? "dialog.cancelPreview.title" : "dialog.cancelSort.title",
+          cancellableOp === "analysis"
+            ? "dialog.cancelAnalysis.title"
+            : cancellableOp === "preview"
+              ? "dialog.cancelPreview.title"
+              : "dialog.cancelSort.title",
         )}
         description={
-          cancellableOp === "preview"
-            ? t("dialog.cancelPreview.description")
-            : t("dialog.cancelSort.description")
+          cancellableOp === "analysis"
+            ? t("dialog.cancelAnalysis.description")
+            : cancellableOp === "preview"
+              ? t("dialog.cancelPreview.description")
+              : t("dialog.cancelSort.description")
         }
         confirmLabel={t("dialog.yesCancel")}
         cancelLabel={t("dialog.keepGoing")}

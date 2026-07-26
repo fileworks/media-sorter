@@ -61,8 +61,12 @@ export const en = {
   "config.source.required": "Pick the folder that holds your photos and videos.",
   "config.source.not_found": "Source folder not found: “{path}”. Check the path and try again.",
   "config.source.not_directory": "That path is a file, not a folder: “{path}”.",
+  "config.source.unavailable":
+    "Source folder cannot be read: “{path}”. Check its permissions or connection.",
   "config.target.required": "Pick where your sorted files should go.",
   "config.target.same_as_source": "Source and destination must be different folders.",
+  "config.target.overlap":
+    "Source and destination must be separate; neither folder may contain the other.",
   "config.rules.migration_warning": "A legacy rule was skipped: {detail}",
   "config.validation.invalid": "This setting is invalid.",
   "config.validation.warning": "Review this setting.",
@@ -124,6 +128,9 @@ export const en = {
   "rules.describe.size": "File size {operator} {value}",
   "rules.describe.resolution": "Resolution {operator} {value}",
   "progress.scanning": "Scanning folder…",
+  "progress.validating": "Validating folders…",
+  "progress.scanningSource": "Scanning source…",
+  "progress.indexingDestination": "Indexing destination…",
   "progress.ranking": "Analyzing image quality…",
   "progress.analyzingFiles": "Analyzing files…",
   "progress.previewFiles": "Preview: {current} / {total} files",
@@ -171,6 +178,8 @@ export const en = {
   "sort.startFailed": "Failed to start sort",
   "sort.cancelledToast": "Sort cancelled.",
   "sort.cancelFailed": "Failed to cancel",
+  "sort.cancelRequested": "Cancellation requested.",
+  "sort.statusFailed": "Sort status could not be read.",
   "accessibility.settingsSections": "Settings sections",
   "accessibility.dismiss": "Dismiss",
   "accessibility.help": "Help",
@@ -184,8 +193,6 @@ export const en = {
     "Detect visually similar images and videos. Preview skips video sampling for speed.",
   "help.duplicateThreshold":
     "Higher values require a closer visual match; values below 85% cause many false positives.",
-  "help.dedupAgainstDestination":
-    "Compare with the persistent destination index and quarantine matches in _already_in_destination/.",
   "help.junkFilter":
     "Quarantine small thumbnails and cache debris in _junk/ without deleting them.",
   "help.junkMinSize": "Files smaller than this are treated as junk; zero disables the check.",
@@ -241,6 +248,9 @@ export const en = {
     "Cannot reach the backend. Make sure it is running (`make backend`) and try reloading.",
   "analysis.scanning": "Scanning source folder…",
   "analysis.failed": "Analysis failed",
+  "analysis.noResult": "Analysis produced no result.",
+  "analysis.statusFailed": "Analysis status could not be read.",
+  "analysis.cancelFailed": "Cancellation could not be requested; analysis is still running.",
   "analysis.requiredFolders": "Set a valid source and destination folder first.",
   "analysis.runFirst": "Run Analysis first.",
   "analysis.noSpace": "Not enough disk space. Free up space or switch to Move mode.",
@@ -276,6 +286,9 @@ export const en = {
   "preview.runFirst": "Run Preview first.",
   "preview.noResult": "Preview produced no result.",
   "preview.failed": "Preview failed.",
+  "preview.partial": "Preview is partial: {count} inaccessible path(s) were skipped.",
+  "preview.statusFailed": "Preview status could not be read.",
+  "preview.cancelFailed": "Cancellation could not be requested; preview is still running.",
   "preview.action": "Run preview →",
   "preview.rerun": "Re-run preview",
   "preview.title": "Preview",
@@ -334,6 +347,8 @@ export const en = {
   "preview.status.junk": "Junk/thumbnail — quarantined to _junk/",
   "preview.status.inDestination":
     "Already in destination — quarantined to _already_in_destination/",
+  "preview.status.duplicateUnknown":
+    "Video perceptual duplicate check completes during the full sort",
   "preview.compareFile": "Compare duplicate {name}",
   "preview.openFile": "Open preview of {name}",
   "preview.category": "Category: {name}",
@@ -467,7 +482,8 @@ export const en = {
   "config.duplicates.threshold": "Similarity threshold",
   "config.duplicates.recovery":
     "Duplicates are set aside in _duplicates/ — never deleted, so every match is recoverable.",
-  "config.duplicates.destination": "Compare against destination",
+  "config.duplicates.destinationAlways":
+    "Existing destination media is always compared when duplicate detection is enabled, including across runs.",
   "config.filters.recursive": "Scan subfolders",
   "config.filters.minSize": "Minimum file size (KB)",
   "config.filters.maxSize": "Maximum file size (MB)",
@@ -654,9 +670,11 @@ export const en = {
   "action.waitForOperation": "Wait for current operation to finish",
   "action.fixSettings": "Fix the highlighted settings first",
   "action.analysisRetry": "Analysis failed — retry first",
+  "action.analysisEmpty": "No supported files matched the current scan settings",
   "action.analysisRequired": "Analysis must complete with sufficient disk space",
   "action.previewRerun": "Re-run preview (will discard existing preview)",
   "action.previewRequired": "Generate a preview first",
+  "action.noSortableFiles": "No supported files are available to sort",
   "action.sortRerun": "Re-run sort (will start a new sort)",
   "config.value.notSet": "Not set",
   "config.value.on": "On",
@@ -674,6 +692,8 @@ export const en = {
   "dialog.applyReset.description":
     "Changing settings will immediately discard your current analysis and preview. You will need to run them again before sorting.",
   "dialog.applyReset.confirm": "Apply & reset",
+  "dialog.applyReset.analysisSummary": "Analysis: {count} files scanned",
+  "dialog.applyReset.previewSummary": "Preview: {count} items planned",
   "dialog.rerunPreview.title": "Re-run preview?",
   "dialog.rerunPreview.description":
     "This will discard the current preview and compute a new one. Reviewed changes will be lost.",
@@ -681,6 +701,8 @@ export const en = {
   "dialog.rerunSort.description":
     "This will start a new sort. The previous sort report will be discarded.",
   "dialog.keepExisting": "Keep existing",
+  "dialog.cancelAnalysis.title": "Cancel analysis?",
+  "dialog.cancelAnalysis.description": "Analysis will stop. You can run it again afterwards.",
   "dialog.cancelPreview.title": "Cancel preview?",
   "dialog.cancelPreview.description":
     "Preview computation will be cancelled and progress will be lost. You can run it again afterwards.",
@@ -771,8 +793,12 @@ export const de: Record<MessageKey, string> = {
   "config.source.not_found":
     "Quellordner nicht gefunden: „{path}“. Pfad prüfen und erneut versuchen.",
   "config.source.not_directory": "Dieser Pfad ist eine Datei, kein Ordner: „{path}“.",
+  "config.source.unavailable":
+    "Der Quellordner kann nicht gelesen werden: „{path}“. Prüfe Berechtigungen und Verbindung.",
   "config.target.required": "Wähle das Ziel für die sortierten Dateien.",
   "config.target.same_as_source": "Quelle und Ziel müssen unterschiedliche Ordner sein.",
+  "config.target.overlap":
+    "Quelle und Ziel müssen getrennt sein; keiner der Ordner darf den anderen enthalten.",
   "config.rules.migration_warning": "Eine alte Regel wurde übersprungen: {detail}",
   "config.validation.invalid": "Diese Einstellung ist ungültig.",
   "config.validation.warning": "Diese Einstellung bitte prüfen.",
@@ -838,6 +864,9 @@ export const de: Record<MessageKey, string> = {
   "rules.describe.size": "Dateigröße {operator} {value}",
   "rules.describe.resolution": "Auflösung {operator} {value}",
   "progress.scanning": "Ordner wird durchsucht…",
+  "progress.validating": "Ordner werden geprüft…",
+  "progress.scanningSource": "Quelle wird durchsucht…",
+  "progress.indexingDestination": "Ziel wird indexiert…",
   "progress.ranking": "Bildqualität wird analysiert…",
   "progress.analyzingFiles": "Dateien werden analysiert…",
   "progress.previewFiles": "Vorschau: {current} / {total} Dateien",
@@ -886,6 +915,8 @@ export const de: Record<MessageKey, string> = {
   "sort.startFailed": "Sortierung konnte nicht gestartet werden",
   "sort.cancelledToast": "Sortierung abgebrochen.",
   "sort.cancelFailed": "Abbruch fehlgeschlagen",
+  "sort.cancelRequested": "Abbruch angefordert.",
+  "sort.statusFailed": "Der Sortierstatus konnte nicht gelesen werden.",
   "accessibility.settingsSections": "Einstellungsbereiche",
   "accessibility.dismiss": "Schließen",
   "accessibility.help": "Hilfe",
@@ -900,8 +931,6 @@ export const de: Record<MessageKey, string> = {
     "Visuell ähnliche Bilder und Videos erkennen. Die Vorschau überspringt Video-Sampling aus Geschwindigkeitsgründen.",
   "help.duplicateThreshold":
     "Höhere Werte verlangen größere visuelle Ähnlichkeit; unter 85 % entstehen viele Fehlalarme.",
-  "help.dedupAgainstDestination":
-    "Mit dem dauerhaften Zielindex vergleichen und Treffer in _already_in_destination/ ablegen.",
   "help.junkFilter": "Kleine Vorschaubilder und Cache-Dateien ohne Löschen in _junk/ ablegen.",
   "help.junkMinSize": "Kleinere Dateien gelten als Datenmüll; null deaktiviert diese Prüfung.",
   "help.junkMinDimension":
@@ -957,6 +986,9 @@ export const de: Record<MessageKey, string> = {
     "Backend nicht erreichbar. Sicherstellen, dass es läuft (`make backend`), und neu laden.",
   "analysis.scanning": "Quellordner wird durchsucht…",
   "analysis.failed": "Analyse fehlgeschlagen",
+  "analysis.noResult": "Die Analyse lieferte kein Ergebnis.",
+  "analysis.statusFailed": "Der Analysestatus konnte nicht gelesen werden.",
+  "analysis.cancelFailed": "Der Abbruch konnte nicht angefordert werden; die Analyse läuft weiter.",
   "analysis.requiredFolders": "Zuerst gültige Quell- und Zielordner festlegen.",
   "analysis.runFirst": "Zuerst die Analyse ausführen.",
   "analysis.noSpace":
@@ -995,6 +1027,10 @@ export const de: Record<MessageKey, string> = {
   "preview.runFirst": "Zuerst die Vorschau ausführen.",
   "preview.noResult": "Die Vorschau lieferte kein Ergebnis.",
   "preview.failed": "Vorschau fehlgeschlagen.",
+  "preview.partial":
+    "Die Vorschau ist unvollständig: {count} nicht zugängliche Pfade wurden übersprungen.",
+  "preview.statusFailed": "Der Vorschaustatus konnte nicht gelesen werden.",
+  "preview.cancelFailed": "Der Abbruch konnte nicht angefordert werden; die Vorschau läuft weiter.",
   "preview.action": "Vorschau ausführen →",
   "preview.rerun": "Vorschau erneut ausführen",
   "preview.title": "Vorschau",
@@ -1052,6 +1088,8 @@ export const de: Record<MessageKey, string> = {
   "preview.status.failed": "Problem: Verarbeitung fehlgeschlagen",
   "preview.status.junk": "Datenmüll/Vorschaubild — wird in _junk/ abgelegt",
   "preview.status.inDestination": "Bereits am Ziel — wird in _already_in_destination/ abgelegt",
+  "preview.status.duplicateUnknown":
+    "Die Prüfung auf visuelle Videoduplikate erfolgt beim vollständigen Sortieren",
   "preview.compareFile": "Duplikat {name} vergleichen",
   "preview.openFile": "Vorschau von {name} öffnen",
   "preview.category": "Kategorie: {name}",
@@ -1186,7 +1224,8 @@ export const de: Record<MessageKey, string> = {
   "config.duplicates.threshold": "Ähnlichkeitsschwelle",
   "config.duplicates.recovery":
     "Duplikate werden in _duplicates/ abgelegt und nie gelöscht; jeder Treffer bleibt wiederherstellbar.",
-  "config.duplicates.destination": "Mit dem Ziel vergleichen",
+  "config.duplicates.destinationAlways":
+    "Vorhandene Zieldateien werden bei aktivierter Duplikaterkennung immer verglichen, auch über mehrere Läufe hinweg.",
   "config.filters.recursive": "Unterordner durchsuchen",
   "config.filters.minSize": "Minimale Dateigröße (KB)",
   "config.filters.maxSize": "Maximale Dateigröße (MB)",
@@ -1377,10 +1416,12 @@ export const de: Record<MessageKey, string> = {
   "action.waitForOperation": "Auf den Abschluss des aktuellen Vorgangs warten",
   "action.fixSettings": "Zuerst die markierten Einstellungen korrigieren",
   "action.analysisRetry": "Analyse fehlgeschlagen — zuerst erneut versuchen",
+  "action.analysisEmpty": "Keine unterstützten Dateien entsprechen den aktuellen Scaneinstellungen",
   "action.analysisRequired":
     "Die Analyse muss mit genügend freiem Speicherplatz abgeschlossen sein",
   "action.previewRerun": "Vorschau neu erstellen (verwirft die vorhandene Vorschau)",
   "action.previewRequired": "Zuerst eine Vorschau erstellen",
+  "action.noSortableFiles": "Keine unterstützten Dateien zum Sortieren verfügbar",
   "action.sortRerun": "Sortierung erneut ausführen (startet eine neue Sortierung)",
   "config.value.notSet": "Nicht festgelegt",
   "config.value.on": "Ein",
@@ -1398,6 +1439,8 @@ export const de: Record<MessageKey, string> = {
   "dialog.applyReset.description":
     "Die Einstellungsänderung verwirft sofort die aktuelle Analyse und Vorschau. Vor dem Sortieren müssen beide erneut ausgeführt werden.",
   "dialog.applyReset.confirm": "Anwenden & zurücksetzen",
+  "dialog.applyReset.analysisSummary": "Analyse: {count} Dateien durchsucht",
+  "dialog.applyReset.previewSummary": "Vorschau: {count} Einträge geplant",
   "dialog.rerunPreview.title": "Vorschau erneut ausführen?",
   "dialog.rerunPreview.description":
     "Die aktuelle Vorschau wird verworfen und neu berechnet. Bereits geprüfte Änderungen gehen verloren.",
@@ -1405,6 +1448,9 @@ export const de: Record<MessageKey, string> = {
   "dialog.rerunSort.description":
     "Eine neue Sortierung wird gestartet. Der vorherige Sortierbericht wird verworfen.",
   "dialog.keepExisting": "Vorhandenes behalten",
+  "dialog.cancelAnalysis.title": "Analyse abbrechen?",
+  "dialog.cancelAnalysis.description":
+    "Die Analyse wird beendet. Sie kann danach erneut ausgeführt werden.",
   "dialog.cancelPreview.title": "Vorschau abbrechen?",
   "dialog.cancelPreview.description":
     "Die Vorschau wird abgebrochen und der Fortschritt geht verloren. Sie kann danach erneut ausgeführt werden.",

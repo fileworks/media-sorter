@@ -13,6 +13,21 @@ from typing import Any, cast
 
 import structlog
 
+LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
+LOG_RETENTION_MAX_BYTES = LOG_FILE_MAX_BYTES * (LOG_BACKUP_COUNT + 1)
+
+_SENSITIVE_FIELD_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "password",
+    "secret",
+    "token",
+)
+_REDACTED = "[REDACTED]"
+
 # The event loop running the FastAPI app. Captured at startup so cross-thread
 # log calls (e.g. from asyncio.to_thread workers in SortingService) can hand
 # entries back to the loop via call_soon_threadsafe — asyncio.Queue is NOT
@@ -45,6 +60,32 @@ def _to_jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): _to_jsonable(v) for k, v in value.items()}
     return str(value)  # Path, Exception, ImageHash, bytes, datetime, …
+
+
+def _redact_sensitive_fields(
+    logger: Any,
+    method: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
+    """Remove credential values before logs reach any handler or live client."""
+
+    def redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    _REDACTED
+                    if any(marker in str(key).lower() for marker in _SENSITIVE_FIELD_MARKERS)
+                    else redact(nested)
+                )
+                for key, nested in value.items()
+            }
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(redact(item) for item in value)
+        return value
+
+    return cast(MutableMapping[str, Any], redact(dict(event_dict)))
 
 
 class LogQueueBroadcast:
@@ -132,6 +173,7 @@ def setup_logging(log_level: str = "INFO") -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
+            _redact_sensitive_fields,
             LogQueueBroadcast(),
             structlog.processors.JSONRenderer(),
         ],
@@ -167,8 +209,8 @@ def setup_logging(log_level: str = "INFO") -> None:
             log_dir = _get_log_dir()
             file_handler = logging.handlers.RotatingFileHandler(
                 log_dir / "backend.log",
-                maxBytes=5 * 1024 * 1024,  # 5 MB per file
-                backupCount=3,
+                maxBytes=LOG_FILE_MAX_BYTES,
+                backupCount=LOG_BACKUP_COUNT,
                 encoding="utf-8",
             )
             file_handler.setLevel(numeric_level)

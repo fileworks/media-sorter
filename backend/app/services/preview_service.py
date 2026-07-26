@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import tempfile
 import time
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
+from app.core.exceptions import ConfigError
 from app.core.logging_config import get_logger
 from app.services.ai.category_classifier_service import CategoryClassifierService
-from app.services.dedup_index import DedupIndex, resolve_index_path
+from app.services.dedup_index import DedupIndex
 from app.services.destination import (
     build_dest_dir,
     predicted_filename,
@@ -20,6 +22,7 @@ from app.services.destination import (
     reserve_destination,
 )
 from app.services.duplicate_service import (
+    DuplicateCheckCancelled,
     DuplicateMatch,
     DuplicateRegistry,
     DuplicateService,
@@ -29,7 +32,7 @@ from app.services.extraction_service import DateExtractionService
 from app.services.filesystem_service import FileSystemService, validate_source_directory
 from app.services.junk_filter import classify_junk
 from app.services.rule_engine_service import RuleEngineService
-from app.utils.path_utils import sanitize_path_segment
+from app.utils.path_utils import sanitize_path_segment, validate_source_target_overlap
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
@@ -74,28 +77,37 @@ class PreviewService:
         # Phase 1 — directory scan (no incremental count available, so the UI
         # shows an indeterminate "Scanning folder…" bar).
         logger.info("Preview started", source=str(config.source_directory))
+        if task is not None:
+            task.transition("validating")
         # A preview is read-only, so only the source is checked here — but it is
         # checked, so a missing folder says so instead of previewing nothing.
         source_root = validate_source_directory(config.source_directory)
+        if not config.target_directory.strip():
+            raise ConfigError("No destination folder is set. Choose one before previewing.")
+        _, dest_root = validate_source_target_overlap(source_root, config.target_directory)
         if task is not None:
-            task.progress.phase = "scanning"
-        files = await self._fs.list_files(
-            config.source_directory,
+            task.transition("scanning_source")
+        traversal = await self._fs.traverse(
+            source_root,
             recursive=config.recursive_scan,
             max_depth=config.max_recursion_depth,
             exclude_patterns=config.exclude_patterns,
             min_file_size_kb=config.min_file_size_kb,
             max_file_size_mb=config.max_file_size_mb,
+            cancel_token=task.cancel_token if task is not None else None,
+            task=task,
         )
-
-        dest_root = Path(config.target_directory)
+        files = traversal.files
         total = len(files)
         logger.info("Preview: scan complete", total=total)
         if task is not None:
-            task.progress.total = total
+            task.update_progress(0, total=total)
 
-        stats: dict[str, int] = {
+        stats: dict[str, Any] = {
             "total": total,
+            "excluded_files": traversal.excluded_files,
+            "partial": traversal.partial,
+            "issue_count": len(traversal.issues),
             "will_sort": 0,
             "will_fail": 0,
             "will_quarantine_unknown": 0,
@@ -103,6 +115,7 @@ class PreviewService:
             "will_skip_duplicate": 0,
             "will_quarantine_junk": 0,
             "will_skip_already_in_destination": 0,
+            "duplicate_unknown": 0,
             # Sorted files that fell below the categorization confidence bar and
             # are predicted to land in _uncategorized/ (always present; 0 when the
             # feature is off).
@@ -114,23 +127,35 @@ class PreviewService:
         check_suspicious = config.exif_sanity_check_enabled
         start_time = time.monotonic()
 
-        # Destination-aware dedup (opt-in): same persistent index the sort
-        # uses, so the preview predicts the "already in destination" outcome
-        # exactly. Missing *video* signatures are not computed here (no ffmpeg
-        # on the preview path) — ones stored by earlier sort runs still match.
+        # Destination-aware dedup uses an ephemeral index so preview stays
+        # read-only while still comparing every existing destination item.
+        # Missing video signatures are not computed here (no ffmpeg on preview).
         dest_registry: DuplicateRegistry | None = None
-        if config.remove_duplicates and config.dedup_against_destination and self._dups is not None:
-            index = DedupIndex(resolve_index_path(config))
-            await asyncio.to_thread(
-                index.refresh,
-                dest_root,
-                self._dups,
-                perceptual=config.duplicate_perceptual_enabled,
-                sample_video=False,
-                cancel_event=task.cancel_event if task is not None else None,
-                task=task,
-            )
-            dest_registry = await asyncio.to_thread(index.load_registry)
+        if (
+            config.remove_duplicates
+            and self._dups is not None
+            and not (task is not None and task.cancel_token.is_set())
+        ):
+            with tempfile.TemporaryDirectory(prefix="mediasort-preview-index-") as index_dir:
+                index = DedupIndex(Path(index_dir) / "dedup.sqlite3")
+                await asyncio.to_thread(
+                    index.refresh,
+                    dest_root,
+                    self._dups,
+                    perceptual=config.duplicate_perceptual_enabled,
+                    sample_video=False,
+                    cancel_event=task.cancel_event if task is not None else None,
+                    task=task,
+                )
+                dest_registry = await asyncio.to_thread(index.load_registry)
+
+        if task is not None and task.cancel_token.is_set():
+            return {
+                "items": [],
+                "stats": stats,
+                "partial": traversal.partial,
+                "issues": [issue.to_dict() for issue in traversal.issues],
+            }
 
         # Phase 2 — quality ranking (only when perceptual de-dup is on). Process
         # best-quality-first within duplicate groups (same quality_key as
@@ -155,13 +180,18 @@ class PreviewService:
             else self._classifier
         )
 
+        if task is not None and task.cancel_token.is_set():
+            return {
+                "items": [],
+                "stats": stats,
+                "partial": traversal.partial,
+                "issues": [issue.to_dict() for issue in traversal.issues],
+            }
+
         # Phase 3 — per-file prediction. Reset the counter so the bar restarts
         # cleanly from 0 under the "previewing" label.
         if task is not None:
-            task.progress.phase = "previewing"
-            task.progress.current = 0
-            task.progress.percentage = 0.0
-            task.progress.estimated_time_remaining_seconds = None
+            task.transition("previewing", total=total)
 
         for rank, idx in enumerate(order):
             if task is not None and task.cancel_event.is_set():
@@ -181,6 +211,7 @@ class PreviewService:
                 operation_rules,
                 operation_classifier,
                 True,
+                task.cancel_token if task is not None else None,
             )
             slots[idx] = item
             if item.get("destination"):
@@ -188,6 +219,8 @@ class PreviewService:
                     reserve_destination(Path(item["destination"]), reserved_destinations)
                 )
             self._bump_stats(stats, item["status"])
+            if item.get("duplicate_evaluation") == "unknown":
+                stats["duplicate_unknown"] += 1
             # A "sort" item with no category (and categorization enabled) is
             # routed to _uncategorized/ — count it for the summary.
             if (
@@ -198,12 +231,12 @@ class PreviewService:
                 stats["uncategorized"] += 1
 
             if task is not None:
-                task.progress.current = rank + 1
-                task.progress.percentage = round((rank + 1) / total * 100, 1) if total else 0.0
                 elapsed = time.monotonic() - start_time
+                eta: float | None = None
                 if elapsed > 0 and rank > 0:
                     rate = (rank + 1) / elapsed
-                    task.progress.estimated_time_remaining_seconds = (total - (rank + 1)) / rate
+                    eta = (total - (rank + 1)) / rate
+                task.update_progress(rank + 1, eta_seconds=eta)
 
         items: list[dict[str, Any]] = [it for it in slots if it is not None]
         logger.info(
@@ -214,14 +247,19 @@ class PreviewService:
             quarantine_future=stats["will_quarantine_future"],
             uncategorized=stats["uncategorized"],
         )
-        return {"items": items, "stats": stats}
+        return {
+            "items": items,
+            "stats": stats,
+            "partial": traversal.partial,
+            "issues": [issue.to_dict() for issue in traversal.issues],
+        }
 
     # ------------------------------------------------------------------ #
     # Per-file prediction                                                   #
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _bump_stats(stats: dict[str, int], status: str) -> None:
+    def _bump_stats(stats: dict[str, Any], status: str) -> None:
         if status == "sort":
             stats["will_sort"] += 1
         elif status == "failed":
@@ -249,6 +287,7 @@ class PreviewService:
         operation_rules: RuleEngineService | None = None,
         operation_classifier: CategoryClassifierService | None = None,
         use_operation_services: bool = False,
+        cancel_token: Any | None = None,
     ) -> dict[str, Any]:
         """Predict the outcome for a single file.
 
@@ -282,6 +321,8 @@ class PreviewService:
                 "duplicate_type": None,
                 "duplicate_similarity": None,
                 "duplicate_of": None,
+                "duplicate_evaluation": "known",
+                "duplicate_unknown_reason": None,
             }
 
         try:
@@ -303,6 +344,8 @@ class PreviewService:
                 "duplicate_type": None,
                 "duplicate_similarity": None,
                 "duplicate_of": None,
+                "duplicate_evaluation": "known",
+                "duplicate_unknown_reason": None,
             }
 
         extracted_date = extr.extracted_date
@@ -326,6 +369,8 @@ class PreviewService:
         dup_type: str | None = None
         dup_similarity: int | None = None
         dup_of: str | None = None
+        dup_evaluation = "known"
+        dup_unknown_reason: str | None = None
 
         if extracted_date is None:
             status = "suspicious_date" if extr.suspicious else "unknown_date"
@@ -355,7 +400,10 @@ class PreviewService:
                 perceptual=config.duplicate_perceptual_enabled,
                 threshold=config.duplicate_perceptual_threshold,
                 destination_registry=dest_registry,
+                cancel_token=cancel_token,
             )
+            dup_evaluation = match.evaluation
+            dup_unknown_reason = match.unknown_reason
             if match.is_duplicate:
                 # Match scope → status/folder, exactly like the sort:
                 # run → _duplicates/, destination → _already_in_destination/.
@@ -378,6 +426,11 @@ class PreviewService:
                     duplicate_of=dup_of,
                     scope=match.scope or "run",
                 )
+            elif match.evaluation == "unknown":
+                # The real sort samples video frames and may route this file as
+                # a duplicate. Do not promise a date destination in preview.
+                status = "duplicate_unknown"
+                dest = None
             else:
                 category = self._classify(file_path, config, classifier)
                 status, dest = self._build_dest_path(
@@ -431,6 +484,8 @@ class PreviewService:
             "duplicate_type": dup_type,
             "duplicate_similarity": dup_similarity,
             "duplicate_of": dup_of,
+            "duplicate_evaluation": dup_evaluation,
+            "duplicate_unknown_reason": dup_unknown_reason,
         }
 
     # ------------------------------------------------------------------ #
@@ -489,6 +544,7 @@ class PreviewService:
         perceptual: bool = True,
         threshold: int = 95,
         destination_registry: DuplicateRegistry | None = None,
+        cancel_token: Any | None = None,
     ) -> DuplicateMatch:
         """Non-destructive duplicate check via DuplicateService.
 
@@ -507,6 +563,9 @@ class PreviewService:
                 threshold=threshold,
                 sample_video=False,
                 destination_registry=destination_registry,
+                cancel_token=cancel_token,
             )
+        except DuplicateCheckCancelled:
+            raise
         except Exception:
             return DuplicateMatch(False)

@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 
@@ -109,7 +109,7 @@ def config_set(
 ) -> None:
     """Update one or more configuration values."""
     client: APIClient = ctx.obj["client"]
-    updates: dict = {}
+    updates: dict[str, Any] = {}
     if source_directory is not None:
         updates["source_directory"] = source_directory
     if target_directory is not None:
@@ -161,12 +161,54 @@ def config_validate(ctx: click.Context) -> None:
 def scan(ctx: click.Context) -> None:
     """List media files found in the configured source directory."""
     client: APIClient = ctx.obj["client"]
+    task_id: str | None = None
     try:
-        result = client.scan_source()
+        task_id = client.start_scan()
+        envelope = _poll_operation(client, "scan", task_id)
+        result = envelope.get("result") or {}
         total = result.get("total", 0)
         click.echo(f"Found {total} media file(s):")
+        if total == 0:
+            click.echo("No supported files matched the current scan settings.")
         for f in result.get("files", []):
             click.echo(f"  {f}")
+        _show_partial(envelope)
+    except KeyboardInterrupt:
+        if task_id:
+            client.cancel_scan(task_id)
+        click.echo("\nCancellation requested.")
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+# ------------------------------------------------------------------ #
+# analyze command                                                        #
+# ------------------------------------------------------------------ #
+
+
+@cli.command()
+@click.pass_context
+def analyze(ctx: click.Context) -> None:
+    """Analyze the source through the shared background task transport."""
+    client: APIClient = ctx.obj["client"]
+    task_id: str | None = None
+    try:
+        task_id = client.start_analysis()
+        envelope = _poll_operation(client, "analysis", task_id)
+        result = envelope.get("result") or {}
+        click.echo(f"Files: {result.get('total_files', 0)}")
+        if result.get("total_files", 0) == 0:
+            click.echo("No supported files matched the current analysis settings.")
+        click.echo(f"Bytes: {result.get('total_size_bytes', 0)}")
+        click.echo(f"Excluded: {result.get('excluded_files', 0)}")
+        for warning in result.get("warnings", []):
+            click.echo(f"Warning: {warning}")
+        _show_partial(envelope)
+    except KeyboardInterrupt:
+        if task_id:
+            client.cancel_analysis(task_id)
+        click.echo("\nCancellation requested.")
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -182,22 +224,16 @@ def scan(ctx: click.Context) -> None:
 def preview(ctx: click.Context) -> None:
     """Show a dry-run preview of what the sort would do."""
     client: APIClient = ctx.obj["client"]
+    task_id: str | None = None
     try:
-        # Use the background-task flow + polling rather than the synchronous
-        # endpoint: a large library easily exceeds the HTTP client's 30 s timeout
-        # on the single blocking request, whereas polling never times out.
         task_id = client.start_preview()
-        while True:
-            data = client.get_preview_progress(task_id)
-            status = data["status"]
-            if status == "completed":
-                click.echo(format_preview(data.get("result") or {}))
-                break
-            if status in ("failed", "cancelled"):
-                msg = data.get("error") or f"preview {status}"
-                click.echo(f"Error: {msg}", err=True)
-                sys.exit(1)
-            time.sleep(0.5)
+        envelope = _poll_operation(client, "preview", task_id)
+        click.echo(format_preview(envelope.get("result") or {}))
+        _show_partial(envelope)
+    except KeyboardInterrupt:
+        if task_id:
+            client.cancel_preview(task_id)
+        click.echo("\nCancellation requested.")
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -330,6 +366,53 @@ def report_export(
 # ------------------------------------------------------------------ #
 # Private helpers                                                        #
 # ------------------------------------------------------------------ #
+
+
+def _poll_operation(
+    client: APIClient,
+    kind: str,
+    task_id: str,
+    *,
+    interval: float = 0.5,
+) -> dict[str, Any]:
+    """Poll a task without restarting it; return its terminal envelope."""
+    getter = {
+        "scan": client.get_scan_progress,
+        "analysis": client.get_analysis_progress,
+        "preview": client.get_preview_progress,
+        "sort": client.get_sorting_progress,
+    }[kind]
+    last_sequence = 0
+    last_phase: str | None = None
+    while True:
+        data = getter(task_id, after_sequence=last_sequence)
+        last_sequence = max(last_sequence, int(data.get("last_event_sequence", 0)))
+        progress = data.get("progress") or {}
+        phase = progress.get("phase")
+        if phase and phase != last_phase:
+            click.echo(f"{str(phase).replace('_', ' ').capitalize()}…")
+            last_phase = str(phase)
+        status = data.get("status")
+        if status == "completed":
+            return data
+        if status == "failed":
+            failure = data.get("failure") or {}
+            message = failure.get("message") or data.get("error") or f"{kind} failed"
+            code = failure.get("code")
+            raise RuntimeError(f"{message} [{code}]" if code else str(message))
+        if status == "cancelled":
+            raise RuntimeError(f"{kind.capitalize()} was cancelled.")
+        time.sleep(interval)
+
+
+def _show_partial(envelope: dict[str, Any]) -> None:
+    """Surface partial traversal results without dumping every path by default."""
+    if not envelope.get("partial"):
+        return
+    issues = envelope.get("issues") or []
+    click.echo(
+        f"Warning: result is partial ({len(issues)} inaccessible path(s)).", err=True
+    )
 
 
 def _watch_task(client: APIClient, task_id: str) -> None:
