@@ -25,7 +25,9 @@ services:
         target: /media/dest
     environment:
       MEDIASORT_CONFIG_DIR: /config
+      MEDIASORT_DATA_DIR: /config
       MEDIASORT_DB_PATH: /config/mediasort.db
+      MEDIASORT_LOG_DIR: /config/logs
       MEDIASORT_LOG_LEVEL: "${MEDIASORT_LOG_LEVEL:-INFO}"
       # Uncomment to pre-configure source/dest inside the container:
       # MEDIASORT_SOURCE_DIRECTORY: /media/source

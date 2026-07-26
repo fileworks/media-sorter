@@ -78,19 +78,18 @@ The current `v1.0.6` installers are unsigned, so the first launch may warn you:
 - **macOS** — right-click → **Open** → **Open**.
 - **Windows** — SmartScreen → **More info** → **Run anyway**.
 
-Your config and history live in `~/Library/Application Support/mediasort/` (macOS) or
-`%APPDATA%\mediasort\` (Windows).
+State now follows stable `PlatformDirs("MediaSorter", appauthor=False)` roots:
 
-If something goes wrong on startup, check the log files:
+| Platform | Config | History database | Logs |
+|---|---|---|---|
+| macOS | `~/Library/Application Support/MediaSorter/config.json` | `~/Library/Application Support/MediaSorter/mediasort.db` | `~/Library/Logs/MediaSorter/` |
+| Windows | `%LOCALAPPDATA%\MediaSorter\config.json` | `%LOCALAPPDATA%\MediaSorter\mediasort.db` | `%LOCALAPPDATA%\MediaSorter\Logs\` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/MediaSorter/config.json` | `${XDG_DATA_HOME:-~/.local/share}/MediaSorter/mediasort.db` | `${XDG_STATE_HOME:-~/.local/state}/MediaSorter/log/` |
 
-| Platform | Path |
-|----------|------|
-| macOS | `~/Library/Logs/MediaSorter/` |
-| Windows | `%APPDATA%\MediaSorter\logs\` |
-| Linux | `~/.local/share/mediasort/logs/` |
-
-`mediasort.log` covers the launcher (port negotiation, process start/stop);
-`backend.log` covers the Python backend (startup errors, sort activity).
+`mediasort.log` covers the launcher; `backend.log` covers Python. Historical
+lowercase state is copied non-destructively on first startup, with conflicts and
+recovery files preserved. See
+[state paths, migration, and recovery](docs/state-and-recovery.md).
 
 ---
 
@@ -119,6 +118,8 @@ in the local file.
 📖 **[docs/development.md](docs/development.md)** — setup, testing, building, and the
 release flow in full.
 🏗️ **[docs/design.md](docs/design.md)** — architecture and the *why* behind the design.
+🔏 **[docs/release-signing.md](docs/release-signing.md)** — optional signing,
+verification, and manual enrollment gates.
 The live API is self-documenting at `http://127.0.0.1:<port>/api/docs` (OpenAPI).
 
 ### How it's built
@@ -179,8 +180,10 @@ with `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_SOURCE_DIRECTORY`, `MEDIASORT_AI_TAGGI
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MEDIASORT_CONFIG_DIR` | platform config dir | Redirects both `config.json` and `mediasort.db` (handy for Docker / parallel envs) |
-| `MEDIASORT_DB_PATH` | `<config dir>/mediasort.db` | Overrides just the SQLite path (parent dir is created if missing) |
+| `MEDIASORT_CONFIG_DIR` | platform config dir | Redirects `config.json`; also keeps the legacy shared data/database behavior when no newer data/database override is set |
+| `MEDIASORT_DATA_DIR` | platform non-roaming data dir | Redirects data and the default parent of `mediasort.db` |
+| `MEDIASORT_DB_PATH` | `<data dir>/mediasort.db` | Overrides the exact SQLite path |
+| `MEDIASORT_LOG_DIR` | platform log dir | Redirects both launcher and backend logs |
 | `MEDIASORT_PORT` | `8000` | Port the backend binds to |
 | `MEDIASORT_LOG_LEVEL` | `INFO` | Backend log level: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `MEDIASORT_DEBUG` | `false` | Enables verbose/debug server behaviour |

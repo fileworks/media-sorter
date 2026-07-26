@@ -57,7 +57,9 @@ EXPOSE 8000
 VOLUME ["/config"]
 
 ENV MEDIASORT_CONFIG_DIR=/config \
-    MEDIASORT_DB_PATH=/config/mediasort.db
+    MEDIASORT_DATA_DIR=/config \
+    MEDIASORT_DB_PATH=/config/mediasort.db \
+    MEDIASORT_LOG_DIR=/config/logs
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c \

@@ -1,13 +1,16 @@
-.PHONY: install install-rust check-deps generate-icons dev backend frontend \
+.PHONY: install install-rust check-deps branding branding-check generate-icons dev backend frontend \
         test test-cov test-ci test-unit test-integration test-e2e test-services test-api \
         lint typecheck format clean \
         bundle-backend bundle-ffmpeg bundle-clip bundle-siglip bundle-portable \
-        build build-tauri release \
+        build build-tauri release release-preflight release-prepare release-finalize \
         ci help
+.NOTPARALLEL: release
 
 BACKEND   := backend
 FRONTEND  := frontend
 TAURI_RES := $(FRONTEND)/src-tauri/resources
+RELEASE_STATE := $(FRONTEND)/src-tauri/target/release-signing-state.json
+PAYLOAD_SNAPSHOT := $(FRONTEND)/src-tauri/target/release-payload-snapshot.json
 
 # Python on Windows defaults stdout to cp1252, which cannot encode the arrows and
 # check marks (↓ → ✓) our build scripts print — a decorative character in a
@@ -41,11 +44,13 @@ FFMPEG_WIN_TAG ?= latest
 # compile — see the `release` target.)
 ifeq ($(OS),Windows_NT)
   DETECTED_OS := Windows
+  RELEASE_PLATFORM := windows
   VENV_BIN    := Scripts
   EXE         := .exe
   SYS_PYTHON  := python
 else
   DETECTED_OS := $(shell uname -s)
+  RELEASE_PLATFORM := $(if $(filter Darwin,$(DETECTED_OS)),macos,linux)
   VENV_BIN    := bin
   EXE         :=
   SYS_PYTHON  := python3
@@ -78,7 +83,8 @@ help:
 	@echo "  make check-deps         Verify all required tools are installed"
 	@echo "  make install            Install all dependencies (backend + frontend)"
 	@echo "  make install-rust       Install the Rust toolchain via rustup"
-	@echo "  make generate-icons     Regenerate app icons (requires Pillow: pip install pillow)"
+	@echo "  make branding           Regenerate app and installer artwork from branding/app-icon.png"
+	@echo "  make branding-check     Verify tracked branding is deterministic and fresh"
 	@echo ""
 	@echo "Development (requires Python, Node, Rust; ffmpeg on PATH only for media ops):"
 	@echo "  make dev                Start backend + Tauri dev in one terminal (hot-reload)"
@@ -165,10 +171,17 @@ install-rust:
 		echo "Then re-run: make install"; \
 	fi
 
-generate-icons:
-	@echo "==> Generating app icons …"
-	$(PYTHON) scripts/generate_icons.py
-	@echo "✓ Icons written to frontend/src-tauri/icons/"
+branding:
+	@echo "==> Generating app and installer branding …"
+	$(PYTHON) scripts/generate_branding.py
+	@echo "✓ Branding written to frontend/src-tauri/icons and installer"
+
+branding-check:
+	$(PYTHON) scripts/generate_branding.py --check
+
+# Backwards-compatible command name; all output now comes from the approved
+# canonical source rather than the historical procedural icon generator.
+generate-icons: branding
 
 install:
 	@# Rust check — give an actionable error rather than a cryptic Cargo message later.
@@ -251,7 +264,7 @@ format:
 
 # ── CI gate ───────────────────────────────────────────────────────────────────
 
-ci: lint typecheck test-ci
+ci: branding-check lint typecheck test-ci
 	@echo ""
 	@echo "✓ All CI checks passed"
 
@@ -398,7 +411,10 @@ endif
 # To ship every OS from one place, push a `v*` tag and let the GitHub Actions
 # matrix build each one natively (see .github/workflows/release.yml).
 
-release: check-deps bundle-backend bundle-ffmpeg bundle-clip build-tauri bundle-portable
+release: check-deps branding-check bundle-backend bundle-ffmpeg bundle-clip release-prepare build-tauri release-finalize bundle-portable
+	$(PYTHON) scripts/release_integrity.py verify \
+		--platform "$(RELEASE_PLATFORM)" \
+		--state "$(RELEASE_STATE)"
 	@echo ""
 	@echo "✓✓✓ Release build complete for $(DETECTED_OS)! ✓✓✓"
 	@echo ""
@@ -421,6 +437,33 @@ release: check-deps bundle-backend bundle-ffmpeg bundle-clip build-tauri bundle-
 	@echo "   GitHub Actions then builds macOS + Windows natively in parallel."
 
 # ── Tauri desktop build (assumes resources are bundled in resources/) ────────
+
+# Signing is intentionally split around the immutable Tauri packaging step:
+# permissions and nested payload signatures are finalized first, then a
+# snapshot proves no source payload changed while Tauri built the outer
+# packages. Complete credential sets make signing/verification mandatory;
+# absent credentials remain explicitly unsigned; partial sets fail here.
+release-preflight:
+	$(PYTHON) scripts/release_integrity.py preflight \
+		--platform "$(RELEASE_PLATFORM)" \
+		--output "$(RELEASE_STATE)"
+
+release-prepare: release-preflight
+	$(PYTHON) scripts/release_integrity.py normalize \
+		--platform "$(RELEASE_PLATFORM)"
+	$(PYTHON) scripts/release_integrity.py sign-nested \
+		--state "$(RELEASE_STATE)"
+	$(PYTHON) scripts/release_integrity.py snapshot \
+		--output "$(PAYLOAD_SNAPSHOT)"
+
+release-finalize:
+	$(PYTHON) scripts/release_integrity.py verify-snapshot \
+		--snapshot "$(PAYLOAD_SNAPSHOT)"
+	$(PYTHON) scripts/release_integrity.py sign-outer \
+		--state "$(RELEASE_STATE)"
+	mkdir -p "$(FRONTEND)/src-tauri/target/release/bundle"
+	cp "$(RELEASE_STATE)" \
+		"$(FRONTEND)/src-tauri/target/release/bundle/release-signing-state.json"
 
 build-tauri:
 	@# Check Cargo is available (look in the augmented PATH so users who have
@@ -445,16 +488,11 @@ build-tauri:
 		exit 1; \
 	fi
 	@echo "Building Tauri app…"
-	cd $(FRONTEND) && PATH="$(DEV_PATH)" npm run tauri build
-	@# macOS post-processing only — these blocks no-op on Windows/Linux (the .app
-	@# path won't exist there, and the unmount is guarded by a uname check).
-	@# Fix executable permissions after Tauri bundling (Tauri resets them)
-	@if [ -f "$(FRONTEND)/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/backend/mediasort-backend" ]; then \
-		chmod 755 "$(FRONTEND)/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/backend/mediasort-backend"; \
-		chmod 755 "$(FRONTEND)/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/ffmpeg/ffmpeg"; \
-		chmod 755 "$(FRONTEND)/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/ffmpeg/ffprobe"; \
-		echo "✓ Fixed executable permissions in .app bundle"; \
-	fi
+	cd $(FRONTEND) && \
+		if [ -z "$$APPLE_SIGNING_IDENTITY" ]; then unset APPLE_SIGNING_IDENTITY; fi; \
+		PATH="$(CURDIR)/$(BACKEND)/.venv/$(VENV_BIN):$(DEV_PATH)" \
+		PYTHONPATH="$(CURDIR)" \
+		npm run tauri build
 	@# Unmount DMG if it was auto-mounted (macOS Finder behavior)
 	@if [ "$$(uname)" = "Darwin" ]; then \
 		for mount in /Volumes/MediaSorter*; do \

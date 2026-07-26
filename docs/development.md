@@ -10,7 +10,7 @@ way it is, see [design.md](design.md).
 ```
 backend/    FastAPI app (app/) + tests/ — the brains
 frontend/   React + TS UI, with src-tauri/ (the Rust shell) inside
-scripts/    build helpers (fetch_ffmpeg, generate_icons, sync-version, …)
+scripts/    build helpers (fetch_ffmpeg, generate_branding, sync-version, …)
 cli/        optional CLI that drives the backend API
 docs/       these docs
 Makefile    every dev/build command
@@ -123,19 +123,22 @@ different path.
 
 ## Debugging
 
-Both the Rust shell and the Python backend write to a shared log directory:
+Both the Rust shell and the Python backend write to the current shared log root:
 
 | Platform | Path |
 |----------|------|
 | macOS | `~/Library/Logs/MediaSorter/` |
-| Windows | `%LOCALAPPDATA%\MediaSorter\logs\` (`%APPDATA%` fallback) |
-| Linux | `~/.local/share/mediasort/logs/` |
+| Windows | `%LOCALAPPDATA%\MediaSorter\Logs\` |
+| Linux | `${XDG_STATE_HOME:-~/.local/state}/MediaSorter/log/` |
 
 `mediasort.log` contains the Rust shell's startup/port-negotiation events.
 `backend.log` contains structured JSON log lines from the Python backend (one
 `structlog` JSON entry per line). It rotates at 5 MiB and retains three backups
 plus the active file (about 20 MiB maximum). A file-handler failure is non-fatal,
 so startup and console logging continue.
+
+Configuration, data, database, log, legacy migration, conflict, and recovery
+paths are listed exactly in [state-and-recovery.md](state-and-recovery.md).
 
 ---
 
@@ -148,6 +151,13 @@ the next version, updates `CHANGELOG.md`, syncs that version everywhere
 and pushes a `v<version>` tag. That tag triggers the release workflow, which
 builds every OS natively — macOS arm64 + Intel `.dmg`, Windows `.msi` + `.exe` —
 and uploads them to a GitHub Release.
+
+Tag builds create draft releases. Artifact type/content checks, packaged
+backend/ffmpeg smoke tests, controlled native startup recovery, checksums, and
+the declared signed/unsigned state must pass before upload. The release stays
+draft until the [clean-machine checklist](release-smoke-checklist.md) is
+recorded. Signing is optional but a partial credential set fails before
+packaging; see [release-signing.md](release-signing.md).
 
 The backend version is single-sourced from `backend/app/_version.py` (pyproject
 reads it via hatchling's dynamic-version hook), so the running app always reports

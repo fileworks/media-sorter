@@ -14,6 +14,8 @@ from app.core.config import Config, ConfigLoader
 from app.core.database import DatabaseManager
 from app.core.exceptions import MediaSortException
 from app.core.logging_config import capture_main_loop, get_logger, setup_logging
+from app.core.paths import resolve_app_paths
+from app.core.state_migration import migrate_legacy_state
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import TaskManager
@@ -370,6 +372,8 @@ class AppFactory:
 
     @staticmethod
     def create(config: Config | None = None) -> FastAPI:
+        paths = resolve_app_paths()
+        migrate_legacy_state(paths)
         if config is None:
             loader = ConfigLoader()
             config = loader.load()
