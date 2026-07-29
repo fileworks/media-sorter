@@ -1,11 +1,13 @@
 """Tests for FileSystemService safe copy/move and directory helpers."""
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app.core.exceptions import SortingError
+from app.services import verified_transfer
 from app.services.filesystem_service import (
     HEIC_EXTENSIONS,
     IMAGE_EXTENSIONS,
@@ -63,36 +65,35 @@ def test_safe_copy_verification_catches_mismatch(
     src.write_text("abc")
     dst = tmp_path / "dst.txt"
 
-    # Simulate a truncated destination by patching stat on the destination
-    original_stat = Path.stat
+    # Simulate storage that silently returns different bytes than were written.
+    def corrupt_stage(path: Path, **_kwargs: object) -> tuple[str, int]:
+        return "0" * 64, path.stat().st_size
 
-    def fake_stat(self: Path, **kwargs: object) -> object:
-        real = original_stat(self, **kwargs)
-        if self == dst:
-            import os
+    monkeypatch.setattr(verified_transfer, "stream_sha256", corrupt_stage)
 
-            return os.stat_result(
-                (
-                    real.st_mode,
-                    real.st_ino,
-                    real.st_dev,
-                    real.st_nlink,
-                    real.st_uid,
-                    real.st_gid,
-                    0,  # wrong size
-                    real.st_atime,
-                    real.st_mtime,
-                    real.st_ctime,
-                )
-            )
-        return real
-
-    monkeypatch.setattr(Path, "stat", fake_stat)
-
-    with pytest.raises(SortingError, match="Verification failed"):
+    with pytest.raises(SortingError) as error:
         svc.safe_copy(src, dst, verify=True)
 
-    assert not dst.exists(), "Partial file should be cleaned up"
+    assert error.value.details["reason"] == "stage_hash_mismatch"
+    assert not dst.exists(), "Unverified content must never reach the destination"
+    assert not list(tmp_path.glob(".*ms-stage-*")), "Stage should be cleaned up"
+
+
+def test_safe_copy_reports_verified_content_identity(
+    tmp_path: Path, svc: FileSystemService
+) -> None:
+    src = tmp_path / "src.bin"
+    content = b"content identity"
+    src.write_bytes(content)
+    dst = tmp_path / "dst.bin"
+
+    result = svc.safe_copy(src, dst)
+
+    assert result.integrity is not None
+    assert result.integrity.verified is True
+    assert result.integrity.observed_result_sha256 == hashlib.sha256(content).hexdigest()
+    assert result.source_removed is False
+    assert result.source_safety == "redundant_verified_copies"
 
 
 # ------------------------------------------------------------------ #

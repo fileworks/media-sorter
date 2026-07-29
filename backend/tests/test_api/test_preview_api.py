@@ -74,9 +74,20 @@ def test_preview_response_structure(client: TestClient, tmp_path: Path) -> None:
 
     assert "items" in data
     assert "stats" in data
+    assert data["plan_id"].startswith("sortplan_")
+    assert data["impact"]["copy_count"] + data["impact"]["move_count"] == 1
+    assert len(data["config_fingerprint"]) == 64
     assert "total" in data["stats"]
     assert "will_sort" in data["stats"]
     assert "will_fail" in data["stats"]
+    reviewed = client.post(
+        "/api/review/outcomes",
+        json={"paths": [str(img)]},
+    )
+    assert reviewed.status_code == 200
+    review_outcome = reviewed.json()["outcomes"][0]
+    assert review_outcome["resolved_date"] == "2023-12-25"
+    assert review_outcome["candidates"] == data["items"][0]["provenance"]["date"]["candidates"]
 
 
 def test_preview_does_not_create_files(client: TestClient, tmp_path: Path) -> None:

@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import ts from "typescript";
+import catalogPanelSource from "@/components/CatalogPanel.tsx?raw";
+import operationCenterSource from "@/components/OperationCenter.tsx?raw";
+import quarantineManagerSource from "@/components/QuarantineManager.tsx?raw";
+import reviewWorkbenchSource from "@/components/ReviewWorkbench.tsx?raw";
+import sourcesPanelSource from "@/components/SourcesPanel.tsx?raw";
+import validationPanelSource from "@/components/ValidationPanel.tsx?raw";
 import { de, en } from "@/i18n/messages";
 import { storedLocale, translate } from "@/i18n/I18nContext";
 import { formatBytes, formatCount, formatDuration } from "@/lib/formatters";
@@ -74,5 +81,42 @@ describe("English/German resources", () => {
     expect(formatMetadataSource("custom_source", (key) => translate("de", key))).toBe(
       "custom source",
     );
+  });
+
+  it("keeps every newly reachable staged panel free of raw English UI text", () => {
+    const panels = {
+      "SourcesPanel.tsx": sourcesPanelSource,
+      "ReviewWorkbench.tsx": reviewWorkbenchSource,
+      "ValidationPanel.tsx": validationPanelSource,
+      "CatalogPanel.tsx": catalogPanelSource,
+      "QuarantineManager.tsx": quarantineManagerSource,
+      "OperationCenter.tsx": operationCenterSource,
+    };
+    for (const [panel, source] of Object.entries(panels)) {
+      const sourceFile = ts.createSourceFile(
+        panel,
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      const rawText: string[] = [];
+      const visit = (node: ts.Node) => {
+        if (ts.isJsxText(node)) {
+          const text = node.text.trim();
+          const keyboardShortcut =
+            /^\(?Alt\+[A-Za-z0-9↑↓…]+(?:\s*\/\s*Alt\+[A-Za-z0-9↑↓…]+)?\)?$/.test(
+              text,
+            );
+          if (/[A-Za-z]/.test(text) && !keyboardShortcut) rawText.push(text);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sourceFile);
+      expect(rawText, panel).toEqual([]);
+      expect(source, panel).not.toMatch(
+        /t\(\s*["'][^"']+["']\s*,\s*undefined\s*,\s*["'][A-Za-z]/,
+      );
+    }
   });
 });

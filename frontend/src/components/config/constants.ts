@@ -111,6 +111,7 @@ export const SECTION_DEFAULTS = {
     sort: true,
     sort_criteria: ["year"],
     copy_instead_of_move: false,
+    companion_handling: "keep_with_primary" as const,
   },
   folders: {
     camera_subfolder_enabled: false,
@@ -126,6 +127,10 @@ export const SECTION_DEFAULTS = {
     duplicate_exact_enabled: true,
     duplicate_perceptual_enabled: true,
     duplicate_perceptual_threshold: 95,
+    burst_detection_enabled: false,
+    burst_time_window_seconds: 3,
+    burst_perceptual_distance: 4,
+    burst_require_camera_identity: true,
   },
   rename: {
     rename: false,
@@ -171,6 +176,8 @@ export const SECTION_DEFAULTS = {
   other: {
     override_metadata: false,
     repair_enabled: true,
+    thumbnail_cache_enabled: true,
+    thumbnail_cache_budget_bytes: 512 * 1024 * 1024,
   },
 } satisfies Record<string, Partial<Config>>;
 

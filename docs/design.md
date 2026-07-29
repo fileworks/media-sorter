@@ -19,8 +19,17 @@ Python backend on it, and tells the React frontend where to find it via
 `invoke("get_api_port")`. The UI then talks to the backend over plain HTTP plus a
 WebSocket for the live log stream. No port is ever hardcoded.
 
-The five-step wizard — Configure → Analyse → Preview → Sort → Report — is the
-whole UX.
+The interface has one navigation model: **Sources → Review → Execute**.
+Sources owns typed roots, recipes, configuration, and the non-mutating scan.
+Review owns overview, organization, exact duplicates, similar media,
+validation, and issues. Execute owns the frozen impact summary, deliberate
+confirmation, live operation state, and report. The operation center remains
+reachable across all three stages.
+
+Stage readiness and back-navigation invalidation are derived from the typed
+model in `frontend/src/lib/stageModel.ts`; panels do not invent their own entry
+rules. Empty, loading, error, and blocked screens use one `StateView` contract,
+and large lists/grids share `useVirtualWindow`.
 
 ---
 

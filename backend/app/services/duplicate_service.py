@@ -60,6 +60,9 @@ class DuplicateMatch:
     scope: str | None = None
     evaluation: Literal["known", "unknown"] = "known"
     unknown_reason: str | None = None
+    # The SHA-256 computed during this check, when exact matching ran. Callers
+    # reuse it to authorize the file's placement without a second full read.
+    content_sha256: str | None = None
 
 
 @dataclass
@@ -139,6 +142,18 @@ class DuplicateRegistry:
     videos: list[_VideoSig] = field(default_factory=list)
     image_index: _HammingIndex | None = field(default=None, repr=False)
     video_indexes: list[_HammingIndex] = field(default_factory=list, repr=False)
+    #: Optional disk-backed fallback for exact lookups. A destination registry
+    #: built this way answers "have I already got these bytes?" from the
+    #: persistent catalog's index instead of holding every hash in memory,
+    #: which is the difference between a large library working and not.
+    exact_lookup: Callable[[str], str | None] | None = field(default=None, repr=False)
+
+    def find_exact(self, sha256: str) -> str | None:
+        """First-seen path for this content, from memory or from the catalog."""
+        seen = self.exact.get(sha256)
+        if seen is not None:
+            return seen
+        return None if self.exact_lookup is None else self.exact_lookup(sha256)
 
     def build_perceptual_indexes(self) -> None:
         self.image_index = _HammingIndex()
@@ -231,16 +246,13 @@ class DuplicateService:
             except OSError as exc:
                 logger.warning("Could not hash file", path=str(file_path), error=str(exc))
                 return DuplicateMatch(False)
-            if destination_registry is not None and h in destination_registry.exact:
-                return DuplicateMatch(
-                    True,
-                    "exact",
-                    100,
-                    destination_registry.exact[h],
-                    scope="destination",
-                )
-            if h in registry.exact:
-                return DuplicateMatch(True, "exact", 100, registry.exact[h], scope="run")
+            if destination_registry is not None:
+                already_there = destination_registry.find_exact(h)
+                if already_there is not None:
+                    return DuplicateMatch(True, "exact", 100, already_there, scope="destination")
+            seen_this_run = registry.find_exact(h)
+            if seen_this_run is not None:
+                return DuplicateMatch(True, "exact", 100, seen_this_run, scope="run")
 
         # 2. Perceptual
         #
@@ -297,6 +309,7 @@ class DuplicateService:
                         False,
                         evaluation="unknown",
                         unknown_reason="video_perceptual_not_computed",
+                        content_sha256=h,
                     )
                 video_sig = self.video_signature(file_path, cancel_token=cancel_token)
                 if video_sig is not None:
@@ -323,7 +336,7 @@ class DuplicateService:
 
         if h is not None:
             registry.exact[h] = str(file_path)
-        return DuplicateMatch(False)
+        return DuplicateMatch(False, content_sha256=h)
 
     def _match_and_label(
         self,

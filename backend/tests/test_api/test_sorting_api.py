@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import time
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app.background_tasks.task_manager import Task
 from app.core.bootstrap import AppFactory
 from app.core.config import Config
+from app.core.config_fingerprint import config_fingerprint
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +44,67 @@ def test_start_sorting_dry_run_flag_accepted(client: TestClient) -> None:
 def test_start_sorting_default_not_dry_run(client: TestClient) -> None:
     response = client.post("/api/sorting/start", json={})
     assert response.status_code == 200
+
+
+def test_changed_config_invalidates_reviewed_preview(client: TestClient) -> None:
+    container = client.app.state.container  # type: ignore[attr-defined]
+    original_sort = container.config.sort
+    reviewed_fingerprint = config_fingerprint(container.config)
+    try:
+        changed = client.post("/api/config", json={"sort": not original_sort})
+        assert changed.status_code == 200
+        response = client.post(
+            "/api/sorting/start",
+            json={
+                "dry_run": True,
+                "expected_config_fingerprint": reviewed_fingerprint,
+            },
+        )
+        assert response.status_code == 409
+        assert response.json()["details"]["reason"] == "stale_preview"
+    finally:
+        client.post("/api/config", json={"sort": original_sort})
+
+
+def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-photo.jpg")
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        missing = local.post(
+            "/api/sorting/start",
+            json={"dry_run": False, "plan_id": "sortplan_missing"},
+        )
+        accepted = local.post(
+            "/api/sorting/start",
+            json={
+                "dry_run": False,
+                "expected_config_fingerprint": preview["config_fingerprint"],
+                "plan_id": preview["plan_id"],
+            },
+        )
+        task_id = accepted.json()["task_id"]
+        status = local.get(f"/api/sorting/{task_id}").json()
+        deadline = time.time() + 10
+        while time.time() < deadline and status["status"] in {"pending", "running"}:
+            time.sleep(0.05)
+            status = local.get(f"/api/sorting/{task_id}").json()
+
+    assert accepted.status_code == 200
+    assert missing.status_code == 409
+    assert missing.json()["details"]["reason"] == "missing_plan"
+    assert status["status"] == "completed"
+    assert Path(preview["items"][0]["destination"]).is_file()
 
 
 # ------------------------------------------------------------------ #

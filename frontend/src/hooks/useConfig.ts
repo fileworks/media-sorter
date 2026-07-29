@@ -43,7 +43,12 @@ export function useConfig() {
 
   // Destructure mutate so the useCallback dependency is the stable function
   // reference, not the mutation object (which changes on every render).
-  const { mutate } = useMutation({
+  const {
+    mutate,
+    error: saveError,
+    isPending: isSaving,
+    variables: lastSavePatch,
+  } = useMutation({
     mutationFn: (patch: Partial<Config>) => api.saveConfig(patch),
     // Serialize saves under a shared scope so two quick edits (each a partial
     // merge on the backend) run in call order. Without this, retries can let an
@@ -61,6 +66,9 @@ export function useConfig() {
   });
 
   const updateConfig = useCallback((patch: Partial<Config>) => mutate(patch), [mutate]);
+  const retrySave = useCallback(() => {
+    if (lastSavePatch) mutate(lastSavePatch);
+  }, [lastSavePatch, mutate]);
 
   const resetConfig = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: CONFIG_KEY });
@@ -82,7 +90,10 @@ export function useConfig() {
     validationWarnings: validationResult?.warnings ?? [],
     fieldErrors,
     error,
+    saveError,
+    isSaving,
     updateConfig,
+    retrySave,
     resetConfig,
   };
 }

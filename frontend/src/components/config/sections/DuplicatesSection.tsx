@@ -68,6 +68,48 @@ export function DuplicatesSection({ config, updateConfig }: SectionProps) {
           </p>
         </div>
       )}
+
+      <FormRow label={t("config.bursts.detect")} htmlFor="detect-bursts" inline>
+        <Toggle
+          id="detect-bursts"
+          checked={config.burst_detection_enabled}
+          onChange={(value) => updateConfig({ burst_detection_enabled: value })}
+        />
+      </FormRow>
+      {config.burst_detection_enabled && (
+        <div className="ml-2 grid gap-3 border-l-2 border-border pl-3 sm:grid-cols-2">
+          <FormRow label={t("config.bursts.window")} htmlFor="burst-window">
+            <input
+              id="burst-window"
+              type="number"
+              min={0.1}
+              max={30}
+              step={0.1}
+              value={config.burst_time_window_seconds}
+              onChange={(event) =>
+                updateConfig({ burst_time_window_seconds: Number(event.target.value) })
+              }
+              className="w-24 rounded border border-border bg-background px-2 py-1 text-sm"
+            />
+          </FormRow>
+          <FormRow label={t("config.bursts.distance")} htmlFor="burst-distance">
+            <input
+              id="burst-distance"
+              type="number"
+              min={0}
+              max={16}
+              value={config.burst_perceptual_distance}
+              onChange={(event) =>
+                updateConfig({ burst_perceptual_distance: Number(event.target.value) })
+              }
+              className="w-24 rounded border border-border bg-background px-2 py-1 text-sm"
+            />
+          </FormRow>
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            {t("config.bursts.reviewFirst")}
+          </p>
+        </div>
+      )}
     </>
   );
 }

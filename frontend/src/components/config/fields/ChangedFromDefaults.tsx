@@ -7,6 +7,7 @@ import type { ConfigDiffEntry } from "@/lib/configDiff";
 interface ChangedFromDefaultsProps {
   entries: ConfigDiffEntry[];
   onResetAll: () => void;
+  onResetKey?: (key: string) => void;
   /** Label for the reset button; defaults to "Reset all". */
   resetLabel?: string;
   disabled?: boolean;
@@ -20,6 +21,7 @@ interface ChangedFromDefaultsProps {
 export function ChangedFromDefaults({
   entries,
   onResetAll,
+  onResetKey,
   resetLabel,
   disabled,
 }: ChangedFromDefaultsProps) {
@@ -72,6 +74,16 @@ export function ChangedFromDefaults({
               <span className="flex items-baseline gap-1.5 text-right">
                 <span className="font-medium text-foreground">{e.current}</span>
                 <span className="text-muted-foreground/60 line-through">{e.default}</span>
+                {onResetKey && !disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onResetKey(e.key)}
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary hover:bg-primary/10"
+                    aria-label={t("settings.resetOne", { label: e.label })}
+                  >
+                    <FiRotateCcw className="h-3 w-3" aria-hidden />
+                  </button>
+                )}
               </span>
             </li>
           ))}

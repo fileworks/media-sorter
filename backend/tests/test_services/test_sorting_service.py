@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+from support import authorize_mutations
 
 from app.background_tasks.task_manager import Task
 from app.core.config import Config
+from app.core.integrity import PreservationProfile
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
 from app.services.duplicate_service import DuplicateMatch, DuplicateRegistry, DuplicateService
@@ -64,6 +66,27 @@ class _FakeTask:
     def __init__(self) -> None:
         self.progress = self._Progress()
         self.cancel_event = asyncio.Event()
+
+
+@pytest.mark.asyncio
+async def test_review_only_configuration_plans_no_transfer_or_mutation(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "photo.jpg").write_bytes(b"media")
+    svc = _make_service(tmp_path, sort=False, remove_duplicates=True)
+
+    with (
+        patch.object(svc._fs, "safe_copy") as copy,
+        patch.object(svc._fs, "safe_move") as move,
+        patch.object(svc, "_process_file") as process,
+    ):
+        stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+
+    assert stats["review_only"] == 1
+    assert stats["sorted"] == 0
+    copy.assert_not_called()
+    move.assert_not_called()
+    process.assert_not_called()
 
 
 # ------------------------------------------------------------------ #
@@ -1255,6 +1278,14 @@ async def test_repair_enabled_true_quarantines_unrepairable_file(tmp_path: Path)
         sort_criteria=["year", "month", "day"],
         copy_instead_of_move=True,
         repair_enabled=True,
+        preservation_profile=PreservationProfile(
+            profile_id="repair-test",
+            name="Repair test",
+            mode="explicit_mutation",
+            allow_repair=True,
+            authorization_origin="run_override",
+            acknowledged_at=datetime.now(timezone.utc),
+        ),
     )
     svc = SortingService(
         config=cfg,
@@ -1549,6 +1580,9 @@ async def test_file_timestamps_set_to_extracted_date(tmp_path: Path) -> None:
     piexif = pytest.importorskip("piexif")
 
     svc = _make_service(tmp_path, copy_instead_of_move=True, remove_duplicates=False)
+    # Writing the extracted date over the original mtime is a deliberate
+    # departure from Organize Only, so the profile has to ask for it.
+    svc._config.preservation_profile = PreservationProfile(preserve_filesystem_timestamps=False)
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
     source_root.mkdir(parents=True)
@@ -1618,6 +1652,8 @@ def _make_ai_service(tmp_path: Path, ai: Any, **overrides: Any) -> SortingServic
     }
     cfg_kwargs.update(overrides)
     cfg = Config(**cfg_kwargs)
+    if cfg.embed_tags_in_files:
+        authorize_mutations(cfg, embedded_metadata=True)
     return SortingService(
         config=cfg,
         config_service=ConfigService(cfg),

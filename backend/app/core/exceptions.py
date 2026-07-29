@@ -67,6 +67,27 @@ class PathOverlapError(MediaSortException):
         )
 
 
+class LibraryProfileError(MediaSortException):
+    """A typed-root profile is incomplete, unavailable, or unsafe."""
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message, "LIBRARY_PROFILE_INVALID", 422, details)
+
+
+class MutationPolicyError(MediaSortException):
+    """Requested media mutations are absent from reviewed profile authorization."""
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message, "MUTATION_NOT_AUTHORIZED", 422, details)
+
+
+class IntegrityTransferError(MediaSortException):
+    """A staged transfer could not prove the active manifest contract."""
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message, "INTEGRITY_TRANSFER_FAILED", 409, details)
+
+
 class SortingError(MediaSortException):
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(message, "SORTING_ERROR", 500, details)

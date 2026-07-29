@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL = Path("branding/app-icon.png")
 APPROVED_SOURCE_SHA256 = (
-    "3dfdbf3dc125a87458415c3755f98106f6c7613e112de8140af5721c66f25041"
+    "b3b68666be2ac794a97f01f2b875a1d86f38331378b3bbc40b6295dc532ae469"
 )
 CANONICAL_SIZE = (1024, 1024)
 

@@ -1,7 +1,6 @@
 """Configuration routes."""
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
@@ -23,7 +22,8 @@ from app.core.config import (
 )
 from app.core.config_sections import SECTIONS
 from app.core.exceptions import ConfigValidationError, MediaSortException
-from app.utils.path_utils import validate_source_root, validate_source_target_overlap
+from app.core.integrity_policy import authorize_config_mutations
+from app.core.library_validation import validate_configured_library
 
 router = APIRouter()
 
@@ -132,6 +132,21 @@ async def save_config(
         coerced["categorize_categories_provenance"] = "custom"
 
     merged = {**config.to_dict(), **coerced}
+    legacy_directory_fields = {
+        "source_directory",
+        "target_directory",
+        "copy_instead_of_move",
+    }
+    if legacy_directory_fields.intersection(coerced) and "library_profile" not in coerced:
+        profile = config.library_profile
+        if profile is None:  # defensive compatibility for hand-built Config instances
+            profile = Config.from_dict(merged).library_profile
+        assert profile is not None
+        merged["library_profile"] = profile.with_legacy_directories(
+            source_directory=str(merged.get("source_directory") or ""),
+            target_directory=str(merged.get("target_directory") or ""),
+            copy_instead_of_move=bool(merged.get("copy_instead_of_move", False)),
+        ).model_dump(mode="json")
     new_config = Config.from_dict(merged)
     # Disk write is blocking — keep it off the event loop.
     await asyncio.to_thread(ConfigLoader().save, new_config)
@@ -176,50 +191,76 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             )
         )
 
-    # ── Source folder ─────────────────────────────────────────────────────────
-    source_root: Path | None = None
-    try:
-        source_root = await asyncio.to_thread(validate_source_root, config.source_directory)
-    except MediaSortException as exc:
-        reason = str(exc.details.get("reason", ""))
-        message_key = {
-            "unset": "config.source.required",
-            "missing": "config.source.not_found",
-            "not_directory": "config.source.not_directory",
-            "root_inaccessible": "config.source.unavailable",
-        }.get(reason, "config.source.unavailable")
+    # ── Typed library roots ────────────────────────────────────────────────────
+    profile = config.library_profile
+    if profile is None or not profile.inputs:
         err(
             "source_directory",
-            exc.message,
-            message_key,
-            {"path": str(exc.details.get("path", config.source_directory or ""))},
+            "Add at least one input folder before continuing.",
+            "config.source.required",
         )
-
-    # ── Destination folder ────────────────────────────────────────────────────
-    if not config.target_directory:
+    if profile is None or profile.destination is None:
         err(
             "target_directory",
             "Pick where your sorted files should go.",
             "config.target.required",
         )
 
-    if source_root is not None and config.target_directory:
+    if profile is not None and profile.inputs and profile.destination is not None:
         try:
             await asyncio.to_thread(
-                validate_source_target_overlap,
-                source_root,
-                config.target_directory,
+                validate_configured_library,
+                config,
+                require_destination=True,
             )
         except MediaSortException as exc:
+            reason = str(exc.details.get("reason", ""))
+            role = str(exc.details.get("role", ""))
+            root_id = str(exc.details.get("root_id", ""))
+            compatibility_profile = len(profile.inputs) == 1 and not profile.references
+            if exc.code == "SOURCE_UNAVAILABLE" or (
+                role == "input" and compatibility_profile and root_id == profile.inputs[0].root_id
+            ):
+                field = "source_directory"
+                message_key = {
+                    "missing": "config.source.not_found",
+                    "not_directory": "config.source.not_directory",
+                    "root_inaccessible": "config.source.unavailable",
+                }.get(reason, "config.source.unavailable")
+            elif role == "destination" and compatibility_profile:
+                field = "target_directory"
+                message_key = "config.target.required"
+            elif reason == "root_overlap" and compatibility_profile:
+                field = "target_directory"
+                message_key = "config.target.overlap"
+            else:
+                field = "library_profile"
+                message_key = "config.profile.invalid"
             err(
-                "target_directory",
+                field,
                 exc.message,
-                "config.target.overlap",
+                message_key,
                 {
-                    "source": str(exc.details.get("source", source_root)),
-                    "target": str(exc.details.get("target", config.target_directory)),
+                    key: value
+                    for key, raw_value in exc.details.items()
+                    if isinstance(raw_value, (str, int, float))
+                    for value in [raw_value]
                 },
             )
+
+    # ── Media mutation authorization ───────────────────────────────────────────
+    try:
+        authorize_config_mutations(config)
+    except MediaSortException as exc:
+        err(
+            "preservation_profile",
+            exc.message,
+            "config.integrity.authorization_required",
+            {
+                "reason": str(exc.details.get("reason", "")),
+                "profile": str(exc.details.get("preservation_profile_id", "")),
+            },
+        )
 
     # Rename pattern: surface unknown/typo'd tokens as a *warning*, not an error.
     # SortingService._apply_rename substitutes only the known tokens and leaves

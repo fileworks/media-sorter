@@ -17,6 +17,7 @@ export function CategorizeConfidenceSlider({
         <span className="text-muted-foreground">{t("config.slider.onlySure")}</span>
       </div>
       <input
+        aria-label={t("config.folder.confident")}
         type="range"
         min={50}
         max={99}

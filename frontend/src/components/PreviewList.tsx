@@ -26,11 +26,11 @@ import type { PreviewItem } from "@/types/api";
 import { type FlatRow, buildFlatRows } from "@/lib/previewRows";
 import { FiArrowUp, FiArrowDown } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
+import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT = 36;
-const OVERSCAN = 20;
 const MAX_CONTAINER_HEIGHT = 520;
 const EMPTY_HEIGHT = 96;
 
@@ -392,7 +392,19 @@ const FileRow: FC<{
             meta={hoverMeta}
             className="min-w-0 w-full"
           >
-            <span className="block truncate text-foreground">{basename}</span>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="truncate text-foreground">{basename}</span>
+              {(item.companions?.length ?? 0) > 0 && (
+                <span
+                  className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-[9px] font-medium text-info"
+                  title={t("preview.unitMembers", {
+                    count: ((item.companions?.length ?? 0) + 1).toLocaleString(locale),
+                  })}
+                >
+                  +{item.companions!.length}
+                </span>
+              )}
+            </span>
           </MediaHoverCard>
         </div>
         <span
@@ -739,7 +751,6 @@ export function PreviewList({
   onSortDirToggle,
 }: PreviewListProps) {
   const { t, locale } = useI18n();
-  const [scrollTop, setScrollTop] = useState(0);
   const [colWidths, setColWidths] = useState<ColWidths>(DEFAULT_COL_WIDTHS);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const colResizing = useRef<{ col: keyof ColWidths; startX: number; startW: number } | null>(null);
@@ -800,6 +811,14 @@ export function PreviewList({
     () => buildFlatRows(items, expanded, sortCriteria, categorizeEnabled),
     [items, expanded, sortCriteria, categorizeEnabled],
   );
+  const windowing = useVirtualWindow({
+    count: flatRows.length,
+    estimateSize: ITEM_HEIGHT,
+    maxHeight: MAX_CONTAINER_HEIGHT,
+    emptyHeight: EMPTY_HEIGHT,
+    overscan: 20,
+    anchorKey: flatRows[0] ? getRowKey(flatRows[0], 0) : null,
+  });
 
   // Precompute the breadcrumb for every row in a single pass so scrolling is an
   // O(1) array lookup. Previously this recomputed the running breadcrumb from
@@ -847,17 +866,10 @@ export function PreviewList({
     breadcrumbs.length === 0
       ? ""
       : breadcrumbs[
-          Math.min(breadcrumbs.length - 1, Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT)))
+          windowing.virtualItems.find(
+            (item) => item.start + item.size > windowing.scrollTop,
+          )?.index ?? 0
         ];
-
-  const totalListHeight = flatRows.length * ITEM_HEIGHT;
-  const hasRows = flatRows.length > 0;
-  const containerHeight = hasRows ? Math.min(totalListHeight, MAX_CONTAINER_HEIGHT) : EMPTY_HEIGHT;
-  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN);
-  const endIndex = Math.min(
-    flatRows.length,
-    Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + OVERSCAN,
-  );
 
   return (
     <>
@@ -900,41 +912,46 @@ export function PreviewList({
 
       {/* Virtual tree */}
       <div
+        ref={windowing.scrollRef}
         style={{
-          height: containerHeight,
-          overflowY: totalListHeight > MAX_CONTAINER_HEIGHT ? "auto" : "hidden",
+          height: windowing.containerHeight,
+          overflowY: windowing.totalSize > MAX_CONTAINER_HEIGHT ? "auto" : "hidden",
         }}
-        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        onScroll={windowing.onScroll}
       >
         {flatRows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {t("preview.noMatches")}
           </div>
         ) : (
-          <div style={{ height: totalListHeight, position: "relative" }}>
-            {flatRows.slice(startIndex, endIndex).map((row, i) => (
-              <div
-                key={getRowKey(row, startIndex + i)}
-                style={{
-                  position: "absolute",
-                  top: (startIndex + i) * ITEM_HEIGHT,
-                  left: 0,
-                  right: 0,
-                  height: ITEM_HEIGHT,
-                }}
-              >
-                <RowRenderer
-                  row={row}
-                  expanded={expanded}
-                  categorizeEnabled={categorizeEnabled}
-                  colWidths={colWidths}
-                  onToggle={onToggle}
-                  onCompare={onCompare}
-                  onOpen={onOpen}
-                  onContextMenu={handleContextMenu}
-                />
-              </div>
-            ))}
+          <div style={{ height: windowing.totalSize, position: "relative" }}>
+            {windowing.virtualItems.map((virtualRow) => {
+              const row = flatRows[virtualRow.index];
+              return (
+                <div
+                  key={getRowKey(row, virtualRow.index)}
+                  ref={windowing.measureElement}
+                  data-virtual-index={virtualRow.index}
+                  style={{
+                    position: "absolute",
+                    top: virtualRow.start,
+                    left: 0,
+                    right: 0,
+                  }}
+                >
+                  <RowRenderer
+                    row={row}
+                    expanded={expanded}
+                    categorizeEnabled={categorizeEnabled}
+                    colWidths={colWidths}
+                    onToggle={onToggle}
+                    onCompare={onCompare}
+                    onOpen={onOpen}
+                    onContextMenu={handleContextMenu}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

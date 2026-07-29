@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.background_tasks.task_manager import Task
+
+
+def _iso(value: datetime | None) -> str | None:
+    return None if value is None else value.isoformat()
 
 
 class TaskStartRequest(BaseModel):
@@ -27,6 +32,23 @@ class TaskProgressData(BaseModel):
     percentage: float
     estimated_time_remaining_seconds: float | None = None
     phase: str | None = None
+
+    #: False means ``total`` is not yet known. Render an indeterminate bar —
+    #: "0%" would claim no progress when the truth is that nothing is countable
+    #: yet.
+    total_known: bool = False
+    unit: str = "items"
+    bytes_done: int = 0
+    bytes_total: int = 0
+    bytes_total_known: bool = False
+    eta_confidence: str = "unknown"
+    last_activity_at: str | None = None
+    last_checkpoint_at: str | None = None
+    last_checkpoint_label: str | None = None
+    outcomes: dict[str, int] = Field(default_factory=dict)
+    cancellation_requested: bool = False
+    cancellation_observed_at: str | None = None
+    recovery_phase: str | None = None
 
 
 class TaskEventResponse(BaseModel):
@@ -70,6 +92,19 @@ class TaskProgressResponse(BaseModel):
                 percentage=task.progress.percentage,
                 estimated_time_remaining_seconds=task.progress.estimated_time_remaining_seconds,
                 phase=task.progress.phase,
+                total_known=task.progress.total_known,
+                unit=task.progress.unit,
+                bytes_done=task.progress.bytes_done,
+                bytes_total=task.progress.bytes_total,
+                bytes_total_known=task.progress.bytes_total_known,
+                eta_confidence=task.progress.eta_confidence,
+                last_activity_at=_iso(task.progress.last_activity_at),
+                last_checkpoint_at=_iso(task.progress.last_checkpoint_at),
+                last_checkpoint_label=task.progress.last_checkpoint_label,
+                outcomes=dict(task.progress.outcomes),
+                cancellation_requested=task.progress.cancellation_requested,
+                cancellation_observed_at=_iso(task.progress.cancellation_observed_at),
+                recovery_phase=task.progress.recovery_phase,
             ),
             partial=task.partial,
             issues=task.issues,

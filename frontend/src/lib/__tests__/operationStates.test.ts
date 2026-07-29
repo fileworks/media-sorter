@@ -54,6 +54,22 @@ describe("operation states", () => {
 
   it("keeps sort disabled for an empty preview", () => {
     const preview: PreviewResult = {
+      config_fingerprint: "fixture",
+      plan_id: "sortplan_fixture",
+      impact: {
+        actionable_groups: 0,
+        copy_count: 0,
+        move_count: 0,
+        quarantine_count: 0,
+        quarantine_bytes: 0,
+        skip_count: 0,
+        source_mutations: 0,
+        required_bytes: 0,
+        conversion_without_originals: 0,
+        companions_left_in_place: 0,
+        embedded_tag_count: 0,
+        unresolved_count: 0,
+      },
       items: [],
       stats: {
         total: 0,

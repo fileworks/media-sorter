@@ -19,6 +19,13 @@ CLIP (fastembed) / SigLIP 2 (onnxruntime), tier-gated by a hardware probe.
 - **`docs/design.md`** — System architecture, data model, feature overview
 - **`docs/development.md`** — Setup, running tests, building frontend
 - **`docs/settings-reference.md`** — Every config option, its default, and what it does (user-facing)
+- **`docs/preservation-guarantees.md`** — The user-facing promise: what Organize Only guarantees, its exact limits, mutation opt-in, rollback, and recovery
+- **`docs/observability.md`** — Event vocabulary, correlation, privacy/redaction rules, and the runtime-diagnostics endpoint
+- **`docs/integrity-baseline.md`** — What the mutation engine guarantees, its transfer diagnostics, and remaining gaps
+- **`docs/state-and-recovery.md`** — State paths, migration, and interrupted-operation reconciliation
+- **`docs/optimization-contracts.md`** — Per-format lossless / visually-lossless contracts, thresholds, the sample-encode projection model, staged execution, and the gate that keeps optimizers off unvalidated formats
+- **`docs/duplicate-review.md`** — Duplicate groups, keeper policies and tie-breakers, reference protection, concrete Copy/Move outcomes, bulk scopes, drift, validation states, and quarantine/permanent removal
+- **`docs/catalog-and-resume.md`** — The persistent index: placement, freshness, rebuild/reset, catalog-backed duplicate lookup, and what an interrupted run may reuse
 
 ### Frontend conventions
 - **State/data:** TanStack Query for all server state; hooks in `frontend/src/hooks/` own fetch + polling; the API client is `frontend/src/services/api.ts` (types live there, re-exported from `frontend/src/types/api.ts`).

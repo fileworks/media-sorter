@@ -2,7 +2,7 @@ import { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 type Variant = "default" | "destructive" | "ghost" | "outline";
-type Size = "sm" | "default";
+type Size = "sm" | "default" | "icon";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -22,8 +22,9 @@ const variantClasses: Record<Variant, string> = {
 };
 
 const sizeClasses: Record<Size, string> = {
-  default: "px-4 py-2 text-sm",
-  sm: "px-3 py-1.5 text-xs",
+  default: "min-h-10 gap-2 px-4 py-2 text-sm",
+  sm: "min-h-8 gap-1.5 px-3 py-1.5 text-xs",
+  icon: "h-9 w-9 p-0",
 };
 
 export function Button({
@@ -40,10 +41,10 @@ export function Button({
       type={type}
       disabled={disabled}
       className={cn(
-        "inline-flex items-center justify-center rounded-md font-medium",
-        "transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1",
+        "inline-flex shrink-0 items-center justify-center rounded-lg font-medium [&>svg]:shrink-0",
+        "transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background",
         "active:scale-[0.98] active:transition-none",
-        "disabled:cursor-not-allowed",
+        "disabled:cursor-not-allowed disabled:active:scale-100",
         variantClasses[variant],
         sizeClasses[size],
         className,

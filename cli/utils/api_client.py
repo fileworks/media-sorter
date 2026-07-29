@@ -204,6 +204,50 @@ class APIClient:
     def cancel_preview(self, task_id: str) -> dict[str, Any]:
         return self._cancel("preview", task_id)
 
+    def start_audit(
+        self,
+        root: str,
+        *,
+        subtree: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        sample_proportion: float = 1.0,
+        idempotency_key: str | None = None,
+    ) -> str:
+        scope = {
+            "subtree": subtree,
+            "date_from": date_from,
+            "date_to": date_to,
+            "sample_proportion": sample_proportion,
+        }
+        return self._start(
+            "audit",
+            idempotency_key=idempotency_key,
+            extra={
+                "root": root,
+                "scope": {
+                    key: value for key, value in scope.items() if value is not None
+                },
+            },
+        )
+
+    def get_audit_progress(
+        self, task_id: str, *, after_sequence: int = 0
+    ) -> dict[str, Any]:
+        return self._json(
+            self._request(
+                "GET",
+                f"/api/audit/tasks/{task_id}",
+                params={"after_sequence": after_sequence},
+                retry=True,
+            )
+        )
+
+    def cancel_audit(self, task_id: str) -> dict[str, Any]:
+        return self._json(
+            self._request("POST", f"/api/audit/tasks/{task_id}/cancel", retry=True)
+        )
+
     def start_sorting(
         self, dry_run: bool = False, idempotency_key: str | None = None
     ) -> str:

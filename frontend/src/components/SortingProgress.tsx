@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FiClock, FiZap, FiCheckCircle, FiAlertTriangle, FiX } from "react-icons/fi";
+import { StateView } from "@/components/StateView";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -247,18 +248,20 @@ export function SortingProgress({
   // ── Render: failed ─────────────────────────────────────────────────────────
   if (status === "failed") {
     return (
-      <Card className="animate-fade-in">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-error">
-            <FiX className="inline-block h-5 w-5 animate-badge-pop" />
-            {t("sort.failed")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md bg-error/10 px-3 py-2 text-sm text-error">
-            {error ?? progress?.error ?? t("sort.unexpected")}
-          </div>
-
+      <StateView
+        variant="error"
+        title={t("sort.failed")}
+        detail={error ?? progress?.error ?? t("sort.unexpected")}
+        onRetry={onRetry}
+        action={
+          onViewReport ? (
+            <Button size="sm" onClick={onViewReport}>
+              {t("sort.viewPartialReport")}
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="mt-3 space-y-2">
           {taskProgress && taskProgress.total > 0 && (
             <p className="text-sm text-muted-foreground">
               {t("sort.processedBeforeFailure", {
@@ -269,21 +272,8 @@ export function SortingProgress({
           )}
 
           <p className="text-xs text-muted-foreground">{t("sort.checkLog")}</p>
-
-          <div className="flex justify-end gap-2">
-            {onRetry && (
-              <Button variant="outline" size="sm" onClick={onRetry}>
-                {t("app.tryAgain")}
-              </Button>
-            )}
-            {onViewReport && (
-              <Button size="sm" onClick={onViewReport}>
-                {t("sort.viewPartialReport")}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </StateView>
     );
   }
 

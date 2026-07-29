@@ -15,6 +15,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { StateView } from "@/components/StateView";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import { DuplicateComparison } from "@/components/DuplicateComparison";
 import { MediaPreviewModal } from "@/components/MediaPreviewModal";
@@ -33,11 +34,13 @@ type SortBy = "name" | "date" | "size" | "status";
 type ViewMode = "list" | "grid";
 
 const FILTER_OPTIONS: FilterMode[] = ["all", "sorted", "warnings", "problems", "duplicates"];
+const DEFAULT_SORT_CRITERIA = ["year", "month", "day"];
 
 interface PreviewPanelProps {
   result: PreviewResult | null;
   loading: boolean;
   error?: string | null;
+  onRetry?: () => void;
   copyInsteadOfMove?: boolean;
   categorizeEnabled?: boolean;
   sortCriteria?: string[];
@@ -155,9 +158,10 @@ export function PreviewPanel({
   result,
   loading,
   error,
+  onRetry,
   copyInsteadOfMove = false,
   categorizeEnabled = false,
-  sortCriteria = ["year", "month", "day"],
+  sortCriteria = DEFAULT_SORT_CRITERIA,
 }: PreviewPanelProps) {
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<FilterMode>("all");
@@ -399,14 +403,7 @@ export function PreviewPanel({
   if (loading) return <PreviewLoadingSkeleton />;
   if (error)
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("preview.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ValidationBadge severity="error" message={error} />
-        </CardContent>
-      </Card>
+      <StateView variant="error" title={t("preview.title")} detail={error} onRetry={onRetry} />
     );
   if (!result)
     return (
@@ -590,6 +587,16 @@ export function PreviewPanel({
               <span className="text-success">
                 {t("preview.sorted", { count: stats.will_sort.toLocaleString(locale) })}
               </span>
+              {(stats.companions ?? 0) > 0 && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-info">
+                    {t("preview.companions", {
+                      count: stats.companions!.toLocaleString(locale),
+                    })}
+                  </span>
+                </>
+              )}
               {stats.will_quarantine_unknown > 0 && (
                 <>
                   <span className="text-muted-foreground">·</span>
@@ -731,6 +738,18 @@ export function PreviewPanel({
                 </div>
               </div>
             </div>
+
+            {((stats.companion_split_warnings ?? 0) > 0 ||
+              (stats.conversion_companion_warnings ?? 0) > 0 ||
+              (stats.unmatched_companions ?? 0) > 0) && (
+              <div className="border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning">
+                {t("preview.companionWarnings", {
+                  split: (stats.companion_split_warnings ?? 0).toLocaleString(locale),
+                  conversion: (stats.conversion_companion_warnings ?? 0).toLocaleString(locale),
+                  unmatched: (stats.unmatched_companions ?? 0).toLocaleString(locale),
+                })}
+              </div>
+            )}
 
             {/* Icon legend (list view only) */}
             {viewMode === "list" && (

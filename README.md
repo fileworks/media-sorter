@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/icon.svg" alt="" width="72" height="72" align="left">
+
 # 📸 MediaSorter
 
 **Point it at a messy folder of photos and videos. Get back a tidy, date-organised library.**
@@ -14,11 +16,33 @@ on your machine.
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-blue)
 
-![MediaSorter — the 5-step wizard](docs/assets/screenshot.png)
+![MediaSorter desktop application](docs/assets/screenshot.png)
 
 </div>
 
 ---
+
+## Status
+
+Released **v1.0.6** — installers for macOS (Apple Silicon and Intel), Windows
+(MSI and NSIS), and a portable ZIP, published as a GitHub Release. There is no
+package-manager channel for the desktop application.
+
+## Overview
+
+MediaSorter cleans up a photo and video collection **offline, on your own
+machine**: it sorts by date, finds exact and visually similar duplicates, filters
+out thumbnails and junk, and optionally tags and categorises with local AI. It
+never uploads anything.
+
+Its default profile is *Organize Only*: files are copied or moved and verified
+byte for byte, and nothing inside a file is ever rewritten unless you explicitly
+opt in. Duplicates go to quarantine, never to the bin.
+
+Recognized companion files stay attached to their media by default: XMP/AAE
+edits, Live Photo motion, RAW siblings, video thumbnails, and audio notes share
+one date, route, rename, collision suffix, and duplicate outcome. Preview shows
+every binding and any split risk before execution.
 
 ## Why you'd want it
 
@@ -35,15 +59,18 @@ into chaos. MediaSorter untangles them **safely**:
 
 ## How it works
 
-A five-step wizard walks you through the whole thing:
+The desktop interface has three durable stages:
 
-**Configure → Analyse → Preview → Sort → Report**
+**Sources → Review → Execute**
 
-1. **Configure** — pick source & destination, choose copy-vs-move, folder depth, rules.
-2. **Analyse** — fast scan: how many files, what types, how much disk space, rough ETA.
-3. **Preview** — dry-run with a per-category breakdown of exactly what will happen.
-4. **Sort** — runs it for real, with a live progress bar and streaming log.
-5. **Report** — per-file summary; export CSV/JSON; browse every past run.
+1. **Sources** — assign input, reference, and destination roles; choose a recipe
+   or edit any setting; scan the selected folders without changing them.
+2. **Review** — inspect organization, exact duplicates, similar media,
+   validation findings, and issues. Preview paths and consequences before
+   anything moves.
+3. **Execute** — read the impact summary, deliberately confirm the exact plan,
+   follow live progress, and open the final report. The operation center keeps
+   current and recent work reachable from every stage.
 
 ## Features
 
@@ -147,9 +174,18 @@ with `MEDIASORT_SOURCE_DIRECTORY` / `MEDIASORT_TARGET_DIRECTORY` (see `docker-co
 
 ---
 
+## Quick start
+
+1. Install from the [latest release](https://github.com/fileworks/media-sorter/releases).
+2. Point it at a source folder and a destination folder.
+3. Run **Analyze**, then **Preview** — nothing has moved yet.
+4. Read the preview, then **Sort**.
+
+Every step before Sort is read-only.
+
 ## Command-line interface
 
-Every step of the wizard is also available from a terminal — useful for headless runs,
+The same scan, preview, execute, and report operations are available from a terminal — useful for headless runs,
 cron jobs, or scripting against the backend. Start the backend (`make backend`, or the
 Docker service above), then drive it with the CLI:
 
@@ -173,6 +209,12 @@ Point it at a non-default backend with `--api-url` (or `MEDIASORT_API_URL`). Com
 
 ---
 
+## Usage
+
+The graphical application is the primary interface; the
+[command-line interface](#command-line-interface) below drives the same backend
+for scripted and headless runs.
+
 ## Environment variables
 
 All optional — the app resolves sane defaults. Any `Config` field can also be overridden
@@ -194,7 +236,7 @@ with `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_SOURCE_DIRECTORY`, `MEDIASORT_AI_TAGGI
 
 ## Configuration
 
-Everything is set through the **Configure** step, or by editing `config.json` in the
+Everything is set on the **Sources** stage, or by editing `config.json` in the
 config directory. The essentials:
 
 | Setting | Default | Description |
@@ -207,6 +249,7 @@ config directory. The essentials:
 | `recursive_scan` | `true` | Descend into subfolders |
 | `preserve_subfolders` | `false` | `true` recreates source subfolders under each date folder; `false` flattens |
 | `remove_duplicates` | `true` | Detect duplicates and quarantine them in `_duplicates/` (never deleted) |
+| `companion_handling` | `keep_with_primary` | Keep recognized companion files with their primary; alternatives are `leave_in_place` and `ignore` |
 | `rules_enabled` | `true` | Global switch for deterministic rules |
 | `rule_set` | `{"version":1,"tag_rules":[],"route_rules":[]}` | Typed tag and safe-routing rules |
 | `ai_tagging_enabled` | `false` | Analyse photos/videos and tag them by content (metadata only) |
@@ -217,7 +260,7 @@ config directory. The essentials:
 | `ai_model_tier` | `"auto"` | Local AI engine: `auto` (hardware-picked) · `lite` (CLIP) · `standard`/`max` (SigLIP 2) · `off` |
 
 > 📖 **Every setting is documented in [docs/settings-reference.md](docs/settings-reference.md)** —
-> grouped by the same sections as the Configure screen, with defaults and plain-English descriptions.
+> grouped by the same sections as the Sources screen, with defaults and plain-English descriptions.
 
 ### Smart Categorization
 
@@ -301,6 +344,36 @@ folders. Legacy tag rules are backed up and migrated once; see the
 
 ---
 
+## Troubleshooting
+
+**"Completed, 0 files sorted".** A source folder that is not mounted used to look
+like an empty library. It now fails with an actionable message — if you see the
+old behaviour, the drive is mounted but empty.
+
+**The window is blank on launch.** A static splash renders before React mounts;
+a persistent blank screen means the backend did not start. Check the log
+location reported by `GET /api/diagnostics`.
+
+**Windows GPU acceleration is not used.** Check the reported ONNX providers under
+Settings; `DmlExecutionProvider` must be present.
+
+**An operation needs review after a crash.** Startup reconciliation classifies
+what it can prove and asks about the rest. Nothing is deleted while a decision is
+outstanding — see [docs/state-and-recovery.md](docs/state-and-recovery.md).
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full gate. In short:
+
+```console
+cd backend && uv sync --all-extras --dev && uv run pytest -q
+cd frontend && npm ci && npm run lint && npm test && npm run build
+```
+
+The knowledge base under [`docs/`](docs/) is the reference for backend, API,
+testing, and the preservation, observability, catalog, and duplicate-review
+contracts, including [read-only library audits](docs/library-audit.md).
+
 ## Contributing
 
 1. Fork and branch off `main`.
@@ -308,6 +381,12 @@ folders. Legacy tag rules are backed up and migrated once; see the
 3. `make ci` must pass; for frontend changes, `npm run lint && npm run build` too.
 4. Open a PR. Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
    (`fix:` / `feat:`) — that's what drives versioning and releases.
+
+## Security
+
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+MediaSorter runs entirely locally: the backend binds to `127.0.0.1`, and the only
+outbound request is the optional update check.
 
 ## License
 

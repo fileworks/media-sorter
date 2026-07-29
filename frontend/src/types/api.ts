@@ -1,6 +1,15 @@
 // Re-export everything from the API client so consumers only need one import.
 export type {
   Config,
+  LibraryProfile,
+  LibraryRoot,
+  LibraryRootRole,
+  OptimizationProfile,
+  PreservationProfile,
+  RootIdentity,
+  CatalogPlacement,
+  ResourcePreferences,
+  TransferMode,
   AiModelTier,
   HardwareInfo,
   ConfigSectionMeta,

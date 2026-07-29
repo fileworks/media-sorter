@@ -50,6 +50,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "sort",
             "sort_criteria",
             "copy_instead_of_move",
+            "companion_handling",
         ),
     ),
     ConfigSection(
@@ -75,6 +76,10 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "duplicate_exact_enabled",
             "duplicate_perceptual_enabled",
             "duplicate_perceptual_threshold",
+            "burst_detection_enabled",
+            "burst_time_window_seconds",
+            "burst_perceptual_distance",
+            "burst_require_camera_identity",
         ),
     ),
     ConfigSection(
@@ -134,7 +139,13 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "other",
         "Other options",
         "Metadata fixes, corruption repair, and update settings.",
-        ("override_metadata", "repair_enabled", "update_check_enabled"),
+        (
+            "override_metadata",
+            "repair_enabled",
+            "update_check_enabled",
+            "thumbnail_cache_enabled",
+            "thumbnail_cache_budget_bytes",
+        ),
     ),
 )
 
@@ -148,5 +159,11 @@ UNGROUPED_FIELDS: frozenset[str] = frozenset(
         # Advanced override without a dedicated control; the default (inside
         # the destination) is right for almost everyone.
         "dedup_index_path",
+        # Versioned location/profile transport contract. The compatibility UI
+        # still edits the legacy source/target controls until LocationsPanel is
+        # implemented.
+        "library_profile",
+        "preservation_profile",
+        "optimization_profile",
     }
 )

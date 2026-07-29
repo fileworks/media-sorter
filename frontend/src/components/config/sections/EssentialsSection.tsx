@@ -177,6 +177,25 @@ export function EssentialsSection({ config, updateConfig, fieldErrors }: Section
           ))}
         </div>
       </FormRow>
+
+      <FormRow
+        label={t("config.companions.label")}
+        help={t("config.companions.help")}
+        helpSide="right"
+      >
+        <Select
+          aria-label={t("config.companions.label")}
+          value={config.companion_handling}
+          onValueChange={(value) =>
+            updateConfig({ companion_handling: value as Config["companion_handling"] })
+          }
+          className="max-w-sm"
+        >
+          <SelectItem value="keep_with_primary">{t("config.companions.keep")}</SelectItem>
+          <SelectItem value="leave_in_place">{t("config.companions.leave")}</SelectItem>
+          <SelectItem value="ignore">{t("config.companions.ignore")}</SelectItem>
+        </Select>
+      </FormRow>
     </>
   );
 }
