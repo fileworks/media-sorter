@@ -6,20 +6,38 @@ import asyncio
 import contextlib
 import os
 import shutil
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from app.background_tasks.task_manager import CancellationToken
-from app.core.exceptions import InsufficientStorageError, SortingError
+from app.core.exceptions import (
+    InsufficientStorageError,
+    IntegrityTransferError,
+    MediaSortException,
+    SortingError,
+)
 
 if TYPE_CHECKING:
     from PIL.Image import Image
 
     from app.background_tasks.task_manager import Task
 from app.core.logging_config import get_logger
+from app.core.media_units import (
+    HEIC_EXTENSIONS as HEIC_EXTENSIONS,
+)
+from app.core.media_units import (
+    RAW_EXTENSIONS as RAW_EXTENSIONS,
+)
+from app.core.media_units import (
+    CompanionHandling,
+    MediaUnit,
+    UnmatchedCompanion,
+    bind_media_units,
+)
+from app.services.verified_transfer import TransferResult, transfer_path
 
 # The media extension registries live in app.utils.media_utils (the single source
 # of truth). They are re-exported here — via the redundant ``as`` alias so they
@@ -44,39 +62,6 @@ from app.utils.path_utils import is_excluded_by_pattern, validate_source_root
 logger = get_logger(__name__)
 
 _CHUNK = 1024 * 1024  # 1 MB
-
-# Subset of IMAGE_EXTENSIONS that need pillow-heif to open.
-HEIC_EXTENSIONS: frozenset[str] = frozenset({".heic", ".heif"})
-
-# Subset of IMAGE_EXTENSIONS that are RAW camera formats (decoded via rawpy).
-RAW_EXTENSIONS: frozenset[str] = frozenset(
-    {
-        ".raw",
-        ".arw",
-        ".cr2",
-        ".cr3",
-        ".crw",
-        ".dng",
-        ".erf",
-        ".kdc",
-        ".mef",
-        ".mrw",
-        ".nef",
-        ".nrw",
-        ".orf",
-        ".pef",
-        ".ptx",
-        ".r3d",
-        ".raf",
-        ".rw2",
-        ".rwl",
-        ".sr2",
-        ".srf",
-        ".srw",
-        ".x3f",
-    }
-)
-
 
 # Bucketing for type-breakdown charts (Analysis "by_type" and Report
 # "files_per_type"). Everything not bucketed here falls through to its bare
@@ -317,9 +302,23 @@ class TraversalIssue:
         }
 
 
+def is_within_any(path: Path, roots: Sequence[Path]) -> bool:
+    """Whether ``path`` sits under any of ``roots``."""
+    for root in roots:
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        return True
+    return False
+
+
 @dataclass
 class TraversalResult:
     files: list[Path] = field(default_factory=list)
+    units: list[MediaUnit] = field(default_factory=list)
+    unmatched_companions: list[UnmatchedCompanion] = field(default_factory=list)
+    companion_candidates: list[Path] = field(default_factory=list)
     issues: list[TraversalIssue] = field(default_factory=list)
     excluded_by_pattern: int = 0
     excluded_by_size: int = 0
@@ -334,6 +333,14 @@ class TraversalResult:
     @property
     def excluded_files(self) -> int:
         return self.excluded_by_pattern + self.excluded_by_size + self.excluded_by_type
+
+
+@dataclass(frozen=True)
+class MultiRootTraversal:
+    """A merged enumeration plus which root each file actually came from."""
+
+    result: TraversalResult
+    root_of: dict[Path, Path]
 
 
 class FileSystemService:
@@ -386,6 +393,92 @@ class FileSystemService:
             counters["issues"] = len(result.issues)
         return result.files
 
+    async def traverse_roots(
+        self,
+        roots: Sequence[tuple[Path, tuple[Path, ...]]],
+        *,
+        recursive: bool = True,
+        max_depth: int | None = None,
+        exclude_patterns: list[str] | None = None,
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
+        companion_handling: CompanionHandling = "keep_with_primary",
+    ) -> MultiRootTraversal:
+        """Enumerate every configured input root as one merged result.
+
+        Each discovered file remembers the root it came from, so relative
+        layout, quarantine structure, and per-root exclusions stay correct no
+        matter how many libraries are being merged. One unreadable root
+        contributes its issues without stopping the others.
+        """
+        merged = TraversalResult()
+        root_of: dict[Path, Path] = {}
+        for canonical_root, exclusions in roots:
+            if cancel_token is not None and cancel_token.is_set():
+                merged.cancelled = True
+                break
+            try:
+                part = await self.traverse(
+                    canonical_root,
+                    recursive=recursive,
+                    max_depth=max_depth,
+                    exclude_patterns=exclude_patterns,
+                    min_file_size_kb=min_file_size_kb,
+                    max_file_size_mb=max_file_size_mb,
+                    cancel_token=cancel_token,
+                    task=task,
+                    companion_handling=companion_handling,
+                )
+            except (MediaSortException, OSError) as exc:
+                # A disconnected or unreadable root is reported as a partial
+                # result. Refusing to enumerate the roots that *are* available
+                # would turn one offline drive into a failed operation.
+                logger.warning(
+                    "Input root could not be enumerated",
+                    root=str(canonical_root),
+                    error=str(exc),
+                )
+                merged.issues.append(
+                    TraversalIssue(
+                        path=str(canonical_root),
+                        error_class=type(exc).__name__,
+                        message=str(exc),
+                    )
+                )
+                continue
+            kept = [path for path in part.files if not is_within_any(path, exclusions)]
+            merged.excluded_directories += len(part.files) - len(kept)
+            for path in kept:
+                root_of.setdefault(path, canonical_root)
+            merged.files.extend(kept)
+            kept_set = set(kept)
+            merged.units.extend(
+                unit
+                for unit in part.units
+                if unit.primary in kept_set
+                and all(not is_within_any(member.path, exclusions) for member in unit.members)
+            )
+            merged.unmatched_companions.extend(
+                item
+                for item in part.unmatched_companions
+                if not is_within_any(item.path, exclusions)
+            )
+            merged.companion_candidates.extend(
+                path for path in part.companion_candidates if not is_within_any(path, exclusions)
+            )
+            for unit in merged.units:
+                for member in unit.members:
+                    root_of.setdefault(member.path, canonical_root)
+            merged.issues.extend(part.issues)
+            merged.excluded_by_pattern += part.excluded_by_pattern
+            merged.excluded_by_size += part.excluded_by_size
+            merged.excluded_by_type += part.excluded_by_type
+            merged.excluded_directories += part.excluded_directories
+            merged.cancelled = merged.cancelled or part.cancelled
+        return MultiRootTraversal(result=merged, root_of=root_of)
+
     async def traverse(
         self,
         root: Path,
@@ -397,6 +490,7 @@ class FileSystemService:
         max_file_size_mb: int | None = None,
         cancel_token: CancellationToken | None = None,
         task: Task | None = None,
+        companion_handling: CompanionHandling = "keep_with_primary",
     ) -> TraversalResult:
         """Enumerate eligible media with cancellation and partial-error details."""
         result = await asyncio.to_thread(
@@ -408,6 +502,7 @@ class FileSystemService:
             min_file_size_kb,
             max_file_size_mb,
             cancel_token,
+            companion_handling,
         )
         if task is not None and result.issues:
             task.mark_partial([issue.to_dict() for issue in result.issues])
@@ -432,6 +527,7 @@ class FileSystemService:
         min_file_size_kb: int | None,
         max_file_size_mb: int | None,
         cancel_token: CancellationToken | None,
+        companion_handling: CompanionHandling = "keep_with_primary",
     ) -> TraversalResult:
         result = TraversalResult()
         self._walk_result(
@@ -446,6 +542,11 @@ class FileSystemService:
             max_file_size_mb,
             cancel_token,
             is_root=True,
+        )
+        result.units, result.unmatched_companions = bind_media_units(
+            result.files + result.companion_candidates,
+            root,
+            handling=companion_handling,
         )
         return result
 
@@ -507,7 +608,16 @@ class FileSystemService:
                 continue
 
             if is_file_entry:
-                if not is_media(entry):
+                if not is_media(entry) and entry.suffix.lower() not in {
+                    ".xmp",
+                    ".aae",
+                    ".pp3",
+                    ".dop",
+                    ".on1",
+                    ".reastore",
+                    ".thm",
+                    ".wav",
+                }:
                     result.excluded_by_type += 1
                     continue
                 # Check exclusion
@@ -531,7 +641,10 @@ class FileSystemService:
                 except OSError as exc:
                     result.issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
                     continue
-                result.files.append(entry)
+                if is_media(entry):
+                    result.files.append(entry)
+                else:
+                    result.companion_candidates.append(entry)
             elif is_dir_entry and recursive and not entry.name.startswith("."):
                 # Check directory exclusion
                 if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
@@ -597,91 +710,64 @@ class FileSystemService:
         destination: Path,
         on_progress: Callable[[int, int], None] | None = None,
         verify: bool = True,
-    ) -> None:
-        """Copy *source* to *destination* in 1 MB chunks with optional size verification."""
-        if not source.exists():
-            raise SortingError(f"Source not found: {source}")
+    ) -> TransferResult:
+        """Copy *source* to *destination* under the content-integrity contract.
 
-        try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise SortingError(
-                f"Could not create destination directory {destination.parent}: {exc}"
-            ) from exc
-
-        source_size = source.stat().st_size
-        available = shutil.disk_usage(destination.parent).free
-        if available < source_size:
-            raise InsufficientStorageError(
-                f"Not enough space in {destination.parent}: "
-                f"need {source_size} B, have {available} B",
-                available=available,
-                required=source_size,
-            )
-
-        try:
-            bytes_copied = 0
-            with source.open("rb") as src, destination.open("wb") as dst:
-                while True:
-                    chunk = src.read(_CHUNK)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-                    bytes_copied += len(chunk)
-                    if on_progress:
-                        on_progress(bytes_copied, source_size)
-
-            if verify:
-                dest_size = destination.stat().st_size
-                if dest_size != source_size:
-                    destination.unlink(missing_ok=True)
-                    raise SortingError(
-                        f"Verification failed for {source.name}: "
-                        f"expected {source_size} B, got {dest_size} B"
-                    )
-
-            logger.debug(
-                "File copied",
-                source=str(source),
-                dest=str(destination),
-                bytes=source_size,
-            )
-
-        except SortingError:
-            raise
-        except OSError as exc:
-            destination.unlink(missing_ok=True)
-            raise SortingError(f"Copy failed for {source}: {exc}") from exc
-
-    def safe_move(self, source: Path, destination: Path) -> None:
-        """Move *source* to *destination* — rename when possible, else copy+delete.
-
-        On the same volume ``os.rename`` is atomic and free (no byte copy); it
-        fails with EXDEV across filesystems, where we fall back to the verified
-        copy-then-delete. Callers pre-pick a collision-free destination via
-        ``find_available_filename``, so rename never silently overwrites in
-        practice.
+        ``verify`` is retained for call-site compatibility but no longer selects
+        a weaker check: content identity is always proven cryptographically, and
+        the visible destination path only ever appears once it holds the full
+        verified copy.
         """
+        return self._transfer(source, destination, move=False, on_progress=on_progress)
+
+    def safe_move(self, source: Path, destination: Path) -> TransferResult:
+        """Move *source* to *destination* without ever losing the only copy.
+
+        A same-volume move publishes a second name for the identical content and
+        then drops the old one, so no bytes are copied or reread. A cross-volume
+        move stages, hashes, and commits a verified copy first; the source is
+        removed only afterwards.
+        """
+        return self._transfer(source, destination, move=True, on_progress=None)
+
+    def _transfer(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        move: bool,
+        on_progress: Callable[[int, int], None] | None,
+    ) -> TransferResult:
         if not source.exists():
             raise SortingError(f"Source not found: {source}")
+
         try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
+            result = transfer_path(source, destination, move=move, on_progress=on_progress)
+        except IntegrityTransferError as exc:
+            raise self._translate(exc) from exc
         except OSError as exc:
-            raise SortingError(
-                f"Could not create destination directory {destination.parent}: {exc}"
-            ) from exc
-        try:
-            source.rename(destination)
-            logger.debug("File moved (rename)", source=str(source), dest=str(destination))
-            return
-        except OSError:
-            pass  # Cross-device (EXDEV) or filesystem quirk — fall back to copy.
-        self.safe_copy(source, destination, verify=True)
-        try:
-            source.unlink()
-        except OSError as exc:
-            raise SortingError(f"Could not remove source after copy {source}: {exc}") from exc
-        logger.debug("File moved", source=str(source), dest=str(destination))
+            raise SortingError(f"{'Move' if move else 'Copy'} failed for {source}: {exc}") from exc
+
+        logger.debug(
+            "File moved" if move else "File copied",
+            source=str(source),
+            dest=str(result.destination_path),
+            protocol=result.protocol,
+            commit_method=result.commit_method,
+            warnings=list(result.warnings),
+        )
+        return result
+
+    @staticmethod
+    def _translate(exc: IntegrityTransferError) -> MediaSortException:
+        """Keep the storage-specific HTTP status the API already exposes."""
+        if exc.details.get("reason") == "insufficient_space":
+            return InsufficientStorageError(
+                exc.message,
+                available=int(exc.details.get("available_bytes", 0)),
+                required=int(exc.details.get("required_bytes", 0)),
+            )
+        return SortingError(exc.message, exc.details)
 
     # ------------------------------------------------------------------ #
     # Directory helpers                                                     #

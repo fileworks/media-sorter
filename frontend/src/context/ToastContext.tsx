@@ -1,5 +1,7 @@
 import { useCallback, useState, type FC, type ReactNode } from "react";
 
+import { StateView, type StateViewVariant } from "@/components/StateView";
+
 import { ToastContext, type ToastVariant } from "./toast-context";
 
 interface Toast {
@@ -22,13 +24,11 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
     );
   }, []);
 
-  // Card surface + coloured accent edge: token-based and readable in both
-  // themes (the raw solid-colour backgrounds failed contrast in dark mode).
-  const VARIANT_CLASSES: Record<ToastVariant, string> = {
-    success: "border-l-success",
-    error: "border-l-error",
-    info: "border-l-info",
-    warning: "border-l-warning",
+  const STATE_VARIANT: Record<ToastVariant, StateViewVariant> = {
+    success: "success",
+    error: "error",
+    info: "info",
+    warning: "warning",
   };
 
   return (
@@ -37,14 +37,8 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
       {/* Toast container */}
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
         {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={[
-              "pointer-events-auto max-w-sm rounded-lg border border-border border-l-4 bg-card px-4 py-3 text-sm text-card-foreground shadow-lg",
-              VARIANT_CLASSES[t.variant],
-            ].join(" ")}
-          >
-            {t.message}
+          <div key={t.id} className="pointer-events-auto max-w-sm shadow-lg">
+            <StateView variant={STATE_VARIANT[t.variant]} title={t.message} compact />
           </div>
         ))}
       </div>

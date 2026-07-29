@@ -28,6 +28,55 @@ _SENSITIVE_FIELD_MARKERS = (
 )
 _REDACTED = "[REDACTED]"
 
+# Diagnostics about logging itself. A sink that silently fails is worse than
+# one that fails loudly, so every drop and handler failure is counted here and
+# surfaced through the runtime-diagnostics endpoint.
+_dropped_live_events = 0
+_sink_failures: list[str] = []
+
+
+def record_sink_failure(detail: str) -> None:
+    """Record a logging-sink failure through a non-recursive channel."""
+    if detail not in _sink_failures:
+        _sink_failures.append(detail)
+    del _sink_failures[:-20]
+
+
+def logging_health() -> dict[str, Any]:
+    """Report where logs go, how much is retained, and what has degraded."""
+    root_logger = logging.getLogger()
+    handlers: list[dict[str, Any]] = []
+    for handler in root_logger.handlers:
+        entry: dict[str, Any] = {
+            "type": type(handler).__name__,
+            "level": logging.getLevelName(handler.level),
+        }
+        if isinstance(handler, logging.handlers.RotatingFileHandler):
+            entry["path"] = str(handler.baseFilename)
+            entry["max_bytes"] = handler.maxBytes
+            entry["backup_count"] = handler.backupCount
+        handlers.append(entry)
+    try:
+        log_dir: str | None = str(resolve_app_paths().log_dir)
+    except Exception:
+        log_dir = None
+    return {
+        "log_directory": log_dir,
+        "level": logging.getLevelName(root_logger.level),
+        "handlers": handlers,
+        "file_logging_active": any(entry["type"] == "RotatingFileHandler" for entry in handlers),
+        "rotation": {
+            "max_bytes": LOG_FILE_MAX_BYTES,
+            "backup_count": LOG_BACKUP_COUNT,
+            "retention_max_bytes": LOG_RETENTION_MAX_BYTES,
+        },
+        "dropped_live_events": _dropped_live_events,
+        "sink_failures": list(_sink_failures),
+        "degraded": bool(_sink_failures)
+        or not any(entry["type"] == "RotatingFileHandler" for entry in handlers),
+    }
+
+
 # The event loop running the FastAPI app. Captured at startup so cross-thread
 # log calls (e.g. from asyncio.to_thread workers in SortingService) can hand
 # entries back to the loop via call_soon_threadsafe — asyncio.Queue is NOT
@@ -129,13 +178,16 @@ def _drop_oldest_put(q: Any, entry: dict[str, Any]) -> None:
     legacy ``_BroadcastQueue`` fan-out (which only quacks like asyncio.Queue)
     can be passed alongside real asyncio queues.
     """
+    global _dropped_live_events
     try:
         if q.full():
             with contextlib.suppress(asyncio.QueueEmpty):
                 q.get_nowait()
+                _dropped_live_events += 1
         q.put_nowait(entry)
-    except Exception:
-        pass
+    except Exception as exc:
+        _dropped_live_events += 1
+        record_sink_failure(f"live_queue:{type(exc).__name__}")
 
 
 def capture_main_loop() -> None:
@@ -207,8 +259,10 @@ def setup_logging(log_level: str = "INFO") -> None:
             file_handler.setLevel(numeric_level)
             file_handler.setFormatter(logging.Formatter("%(message)s"))
             root_logger.addHandler(file_handler)
-        except Exception:
-            pass  # Never let logging setup crash the app
+        except Exception as exc:
+            # Never let logging setup crash the app, but never pretend it worked
+            # either: the degraded state is reported through logging_health().
+            record_sink_failure(f"file_handler:{type(exc).__name__}")
     else:
         # Level may have changed since the handler was first registered.
         for h in root_logger.handlers:

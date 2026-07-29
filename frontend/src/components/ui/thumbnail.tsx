@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef } from "react";
 import { FiFile } from "react-icons/fi";
 import { api } from "@/services/api";
 import { cn } from "@/lib/utils";
+import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 
 /**
  * Lazily-loaded image thumbnail for a local media file. The backend renders a
@@ -26,12 +27,16 @@ export function Thumbnail({
   className?: string;
   maxPx?: number;
 }) {
-  const [errored, setErrored] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { objectUrl, loading, errored } = useQueuedThumbnail(
+    api.thumbnailUrl(path, maxPx),
+    wrapperRef,
+  );
 
   if (errored) {
     return (
       <div
+        ref={wrapperRef}
         className={cn("flex items-center justify-center text-muted-foreground bg-muted", className)}
         aria-hidden
       >
@@ -41,22 +46,20 @@ export function Thumbnail({
   }
 
   return (
-    <div className={cn("relative overflow-hidden bg-muted", className)}>
-      {!loaded && (
+    <div ref={wrapperRef} className={cn("relative overflow-hidden bg-muted", className)}>
+      {loading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
         </div>
       )}
       <img
-        src={api.thumbnailUrl(path, maxPx)}
+        src={objectUrl ?? undefined}
         alt=""
         loading="lazy"
         decoding="async"
-        onLoad={() => setLoaded(true)}
-        onError={() => setErrored(true)}
         className={cn(
           "h-full w-full object-contain transition-opacity duration-200",
-          loaded ? "opacity-100" : "opacity-0",
+          objectUrl ? "opacity-100" : "opacity-0",
         )}
       />
     </div>

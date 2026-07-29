@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from support import authorize_mutations
 
 from app.services.conversion_service import ConversionService
 
@@ -381,6 +382,7 @@ async def test_sort_integration_converts_jpeg_to_png(tmp_path: Path) -> None:
         convert_images=True,
         image_format="png",
     )
+    authorize_mutations(cfg, conversion=True)
     svc = SortingService(
         config=cfg,
         config_service=ConfigService(cfg),
@@ -446,6 +448,7 @@ async def test_sort_integration_conversion_failure_keeps_original(tmp_path: Path
         convert_images=True,
         image_format="webp",
     )
+    authorize_mutations(cfg, conversion=True)
     svc = SortingService(
         config=cfg,
         config_service=ConfigService(cfg),

@@ -1,10 +1,12 @@
-import { useState, useRef, useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getBasename } from "@/lib/pathUtils";
 import { api } from "@/services/api";
+import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 import type { PreviewItem } from "@/types/api";
 import { FiFile, FiFilm } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
+import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 
 const VIDEO_EXTS = new Set([
   ".mp4",
@@ -20,14 +22,8 @@ const VIDEO_EXTS = new Set([
   ".m2ts",
 ]);
 
-// Grid geometry — must stay in sync with the styles below so the windowing
-// math matches what the browser actually lays out.
-const MIN_COL = 110; // minmax(110px, …)
-const GAP = 8; // gap-2
-const PAD = 12; // p-3
-const CAPTION_H = 52; // min-h-[3rem] caption + padding
-const MAX_VIEWPORT = 560; // matches the previous max-h-[560px] wrapper
-const OVERSCAN_ROWS = 2;
+const MAX_VIEWPORT = 560;
+const GRID_MIN_COLUMN = 120;
 
 function isVideo(path: string): boolean {
   const dot = path.lastIndexOf(".");
@@ -86,8 +82,12 @@ function ThumbnailCard({
   onOpen: (item: PreviewItem) => void;
 }) {
   const { t } = useI18n();
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const { objectUrl, loading, errored } = useQueuedThumbnail(
+    api.thumbnailUrl(item.source, 240),
+    cardRef,
+  );
+  const loaded = Boolean(objectUrl);
   const name = getBasename(item.source);
   const video = isVideo(item.source);
   const statusDot = getStatusColor(item.status);
@@ -95,6 +95,7 @@ function ThumbnailCard({
 
   return (
     <button
+      ref={cardRef}
       type="button"
       onClick={() => onOpen(item)}
       className={cn(
@@ -108,18 +109,16 @@ function ThumbnailCard({
       <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-muted/30">
         {!errored ? (
           <>
-            {!loaded && (
+            {loading && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
               </div>
             )}
             <img
-              src={api.thumbnailUrl(item.source, 240)}
+              src={objectUrl ?? undefined}
               alt=""
               loading="lazy"
               decoding="async"
-              onLoad={() => setLoaded(true)}
-              onError={() => setErrored(true)}
               className={cn(
                 "h-full w-full object-cover transition-opacity duration-200",
                 loaded ? "opacity-100" : "opacity-0",
@@ -194,33 +193,25 @@ export interface PreviewGridProps {
  */
 export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: PreviewGridProps) {
   const { t } = useI18n();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [viewportH, setViewportH] = useState(MAX_VIEWPORT);
-  const [scrollTop, setScrollTop] = useState(0);
-
-  // Measure the scroll container and keep it current on resize.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(GRID_MIN_COLUMN);
   useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const measure = () => {
-      setWidth(el.clientWidth);
-      setViewportH(el.clientHeight || MAX_VIEWPORT);
-    };
+    const element = containerRef.current;
+    if (!element) return;
+    const measure = () => setContainerWidth(element.clientWidth || GRID_MIN_COLUMN);
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
-
-  const { columns, rowHeight } = useMemo(() => {
-    const inner = Math.max(0, width - PAD * 2);
-    if (inner === 0) return { columns: 1, rowHeight: MIN_COL + CAPTION_H + GAP };
-    const cols = Math.max(1, Math.floor((inner + GAP) / (MIN_COL + GAP)));
-    const cellW = (inner - (cols - 1) * GAP) / cols;
-    // Card = square thumbnail (cellW) + caption; rows are separated by GAP.
-    return { columns: cols, rowHeight: cellW + CAPTION_H + GAP };
-  }, [width]);
+  const columns = Math.max(1, Math.floor(containerWidth / GRID_MIN_COLUMN));
+  const totalRows = Math.ceil(items.length / columns);
+  const rows = useVirtualWindow({
+    count: totalRows,
+    estimateSize: Math.max(GRID_MIN_COLUMN + 60, containerWidth / Math.max(columns, 1) + 60),
+    maxHeight: MAX_VIEWPORT,
+    overscan: 2,
+  });
 
   if (items.length === 0) {
     return (
@@ -230,44 +221,40 @@ export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: Previe
     );
   }
 
-  const totalRows = Math.ceil(items.length / columns);
-  const totalHeight = totalRows * rowHeight + PAD * 2;
-  const firstRow = Math.max(0, Math.floor((scrollTop - PAD) / rowHeight) - OVERSCAN_ROWS);
-  const lastRow = Math.min(
-    totalRows,
-    Math.ceil((scrollTop - PAD + viewportH) / rowHeight) + OVERSCAN_ROWS,
-  );
-  const firstItem = firstRow * columns;
-  const lastItem = Math.min(items.length, lastRow * columns);
-  const visible = items.slice(firstItem, lastItem);
-
   return (
     <div
-      ref={scrollRef}
+      ref={containerRef}
       className="overflow-y-auto"
       style={{ maxHeight: MAX_VIEWPORT }}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      onScroll={rows.onScroll}
     >
-      <div style={{ height: totalHeight, position: "relative" }}>
-        <div
-          className="grid gap-2 px-3"
-          style={{
-            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-            position: "absolute",
-            top: firstRow * rowHeight + PAD,
-            left: 0,
-            right: 0,
-          }}
-        >
-          {visible.map((item) => (
-            <ThumbnailCard
-              key={item.source}
-              item={item}
-              categorizeEnabled={categorizeEnabled}
-              onOpen={onOpen}
-            />
-          ))}
-        </div>
+      <div className="px-3" style={{ height: rows.totalSize, position: "relative" }}>
+        {rows.virtualItems.map((row) => (
+          <div
+            key={row.index}
+            ref={rows.measureElement}
+            data-virtual-index={row.index}
+            className="grid gap-2 pb-2"
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              position: "absolute",
+              top: row.start,
+              left: 12,
+              right: 12,
+            }}
+          >
+            {items
+              .slice(row.index * columns, Math.min(items.length, (row.index + 1) * columns))
+              .map((item) => (
+                <ThumbnailCard
+                  key={item.source}
+                  item={item}
+                  categorizeEnabled={categorizeEnabled}
+                  onOpen={onOpen}
+                />
+              ))}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,50 +1,80 @@
-import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/services/api";
-import { useConfig } from "@/hooks/useConfig";
-import type { Config, OperationReport } from "@/types/api";
-import { useGlobalLoader } from "@/hooks/useGlobalLoader";
-import { useAnalysis } from "@/hooks/useAnalysis";
-import { useSorting } from "@/hooks/useSorting";
-import { usePreview } from "@/hooks/usePreview";
-import { useToast } from "@/context/toast-context";
-import { useTheme } from "@/hooks/useTheme";
-import { StepIndicator, type WizardStep } from "@/components/StepIndicator";
-import { ConfigPanel } from "@/components/ConfigPanel";
+import { FiArrowLeft, FiCheckCircle, FiClock, FiMoon, FiSun, FiX } from "react-icons/fi";
+
 import { AnalysisPanel } from "@/components/AnalysisPanel";
-import { PreviewPanel } from "@/components/PreviewPanel";
-import { SortingProgress } from "@/components/SortingProgress";
-import { PreviewProgressCard } from "@/components/PreviewProgressCard";
-import { ReportPanel } from "@/components/ReportPanel";
+import { ConfigPanel } from "@/components/ConfigPanel";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ExecutePreflight } from "@/components/OperationCenter";
 import { LogViewer } from "@/components/LogViewer";
+import { PreviewProgressCard } from "@/components/PreviewProgressCard";
+import { RecoveryBanner } from "@/components/RecoveryBanner";
+import { SourcesPanel } from "@/components/SourcesPanel";
+import { StageShell } from "@/components/StageShell";
+import { StateView } from "@/components/StateView";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/context/toast-context";
+import { useAnalysis } from "@/hooks/useAnalysis";
+import { useConfig } from "@/hooks/useConfig";
+import { useGlobalLoader } from "@/hooks/useGlobalLoader";
+import { usePreview } from "@/hooks/usePreview";
+import { useSorting } from "@/hooks/useSorting";
+import { useTheme } from "@/hooks/useTheme";
+import { useUpdateCheck } from "@/hooks/useUpdateCheck";
+import { useI18n } from "@/i18n/I18nContext";
+import type { RootCard } from "@/lib/sourcesStage";
+import type { StageState } from "@/lib/stageModel";
+import { startBlock } from "@/lib/startupRecovery";
 import { cn, isTauri } from "@/lib/utils";
 import { formatDuration } from "@/lib/formatters";
-import { canStartSort, getAnalysisGate } from "@/lib/operationStates";
-import {
-  FiSun,
-  FiMoon,
-  FiClock,
-  FiArrowLeft,
-  FiArrowRight,
-  FiAlertTriangle,
-  FiLoader,
-  FiXCircle,
-  FiCheckCircle,
-  FiX,
-} from "react-icons/fi";
-import { useUpdateCheck } from "@/hooks/useUpdateCheck";
-import { UpdateBanner } from "@/components/UpdateBanner";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useI18n } from "@/i18n/I18nContext";
+import { extractErrorMessage } from "@/lib/errorUtils";
+import { api } from "@/services/api";
+import type { Config, OperationReport } from "@/types/api";
 
-// History is a separate page reached only by the header button — defer its
-// bundle (panel + report modal path) until the user actually opens it.
 const HistoryPanel = lazy(() =>
-  import("@/components/HistoryPanel").then((m) => ({ default: m.HistoryPanel })),
+  import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
 );
-
-// ── First-run welcome card ─────────────────────────────────────────────────────
+const PreviewPanel = lazy(() =>
+  import("@/components/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
+);
+const ReviewWorkbench = lazy(() =>
+  import("@/components/ReviewWorkbench").then((module) => ({ default: module.ReviewWorkbench })),
+);
+const CatalogPanel = lazy(() =>
+  import("@/components/CatalogPanel").then((module) => ({ default: module.CatalogPanel })),
+);
+const QuarantineManager = lazy(() =>
+  import("@/components/QuarantineManager").then((module) => ({
+    default: module.QuarantineManager,
+  })),
+);
+const ValidationPanel = lazy(() =>
+  import("@/components/ValidationPanel").then((module) => ({ default: module.ValidationPanel })),
+);
+const LibraryAuditPanel = lazy(() =>
+  import("@/components/LibraryAuditPanel").then((module) => ({
+    default: module.LibraryAuditPanel,
+  })),
+);
+const BurstReviewPanel = lazy(() =>
+  import("@/components/BurstReviewPanel").then((module) => ({
+    default: module.BurstReviewPanel,
+  })),
+);
+const DestinationReconciliationPanel = lazy(() =>
+  import("@/components/DestinationReconciliationPanel").then((module) => ({
+    default: module.DestinationReconciliationPanel,
+  })),
+);
+const SortingProgress = lazy(() =>
+  import("@/components/SortingProgress").then((module) => ({
+    default: module.SortingProgress,
+  })),
+);
+const ReportPanel = lazy(() =>
+  import("@/components/ReportPanel").then((module) => ({ default: module.ReportPanel })),
+);
 
 const WELCOME_KEY = "mediasort_welcome_seen";
 
@@ -73,60 +103,34 @@ function FirstRunWelcome({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-// ── Sort-complete celebration banner ──────────────────────────────────────────
-
 function SortCelebration({ report }: { report: OperationReport }) {
   const { t, locale } = useI18n();
   const [visible, setVisible] = useState(true);
-
   if (!visible) return null;
-
-  const { summary, duration_seconds } = report;
-  const quarantineCount =
-    summary.future_dates + summary.unknown_dates + summary.corrupted + (summary.junk ?? 0);
-  const duplicateCount = summary.duplicates + (summary.already_in_destination ?? 0);
-
   return (
     <div className="animate-fade-in rounded-xl border border-primary/30 bg-primary/10 px-5 py-4">
       <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20">
-          <FiCheckCircle className="animate-celebration-bloom h-6 w-6 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-foreground">
-            {t(
-              summary.sorted === 1
-                ? duration_seconds
-                  ? "report.organizedIn.one"
-                  : "report.organized.one"
-                : duration_seconds
-                  ? "report.organizedIn"
-                  : "report.organized",
-              {
-                count: summary.sorted.toLocaleString(locale),
-                duration: formatDuration(duration_seconds, { style: "long", locale }),
-              },
-            )}
-          </p>
-          {(quarantineCount > 0 || duplicateCount > 0) && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {duplicateCount > 0 &&
-                t("report.duplicatesQuarantined", {
-                  count: duplicateCount.toLocaleString(locale),
-                })}
-              {duplicateCount > 0 && quarantineCount > 0 && " · "}
-              {quarantineCount > 0 &&
-                t("report.specialFolders", {
-                  count: quarantineCount.toLocaleString(locale),
-                })}
-            </p>
+        <FiCheckCircle className="h-6 w-6 shrink-0 text-primary" />
+        <p className="min-w-0 flex-1 text-sm font-bold text-foreground">
+          {t(
+            report.summary.sorted === 1
+              ? report.duration_seconds
+                ? "report.organizedIn.one"
+                : "report.organized.one"
+              : report.duration_seconds
+                ? "report.organizedIn"
+                : "report.organized",
+            {
+              count: report.summary.sorted.toLocaleString(locale),
+              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
+            },
           )}
-        </div>
+        </p>
         <button
           type="button"
           onClick={() => setVisible(false)}
-          className="shrink-0 rounded p-1 text-primary/50 hover:text-primary"
           aria-label={t("accessibility.dismiss")}
+          className="rounded p-1 text-primary/50 hover:text-primary"
         >
           <FiX className="h-4 w-4" />
         </button>
@@ -135,74 +139,70 @@ function SortCelebration({ report }: { report: OperationReport }) {
   );
 }
 
-/**
- * The app-wide "something is computing" indicator: a thin orange bar pinned to
- * the very top of the window that flows left-to-right whenever any non-trivial
- * work is in flight (config load/save, analysis, preview, sort, history, …).
- * Its host header must be `position: relative`.
- */
 function TopProgressBar({ busy }: { busy: boolean }) {
-  if (!busy) return null;
-  return <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />;
+  return busy ? (
+    <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />
+  ) : null;
+}
+
+function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: number): RootCard[] {
+  if (!config) return [];
+  const profileRoots =
+    config.library_profile.roots.length > 0
+      ? config.library_profile.roots
+      : [
+          ...(config.source_directory
+            ? [
+                {
+                  root_id: "legacy-input",
+                  role: "input" as const,
+                  path: config.source_directory,
+                  display_name: null,
+                  priority: 0,
+                  exclusions: [],
+                  identity: null,
+                },
+              ]
+            : []),
+          ...(config.target_directory
+            ? [
+                {
+                  root_id: "legacy-destination",
+                  role: "destination" as const,
+                  path: config.target_directory,
+                  display_name: null,
+                  priority: 1,
+                  exclusions: [],
+                  identity: null,
+                },
+              ]
+            : []),
+        ];
+  return profileRoots.map((root) => ({
+    rootId: root.root_id,
+    role: root.role,
+    path: root.path,
+    displayName: root.display_name,
+    priority: root.priority,
+    exclusions: root.exclusions,
+    state: scanned ? "ready" : "unknown",
+    volume: root.identity?.volume_id ?? null,
+    freshness: scanned ? "fresh" : "unknown",
+    indexedFiles: scanned && root.role === "input" ? indexedFiles : null,
+    issueCount: 0,
+  }));
 }
 
 export default function MainPage() {
   const { toast } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
-  const { config, isValid, updateConfig } = useConfig();
-  const { setLocale, t, locale } = useI18n();
-
-  useEffect(() => {
-    if (config?.language) setLocale(config.language);
-  }, [config?.language, setLocale]);
-
-  // ── Hooks ──────────────────────────────────────────────────────────────────
-
-  const {
-    result: analysisResult,
-    loading: analysisLoading,
-    error: analysisError,
-    runAnalysis,
-    cancelAnalysis,
-    clear: clearAnalysis,
-  } = useAnalysis();
-
-  const {
-    result: previewResult,
-    loading: previewLoading,
-    error: previewError,
-    elapsed: previewElapsed,
-    progress: previewProgress,
-    generatePreview,
-    cancelPreview,
-    clear: clearPreview,
-  } = usePreview();
-
-  const {
-    progress,
-    status,
-    error: sortError,
-    report,
-    startSorting,
-    cancelSorting,
-    clearReport,
-  } = useSorting();
-
-  // ── View state ─────────────────────────────────────────────────────────────
-  // "wizard" is the normal 5-step flow; "history" is a separate full page
-
-  const [view, setView] = useState<"wizard" | "history">("wizard");
-  const [step, setStep] = useState<WizardStep>(1);
+  const { config, isValid, updateConfig, saveError, retrySave } = useConfig();
+  const { setLocale, t } = useI18n();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  // Pending config patch: held here until the user confirms the settings change dialog
   const [pendingConfigPatch, setPendingConfigPatch] = useState<Partial<Config> | null>(null);
-  // Incremented when user cancels a pending config change to force-remount ConfigPanel inputs
   const [sectionBodyKey, setSectionBodyKey] = useState(0);
-  // Re-run confirmation: when user clicks "Run Preview" / "Sort Now" over existing results
-  const [rerunConfirmType, setRerunConfirmType] = useState<"preview" | "sort" | null>(null);
-
-  // ── First-run welcome ──────────────────────────────────────────────────────
-
+  const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [welcomeVisible, setWelcomeVisible] = useState(() => {
     try {
       return !localStorage.getItem(WELCOME_KEY);
@@ -211,351 +211,455 @@ export default function MainPage() {
     }
   });
 
-  const dismissWelcome = useCallback(() => {
-    try {
-      localStorage.setItem(WELCOME_KEY, "1");
-    } catch {
-      // ignore
-    }
-    setWelcomeVisible(false);
-  }, []);
-
-  // ── Update check ───────────────────────────────────────────────────────────
-
+  const analysis = useAnalysis();
+  const preview = usePreview();
+  const sorting = useSorting();
+  const loaderActive = useGlobalLoader();
   const { data: updateInfo } = useUpdateCheck();
-
-  // ── Backend health ─────────────────────────────────────────────────────────
-
   const {
     data: health,
     isLoading: healthLoading,
     isError: healthError,
-    failureCount: healthFailureCount,
   } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.health(),
     refetchInterval: 10_000,
     retry: 3,
   });
-
-  // Derive backend reachability from error state (not just data presence), so
-  // the warning correctly reappears after the backend goes down once it was up.
-  const backendDown = healthError || (healthFailureCount >= 3 && !health);
-
-  const [showBackendWarning, setShowBackendWarning] = useState(false);
-  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (health?.status === "ok" && !backendDown) {
-      setShowBackendWarning(false);
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-      return;
-    }
-    if (backendDown) {
-      warningTimerRef.current = setTimeout(() => setShowBackendWarning(true), 4000);
-    }
-    return () => {
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-    };
-  }, [health, backendDown]);
-
-  // ── History count (badge in header) ────────────────────────────────────────
-
   const { data: historyMeta } = useQuery({
     queryKey: ["reports", 1, 0],
     queryFn: () => api.listReports(1, 0),
-    staleTime: 30_000,
     enabled: health?.status === "ok",
+    staleTime: 30_000,
   });
-  const historyCount = historyMeta?.total ?? 0;
+  const { data: diagnostics } = useQuery({
+    queryKey: ["diagnostics"],
+    queryFn: () => api.diagnostics(),
+    enabled: health?.status === "ok",
+    refetchInterval: 10_000,
+  });
 
-  // ── Config validation ───────────────────────────────────────────────────────
-  // `isValid` (from useConfig's single validation query) already covers every
-  // problem — missing/not-found source, missing destination, out-of-range
-  // settings. Each problem is surfaced in-place: the offending section is
-  // flagged in the settings rail and the field itself shows the message.
-
-  const analysisGate = getAnalysisGate(analysisResult, analysisLoading, analysisError);
-
-  // ── Wizard step gating ─────────────────────────────────────────────────────
-
-  const canGoToAnalysis = isValid;
-  const canGoToPreview = analysisGate.canPreview;
-  const canGoToSort = canStartSort(previewResult);
-  const isRunning = status === "running" || status === "pending";
-  const isAnyRunning = analysisLoading || previewLoading || isRunning;
-
-  // Which steps have valid results — drives stepper completion markers.
-  // Step 1 is marked done when we've moved past it (analysis exists).
-  const doneSteps = useMemo((): ReadonlySet<WizardStep> => {
-    const s = new Set<WizardStep>();
-    if (step > 1 || (analysisResult && !analysisError)) s.add(1);
-    if (analysisResult && !analysisError) s.add(2);
-    if (previewResult && !previewError) s.add(3);
-    if (status === "completed") s.add(4);
-    if (report) s.add(5);
-    return s;
-  }, [step, analysisResult, analysisError, previewResult, previewError, status, report]);
-
-  // Highest step the user may navigate to — derived from actual data, not a separate state.
-  // In-progress operations keep their step navigable even if results aren't available yet.
-  const navigableUpTo = useMemo((): WizardStep => {
-    let max: number = step;
-    if (analysisResult && !analysisError) max = Math.max(max, 2);
-    if (analysisLoading) max = Math.max(max, 2);
-    if (previewResult && !previewError) max = Math.max(max, 3);
-    if (previewLoading) max = Math.max(max, 3);
-    if (isRunning || status === "completed") max = Math.max(max, 4);
-    if (report) max = Math.max(max, 5);
-    return max as WizardStep;
-  }, [
-    step,
-    analysisResult,
-    analysisError,
-    analysisLoading,
-    previewResult,
-    previewError,
-    previewLoading,
-    isRunning,
-    status,
-    report,
-  ]);
-
-  // App-wide busy signal for the top bar: only genuinely long operations drive
-  // it. `isAnyRunning` covers analysis/preview/sort continuously across their
-  // poll cadence; `loaderActive` is acquired for the full background-task
-  // lifetime. Config saves, toggles, validation, and ordinary GETs are excluded
-  // by construction, so the bar no longer blinks on every setting change.
-  const loaderActive = useGlobalLoader();
-  const globalBusy = isAnyRunning || loaderActive;
-
-  // ── Navigation ─────────────────────────────────────────────────────────────
-
-  // Configure needs the two-pane layout; Preview expands to fill available space;
-  // other steps stay narrow for legibility.
-  const contentWidth = step === 1 ? "max-w-5xl" : step === 3 ? "max-w-6xl" : "max-w-3xl";
-
-  // Navigation is always free — computing status is shown in the footer instead of blocking navigation.
-  const goToStep = (s: WizardStep) => setStep(s);
-
-  // Auto-advance to Report when sort completes
   useEffect(() => {
-    if (status === "completed" && report && step !== 5) {
-      goToStep(5);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, report]);
+    if (config?.language) setLocale(config.language);
+  }, [config?.language, setLocale]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  useEffect(() => setImpactAcknowledged(false), [preview.result, config]);
 
-  const handleAnalyse = async () => {
-    if (!canGoToAnalysis) {
-      toast(t("analysis.requiredFolders"), "warning");
-      return;
-    }
-    goToStep(2);
-    await runAnalysis();
-  };
-
-  const handlePreview = async () => {
-    if (!canGoToPreview) {
-      if (!analysisResult) {
-        toast(t("analysis.runFirst"), "warning");
-      } else if (!analysisResult.disk_space.sufficient) {
-        toast(t("analysis.noSpace"), "warning");
-      }
-      return;
-    }
-    goToStep(3);
-    await generatePreview();
-  };
-
-  const handleSort = async () => {
-    if (!canGoToSort) {
-      toast(t("preview.runFirst"), "warning");
-      return;
-    }
-    goToStep(4);
-    await startSorting(false);
-  };
-
-  // Determine which computation is cancellable (only one active at a time)
-  const cancellableOp = analysisLoading
-    ? "analysis"
-    : previewLoading
-      ? "preview"
-      : isRunning
-        ? "sort"
-        : null;
-
-  const handleCancelRequest = () => {
-    if (!cancellableOp) return;
-    setCancelConfirmOpen(true);
-  };
-
-  const handleCancelConfirmed = async () => {
-    setCancelConfirmOpen(false);
-    if (cancellableOp === "analysis") {
-      await cancelAnalysis();
-    } else if (cancellableOp === "preview") {
-      await cancelPreview();
-    } else if (cancellableOp === "sort") {
-      void cancelSorting();
-    }
-  };
-
-  const handleNewSort = () => {
-    clearAnalysis();
-    clearPreview();
-    clearReport();
-    setStep(1);
-  };
-
-  // ── Config-change interceptor ──────────────────────────────────────────────
-  // Saves go through here; if there are existing results the change is held
-  // until the user confirms. On dismiss, sectionBodyKey is bumped to force-
-  // remount the section inputs (resets local state of text fields, etc.).
+  const scanned = analysis.result !== null && analysis.error === null;
+  const reviewed = preview.result !== null && preview.error === null;
+  const isSorting = sorting.status === "running" || sorting.status === "pending";
+  const isAnyRunning = analysis.loading || preview.loading || isSorting;
+  const recoveryOperations = diagnostics?.recovery_operations ?? [];
+  const recoveryBlock = startBlock(recoveryOperations);
+  const cards = useMemo(
+    () => rootCards(config, scanned, analysis.result?.total_files ?? 0),
+    [analysis.result?.total_files, config, scanned],
+  );
 
   const handleConfigSave = useCallback(
     (patch: Partial<Config>) => {
-      if (status === "running" || status === "pending") {
-        // Never interrupt an active sort — save silently
-        updateConfig(patch);
+      if (analysis.result || preview.result) {
+        setPendingConfigPatch(patch);
         return;
       }
-      const hasResults = analysisResult !== null || previewResult !== null;
-      if (hasResults) {
-        setPendingConfigPatch(patch);
-      } else {
-        updateConfig(patch);
-      }
+      updateConfig(patch);
     },
-    [analysisResult, previewResult, status, updateConfig],
+    [analysis.result, preview.result, updateConfig],
   );
 
-  const handleConfigChangeConfirm = () => {
-    if (pendingConfigPatch) updateConfig(pendingConfigPatch);
-    setPendingConfigPatch(null);
-    clearAnalysis();
-    clearPreview();
-    setStep(1);
-  };
+  const handleRootsChange = useCallback(
+    (nextCards: RootCard[]) => {
+      if (!config) return;
+      const roots = nextCards.map((card) => {
+        const existing = config.library_profile.roots.find((root) => root.root_id === card.rootId);
+        return {
+          root_id: card.rootId,
+          role: card.role,
+          path: card.path,
+          display_name: card.displayName,
+          priority: card.priority,
+          exclusions: card.exclusions,
+          identity: existing?.identity ?? null,
+        };
+      });
+      const source = roots.find((root) => root.role === "input")?.path ?? "";
+      const destination = roots.find((root) => root.role === "destination")?.path ?? "";
+      handleConfigSave({
+        source_directory: source,
+        target_directory: destination,
+        library_profile: { ...config.library_profile, roots },
+      });
+    },
+    [config, handleConfigSave],
+  );
 
-  const handleConfigChangeDismiss = () => {
-    setPendingConfigPatch(null);
-    setSectionBodyKey((k) => k + 1);
-  };
-
-  // ── Re-run (preview / sort) with confirmation ─────────────────────────────
-
-  const handlePreviewClick = () => {
-    if (previewResult !== null && !previewLoading) {
-      setRerunConfirmType("preview");
-    } else {
-      void handlePreview();
+  const pickRootFolder = useCallback(async () => {
+    if (!isTauri) {
+      document.getElementById("source-dir")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => document.getElementById("source-dir")?.focus(), 350);
+      return;
     }
-  };
-
-  const handleSortClick = () => {
-    if (report !== null && !isRunning) {
-      setRerunConfirmType("sort");
-    } else {
-      void handleSort();
+    try {
+      const { open } = await import("@tauri-apps/api/dialog");
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected !== "string") return;
+      handleRootsChange([
+        ...cards,
+        {
+          rootId: `input-${Date.now()}`,
+          role: "input",
+          path: selected,
+          displayName: null,
+          priority: cards.length,
+          exclusions: [],
+          state: "unknown",
+          volume: null,
+          freshness: "unknown",
+          indexedFiles: null,
+          issueCount: 0,
+        },
+      ]);
+    } catch {
+      toast(t("sources.folderPickerFailed"), "error");
     }
-  };
+  }, [cards, handleRootsChange, t, toast]);
 
-  const handleRerunConfirmed = async () => {
-    const type = rerunConfirmType;
-    setRerunConfirmType(null);
-    if (type === "preview") {
-      clearPreview();
-      void handlePreview();
-    } else if (type === "sort") {
-      clearReport();
-      void handleSort();
+  const dismissWelcome = useCallback(() => {
+    try {
+      localStorage.setItem(WELCOME_KEY, "1");
+    } catch {
+      // Local storage is optional.
     }
+    setWelcomeVisible(false);
+  }, []);
+
+  const runAnalysis = async () => {
+    if (recoveryBlock.blocked) {
+      toast(recoveryBlock.reason ?? t("stage.recovery.blocked"), "warning");
+      return;
+    }
+    if (!isValid) {
+      toast(t("analysis.requiredFolders"), "warning");
+      return;
+    }
+    preview.clear();
+    await analysis.runAnalysis();
   };
 
-  // ── Backend status dot ─────────────────────────────────────────────────────
+  const runPreview = async () => {
+    if (!analysis.result) {
+      toast(t("analysis.runFirst"), "warning");
+      return;
+    }
+    await preview.generatePreview();
+  };
 
-  const backendDotColor =
+  const cancellableOperation = analysis.loading
+    ? "analysis"
+    : preview.loading
+      ? "preview"
+      : isSorting
+        ? "sort"
+        : null;
+
+  const cancelCurrent = async () => {
+    setCancelConfirmOpen(false);
+    if (cancellableOperation === "analysis") await analysis.cancelAnalysis();
+    if (cancellableOperation === "preview") await preview.cancelPreview();
+    if (cancellableOperation === "sort") await sorting.cancelSorting();
+  };
+
+  const stageInputs = {
+    rootsReady: isValid,
+    rootsReason: isValid ? null : t("stage.gate.roots"),
+    scanned,
+    reviewed,
+    reviewedReason: t("stage.gate.review"),
+    blocked: recoveryBlock.blocked,
+    blockedReason: recoveryBlock.reason,
+  };
+  const stageKey = {
+    profileId: config?.library_profile.profile_id ?? "",
+    catalogGeneration: scanned ? 1 : 0,
+    planVersion: reviewed ? 1 : 0,
+    taskId: null,
+  };
+
+  const impact = preview.result?.impact;
+  const preflightInput = {
+    actionableGroups: impact?.actionable_groups ?? 0,
+    quarantineCount: impact?.quarantine_count ?? 0,
+    quarantineBytes: impact?.quarantine_bytes ?? 0,
+    copyCount: impact?.copy_count ?? 0,
+    moveCount: impact?.move_count ?? 0,
+    skipCount: impact?.skip_count ?? 0,
+    referenceCount: 0,
+    sourceMutations: impact?.source_mutations ?? 0,
+    acknowledgedSourceMutations: impactAcknowledged,
+    staleGroups: 0,
+    unresolvedGroups: impact?.unresolved_count ?? 0,
+    unplannedCount: impact?.unresolved_count ?? 0,
+    freeBytes: analysis.result?.disk_space.destination_free_bytes ?? null,
+    requiredBytes: impact?.required_bytes ?? 0,
+    quarantineWritable: true,
+    conversionWithoutOriginals: impact?.conversion_without_originals ?? 0,
+    companionsLeftInPlace: impact?.companions_left_in_place ?? 0,
+    embeddedTagCount: impact?.embedded_tag_count ?? 0,
+  };
+
+  const renderSources = () => (
+    <div className="space-y-4">
+      {welcomeVisible && !config?.source_directory && (
+        <FirstRunWelcome onDismiss={dismissWelcome} />
+      )}
+      <SourcesPanel
+        cards={cards}
+        onChange={handleRootsChange}
+        onPickFolder={() => void pickRootFolder()}
+        config={config}
+        onApplyConfig={handleConfigSave}
+      />
+      <ConfigPanel
+        disabled={isAnyRunning}
+        onSaveConfig={handleConfigSave}
+        sectionBodyKey={sectionBodyKey}
+      />
+      {analysis.loading ? (
+        <StateView variant="loading" title={t("analysis.scanning")} />
+      ) : analysis.error ? (
+        <StateView
+          variant="error"
+          title={t("analysis.failed")}
+          detail={analysis.error}
+          onRetry={() => void runAnalysis()}
+        />
+      ) : analysis.result ? (
+        <AnalysisPanel
+          result={analysis.result}
+          loading={false}
+          error={null}
+          onRetry={() => void runAnalysis()}
+          onBackToConfig={() => undefined}
+        />
+      ) : (
+        <StateView
+          variant={isValid ? "empty" : "blocked"}
+          title={isValid ? t("stage.sources.ready") : t("stage.sources.blocked")}
+          detail={isValid ? t("stage.sources.scanHelp") : t("stage.gate.roots")}
+          action={
+            <Button
+              size="sm"
+              disabled={!isValid || !health || recoveryBlock.blocked}
+              onClick={() => void runAnalysis()}
+            >
+              {t("analysis.action")}
+            </Button>
+          }
+        />
+      )}
+    </div>
+  );
+
+  const renderReview = (state: StageState) => {
+    if (!scanned) {
+      return (
+        <StateView
+          variant="blocked"
+          title={t("stage.review.notScanned")}
+          detail={t("stage.gate.scan")}
+        />
+      );
+    }
+    if (state.view === "overview") {
+      return (
+        <div className="space-y-4">
+          <AnalysisPanel
+            result={analysis.result}
+            loading={false}
+            error={analysis.error}
+            onRetry={() => void runAnalysis()}
+            onBackToConfig={() => undefined}
+          />
+          {preview.loading ? (
+            <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
+          ) : (
+            <StateView
+              variant={preview.error ? "error" : preview.result ? "empty" : "blocked"}
+              title={
+                preview.error
+                  ? t("preview.failed")
+                  : preview.result
+                    ? t("stage.review.planReady")
+                    : t("stage.review.planNeeded")
+              }
+              detail={preview.error ?? t("stage.review.planHelp")}
+              onRetry={preview.error ? () => void runPreview() : undefined}
+              action={
+                !preview.error ? (
+                  <Button size="sm" onClick={() => void runPreview()}>
+                    {preview.result ? t("preview.rerun") : t("preview.action")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
+        </div>
+      );
+    }
+    if (state.view === "organization") {
+      return preview.loading ? (
+        <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
+      ) : (
+        <PreviewPanel
+          result={preview.result}
+          loading={false}
+          error={preview.error}
+          onRetry={() => void runPreview()}
+          copyInsteadOfMove={config?.copy_instead_of_move}
+          categorizeEnabled={config?.categorize_enabled}
+          sortCriteria={config?.sort_criteria ?? ["year", "month", "day"]}
+        />
+      );
+    }
+    if (state.view === "exact") {
+      return <ReviewWorkbench kindFilter="exact" items={preview.result?.items ?? []} />;
+    }
+    if (state.view === "similar") {
+      return <ReviewWorkbench kindFilter="similar" items={preview.result?.items ?? []} />;
+    }
+    if (state.view === "bursts") {
+      const inputRoot = config?.library_profile.roots.find((root) => root.role === "input");
+      return inputRoot ? (
+        <BurstReviewPanel
+          root={inputRoot.path}
+          items={preview.result?.items ?? []}
+          enabled={config?.burst_detection_enabled ?? false}
+        />
+      ) : (
+        <StateView variant="blocked" title={t("stage.gate.roots")} />
+      );
+    }
+    if (state.view === "reconciliation") {
+      return <DestinationReconciliationPanel items={preview.result?.items ?? []} />;
+    }
+    if (state.view === "validation") {
+      const inputRoot = config?.library_profile.roots.find((root) => root.role === "input");
+      const destinationRoot = config?.library_profile.roots.find(
+        (root) => root.role === "destination",
+      );
+      return inputRoot ? (
+        <div className="space-y-6">
+          <ValidationPanel rootId={inputRoot.root_id} />
+          {destinationRoot?.path && <LibraryAuditPanel root={destinationRoot.path} />}
+        </div>
+      ) : (
+        <StateView variant="blocked" title={t("stage.gate.roots")} />
+      );
+    }
+    return (
+      <div className="space-y-6">
+        <CatalogPanel />
+        <QuarantineManager />
+      </div>
+    );
+  };
+
+  const renderExecute = () => {
+    if (!reviewed) {
+      return (
+        <StateView
+          variant="blocked"
+          title={t("stage.execute.notReady")}
+          detail={t("stage.gate.review")}
+        />
+      );
+    }
+    if (sorting.report) {
+      return (
+        <div className="space-y-4">
+          <SortCelebration report={sorting.report} />
+          <ReportPanel report={sorting.report} />
+        </div>
+      );
+    }
+    if (sorting.status !== "idle") {
+      return (
+        <SortingProgress
+          progress={sorting.progress ?? null}
+          status={sorting.status}
+          error={sorting.error}
+          onCancel={() => setCancelConfirmOpen(true)}
+          onViewReport={() => undefined}
+          onRetry={() =>
+            void sorting.startSorting(
+              false,
+              preview.result?.config_fingerprint,
+              preview.result?.plan_id,
+            )
+          }
+        />
+      );
+    }
+    return (
+      <ExecutePreflight
+        input={preflightInput}
+        onAcknowledge={setImpactAcknowledged}
+        onExecute={() =>
+          void sorting.startSorting(
+            false,
+            preview.result?.config_fingerprint,
+            preview.result?.plan_id,
+          )
+        }
+        busy={isSorting}
+      />
+    );
+  };
+
+  const backendColor =
     health?.status === "ok"
       ? "bg-success"
       : healthLoading
         ? "bg-warning animate-pulse"
         : "bg-error";
+  const globalBusy = isAnyRunning || loaderActive;
 
-  const backendLabel = health
-    ? t("backend.connected", { version: health.version })
-    : healthLoading
-      ? t("backend.connecting")
-      : t("backend.unreachable");
-
-  // ── HISTORY PAGE ───────────────────────────────────────────────────────────
-
-  if (view === "history") {
+  if (historyOpen) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-secondary dark:bg-background">
-        {/* History-page header — completely replaces the wizard header */}
-        <header className="relative shrink-0 border-b border-border bg-background px-6 py-3 shadow-sm">
+      <div className="flex h-screen flex-col overflow-hidden bg-background">
+        <header className="relative shrink-0 border-b border-border/80 bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
           <TopProgressBar busy={globalBusy} />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setView("wizard")}
-                className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label={t("app.back")}
-              >
-                <FiArrowLeft className="h-4 w-4" />
-                {t("app.back")}
-              </button>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                <FiClock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-base font-semibold text-foreground">
-                  {t("app.sortHistory")}
-                </span>
-                {historyCount > 0 && (
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-mono tabular-nums text-muted-foreground">
-                    {historyCount}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Right: theme + backend status (same as wizard) */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-              >
-                {theme === "dark" ? <FiSun className="h-4 w-4" /> : <FiMoon className="h-4 w-4" />}
-              </button>
-              <div className="flex items-center gap-1.5 text-xs">
-                <span
-                  className={cn("inline-block h-2 w-2 rounded-full shrink-0", backendDotColor)}
-                />
-                <span className="text-muted-foreground">{backendLabel}</span>
-              </div>
-            </div>
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setHistoryOpen(false)}
+              className="text-muted-foreground"
+            >
+              <FiArrowLeft className="h-4 w-4" aria-hidden />
+              {t("app.back")}
+            </Button>
+            <span className="truncate text-sm font-semibold text-foreground">
+              {t("app.sortHistory")}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
+              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
+            >
+              {theme === "dark" ? (
+                <FiSun className="h-4 w-4" aria-hidden />
+              ) : (
+                <FiMoon className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
           </div>
         </header>
-
-        {/* History content */}
-        <main className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarGutter: "stable" }}>
+        <main className="flex-1 overflow-y-auto px-6 py-5">
           <div className="mx-auto max-w-3xl">
-            <Suspense
-              fallback={
-                <div className="animate-pulse space-y-3 py-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-16 rounded-xl bg-muted" />
-                  ))}
-                </div>
-              }
-            >
+            <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
               <HistoryPanel />
             </Suspense>
           </div>
@@ -564,424 +668,203 @@ export default function MainPage() {
     );
   }
 
-  // ── WIZARD PAGE ────────────────────────────────────────────────────────────
-
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-secondary dark:bg-background">
-      {/* ── Wizard header ── */}
-      <header className="relative shrink-0 border-b border-border bg-background px-6 py-3 shadow-sm">
-        {/* App-wide "computing" indicator — very top of the window */}
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <header className="relative shrink-0 border-b border-border/80 bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
         <TopProgressBar busy={globalBusy} />
-
-        <div className="flex items-center justify-between">
-          {/* Left: logo + version */}
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold text-foreground">MediaSorter</span>
-            {health?.version && (
-              <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                v{health.version}
-              </span>
-            )}
-          </div>
-
-          {/* Right: controls */}
-          <div className="flex items-center gap-3">
-            {/* Theme toggle */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-            >
-              {theme === "dark" ? <FiSun className="h-4 w-4" /> : <FiMoon className="h-4 w-4" />}
-            </button>
-
-            {/* History button → navigates to history page */}
-            <button
-              type="button"
-              onClick={() => setView("history")}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <FiClock className="h-3.5 w-3.5" />
-              <span>{t("app.history")}</span>
-              {historyCount > 0 && (
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-mono tabular-nums">
-                  {historyCount}
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <img
+              src="/icon.svg"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0 rounded-xl shadow-sm"
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-base font-bold tracking-tight text-foreground">
+                  MediaSorter
                 </span>
-              )}
-            </button>
-
-            {/* Backend status */}
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className={cn("inline-block h-2 w-2 rounded-full shrink-0", backendDotColor)} />
-              <span className="text-muted-foreground">{backendLabel}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Step indicator */}
-        <StepIndicator
-          current={step}
-          doneSteps={doneSteps}
-          maxReached={navigableUpTo}
-          onStepClick={goToStep}
-        />
-      </header>
-
-      {/* ── Main content ── */}
-      <main className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarGutter: "stable" }}>
-        <div className={cn("mx-auto min-h-full space-y-4", contentWidth)}>
-          {/* Update available banner */}
-          {updateInfo?.update_available && <UpdateBanner info={updateInfo} />}
-
-          {/* Backend warning banner */}
-          {showBackendWarning && !health && (
-            <div className="flex items-center gap-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
-              <FiAlertTriangle className="shrink-0 h-4 w-4 text-warning" />
-              <span className="text-warning">
-                {isTauri ? t("backend.lost") : <>{t("backend.browserLost")}</>}
-              </span>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="ml-auto shrink-0 rounded-md border border-warning/30 bg-warning/15 px-3 py-1 text-xs font-medium text-warning hover:bg-warning/25"
-              >
-                {t("app.reload")}
-              </button>
-            </div>
-          )}
-
-          {/* Keyed wrapper re-mounts on each step change so content animates in */}
-          <div key={step} className="step-enter space-y-4">
-            {/* ── Step 1: Configure ── */}
-            {step === 1 && (
-              <>
-                {/* First-run welcome — shown once until dismissed */}
-                {welcomeVisible && !config?.source_directory && (
-                  <FirstRunWelcome onDismiss={dismissWelcome} />
+                {health?.version && (
+                  <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary sm:inline">
+                    v{health.version}
+                  </span>
                 )}
-
-                {/* Sidebar navigation stays usable during computation; only form inputs lock */}
-                <ConfigPanel
-                  disabled={isAnyRunning}
-                  onSaveConfig={handleConfigSave}
-                  sectionBodyKey={sectionBodyKey}
-                />
-              </>
-            )}
-
-            {/* ── Step 2: Analysis ── */}
-            {step === 2 && (
-              <>
-                {analysisLoading && (
-                  <div className="rounded-xl border border-border bg-card px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">{t("analysis.scanning")}</p>
-                  </div>
-                )}
-
-                <AnalysisPanel
-                  result={analysisResult}
-                  loading={analysisLoading}
-                  error={analysisError}
-                  onRetry={() => void runAnalysis()}
-                  onBackToConfig={() => setStep(1)}
-                />
-
-                {analysisResult && !analysisResult.disk_space.sufficient && !analysisLoading && (
-                  <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                    <FiXCircle className="shrink-0 h-4 w-4 text-error" />
-                    <span>{t("analysis.noSpace")}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="ml-auto shrink-0"
-                      onClick={() => setStep(1)}
-                    >
-                      {t("analysis.backToConfig")}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ── Step 3: Preview ── */}
-            {step === 3 && (
-              <>
-                {previewLoading && (
-                  <PreviewProgressCard progress={previewProgress} elapsed={previewElapsed} />
-                )}
-
-                <PreviewPanel
-                  result={previewResult}
-                  loading={previewLoading}
-                  error={previewError}
-                  copyInsteadOfMove={config?.copy_instead_of_move}
-                  categorizeEnabled={config?.categorize_enabled}
-                  sortCriteria={config?.sort_criteria ?? ["year", "month", "day"]}
-                />
-              </>
-            )}
-
-            {/* ── Step 4: Sort ── */}
-            {step === 4 && (
-              <SortingProgress
-                progress={progress ?? null}
-                status={status}
-                error={sortError}
-                onCancel={handleCancelRequest}
-                onViewReport={() => goToStep(5)}
-                onRetry={() => void startSorting(false)}
-              />
-            )}
-
-            {/* ── Step 5: Report ── */}
-            {step === 5 && report && (
-              <>
-                <SortCelebration report={report} />
-                <ReportPanel report={report} />
-              </>
-            )}
-            {step === 5 && !report && (
-              <div className="rounded-xl border border-border bg-muted/30 px-6 py-12 text-center">
-                <p className="text-muted-foreground">{t("report.none")}</p>
               </div>
-            )}
+              <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
+                {t("app.tagline")}
+              </p>
+            </div>
           </div>
-        </div>
-      </main>
-
-      {/* ── Footer action bar ── */}
-      <footer className="shrink-0 border-t border-border bg-background px-6 py-3">
-        <div className={cn("mx-auto flex items-center justify-between gap-4", contentWidth)}>
-          {/* Back — hidden on step 1 and step 5 */}
-          {step > 1 && step !== 5 ? (
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <div
+              className="hidden items-center gap-2 rounded-full border border-border/80 bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground md:flex"
+              role="status"
+              title={
+                health?.status === "ok"
+                  ? t("backend.connected", { version: health.version })
+                  : t("backend.connecting")
+              }
+            >
+              <span className={cn("h-2 w-2 rounded-full", backendColor)} />
+              {health?.status === "ok" ? t("backend.ready") : t("backend.connecting")}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
+              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
+            >
+              {theme === "dark" ? (
+                <FiSun className="h-4 w-4" aria-hidden />
+              ) : (
+                <FiMoon className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => goToStep(Math.max(1, step - 1) as WizardStep)}
+              onClick={() => setHistoryOpen(true)}
+              className="px-2 text-muted-foreground sm:px-3"
+              title={t("app.history")}
             >
-              ← {t("app.back")}
-            </Button>
-          ) : (
-            <div />
-          )}
-
-          {/* Global computation status — shown instead of per-step text */}
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-            {isAnyRunning ? (
-              <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs">
-                <FiLoader className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                <span className="font-medium text-foreground">
-                  {analysisLoading && t("progress.analyzingFiles")}
-                  {previewLoading &&
-                    (previewProgress
-                      ? t("progress.previewFiles", {
-                          current: previewProgress.current.toLocaleString(locale),
-                          total: previewProgress.total.toLocaleString(locale),
-                        })
-                      : t("progress.computingPreview", { seconds: previewElapsed }))}
-                  {isRunning &&
-                    (progress?.progress
-                      ? t("progress.sortFiles", {
-                          current: progress.progress.current.toLocaleString(locale),
-                          total: progress.progress.total.toLocaleString(locale),
-                        })
-                      : t("progress.sortingFiles"))}
+              <FiClock className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">{t("app.history")}</span>
+              {(historyMeta?.total ?? 0) > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold">
+                  {historyMeta?.total}
                 </span>
-                {cancellableOp && (
-                  <button
-                    type="button"
-                    onClick={handleCancelRequest}
-                    className="ml-1 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-                    title={t("operation.cancel")}
-                    aria-label={t("operation.cancel")}
-                  >
-                    <FiXCircle className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {step === 4 && status === "completed" && !isRunning && t("sort.footerComplete")}
-                {step === 4 && status === "failed" && t("sort.footerFailed")}
-                {step === 5 && report && t("sort.footerReport")}
-              </p>
-            )}
-          </div>
-
-          {/* Forward actions */}
-          <div className="flex gap-2">
-            {/* Universal "Next" ghost button — visible on any step when a later step has
-                been computed or is actively computing, so the user can always navigate
-                forward without waiting for the primary action to complete. */}
-            {navigableUpTo > step && step < 4 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => goToStep((step + 1) as WizardStep)}
-                className="flex items-center gap-1"
-                title={t("app.next")}
-              >
-                {t("app.next")} <FiArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            )}
-
-            {step === 1 && (
-              <Button
-                size="sm"
-                disabled={!canGoToAnalysis || isAnyRunning || !health}
-                title={
-                  !health
-                    ? t("action.backendDisconnected")
-                    : isAnyRunning
-                      ? t("action.waitForOperation")
-                      : !canGoToAnalysis
-                        ? t("action.fixSettings")
-                        : undefined
-                }
-                onClick={() => void handleAnalyse()}
-              >
-                {t("analysis.action")}
-              </Button>
-            )}
-
-            {step === 2 && (
-              <Button
-                size="sm"
-                disabled={!canGoToPreview || isAnyRunning}
-                title={
-                  isAnyRunning
-                    ? t("action.waitForOperation")
-                    : !canGoToPreview
-                      ? analysisError
-                        ? t("action.analysisRetry")
-                        : analysisGate.empty
-                          ? t("action.analysisEmpty")
-                          : t("action.analysisRequired")
-                      : previewResult !== null
-                        ? t("action.previewRerun")
-                        : undefined
-                }
-                onClick={handlePreviewClick}
-              >
-                {previewResult !== null && !previewLoading
-                  ? t("preview.rerun")
-                  : t("preview.action")}
-              </Button>
-            )}
-
-            {step === 3 && (
-              <Button
-                size="sm"
-                disabled={!canGoToSort || isAnyRunning}
-                title={
-                  isAnyRunning
-                    ? t("action.waitForOperation")
-                    : !canGoToSort
-                      ? previewResult
-                        ? t("action.noSortableFiles")
-                        : t("action.previewRequired")
-                      : report !== null
-                        ? t("action.sortRerun")
-                        : undefined
-                }
-                onClick={handleSortClick}
-              >
-                {t("sort.action")}
-              </Button>
-            )}
-
-            {step === 4 && !isRunning && status === "completed" && (
-              <Button size="sm" onClick={() => goToStep(5)}>
-                {t("sort.viewReport")}
-              </Button>
-            )}
-
-            {step === 5 && (
-              <Button variant="outline" size="sm" onClick={handleNewSort}>
-                {t("sort.new")}
-              </Button>
-            )}
+              )}
+            </Button>
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg md:hidden"
+              role="status"
+              aria-label={
+                health?.status === "ok"
+                  ? t("backend.connected", { version: health.version })
+                  : t("backend.connecting")
+              }
+            >
+              <span className={cn("h-2.5 w-2.5 rounded-full", backendColor)} />
+            </div>
           </div>
         </div>
-      </footer>
+      </header>
 
-      {/* ── Log viewer ── */}
+      <main
+        className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:py-7"
+        style={{ scrollbarGutter: "stable" }}
+      >
+        <div className="mx-auto max-w-7xl space-y-4">
+          {recoveryOperations.map((operation) => (
+            <RecoveryBanner
+              key={operation.operation_id}
+              operation={operation}
+              onOpenReport={() => setHistoryOpen(true)}
+            />
+          ))}
+          {updateInfo?.update_available && <UpdateBanner info={updateInfo} />}
+          {healthError && (
+            <StateView
+              variant="error"
+              compact
+              title={isTauri ? t("backend.lost") : t("backend.browserLost")}
+              action={
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="rounded-lg border border-current px-3 py-1 text-xs"
+                >
+                  {t("app.reload")}
+                </button>
+              }
+            />
+          )}
+          {saveError && (
+            <StateView
+              variant="error"
+              compact
+              title={t("config.saveFailed")}
+              detail={extractErrorMessage(saveError, t("config.saveFailedHelp"))}
+              onRetry={retrySave}
+            />
+          )}
+
+          <StageShell inputs={stageInputs} stageKey={stageKey}>
+            {(state) => {
+              const content =
+                state.stage === "sources"
+                  ? renderSources()
+                  : state.stage === "review"
+                    ? renderReview(state)
+                    : renderExecute();
+              return (
+                <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
+                  {content}
+                </Suspense>
+              );
+            }}
+          </StageShell>
+        </div>
+      </main>
+
+      {cancellableOperation && (
+        <footer className="shrink-0 border-t border-border bg-background px-6 py-2">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 text-xs">
+            <span className="text-muted-foreground">{t("state.working")}</span>
+            <button
+              type="button"
+              onClick={() => setCancelConfirmOpen(true)}
+              className="rounded-lg border border-border px-3 py-1 text-warning"
+            >
+              {t("operation.cancel")}
+            </button>
+          </div>
+        </footer>
+      )}
+
       <LogViewer isRunning={isAnyRunning} />
 
-      {/* Config-change confirmation dialog */}
       <ConfirmDialog
         open={pendingConfigPatch !== null}
         title={t("dialog.applyReset.title")}
         description={t("dialog.applyReset.description")}
         confirmLabel={t("dialog.applyReset.confirm")}
         cancelLabel={t("common.cancel")}
-        onClose={handleConfigChangeDismiss}
-        onConfirm={handleConfigChangeConfirm}
-      >
-        {(analysisResult || previewResult) && (
-          <ul className="space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            {analysisResult && (
-              <li>
-                <span className="font-semibold text-foreground">
-                  {t("dialog.applyReset.analysisSummary", {
-                    count: analysisResult.total_files.toLocaleString(locale),
-                  })}
-                </span>
-              </li>
-            )}
-            {previewResult && (
-              <li>
-                <span className="font-semibold text-foreground">
-                  {t("dialog.applyReset.previewSummary", {
-                    count: previewResult.items.length.toLocaleString(locale),
-                  })}
-                </span>
-              </li>
-            )}
-          </ul>
-        )}
-      </ConfirmDialog>
-
-      {/* Re-run confirmation dialog */}
-      <ConfirmDialog
-        open={rerunConfirmType !== null}
-        title={t(
-          rerunConfirmType === "preview" ? "dialog.rerunPreview.title" : "dialog.rerunSort.title",
-        )}
-        description={
-          rerunConfirmType === "preview"
-            ? t("dialog.rerunPreview.description")
-            : t("dialog.rerunSort.description")
-        }
-        confirmLabel={t(rerunConfirmType === "preview" ? "preview.rerun" : "sort.action")}
-        cancelLabel={t("dialog.keepExisting")}
-        onClose={() => setRerunConfirmType(null)}
-        onConfirm={() => void handleRerunConfirmed()}
+        onClose={() => {
+          setPendingConfigPatch(null);
+          setSectionBodyKey((key) => key + 1);
+        }}
+        onConfirm={() => {
+          if (pendingConfigPatch) updateConfig(pendingConfigPatch);
+          setPendingConfigPatch(null);
+          analysis.clear();
+          preview.clear();
+        }}
       />
 
-      {/* Cancel confirmation dialog */}
       <ConfirmDialog
         open={cancelConfirmOpen}
         title={t(
-          cancellableOp === "analysis"
+          cancellableOperation === "analysis"
             ? "dialog.cancelAnalysis.title"
-            : cancellableOp === "preview"
+            : cancellableOperation === "preview"
               ? "dialog.cancelPreview.title"
               : "dialog.cancelSort.title",
         )}
-        description={
-          cancellableOp === "analysis"
-            ? t("dialog.cancelAnalysis.description")
-            : cancellableOp === "preview"
-              ? t("dialog.cancelPreview.description")
-              : t("dialog.cancelSort.description")
-        }
+        description={t(
+          cancellableOperation === "analysis"
+            ? "dialog.cancelAnalysis.description"
+            : cancellableOperation === "preview"
+              ? "dialog.cancelPreview.description"
+              : "dialog.cancelSort.description",
+        )}
         confirmLabel={t("dialog.yesCancel")}
         cancelLabel={t("dialog.keepGoing")}
         onClose={() => setCancelConfirmOpen(false)}
-        onConfirm={() => void handleCancelConfirmed()}
+        onConfirm={() => void cancelCurrent()}
       />
     </div>
   );

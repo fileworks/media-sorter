@@ -96,6 +96,8 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Lets test modules in subdirectories import the shared helpers in tests/support.py.
+pythonpath = ["tests"]
 
 [tool.mypy]
 strict = true

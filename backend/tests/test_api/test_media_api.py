@@ -1,6 +1,7 @@
 """Integration tests for the media (thumbnail) API route."""
 
 import io
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,6 +49,45 @@ def test_thumbnail_non_image_returns_415(client: TestClient, tmp_path) -> None:
 def test_thumbnail_requires_path(client: TestClient) -> None:
     response = client.get("/api/thumbnail")
     assert response.status_code == 422
+
+
+def test_thumbnail_second_pass_uses_cache_and_conditional_etag(
+    client: TestClient, tmp_path
+) -> None:
+    img = tmp_path / "cached.jpg"
+    _write_jpeg(img)
+    from app.api.routes import media
+
+    with patch.object(media, "_render_thumbnail", wraps=media._render_thumbnail) as render:
+        first = client.get("/api/thumbnail", params={"path": str(img), "size": 240})
+        second = client.get("/api/thumbnail", params={"path": str(img), "size": 240})
+        not_modified = client.get(
+            "/api/thumbnail",
+            params={"path": str(img), "size": 240},
+            headers={"If-None-Match": first.headers["etag"]},
+        )
+
+    assert first.status_code == second.status_code == 200
+    assert first.content == second.content
+    assert render.call_count == 1
+    assert not_modified.status_code == 304
+    assert not not_modified.content
+
+
+def test_thumbnail_changed_source_changes_validator(client: TestClient, tmp_path) -> None:
+    img = tmp_path / "changed.jpg"
+    _write_jpeg(img)
+    first = client.get("/api/thumbnail", params={"path": str(img)})
+    Image.new("RGB", (320, 240), (10, 220, 40)).save(img, format="JPEG")
+
+    second = client.get(
+        "/api/thumbnail",
+        params={"path": str(img)},
+        headers={"If-None-Match": first.headers["etag"]},
+    )
+
+    assert second.status_code == 200
+    assert second.headers["etag"] != first.headers["etag"]
 
 
 # ── /api/media/info ────────────────────────────────────────────────────────────

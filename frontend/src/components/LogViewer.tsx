@@ -100,8 +100,9 @@ export function LogViewer({ isRunning }: LogViewerProps) {
   const [collapsed, setCollapsed] = useState(true);
   const [filter, setFilter] = useState<FilterLevel>("all");
   const [userScrolled, setUserScrolled] = useState(false);
-  // Visible from the start so the user can always open the log
-  const [visible, setVisible] = useState(true);
+  // Keep technical detail out of the primary workflow until work starts or a
+  // message actually exists. This avoids presenting an idle socket as an error.
+  const [visible, setVisible] = useState(false);
   const prevRunningRef = useRef(false);
 
   // Auto-show when an operation starts — but keep it collapsed so the user
@@ -190,8 +191,9 @@ export function LogViewer({ isRunning }: LogViewerProps) {
             <span
               className={[
                 "inline-block h-1.5 w-1.5 rounded-full",
-                isConnected ? "bg-green-400" : "bg-red-400",
+                isConnected ? "bg-green-400" : isRunning ? "bg-red-400" : "bg-gray-500",
               ].join(" ")}
+              aria-hidden
             />
             <span className="text-xs font-semibold text-gray-200">{t("log.title")}</span>
             <span className="text-xs text-gray-500">({logs.length})</span>

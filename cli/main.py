@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -18,7 +18,6 @@ from cli.utils.formatters import (
     format_progress,
     format_report,
 )
-
 
 # ------------------------------------------------------------------ #
 # Root group                                                             #
@@ -102,10 +101,10 @@ def config_show(ctx: click.Context) -> None:
 @click.pass_context
 def config_set(
     ctx: click.Context,
-    source_directory: Optional[str],
-    target_directory: Optional[str],
-    copy_instead_of_move: Optional[bool],
-    sort_criteria: Optional[str],
+    source_directory: str | None,
+    target_directory: str | None,
+    copy_instead_of_move: bool | None,
+    sort_criteria: str | None,
 ) -> None:
     """Update one or more configuration values."""
     client: APIClient = ctx.obj["client"]
@@ -240,6 +239,68 @@ def preview(ctx: click.Context) -> None:
 
 
 # ------------------------------------------------------------------ #
+# audit                                                                  #
+# ------------------------------------------------------------------ #
+
+
+@cli.command()
+@click.argument("root", type=click.Path(path_type=Path, exists=True, file_okay=False))
+@click.option("--subtree", default=None, help="Audit only this relative subtree.")
+@click.option("--date-from", default=None, help="Earliest capture date (YYYY-MM-DD).")
+@click.option("--date-to", default=None, help="Latest capture date (YYYY-MM-DD).")
+@click.option(
+    "--sample",
+    "sample_proportion",
+    type=click.FloatRange(min=0.000001, max=1.0),
+    default=1.0,
+    show_default=True,
+    help="Deterministic proportion of files to audit.",
+)
+@click.pass_context
+def audit(
+    ctx: click.Context,
+    root: Path,
+    subtree: str | None,
+    date_from: str | None,
+    date_to: str | None,
+    sample_proportion: float,
+) -> None:
+    """Read-only integrity audit of an existing organized library."""
+    client: APIClient = ctx.obj["client"]
+    task_id: str | None = None
+    try:
+        task_id = client.start_audit(
+            str(root),
+            subtree=subtree,
+            date_from=date_from,
+            date_to=date_to,
+            sample_proportion=sample_proportion,
+        )
+        envelope = _poll_operation(client, "audit", task_id)
+        result = envelope.get("result") or {}
+        click.echo(
+            f"Audit {result.get('audit_id', '')}: {result.get('coverage', 'partial')} coverage, "
+            f"{result.get('scanned_files', 0)} file(s), "
+            f"{len(result.get('findings', []))} finding(s), "
+            f"{result.get('baseline_established', 0)} baseline(s) established."
+        )
+        for finding in result.get("findings", []):
+            marker = "NEW " if finding.get("newly_appeared") else ""
+            click.echo(
+                f"  {marker}{finding.get('category')}: "
+                f"{finding.get('relative_path')} — {finding.get('evidence')}"
+            )
+        _show_partial(envelope)
+    except KeyboardInterrupt:
+        if task_id:
+            client.cancel_audit(task_id)
+        click.echo("\nCancellation requested.")
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+# ------------------------------------------------------------------ #
 # sort group                                                             #
 # ------------------------------------------------------------------ #
 
@@ -347,7 +408,7 @@ def report() -> None:
 )
 @click.pass_context
 def report_export(
-    ctx: click.Context, operation_id: str, fmt: str, output: Optional[str]
+    ctx: click.Context, operation_id: str, fmt: str, output: str | None
 ) -> None:
     """Export a historical operation report as JSON or CSV."""
     client: APIClient = ctx.obj["client"]
@@ -381,6 +442,7 @@ def _poll_operation(
         "analysis": client.get_analysis_progress,
         "preview": client.get_preview_progress,
         "sort": client.get_sorting_progress,
+        "audit": client.get_audit_progress,
     }[kind]
     last_sequence = 0
     last_phase: str | None = None

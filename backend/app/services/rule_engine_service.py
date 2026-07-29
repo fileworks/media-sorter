@@ -20,11 +20,20 @@ from app.services.filesystem_service import image_dimensions
 
 
 @dataclass(frozen=True)
+class MatchedRule:
+    name: str
+    priority: int
+    saved_order: int
+
+
+@dataclass(frozen=True)
 class RuleEvaluation:
     tags: tuple[str, ...]
     route: str | None
     matched_tag_rule_ids: tuple[str, ...]
     matched_route_rule_id: str | None
+    matched_tag_rules: tuple[MatchedRule, ...] = ()
+    matched_route_rule: MatchedRule | None = None
 
 
 _EMPTY = RuleEvaluation((), None, (), None)
@@ -45,8 +54,9 @@ class RuleEngineService:
         rule_set = self._config.rule_set
         tags: list[str] = []
         tag_ids: list[str] = []
+        tag_matches: list[MatchedRule] = []
         seen_tags: set[str] = set()
-        for _, rule in sorted(
+        for saved_order, rule in sorted(
             enumerate(rule_set.tag_rules),
             key=lambda item: (item[1].priority, item[0]),
         ):
@@ -57,20 +67,29 @@ class RuleEngineService:
                 seen_tags.add(key)
                 tags.append(rule.tag)
             tag_ids.append(rule.id)
+            tag_matches.append(MatchedRule(rule.name, rule.priority, saved_order))
 
         route_rule: RouteRule | None = None
-        for _, candidate in sorted(
+        route_saved_order: int | None = None
+        for saved_order, candidate in sorted(
             enumerate(rule_set.route_rules),
             key=lambda item: (item[1].priority, item[0]),
         ):
             if candidate.enabled and self._matches(file_path, candidate):
                 route_rule = candidate
+                route_saved_order = saved_order
                 break
         return RuleEvaluation(
             tags=tuple(tags),
             route=route_rule.relative_folder if route_rule else None,
             matched_tag_rule_ids=tuple(tag_ids),
             matched_route_rule_id=route_rule.id if route_rule else None,
+            matched_tag_rules=tuple(tag_matches),
+            matched_route_rule=(
+                MatchedRule(route_rule.name, route_rule.priority, route_saved_order or 0)
+                if route_rule is not None
+                else None
+            ),
         )
 
     def evaluate(self, file_path: Path) -> list[str]:

@@ -233,7 +233,7 @@ export function useSorting() {
   useEffect(() => releaseLoader, [releaseLoader]);
 
   const startSorting = useCallback(
-    async (dryRun = false) => {
+    async (dryRun = false, expectedConfigFingerprint?: string, planId?: string) => {
       // Clear old task id before the async call so the stale ["sorting", oldId]
       // query is never polled during the API round-trip.
       setTaskId(null);
@@ -251,7 +251,7 @@ export function useSorting() {
       releaseLoaderRef.current = api.beginOperation();
       setUiStatus("pending");
       try {
-        const id = await api.startSort(dryRun);
+        const id = await api.startSort(dryRun, undefined, expectedConfigFingerprint, planId);
         setTaskId(id);
         setUiStatus("running");
       } catch (err) {

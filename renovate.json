@@ -1,49 +1,144 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommits", ":dependencyDashboard"],
+  "description": "Generated from maintenance/renovate.py. Edit the generator, not this file; it becomes a two-line extends once the shared preset repository exists.",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard"
+  ],
   "timezone": "Europe/Berlin",
-  "schedule": ["before 6am on monday"],
+  "schedule": [
+    "before 6am on monday"
+  ],
   "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "minimumReleaseAge": "3 days",
+  "dependencyDashboardTitle": "Dependency dashboard",
+  "labels": [
+    "dependencies"
+  ],
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on the first day of the month"]
+    "schedule": [
+      "before 6am on the first day of the month"
+    ]
   },
   "vulnerabilityAlerts": {
-    "labels": ["security"],
-    "schedule": ["at any time"],
-    "automerge": true
+    "labels": [
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": null,
+    "automerge": false
   },
   "packageRules": [
     {
-      "description": "Auto-merge patch/minor once CI (lint/typecheck/test/build) is green — low risk, keeps the tree current without manual review.",
-      "matchUpdateTypes": ["patch", "minor", "digest"],
+      "description": "Low-risk updates merge themselves once every required check is green.",
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest"
+      ],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
     },
     {
-      "description": "Major bumps always get a PR, never auto-merged — API/behaviour changes need a look.",
-      "matchUpdateTypes": ["major"],
+      "description": "Majors always get a person; they change behaviour by definition.",
+      "matchUpdateTypes": [
+        "major"
+      ],
       "automerge": false,
-      "labels": ["major-update"]
+      "labels": [
+        "major-update"
+      ]
     },
     {
-      "description": "Group all GitHub Actions bumps into one PR.",
-      "matchManagers": ["github-actions"],
+      "description": "Publishers, toolchains, codecs, installers, and security-sensitive libraries always get a person, at any update type.",
+      "matchPackageNames": [
+        "pyinstaller",
+        "tauri*",
+        "@tauri-apps/**",
+        "semantic-release",
+        "python-semantic-release",
+        "twine",
+        "ffmpeg*",
+        "pillow",
+        "pikepdf",
+        "cryptography",
+        "certifi",
+        "urllib3",
+        "requests"
+      ],
+      "automerge": false,
+      "labels": [
+        "needs-review"
+      ]
+    },
+    {
+      "description": "Group GitHub Actions bumps into one reviewable PR.",
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "GitHub Actions",
       "automerge": true
     },
     {
-      "description": "Group the Rust/Tauri toolchain together — these tend to move in lockstep.",
-      "matchManagers": ["cargo"],
-      "groupName": "Rust / Tauri",
-      "postUpdateOptions": ["cargoUpdateLockfile"]
+      "description": "Group Python tooling so lint/type/test churn arrives together.",
+      "matchManagers": [
+        "pep621",
+        "pip_requirements",
+        "uv"
+      ],
+      "matchPackageNames": [
+        "ruff",
+        "mypy",
+        "pytest*",
+        "coverage*",
+        "hypothesis"
+      ],
+      "groupName": "Python tooling"
     },
     {
-      "description": "Group the frontend build tooling (Vite/TS/ESLint/etc.) so it doesn't flood the PR list.",
-      "matchManagers": ["npm"],
-      "matchDepTypes": ["devDependencies"],
-      "groupName": "frontend tooling"
+      "description": "Group JavaScript tooling for the same reason.",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "eslint*",
+        "@typescript-eslint/**",
+        "vite*",
+        "vitest*",
+        "typescript"
+      ],
+      "groupName": "JavaScript tooling"
+    },
+    {
+      "description": "Isolate the Python runtime; it moves everything else with it.",
+      "matchPackageNames": [
+        "python"
+      ],
+      "groupName": "Python runtime",
+      "automerge": false
+    },
+    {
+      "description": "Isolate the Rust/Tauri family; they are coupled and user-facing.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "groupName": "Rust and Tauri",
+      "automerge": false
+    },
+    {
+      "description": "Installer and bundler changes are verified by hand.",
+      "matchPackageNames": [
+        "pyinstaller",
+        "tauri",
+        "@tauri-apps/cli"
+      ],
+      "automerge": false
     }
   ]
 }

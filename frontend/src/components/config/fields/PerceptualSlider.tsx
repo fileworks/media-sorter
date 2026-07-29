@@ -25,6 +25,7 @@ export function PerceptualSlider({
         <span className="text-muted-foreground">{t("config.slider.strict")}</span>
       </div>
       <input
+        aria-label={t("config.duplicates.threshold")}
         type="range"
         min={85}
         max={100}

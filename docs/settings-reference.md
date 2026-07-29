@@ -1,15 +1,42 @@
 # MediaSorter — Settings Reference
 
 Every option MediaSorter exposes, what it does, and its default. Settings are edited
-in the **Configure** step of the wizard (grouped into the sections below), or directly
-in `config.json` in your config directory. Any field can also be overridden by an
+on the **Sources** stage (grouped into the sections below), or directly in
+`config.json` in your config directory. Any field can also be overridden by an
 environment variable named `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_COPY_INSTEAD_OF_MOVE=true`).
 
-> **Nothing here ever deletes your originals unless you explicitly choose the
-> `delete` duplicate action.** Files that can't be placed are moved into clearly
-> named quarantine folders you can review.
+> **Duplicates are never deleted.** Files that cannot be placed are moved into
+> clearly named quarantine folders you can review.
 
 Defaults below are the real backend defaults from `backend/app/core/config.py`.
+
+---
+
+## Recipes and visibility
+
+Recipes are optional one-shot starting points. Applying one writes ordinary
+configuration fields, reports the exact keys it changed, and leaves every field
+editable. There is no active recipe, saved recipe entity, profile badge, import,
+or export.
+
+| Recipe | Fields it establishes | Consequence stated before applying |
+|---|---|---|
+| **Just find duplicates** | scanning/review only, exact and perceptual duplicate review, no transfer/conversion/repair | No file mutation |
+| **Full clean-up** | move, organize by year, duplicate handling, JPEG/MP4 conversion, repair | Verified moves remove sources; conversion/repair can change bytes |
+| **Copy, leave originals** | the full clean-up field set with Copy | Originals stay; converted copies differ and quarantine may affect source folders |
+
+The initial surface shows the frequently decided **Basic** sections:
+Essentials, Folder structure, and Duplicates. Scan filters, naming, conversion,
+rules, AI, and other tuning live under **Advanced**. This changes visibility
+only: all nine sections and all backend defaults remain intact. Search matches
+section names, descriptions, and configuration keys even while Advanced is
+closed, and settings differing from defaults remain flagged and individually
+resettable.
+
+New settings belong in Advanced unless their value is normally decided for each
+run or library. The rationale is decision frequency: Basic contains the choices
+needed to start safely; Advanced contains thresholds, patterns, models, and
+once-only tuning.
 
 ---
 
@@ -21,7 +48,21 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 | Source folder | `source_directory` | *(required)* | The messy folder to scan. Never modified except for a `move`. |
 | Destination folder | `target_directory` | *(required)* | Where the organised library is written. |
 | Copy instead of move | `copy_instead_of_move` | `false` | `true` leaves your originals untouched and writes copies; `false` moves files. Copy needs enough free disk space (checked in **Analyse**). |
+| Companion media | `companion_handling` | `"keep_with_primary"` | `keep_with_primary` binds recognized sidecars, Live Photo motion, RAW siblings, video thumbnails, and audio notes into one unit. `leave_in_place` reports the split and transfers only the primary. `ignore` reproduces media-only behavior. Override with `MEDIASORT_COMPANION_HANDLING`. |
 | Date folder levels | `sort_criteria` | `["year"]` | Folder depth of the date hierarchy: `["year"]` → `2024/`, `["year","month"]` → `2024/03/`, `["year","month","day"]` → `2024/03/15/`. |
+
+### Media units
+
+Pairing requires the same directory and a matching stem. A fixed primary
+precedence is used: RAW, HEIC/HEIF, JPEG, other image, then video. Recognized
+roles are edit sidecars (`.xmp`, `.aae`, `.pp3`, `.dop`, `.on1`, `.reastore`),
+Live Photo `.mov`, RAW+JPEG/HEIC siblings, video `.thm`, and image `.wav` notes.
+
+Only the primary drives date extraction, routing, renaming, and duplicate
+evaluation. Every companion inherits the primary's final folder and collision
+suffix but keeps its own extension. Preview lists the binding and warns before
+commit about unmatched files, `leave_in_place`, and conversion. Conversion
+does not rewrite an internal filename reference inside a companion.
 
 ## Folders & routing
 
@@ -50,6 +91,20 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 ² Defaults: `Thumbs.db`, `ehthumbs.db`, `desktop.ini`, `._*`, `*-thumb.*`, `*_thumb.*`,
 `.thumbnails`, `.thumbs`.
 
+## Thumbnail cache
+
+| Setting | Key | Default | What it does |
+|---|---|---|---|
+| Cache thumbnails | `thumbnail_cache_enabled` | `true` | Reuses rendered previews instead of decoding the source again. Disable it to render on demand without creating cache entries. |
+| Cache budget | `thumbnail_cache_budget_bytes` | `536870912` (512 MiB) | Fixed byte ceiling. Least-recently-used entries are removed opportunistically on a write; there is no timer or idle worker. |
+
+The cache lives at `<data directory>/thumbnail-cache/`. Its keys include source
+identity, sampled content, requested size, and renderer version. It contains
+only derived JPEG previews and is safe to delete at any time; the next visible
+request regenerates what it needs. Read, write, permission, full-disk, and
+corrupt-entry failures fall back to on-demand rendering and never block media
+access.
+
 ## Duplicates
 
 | Setting | Key | Default | What it does |
@@ -73,17 +128,74 @@ is accepted when loading old config files but is ignored and is not saved.
 |---|---|---|---|
 | Rename files | `rename` | `false` | Rename each file using a pattern as it's sorted. |
 | Rename pattern | `rename_pattern` | `"TYPE_YYYY-MM-DD"` | Tokens: `TYPE`, `YYYY`, `MM`, `DD`, plus a numeric counter for collisions. |
-| Override existing metadata | `override_metadata` | `false` | Allow writing metadata even when the file already has some. |
+| Override existing metadata | `override_metadata` | `false` | Rewrite the embedded creation date. Changes media bytes, so it needs a reviewed mutation profile — see [Media mutation profiles](#media-mutation-profiles). |
 
 ## Conversion
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Convert videos | `convert_videos` | `false` | Transcode videos during the sort (bundled ffmpeg). |
+| Convert videos | `convert_videos` | `false` | Transcode videos during the sort (bundled ffmpeg). Needs a reviewed mutation profile plus an acknowledged optimization profile. |
 | Video format | `video_format` | `"mp4"` | Target container: `mp4` · `mkv` · `mov` · `webm` · `avi`. |
-| Convert images | `convert_images` | `false` | Transcode images during the sort. |
+| Convert images | `convert_images` | `false` | Transcode images during the sort. Needs a reviewed mutation profile plus an acknowledged optimization profile. |
 | Image format | `image_format` | `"jpeg"` | Target format: `jpeg` · `png` · `webp` · `tiff`. |
-| Repair corrupted files | `repair_enabled` | `true` | Validate sorted files; attempt a safe repair; quarantine if unrepairable. |
+| Repair corrupted files | `repair_enabled` | `true` | Validate sorted files; attempt a safe repair; quarantine if unrepairable. Repair rewrites media, so it needs a reviewed mutation profile. |
+
+## Library roots
+
+A profile holds several typed roots, each with one role:
+
+| Role | Count | What it means |
+|---|---|---|
+| `input` | one or more | Folders to organize. Every one is enumerated; each file keeps its own root for relative layout and quarantine structure |
+| `reference` | any | Compared against, **never changed**. Used to deduplicate against a library you do not want reorganized |
+| `destination` | exactly one | Where organized media lands |
+
+Copy/Move is profile-wide: it is one decision for the run, not per root.
+
+Each root carries its own `exclusions` — relative subtrees skipped for that root
+only. A root that is offline or unreadable contributes a partial-result issue and
+the remaining roots still run; one disconnected drive never fails the operation.
+
+**Reference roots are enforced, not just documented.** The verified executor
+refuses any transfer whose source or destination falls inside one, with
+`MUTATION_NOT_AUTHORIZED` / `reference_root_is_immutable`, and records an
+`integrity.violation` event. Because the check lives at the single point where
+media moves, no pipeline step can bypass it by forgetting to look.
+
+## Media mutation profiles
+
+MediaSorter organizes by default and mutates only when asked. Two profiles carry
+that authorization; both are stored in `config.json` and validated before any
+preview or sort starts.
+
+### `preservation_profile`
+
+| Field | Default | What it does |
+|---|---|---|
+| `mode` | `"organize_only"` | `organize_only` copies and moves media byte-for-byte. `explicit_mutation` is the only mode that can authorize a media rewrite. |
+| `allow_embedded_metadata_edits` | `false` | Permits EXIF/tag writes into the file (`override_metadata`, `embed_tags_in_files`). |
+| `allow_repair` | `false` | Permits `repair_enabled` to rewrite a file. |
+| `allow_conversion` / `allow_compression` | `false` | Permit `convert_images` / `convert_videos`. |
+| `preserve_filesystem_timestamps` | `true` | Copies the original atime/mtime to the destination. Set to `false` to write the extracted media date instead. |
+| `derived_metadata` | `"report_only"` | Where derived tags and date corrections go when they are not embedded. `sidecar_and_report` also writes a `<file>.xmp` sidecar. |
+| `acknowledged_at` | `null` | Timestamp of the explicit acknowledgement. `explicit_mutation` without it is refused. |
+| `requires_review` | `false` | Set by migration when an older config already enabled mutating settings. Blocks execution until reviewed. |
+
+### `optimization_profile`
+
+Conversion additionally needs an acknowledged optimization profile naming its
+`tool`, `tool_version`, and `validation_contract`; compression requires
+`mode: "visually_lossless"`. A disabled profile cannot carry any execution
+authorization.
+
+### What happens without one
+
+Turning on a mutating setting under Organize Only does not silently downgrade
+the run — it is refused with `MUTATION_NOT_AUTHORIZED` and a `reason` naming the
+missing authorization (`explicit_profile_required`, `capability_not_authorized`,
+`optimization_profile_required`, `compression_profile_required`, or
+`migration_review_required`). Nothing is written before the refusal.
+
 
 ## Rules (tagging and routing)
 
@@ -152,7 +264,7 @@ allowed but flagged **"may be slow"**, so the choice is always informed.
 | API key / secret / endpoint | `ai_tagging_api_key`, `ai_tagging_api_secret`, `ai_tagging_endpoint` | `null` | Cloud credentials. Azure needs endpoint + key; Imagga needs key + secret; Google needs key. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
-| Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Off = tags stay in preview/report only. The old `ai_tagging_embed_in_files` key is read for compatibility. |
+| Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
 Azure and Imagga receive the selected operation locale and request native German output. Google

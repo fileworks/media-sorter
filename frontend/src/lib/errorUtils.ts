@@ -4,12 +4,12 @@
  * casts that were duplicated across the async hooks.
  *
  * Resolution order (most specific → least):
- *  1. The backend error envelope `response.data.error` (FastAPI's
- *     `{ error, code, details }` shape). Preferred over the generic Axios
+ *  1. A structured backend error (`response.data.error` or FastAPI
+ *     `response.data.detail`). Preferred over the generic Axios
  *     `Error.message` ("Request failed with status code 500") because it carries
  *     the real, user-facing reason.
- *  2. A native `Error.message` (network failures, aborts, thrown Errors).
- *  3. `defaultMessage` when nothing usable is found.
+ *  2. `defaultMessage` for native/unstructured errors. Their implementation
+ *     messages are useful in logs, but are not an interface contract.
  *
  * @param err - the caught value (typed `unknown`, as in a `catch`)
  * @param defaultMessage - fallback when no message can be extracted
@@ -17,15 +17,30 @@
  */
 export function extractErrorMessage(err: unknown, defaultMessage = "Unknown error"): string {
   if (typeof err === "object" && err !== null) {
-    const envelope = (err as { response?: { data?: { error?: unknown } } }).response?.data?.error;
-    if (typeof envelope === "string" && envelope.trim() !== "") {
-      return envelope;
+    const data = (
+      err as {
+        response?: { data?: { error?: unknown; detail?: unknown } };
+      }
+    ).response?.data;
+    const structured = data?.error ?? data?.detail;
+    if (typeof structured === "string" && structured.trim() !== "") {
+      return userFacingError(structured);
     }
   }
 
-  if (err instanceof Error && err.message.trim() !== "") {
-    return err.message;
-  }
+  return userFacingError(defaultMessage);
+}
 
-  return defaultMessage;
+/** Remove implementation detail before an already-captured error reaches UI. */
+export function userFacingError(value: string): string {
+  const firstLine = value.split(/\r?\n/, 1)[0]?.trim() ?? "";
+  if (!firstLine) return "The operation could not be completed.";
+  if (
+    /traceback|stack trace|(?:^|\n)\s*at\s|file ".*", line \d+|node_modules|sql(?:ite)? error|^[A-Z][A-Za-z]+Error:/i.test(
+      value,
+    )
+  ) {
+    return "The operation could not be completed. Try again or check the operation log.";
+  }
+  return firstLine.slice(0, 320);
 }

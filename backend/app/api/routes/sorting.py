@@ -11,6 +11,7 @@ from app.api.schemas import (
     TaskStartRequest,
     TaskStartResponse,
 )
+from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
 
 router = APIRouter()
@@ -18,6 +19,8 @@ router = APIRouter()
 
 class StartSortRequest(TaskStartRequest):
     dry_run: bool = False
+    expected_config_fingerprint: str | None = None
+    plan_id: str | None = None
 
 
 @router.post("/sorting/start", response_model=TaskStartResponse)
@@ -28,11 +31,38 @@ async def start_sorting(
     transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
 ) -> TaskStartResponse:
     request = body or StartSortRequest()
+    current_fingerprint = config_fingerprint(container.config)
+    if (
+        request.expected_config_fingerprint is not None
+        and request.expected_config_fingerprint != current_fingerprint
+    ):
+        raise ConflictError(
+            "The configuration changed after preview; generate and review a new plan.",
+            details={
+                "reason": "stale_preview",
+                "expected_config_fingerprint": request.expected_config_fingerprint,
+                "current_config_fingerprint": current_fingerprint,
+            },
+        )
+    frozen_plan = None
+    if request.plan_id is not None:
+        frozen_plan = container.preview_service.frozen_plan(request.plan_id)
+        if frozen_plan is None:
+            raise ConflictError(
+                "The reviewed plan is no longer available; generate preview again.",
+                details={"reason": "missing_plan", "plan_id": request.plan_id},
+            )
+        if frozen_plan.config_fingerprint != current_fingerprint:
+            raise ConflictError(
+                "The configuration changed after preview; generate and review a new plan.",
+                details={"reason": "stale_plan", "plan_id": request.plan_id},
+            )
     task, replayed = container.task_manager.start_task(
         "sort",
         request.idempotency_key,
         container.sorting_service.run,
         dry_run=request.dry_run,
+        frozen_plan=frozen_plan,
     )
     if retry_attempt is not None:
         task.record_transport_retry(

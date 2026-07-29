@@ -139,6 +139,8 @@ class ReportService:
                 "corrupted": op.get("corrupted_files", 0) or 0,
                 "junk": op.get("junk_files", 0) or 0,
                 "already_in_destination": op.get("already_in_destination", 0) or 0,
+                "companions": op.get("companion_files", 0) or 0,
+                "incomplete_units": op.get("incomplete_units", 0) or 0,
             },
             "statistics": statistics,
             "files": files,
@@ -196,6 +198,9 @@ class ReportService:
                 "duplicate_similarity",
                 "duplicate_of",
                 "suspicious",
+                "unit_id",
+                "companion_role",
+                "unit_primary_path",
             ]
             writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()

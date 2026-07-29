@@ -18,7 +18,7 @@ from app.api.schemas import (
 from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.core.exceptions import TaskNotFoundError
-from app.utils.path_utils import validate_source_root, validate_source_target_overlap
+from app.core.library_validation import validate_configured_library
 
 router = APIRouter()
 
@@ -29,6 +29,9 @@ class ScanResponse(BaseModel):
     excluded_files: int = 0
     partial: bool = False
     issues: list[dict[str, Any]] = Field(default_factory=list)
+    media_units: int = 0
+    companion_files: int = 0
+    unmatched_companions: int = 0
 
 
 class DiskSpaceResponse(BaseModel):
@@ -56,6 +59,9 @@ class AnalysisResponse(BaseModel):
     warnings: list[str]
     partial: bool = False
     issues: list[dict[str, Any]] = Field(default_factory=list)
+    media_units: int = 0
+    companion_files: int = 0
+    unmatched_companions: int = 0
 
 
 def _snapshot(config: Config) -> Config:
@@ -64,24 +70,25 @@ def _snapshot(config: Config) -> Config:
 
 async def _scan_operation(task: Task, container: Any, config: Config) -> dict[str, Any]:
     task.transition("validating")
-    source = await asyncio.to_thread(validate_source_root, config.source_directory)
-    if config.target_directory:
-        await asyncio.to_thread(
-            validate_source_target_overlap,
-            source,
-            config.target_directory,
-        )
-    task.transition("scanning_source")
-    traversal = await container.filesystem_service.traverse(
-        source,
-        recursive=config.recursive_scan,
-        max_depth=config.max_recursion_depth,
-        exclude_patterns=config.exclude_patterns,
-        min_file_size_kb=config.min_file_size_kb,
-        max_file_size_mb=config.max_file_size_mb,
-        cancel_token=task.cancel_token,
-        task=task,
+    library = await asyncio.to_thread(
+        validate_configured_library,
+        config,
+        require_destination=False,
     )
+    task.transition("scanning_source")
+    traversal = (
+        await container.filesystem_service.traverse_roots(
+            [(item.canonical_path, item.exclusions) for item in library.inputs],
+            recursive=config.recursive_scan,
+            max_depth=config.max_recursion_depth,
+            exclude_patterns=config.exclude_patterns,
+            min_file_size_kb=config.min_file_size_kb,
+            max_file_size_mb=config.max_file_size_mb,
+            cancel_token=task.cancel_token,
+            task=task,
+            companion_handling=config.companion_handling,
+        )
+    ).result
     task.update_progress(len(traversal.files), total=len(traversal.files))
     return ScanResponse(
         files=[str(path) for path in traversal.files],
@@ -89,6 +96,9 @@ async def _scan_operation(task: Task, container: Any, config: Config) -> dict[st
         excluded_files=traversal.excluded_files,
         partial=traversal.partial,
         issues=[issue.to_dict() for issue in traversal.issues],
+        media_units=len(traversal.units),
+        companion_files=sum(len(unit.companions) for unit in traversal.units),
+        unmatched_companions=len(traversal.unmatched_companions),
     ).model_dump()
 
 
@@ -99,27 +109,31 @@ async def _analysis_operation(task: Task, container: Any, config: Config) -> dic
 @router.post("/scan", response_model=ScanResponse)
 async def scan(container: ContainerDep, config: ConfigDep) -> ScanResponse:
     """Compatibility endpoint; shipped clients use the task transport."""
-    source = await asyncio.to_thread(validate_source_root, config.source_directory)
-    if config.target_directory:
-        await asyncio.to_thread(
-            validate_source_target_overlap,
-            source,
-            config.target_directory,
-        )
-    traversal = await container.filesystem_service.traverse(
-        source,
-        recursive=config.recursive_scan,
-        max_depth=config.max_recursion_depth,
-        exclude_patterns=config.exclude_patterns,
-        min_file_size_kb=config.min_file_size_kb,
-        max_file_size_mb=config.max_file_size_mb,
+    library = await asyncio.to_thread(
+        validate_configured_library,
+        config,
+        require_destination=False,
     )
+    traversal = (
+        await container.filesystem_service.traverse_roots(
+            [(item.canonical_path, item.exclusions) for item in library.inputs],
+            recursive=config.recursive_scan,
+            max_depth=config.max_recursion_depth,
+            exclude_patterns=config.exclude_patterns,
+            min_file_size_kb=config.min_file_size_kb,
+            max_file_size_mb=config.max_file_size_mb,
+            companion_handling=config.companion_handling,
+        )
+    ).result
     return ScanResponse(
         files=[str(path) for path in traversal.files],
         total=len(traversal.files),
         excluded_files=traversal.excluded_files,
         partial=traversal.partial,
         issues=[issue.to_dict() for issue in traversal.issues],
+        media_units=len(traversal.units),
+        companion_files=sum(len(unit.companions) for unit in traversal.units),
+        unmatched_companions=len(traversal.unmatched_companions),
     )
 
 

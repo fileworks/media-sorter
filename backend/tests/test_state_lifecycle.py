@@ -404,7 +404,11 @@ def test_config_unversioned_migration_and_future_rejection(tmp_path: Path) -> No
     loader.config_file.write_text('{"source_directory": "/legacy"}', encoding="utf-8")
     assert loader.load().source_directory == "/legacy"
     migrated = json.loads(loader.config_file.read_text(encoding="utf-8"))
-    assert migrated["$schema"] == "mediasort-config-v1"
+    assert migrated["$schema"] == "mediasort-config-v3"
+    assert migrated["library_profile"]["profile_id"] == "default-library"
+    assert migrated["library_profile"]["catalog"]["mode"] == "application_data"
+    assert migrated["preservation_profile"]["mode"] == "organize_only"
+    assert migrated["optimization_profile"]["mode"] == "disabled"
 
     future = '{"$schema": "mediasort-config-v999", "source_directory": "/future"}'
     loader.config_file.write_text(future, encoding="utf-8")

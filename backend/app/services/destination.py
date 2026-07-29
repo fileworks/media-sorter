@@ -142,3 +142,8 @@ def predicted_filename(file_path: Path, extracted_date: date, config: Config) ->
         file_type = "VID" if is_video(file_path) else "IMG"
         stem = rename_stem(config.rename_pattern, extracted_date, stem, file_type)
     return stem + suffix
+
+
+def companion_destination(primary_destination: Path, companion: Path) -> Path:
+    """Place a member beside its primary, inheriting its final collision stem."""
+    return primary_destination.with_name(primary_destination.stem + companion.suffix)
