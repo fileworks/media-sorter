@@ -47,6 +47,35 @@ export default {
           DEFAULT: "hsl(var(--color-category))",
           foreground: "hsl(var(--color-category-foreground))",
         },
+        // Categorical series for charts. Named rather than raw palette values
+        // so an n-way breakdown is not mistaken for status colouring.
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
+          6: "hsl(var(--chart-6))",
+        },
+        // The log console's fixed dark chrome, in both themes.
+        console: {
+          DEFAULT: "hsl(var(--console-surface))",
+          border: "hsl(var(--console-border))",
+          foreground: "hsl(var(--console-text))",
+          muted: "hsl(var(--console-muted))",
+        },
+      },
+      // Tailwind's scale stops at text-xs (12px), and this is a dense tool that
+      // genuinely needs two steps below it for badges, counts and table meta.
+      // Without them every such place reached for `text-[11px]`, which is how
+      // 100 arbitrary type values ended up spread across 26 files.
+      //
+      // Two steps, not three: the former `text-[9px]` sites were all small count
+      // badges, and 9px is below a sensible legibility floor for a tool someone
+      // reads all day. They use `text-3xs`.
+      fontSize: {
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+        "3xs": ["0.625rem", { lineHeight: "0.875rem" }],
       },
       borderRadius: {
         lg: "var(--radius)",

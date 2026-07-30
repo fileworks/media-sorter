@@ -206,7 +206,7 @@ export function StageShell({
                       <span
                         id={`stage-gate-${entry.stage}`}
                         className={cn(
-                          "mt-0.5 hidden text-[11px] leading-snug lg:block",
+                          "mt-0.5 hidden text-2xs leading-snug lg:block",
                           current ? "text-primary-foreground/75" : "text-muted-foreground",
                         )}
                       >

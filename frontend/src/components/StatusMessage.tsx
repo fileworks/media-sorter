@@ -55,7 +55,7 @@ export function StatusMessage({ onAction, className = "", ...input }: StatusMess
           <summary className="cursor-pointer text-xs text-muted-foreground">
             Technical details ({status.code})
           </summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-2xs text-muted-foreground">
             {status.technicalDetail}
           </pre>
         </details>

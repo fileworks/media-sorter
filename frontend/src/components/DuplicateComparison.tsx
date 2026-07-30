@@ -114,13 +114,13 @@ function AlignedDetailTable({ rows }: { rows: DetailRow[] }) {
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border bg-muted/50">
-            <th className="py-1.5 pl-3 pr-2 text-left text-[11px] font-semibold text-muted-foreground">
+            <th className="py-1.5 pl-3 pr-2 text-left text-2xs font-semibold text-muted-foreground">
               {t("duplicate.field")}
             </th>
-            <th className="py-1.5 pr-2 text-left text-[11px] font-semibold text-success">
+            <th className="py-1.5 pr-2 text-left text-2xs font-semibold text-success">
               {t("duplicate.original")}
             </th>
-            <th className="py-1.5 pr-3 text-left text-[11px] font-semibold text-info">
+            <th className="py-1.5 pr-3 text-left text-2xs font-semibold text-info">
               {t("duplicate.duplicate")}
             </th>
           </tr>
@@ -302,12 +302,12 @@ function ImageComparisonSlider({
 
         {/* Corner labels */}
         <div className="pointer-events-none absolute left-2 top-2">
-          <span className="rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+          <span className="rounded bg-black/60 px-2 py-0.5 text-2xs font-semibold text-white">
             {t("duplicate.original")}
           </span>
         </div>
         <div className="pointer-events-none absolute right-2 top-2">
-          <span className="rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+          <span className="rounded bg-black/60 px-2 py-0.5 text-2xs font-semibold text-white">
             {t("duplicate.duplicate")}
           </span>
         </div>
@@ -319,10 +319,17 @@ function ImageComparisonSlider({
           aria-hidden
         >
           <div className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md">
-            <svg width="14" height="10" viewBox="0 0 14 10" fill="none" aria-hidden>
+            <svg
+              width="14"
+              height="10"
+              viewBox="0 0 14 10"
+              fill="none"
+              aria-hidden
+              className="text-black/70"
+            >
               <path
                 d="M1 5h12M1 5L4 2M1 5L4 8M13 5L10 2M13 5L10 8"
-                stroke="#555"
+                stroke="currentColor"
                 strokeWidth="1.5"
                 strokeLinecap="round"
               />
@@ -350,7 +357,7 @@ function ImageComparisonSlider({
           {t("duplicate.viewDuplicate")}
         </button>
       </div>
-      <p className="text-center text-[11px] text-muted-foreground">{t("duplicate.sliderHelp")}</p>
+      <p className="text-center text-2xs text-muted-foreground">{t("duplicate.sliderHelp")}</p>
     </div>
   );
 }
@@ -614,7 +621,7 @@ export function DuplicateComparison({
                       {getBasename(original)}
                     </p>
                     {winnerReason ? (
-                      <div className="flex items-start gap-1.5 rounded-md border border-success/20 bg-success/10 px-2.5 py-1.5 text-[11px] text-success">
+                      <div className="flex items-start gap-1.5 rounded-md border border-success/20 bg-success/10 px-2.5 py-1.5 text-2xs text-success">
                         <FiAward className="mt-0.5 h-3 w-3 shrink-0" />
                         <span>{winnerReason}</span>
                       </div>
@@ -644,11 +651,11 @@ export function DuplicateComparison({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Original (left / kept) */}
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("duplicate.source")}
                     </p>
                     <p
-                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-foreground"
+                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
                       title={original}
                     >
                       {original}
@@ -656,11 +663,11 @@ export function DuplicateComparison({
                     <PathActions path={original} compact />
                     {originalDestination && (
                       <>
-                        <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("duplicate.destination")}
                         </p>
                         <p
-                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-muted-foreground"
+                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
                           title={originalDestination}
                         >
                           {originalDestination}
@@ -671,11 +678,11 @@ export function DuplicateComparison({
 
                   {/* Duplicate (right) */}
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("duplicate.source")}
                     </p>
                     <p
-                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-foreground"
+                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
                       title={item.source}
                     >
                       {item.source}
@@ -683,11 +690,11 @@ export function DuplicateComparison({
                     <PathActions path={item.source} compact />
                     {item.destination && (
                       <>
-                        <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("duplicate.destination")}
                         </p>
                         <p
-                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-[10px] text-muted-foreground"
+                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
                           title={item.destination}
                         >
                           {item.destination}
@@ -746,7 +753,7 @@ export function DuplicateComparison({
                   />
                 </button>
                 {!diffLoading && (
-                  <p className="text-[11px] text-muted-foreground">{t("duplicate.diffHelp")}</p>
+                  <p className="text-2xs text-muted-foreground">{t("duplicate.diffHelp")}</p>
                 )}
               </div>
             )}

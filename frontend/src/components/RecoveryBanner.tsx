@@ -48,7 +48,7 @@ export function RecoveryBanner({ operation, onDecide, onOpenReport }: RecoveryBa
             >
               <div className="min-w-0">
                 <p className="truncate text-xs text-foreground">{redactRoot(artifact.path)}</p>
-                <p className="text-[11px] text-muted-foreground">{explanation}</p>
+                <p className="text-2xs text-muted-foreground">{explanation}</p>
               </div>
               {onDecide && (
                 <div className="flex gap-2">

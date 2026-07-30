@@ -80,7 +80,7 @@ export function OperationCenter({
           <span className="block text-xs font-semibold text-foreground">
             {t("operations.title")}
           </span>
-          <span className={`block truncate text-[11px] ${TONE_CLASS[badge.tone]}`}>
+          <span className={`block truncate text-2xs ${TONE_CLASS[badge.tone]}`}>
             {badge.count > 0 ? `${badge.count} · ${badgeTitle}` : badgeTitle}
           </span>
         </span>
@@ -122,14 +122,14 @@ export function OperationCenter({
                     <span className="text-sm text-foreground">
                       {t(`operations.kind.${operation.kind}`)} · {report.headline}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-2xs text-muted-foreground">
                       {t("operations.written", {
                         bytes: formatBytesShort(operation.bytesWritten),
                       })}
                     </span>
                   </div>
                   {report.facts.length > 0 && (
-                    <dl className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                    <dl className="mt-1 flex flex-wrap gap-x-3 text-2xs text-muted-foreground">
                       {report.facts.map((fact) => (
                         <span key={fact.label}>
                           {fact.label}: {fact.value}
@@ -138,7 +138,7 @@ export function OperationCenter({
                     </dl>
                   )}
                   {report.nextSteps.length > 0 && (
-                    <p className="mt-1 text-[11px] text-warning">{report.nextSteps[0]}</p>
+                    <p className="mt-1 text-2xs text-warning">{report.nextSteps[0]}</p>
                   )}
                   {onOpen && (
                     <div className="mt-1 flex flex-wrap gap-2">
@@ -147,7 +147,7 @@ export function OperationCenter({
                           key={`${link.kind}:${link.id}`}
                           type="button"
                           onClick={() => onOpen(link.kind, link.id)}
-                          className="rounded border border-border px-2 py-0.5 text-[11px] hover:border-primary"
+                          className="rounded border border-border px-2 py-0.5 text-2xs hover:border-primary"
                         >
                           {link.kind}
                         </button>

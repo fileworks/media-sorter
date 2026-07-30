@@ -689,19 +689,19 @@ export default function MainPage() {
                   MediaSorter
                 </span>
                 {health?.version && (
-                  <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary sm:inline">
+                  <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-semibold text-primary sm:inline">
                     v{health.version}
                   </span>
                 )}
               </div>
-              <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
+              <p className="hidden truncate text-2xs text-muted-foreground sm:block">
                 {t("app.tagline")}
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <div
-              className="hidden items-center gap-2 rounded-full border border-border/80 bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground md:flex"
+              className="hidden items-center gap-2 rounded-full border border-border/80 bg-background px-2.5 py-1.5 text-2xs text-muted-foreground md:flex"
               role="status"
               title={
                 health?.status === "ok"
@@ -735,7 +735,7 @@ export default function MainPage() {
               <FiClock className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">{t("app.history")}</span>
               {(historyMeta?.total ?? 0) > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold">
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-3xs font-semibold">
                   {historyMeta?.total}
                 </span>
               )}

@@ -255,7 +255,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
             </h2>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium bg-muted",
+                "shrink-0 rounded-full px-2 py-0.5 text-2xs font-medium bg-muted",
                 getStatusColor(current.status),
               )}
             >
@@ -338,7 +338,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
           <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-4">
             {meta.map((m) => (
               <div key={m.label} className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                <dt className="text-2xs uppercase tracking-wide text-muted-foreground">
                   {m.label}
                 </dt>
                 <dd className="truncate font-mono text-foreground" title={m.value}>
@@ -353,14 +353,14 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
             <div className="space-y-2">
               {tags.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("preview.tags")}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                        className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary"
                       >
                         {tag}
                       </span>
@@ -370,10 +370,10 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               )}
               {category && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("preview.categoryLabel")}
                   </p>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-category/10 px-2.5 py-0.5 text-[11px] font-medium text-category">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-category/10 px-2.5 py-0.5 text-2xs font-medium text-category">
                     <FiFolder className="h-3 w-3 shrink-0" />
                     {category}
                   </span>
@@ -384,7 +384,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
 
           {(current.companions?.length ?? 0) > 0 && (
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("preview.unitMembers", { count: current.companions!.length + 1 })}
               </p>
               <ul className="space-y-1.5">
@@ -397,17 +397,17 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                       <span className="font-medium text-foreground">
                         {getBasename(member.source)}
                       </span>
-                      <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
+                      <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-3xs text-info">
                         {t(`preview.companionRole.${member.role}`)}
                       </span>
                     </div>
                     {member.destination && (
-                      <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                      <p className="mt-1 break-all font-mono text-2xs text-muted-foreground">
                         → {member.destination}
                       </p>
                     )}
                     {member.warning && (
-                      <p className="mt-1 text-[11px] text-warning">{member.warning}</p>
+                      <p className="mt-1 text-2xs text-warning">{member.warning}</p>
                     )}
                   </li>
                 ))}
@@ -534,7 +534,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                       : ""}
                   </p>
                   {current.provenance.duplicate.matched_path && (
-                    <p className="break-all font-mono text-[11px] text-muted-foreground">
+                    <p className="break-all font-mono text-2xs text-muted-foreground">
                       {current.provenance.duplicate.matched_path}
                     </p>
                   )}
@@ -566,7 +566,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
 
           {/* Source path */}
           <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("preview.column.source")}
             </p>
             <PathActions path={current.source} />
@@ -575,7 +575,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
           {/* Destination path (if known) */}
           {current.destination && (
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("preview.column.destination")}
               </p>
               <p
@@ -590,7 +590,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
 
         {/* Footer: keyboard hint */}
         {showNav && (
-          <p className="border-t border-border px-5 py-2 text-[11px] text-muted-foreground">
+          <p className="border-t border-border px-5 py-2 text-2xs text-muted-foreground">
             {t("preview.navigationHelp")}
           </p>
         )}

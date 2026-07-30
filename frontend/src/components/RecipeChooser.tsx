@@ -77,7 +77,7 @@ export function RecipeChooser({
                 {t(recipe.descriptionKey)}
               </span>
               <span
-                className={`mt-2.5 block text-[11px] leading-relaxed ${
+                className={`mt-2.5 block text-2xs leading-relaxed ${
                   recipe.irreversible ? "text-warning" : "text-success"
                 }`}
               >
@@ -108,7 +108,7 @@ export function RecipeChooser({
           <p className="text-xs font-medium text-success">
             {t("recipes.changed", { count: applied.length })}
           </p>
-          <ul className="mt-1 grid gap-x-4 text-[11px] text-muted-foreground sm:grid-cols-2">
+          <ul className="mt-1 grid gap-x-4 text-2xs text-muted-foreground sm:grid-cols-2">
             {applied.map((change) => (
               <li key={change.key}>
                 <code>{change.key}</code>: {displayValue(change.after)}

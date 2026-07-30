@@ -141,9 +141,7 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
               {suggestError && <p className="mt-1 text-xs text-error">{suggestError}</p>}
               {suggestions.length > 0 && (
                 <div className="mt-2 space-y-1.5">
-                  <p className="text-[11px] text-muted-foreground">
-                    {t("config.folder.suggestions")}
-                  </p>
+                  <p className="text-2xs text-muted-foreground">{t("config.folder.suggestions")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {suggestions.map((s) => (
                       <span

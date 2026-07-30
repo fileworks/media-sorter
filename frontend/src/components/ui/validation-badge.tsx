@@ -32,7 +32,7 @@ export function ValidationBadge({ message, severity = "error", className }: Vali
         className,
       )}
     >
-      <span className="mt-px shrink-0 text-[11px] font-bold">{icons[severity]}</span>
+      <span className="mt-px shrink-0 text-2xs font-bold">{icons[severity]}</span>
       {message}
     </p>
   );

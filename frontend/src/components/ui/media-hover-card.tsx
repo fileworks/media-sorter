@@ -95,10 +95,7 @@ export function MediaHoverCard({ path, title, meta, children, className }: Media
             </p>
             <dl className="mt-1 space-y-0.5">
               {rows.map((m) => (
-                <div
-                  key={m.label}
-                  className="flex items-baseline justify-between gap-3 text-[11px]"
-                >
+                <div key={m.label} className="flex items-baseline justify-between gap-3 text-2xs">
                   <dt className="shrink-0 text-muted-foreground">{m.label}</dt>
                   <dd className="min-w-0 truncate font-mono text-foreground">{m.value}</dd>
                 </div>

@@ -127,7 +127,7 @@ export function ValidationPanel({ rootId }: { rootId: string }) {
                       {finding.current_path ?? "—"}
                     </div>
                     {finding.expected_path && (
-                      <div className="truncate text-[11px]" title={finding.expected_path}>
+                      <div className="truncate text-2xs" title={finding.expected_path}>
                         {t("validation.expected", { path: finding.expected_path })}
                       </div>
                     )}
@@ -142,7 +142,7 @@ export function ValidationPanel({ rootId }: { rootId: string }) {
       )}
 
       {data.disabled_categories.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {t("validation.disabled", { categories: data.disabled_categories.join(", ") })}
         </p>
       )}

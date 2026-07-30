@@ -47,7 +47,7 @@ const TONE_CLASS: Record<string, string> = {
 function ConfidenceBadge({ item }: { item: ItemProjection }) {
   const tone = confidenceTone(item.confidence);
   return (
-    <span className={`text-[11px] uppercase tracking-wide ${TONE_CLASS[tone]}`} title={item.reason}>
+    <span className={`text-2xs uppercase tracking-wide ${TONE_CLASS[tone]}`} title={item.reason}>
       {isEstimate(item) ? `${item.confidence} estimate` : "measured"}
     </span>
   );
@@ -93,7 +93,7 @@ function ItemRow({
           {recommendation.headline}
         </div>
         {recommendation.requiresOverride && onToggleOverride && (
-          <label className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <label className="mt-1 flex items-center gap-2 text-2xs text-muted-foreground">
             <input
               type="checkbox"
               checked={overridden}
@@ -147,7 +147,7 @@ export function OptimizationPreviewPanel({
             {saving.label ? `${saving.label} (${saving.percentLabel})` : "Unknown"}
           </div>
           {!saving.label && saving.reason && (
-            <div className="mt-1 text-[11px] text-muted-foreground">{saving.reason}</div>
+            <div className="mt-1 text-2xs text-muted-foreground">{saving.reason}</div>
           )}
         </div>
         <div className="rounded-lg border border-border p-3">
