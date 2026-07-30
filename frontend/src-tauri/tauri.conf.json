@@ -49,8 +49,7 @@
         "icons/icon.png"
       ],
       "resources": [
-        "resources/backend/**",
-        "resources/ffmpeg/**"
+        "resources/**"
       ],
       "dmg": {
         "background": "installer/dmg-background.png",
