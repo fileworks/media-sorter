@@ -125,14 +125,35 @@ it("keeps all three two-million-item ranges bounded within their previous budget
     { name: "duplicate groups", count: 2_000_000, row: 64, view: 520, budget: 40 },
   ] as const;
 
+  // Violations are collected rather than asserted inside the loop. The timed
+  // section previously contained 60,000 `expect()` calls, so it measured the
+  // assertion library far more than it measured `fixedWindow` — which is why
+  // upgrading vitest pushed it from under budget to 1042ms without anything
+  // about the windowing changing. What is timed is now only the thing under
+  // test.
+  const overBudget: string[] = [];
+  const wrongHeight: string[] = [];
+
   const started = performance.now();
   for (let iteration = 0; iteration < 10_000; iteration += 1) {
     for (const tier of tiers) {
       const scrollTop = ((iteration * 7919) % (tier.count - 1)) * tier.row;
       const range = fixedWindow(tier.count, scrollTop, tier.view, tier.row, 2);
-      expect(range.end - range.start, tier.name).toBeLessThanOrEqual(tier.budget);
-      expect(range.totalHeight, tier.name).toBe(tier.count * tier.row);
+      if (range.end - range.start > tier.budget) {
+        overBudget.push(`${tier.name}: ${range.end - range.start} > ${tier.budget}`);
+      }
+      if (range.totalHeight !== tier.count * tier.row) {
+        wrongHeight.push(`${tier.name}: ${range.totalHeight}`);
+      }
     }
   }
-  expect(performance.now() - started).toBeLessThan(1_000);
+  const elapsed = performance.now() - started;
+
+  // The bounds are the point of the test and are exact, not timing-dependent.
+  expect(overBudget).toEqual([]);
+  expect(wrongHeight).toEqual([]);
+  // The budget stays a guard against an algorithmic regression — 30,000 windows
+  // over two-million-item lists must not creep into linear work — with enough
+  // headroom that a loaded shared runner is not a failure.
+  expect(elapsed).toBeLessThan(1_000);
 });
