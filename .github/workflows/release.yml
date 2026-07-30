@@ -406,6 +406,40 @@ jobs:
         with:
           path: artifacts
 
+      # Every platform job produces a file literally named SHA256SUMS, and all
+      # three were uploaded as one release asset of that name. They collided:
+      # v1.1.5 shipped a SHA256SUMS containing a single line, for the arm64 DMG,
+      # so four of the five installers had no published checksum at all — and the
+      # asset-update race is what failed this step.
+      #
+      # The same collision hit release-signing-state-macos.json, which both macOS
+      # jobs emit under one name.
+      - name: Merge per-platform checksums and signing state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # One SHA256SUMS covering every artifact, which is what a verifier wants.
+          find artifacts -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 cat \
+            | sort -u > release/SHA256SUMS
+          echo "--- merged checksums:"
+          cat release/SHA256SUMS
+          # Signing state is per-job evidence, so it keeps a per-job name.
+          for state in $(find artifacts -name 'release-signing-state-*.json' | sort); do
+            job="$(basename "$(dirname "$state")")"
+            cp "$state" "release/release-signing-state-${job}.json"
+          done
+          ls -la release/
+          # Every installer must be accounted for in the merged file.
+          missing=0
+          while IFS= read -r artifact; do
+            name="$(basename "$artifact")"
+            grep -q "  ${name}$" release/SHA256SUMS || { echo "::error::no checksum for ${name}"; missing=1; }
+          done < <(find artifacts \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.zip' \) )
+          exit $missing
+
       - name: Create draft or publish only with recorded smoke evidence
         uses: softprops/action-gh-release@v2
         with:
@@ -417,5 +451,5 @@ jobs:
             artifacts/**/*.msi
             artifacts/**/*.exe
             artifacts/**/*.zip
-            artifacts/**/SHA256SUMS
-            artifacts/**/release-signing-state-*.json
+            release/SHA256SUMS
+            release/release-signing-state-*.json
