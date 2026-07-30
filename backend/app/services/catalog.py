@@ -14,9 +14,11 @@ is not there" are different statements and only one of them is safe to act on.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sqlite3
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +26,8 @@ from typing import Any, Literal
 
 from app.core.catalog_schema import (
     CATALOG_SCHEMA_VERSION,
+    FINGERPRINT_ROLE,
+    FINGERPRINT_VERSION,
     HASH_EXTRACTOR_VERSION,
     MEDIA_FACT_EXTRACTOR_VERSION,
     SIGNATURE_EXTRACTOR_VERSION,
@@ -53,6 +57,9 @@ class FileRecord:
     size_bytes: int
     mtime_ns: int
     fingerprint: str
+    ctime_ns: int | None = None
+    fingerprint_version: int = 1
+    fingerprint_role: str = "cache_hint"
     file_identity: str | None = None
     missing_since_generation: int | None = None
     unit_id: str | None = None
@@ -70,6 +77,7 @@ class ObservedFile:
     mtime_ns: int
     ctime_ns: int | None = None
     file_identity: str | None = None
+    sample_sha256: str | None = None
     unit_id: str | None = None
     companion_role: str | None = None
     unit_primary: bool = False
@@ -80,7 +88,9 @@ class ObservedFile:
         return fingerprint(
             size_bytes=self.size_bytes,
             mtime_ns=self.mtime_ns,
+            ctime_ns=self.ctime_ns,
             file_identity=self.file_identity,
+            sample_sha256=self.sample_sha256,
         )
 
     @classmethod
@@ -92,6 +102,7 @@ class ObservedFile:
             mtime_ns=observed.st_mtime_ns,
             ctime_ns=getattr(observed, "st_ctime_ns", None),
             file_identity=str(observed.st_ino) if observed.st_ino else None,
+            sample_sha256=bounded_sample_sha256(path) if os.name == "nt" else None,
         )
 
 
@@ -144,6 +155,12 @@ class MediaCatalog:
         integrity = self._connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise CatalogCorruptionError(f"Catalog failed integrity check: {integrity}")
+        current_version = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
+        if 0 < current_version < CATALOG_SCHEMA_VERSION:
+            backup = self.path.with_name(f"{self.path.name}.v{current_version}.backup")
+            if not backup.exists():
+                with closing(sqlite3.connect(backup)) as destination, destination:
+                    self._connection.backup(destination)
         # Not wrapped in `transaction()`: sqlite3's ``executescript`` commits any
         # open transaction before it runs, so an explicit BEGIN here would leave
         # the COMMIT with nothing to close. The schema is idempotent
@@ -151,7 +168,14 @@ class MediaCatalog:
         return apply_schema(self._connection)
 
     def close(self) -> None:
-        self._connection.close()
+        connection = getattr(self, "_connection", None)
+        if connection is not None:
+            connection.close()
+
+    def __del__(self) -> None:
+        """Best-effort fallback for callers that forget the context manager."""
+        with suppress(Exception):
+            self.close()
 
     def __enter__(self) -> MediaCatalog:
         return self
@@ -274,16 +298,19 @@ class MediaCatalog:
                 connection.execute(
                     """
                     INSERT INTO files (root_id, relative_path, file_identity, size_bytes,
-                                       mtime_ns, ctime_ns, fingerprint, unit_id,
+                                       mtime_ns, ctime_ns, fingerprint,
+                                       fingerprint_version, fingerprint_role, unit_id,
                                        companion_role, unit_primary, primary_relative_path,
                                        first_seen_generation, last_seen_generation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(root_id, relative_path) DO UPDATE SET
                         file_identity = excluded.file_identity,
                         size_bytes = excluded.size_bytes,
                         mtime_ns = excluded.mtime_ns,
                         ctime_ns = excluded.ctime_ns,
                         fingerprint = excluded.fingerprint,
+                        fingerprint_version = excluded.fingerprint_version,
+                        fingerprint_role = excluded.fingerprint_role,
                         unit_id = excluded.unit_id,
                         companion_role = excluded.companion_role,
                         unit_primary = excluded.unit_primary,
@@ -299,6 +326,8 @@ class MediaCatalog:
                         item.mtime_ns,
                         item.ctime_ns,
                         item.fingerprint,
+                        FINGERPRINT_VERSION,
+                        FINGERPRINT_ROLE,
                         item.unit_id,
                         item.companion_role,
                         int(item.unit_primary),
@@ -368,6 +397,8 @@ class MediaCatalog:
 
     def hash_for(self, record: FileRecord) -> str | None:
         """Return a stored hash only if it is still provably about this content."""
+        if record.fingerprint_version != FINGERPRINT_VERSION:
+            return None
         row = self._connection.execute(
             """
             SELECT sha256 FROM file_hashes
@@ -411,6 +442,8 @@ class MediaCatalog:
             )
 
     def media_facts_for(self, record: FileRecord) -> dict[str, Any] | None:
+        if record.fingerprint_version != FINGERPRINT_VERSION:
+            return None
         row = self._connection.execute(
             """
             SELECT kind, captured_at, camera_model, width, height, duration_seconds
@@ -454,6 +487,8 @@ class MediaCatalog:
             )
 
     def signature_for(self, record: FileRecord, kind: str) -> dict[str, Any] | None:
+        if record.fingerprint_version != FINGERPRINT_VERSION:
+            return None
         row = self._connection.execute(
             """
             SELECT value, mean_rgb FROM signatures
@@ -514,10 +549,11 @@ class MediaCatalog:
             SELECT f.* FROM files f
               JOIN file_hashes h ON h.file_id = f.file_id
              WHERE h.sha256 = ? AND h.fingerprint = f.fingerprint
+               AND f.fingerprint_version = ?
                AND f.missing_since_generation IS NULL
              LIMIT ?
             """,
-            (sha256, limit),
+            (sha256, FINGERPRINT_VERSION, limit),
         ).fetchall()
         return [_to_record(row) for row in rows]
 
@@ -681,7 +717,10 @@ def _to_record(row: sqlite3.Row) -> FileRecord:
         relative_path=str(row["relative_path"]),
         size_bytes=int(row["size_bytes"]),
         mtime_ns=int(row["mtime_ns"]),
+        ctime_ns=None if row["ctime_ns"] is None else int(row["ctime_ns"]),
         fingerprint=str(row["fingerprint"]),
+        fingerprint_version=int(row["fingerprint_version"]),
+        fingerprint_role=str(row["fingerprint_role"]),
         file_identity=(None if row["file_identity"] is None else str(row["file_identity"])),
         missing_since_generation=(
             None
@@ -695,3 +734,15 @@ def _to_record(row: sqlite3.Row) -> FileRecord:
             None if row["primary_relative_path"] is None else str(row["primary_relative_path"])
         ),
     )
+
+
+def bounded_sample_sha256(path: Path, *, sample_bytes: int = 4096) -> str:
+    """Hash bounded first/last samples where the platform lacks change time."""
+    size = path.stat().st_size
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        digest.update(stream.read(sample_bytes))
+        if size > sample_bytes:
+            stream.seek(max(sample_bytes, size - sample_bytes))
+            digest.update(stream.read(sample_bytes))
+    return digest.hexdigest()

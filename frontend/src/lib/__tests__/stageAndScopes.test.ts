@@ -69,7 +69,11 @@ const DEFINITIONS: SettingDefinition[] = [
 
 describe("effectiveValue", () => {
   it("prefers a run override over the saved value", () => {
-    const scopes = { ...EMPTY_SCOPES, profile: { rename_pattern: "a" }, run: { rename_pattern: "b" } };
+    const scopes = {
+      ...EMPTY_SCOPES,
+      profile: { rename_pattern: "a" },
+      run: { rename_pattern: "b" },
+    };
 
     const setting = effectiveValue(DEFINITIONS[1], scopes);
 
@@ -80,7 +84,10 @@ describe("effectiveValue", () => {
   });
 
   it("falls back to the saved value, then to the default", () => {
-    const saved = effectiveValue(DEFINITIONS[1], { ...EMPTY_SCOPES, profile: { rename_pattern: "a" } });
+    const saved = effectiveValue(DEFINITIONS[1], {
+      ...EMPTY_SCOPES,
+      profile: { rename_pattern: "a" },
+    });
     const fallback = effectiveValue(DEFINITIONS[1], EMPTY_SCOPES, { rename_pattern: "d" });
 
     expect(saved.source).toBe("profile");
@@ -89,13 +96,19 @@ describe("effectiveValue", () => {
   });
 
   it("reads an application setting from the application scope", () => {
-    const setting = effectiveValue(DEFINITIONS[0], { ...EMPTY_SCOPES, application: { language: "de" } });
+    const setting = effectiveValue(DEFINITIONS[0], {
+      ...EMPTY_SCOPES,
+      application: { language: "de" },
+    });
 
     expect(setting.source).toBe("application");
   });
 
   it("does not call a run value an override when nothing was saved", () => {
-    const setting = effectiveValue(DEFINITIONS[1], { ...EMPTY_SCOPES, run: { rename_pattern: "b" } });
+    const setting = effectiveValue(DEFINITIONS[1], {
+      ...EMPTY_SCOPES,
+      run: { rename_pattern: "b" },
+    });
 
     expect(setting.source).toBe("run");
     expect(setting.overridden).toBe(false);
@@ -121,12 +134,14 @@ describe("scope badges", () => {
 
   it("distinguishes library settings from app preferences", () => {
     expect(
-      scopeBadge(effectiveValue(DEFINITIONS[1], { ...EMPTY_SCOPES, profile: { rename_pattern: "a" } }))
-        .label,
+      scopeBadge(
+        effectiveValue(DEFINITIONS[1], { ...EMPTY_SCOPES, profile: { rename_pattern: "a" } }),
+      ).label,
     ).toBe("library");
     expect(
-      scopeBadge(effectiveValue(DEFINITIONS[0], { ...EMPTY_SCOPES, application: { language: "de" } }))
-        .label,
+      scopeBadge(
+        effectiveValue(DEFINITIONS[0], { ...EMPTY_SCOPES, application: { language: "de" } }),
+      ).label,
     ).toBe("app");
   });
 });
@@ -145,9 +160,9 @@ describe("unsavedState", () => {
   });
 
   it("says everything is saved when nothing changed", () => {
-    expect(unsavedState(DEFINITIONS, { rename_pattern: "a" }, { rename_pattern: "a" }).summary).toBe(
-      "Everything is saved.",
-    );
+    expect(
+      unsavedState(DEFINITIONS, { rename_pattern: "a" }, { rename_pattern: "a" }).summary,
+    ).toBe("Everything is saved.");
   });
 
   it("ignores keys that are not settings", () => {
@@ -157,7 +172,11 @@ describe("unsavedState", () => {
 
 describe("run overrides", () => {
   it("reverting one lets the saved value show through", () => {
-    const scopes = { ...EMPTY_SCOPES, profile: { rename_pattern: "a" }, run: { rename_pattern: "b" } };
+    const scopes = {
+      ...EMPTY_SCOPES,
+      profile: { rename_pattern: "a" },
+      run: { rename_pattern: "b" },
+    };
 
     const reverted = revertRunOverride(scopes, "rename_pattern");
 
@@ -165,7 +184,11 @@ describe("run overrides", () => {
   });
 
   it("clearing them all leaves the saved values intact", () => {
-    const scopes = { ...EMPTY_SCOPES, profile: { rename_pattern: "a" }, run: { rename_pattern: "b" } };
+    const scopes = {
+      ...EMPTY_SCOPES,
+      profile: { rename_pattern: "a" },
+      run: { rename_pattern: "b" },
+    };
 
     expect(clearRunOverrides(scopes).profile.rename_pattern).toBe("a");
     expect(clearRunOverrides(scopes).run).toEqual({});
@@ -202,8 +225,22 @@ describe("categories and search", () => {
 describe("safetyConsequences", () => {
   it("warns about Move mode and about writing inside files", () => {
     const consequences = safetyConsequences({
-      copy_instead_of_move: { key: "", value: false, source: "profile", overridden: false, savedValue: false, invalidates: "nothing" },
-      embed_tags_in_files: { key: "", value: true, source: "profile", overridden: false, savedValue: true, invalidates: "nothing" },
+      copy_instead_of_move: {
+        key: "",
+        value: false,
+        source: "profile",
+        overridden: false,
+        savedValue: false,
+        invalidates: "nothing",
+      },
+      embed_tags_in_files: {
+        key: "",
+        value: true,
+        source: "profile",
+        overridden: false,
+        savedValue: true,
+        invalidates: "nothing",
+      },
     });
 
     expect(consequences.map((item) => item.severity)).toEqual(["warning", "warning"]);
@@ -212,7 +249,14 @@ describe("safetyConsequences", () => {
 
   it("states that duplicates are quarantined rather than deleted", () => {
     const consequences = safetyConsequences({
-      remove_duplicates: { key: "", value: true, source: "profile", overridden: false, savedValue: true, invalidates: "nothing" },
+      remove_duplicates: {
+        key: "",
+        value: true,
+        source: "profile",
+        overridden: false,
+        savedValue: true,
+        invalidates: "nothing",
+      },
     });
 
     expect(consequences[0].text).toMatch(/never deleted/i);

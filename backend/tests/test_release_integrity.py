@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import stat
@@ -352,6 +353,35 @@ def test_portable_builder_matches_launcher_resource_layout(
     (resources / "ffmpeg").mkdir()
     (resources / "ffmpeg" / "ffmpeg.exe").write_bytes(b"MZffmpeg")
     (resources / "ffmpeg" / "ffprobe.exe").write_bytes(b"MZffprobe")
+    (resources / "ffmpeg" / "native-tools-provenance.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_manifest_version": "fixture",
+                "platform": "windows",
+                "architecture": "x86_64",
+                "sources": [
+                    {
+                        "url": "https://example.test/releases/v1/ffmpeg.zip",
+                        "sha256": "a" * 64,
+                    }
+                ],
+                "bundled_binaries": {
+                    "ffmpeg.exe": {
+                        "sha256": hashlib.sha256(b"MZffmpeg").hexdigest(),
+                        "size_bytes": 8,
+                    },
+                    "ffprobe.exe": {
+                        "sha256": hashlib.sha256(b"MZffprobe").hexdigest(),
+                        "size_bytes": 9,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (resources / "clip").mkdir()
+    (resources / "clip" / "stale-model.onnx").write_bytes(b"must-not-ship")
     output = tmp_path / "output"
     monkeypatch.setattr(make_portable_zip, "TARGET_RELEASE", target)
     monkeypatch.setattr(make_portable_zip, "RESOURCES_SRC", resources)
@@ -369,5 +399,7 @@ def test_portable_builder_matches_launcher_resource_layout(
 
     archive_path = output / "MediaSorter-portable.zip"
     _, required = release_integrity._zip_required(archive_path)
+    release_integrity._verify_zip_native_provenance(archive_path, required)
     with release_integrity.zipfile.ZipFile(archive_path) as archive:
         assert set(required.values()) <= set(archive.namelist())
+        assert not any("/clip/" in name for name in archive.namelist())

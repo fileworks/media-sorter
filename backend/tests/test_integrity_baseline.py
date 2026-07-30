@@ -100,7 +100,7 @@ def test_copy_preserves_source_filesystem_timestamps(tmp_path: Path) -> None:
     assert result.warnings == ()
 
 
-def test_same_volume_move_needs_no_second_copy(tmp_path: Path) -> None:
+def test_same_volume_move_revalidates_bytes_without_a_second_copy(tmp_path: Path) -> None:
     source = tmp_path / "source.bin"
     destination = tmp_path / "moved" / "source.bin"
     source.write_bytes(b"no byte copy needed")
@@ -108,7 +108,8 @@ def test_same_volume_move_needs_no_second_copy(tmp_path: Path) -> None:
     result = FileSystemService().safe_move(source, destination)
 
     assert result.protocol == "same_volume_link"
-    assert result.integrity_source == "same_inode"
+    assert result.integrity_source == "measured"
+    assert result.integrity is not None
     assert result.source_removed is True
     assert source.exists() is False
     assert destination.read_bytes() == b"no byte copy needed"

@@ -14,11 +14,10 @@ and quantize to ~100 MB per tower, so it runs on a moderate laptop CPU.
 
 Design notes
 ------------
-* **Everything is lazy and best-effort.** The heavy imports (onnxruntime,
-  tokenizers, huggingface_hub), the model download and the session construction
-  only happen on first real use. Any failure flips :pyattr:`available` to
-  ``False`` so the factory falls back to CLIP — a sort is never broken by a
-  missing/broken model.
+* **Inference loading is lazy and offline.** Heavy imports and session
+  construction happen only on first real use. Downloads are handled separately
+  by the explicit, verified model installer; this class never contacts a network.
+  A load failure flips :pyattr:`available` to ``False``.
 * **Runtime-adaptive I/O.** Input names (``pixel_values`` / ``input_ids`` /
   ``attention_mask``) and the pooled-embedding output name are resolved from the
   loaded graph rather than hardcoded, so a slightly different export still works.
@@ -29,20 +28,20 @@ Design notes
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
+from app.services.ai.model_installation import AiModelStore
 
 if TYPE_CHECKING:
     from PIL.Image import Image
 
 logger = get_logger(__name__)
 
-# onnx-community SigLIP 2 base/16 @256 (Apache-2.0). Pinned by repo id; the q8
-# ("quantized") tower variants are ~100 MB each and CPU-friendly.
+# onnx-community SigLIP 2 base/16 @256 (Apache-2.0). Its immutable commit and
+# file digests live in ai-models.json; these names only address installed files.
 SIGLIP2_REPO = "onnx-community/siglip2-base-patch16-256-ONNX"
 _VISION_FILE = "onnx/vision_model_quantized.onnx"
 _TEXT_FILE = "onnx/text_model_quantized.onnx"
@@ -63,23 +62,6 @@ _PAD_TOKEN = "<pad>"
 # Candidate output names for the pooled, similarity-ready embedding, most- to
 # least-specific. Tower-only exports expose ``pooler_output``.
 _EMBED_OUTPUT_CANDIDATES = ("pooler_output", "image_embeds", "text_embeds", "embeds")
-
-
-def _model_cache_dir() -> Path | None:
-    """Resolve where the SigLIP ONNX files are cached / bundled.
-
-    Order: explicit ``MEDIASORT_SIGLIP_MODEL_DIR`` → a ``siglip/`` resource next
-    to the frozen backend (PyInstaller release) → ``None`` (let huggingface_hub
-    use its own cache and download on first use — the dev/desktop path).
-    """
-    env = os.environ.get("MEDIASORT_SIGLIP_MODEL_DIR")
-    if env:
-        return Path(env)
-    if getattr(sys, "frozen", False):
-        candidate = Path(sys.executable).resolve().parent.parent / "siglip"
-        if candidate.is_dir():
-            return candidate
-    return None
 
 
 def _upright_rgb(image: Image) -> Image:
@@ -118,6 +100,7 @@ class SiglipOnnxEncoder(VisionEncoder):
         vision_session: Any | None = None,
         text_session: Any | None = None,
         tokenizer: Any | None = None,
+        model_store: AiModelStore | None = None,
     ) -> None:
         self._repo = repo
         self._allow_gpu = allow_gpu
@@ -125,6 +108,7 @@ class SiglipOnnxEncoder(VisionEncoder):
         self._vision_session: Any | None = vision_session
         self._text_session: Any | None = text_session
         self._tokenizer: Any | None = tokenizer
+        self._model_store = model_store
         self._load_failed = False
         self._text_cache: dict[tuple[str, ...], Any] = {}
         # Resolved lazily from the loaded graphs.
@@ -184,10 +168,10 @@ class SiglipOnnxEncoder(VisionEncoder):
             self._load()
             self._resolve_io()
             return True
-        except Exception as exc:  # pragma: no cover - depends on optional deps/network
+        except Exception as exc:  # pragma: no cover - depends on optional runtime/deps
             self._load_failed = True
             logger.warning(
-                "SigLIP 2 encoder unavailable; falling back to CLIP",
+                "SigLIP 2 encoder unavailable",
                 error=str(exc),
                 repo=self._repo,
             )
@@ -195,32 +179,23 @@ class SiglipOnnxEncoder(VisionEncoder):
 
     def _load(self) -> None:
         import onnxruntime as ort
-        from huggingface_hub import hf_hub_download
         from tokenizers import Tokenizer
 
-        cache = _model_cache_dir()
-        cache_dir = str(cache) if cache is not None else None
+        components = (
+            self._model_store.component_paths("siglip-standard-v1", verify=True)
+            if self._model_store is not None
+            else None
+        )
+        if components is None:
+            raise FileNotFoundError("the verified SigLIP model pack is not installed")
+        model_root = components["model"]
 
-        def fetch(filename: str) -> str:
-            # When the model is bundled (frozen release / explicit dir) prefer the
-            # local copy so a packaged app never needs the network; only reach out
-            # if the file isn't already cached. The dev/desktop path (no cache_dir)
-            # downloads on first use.
-            #
-            # str() is load-bearing: huggingface_hub ships with the optional
-            # `local-ai` extra, so under CI's `.[dev]`-only install mypy resolves
-            # it to Any (ignore_missing_imports) and strict mode rejects the
-            # implicit Any return.
-            if cache_dir is not None:
-                try:
-                    return str(
-                        hf_hub_download(
-                            self._repo, filename, cache_dir=cache_dir, local_files_only=True
-                        )
-                    )
-                except Exception:
-                    pass
-            return str(hf_hub_download(self._repo, filename, cache_dir=cache_dir))
+        def installed(filename: str) -> str:
+            candidate = model_root.joinpath(*Path(filename).parts)
+            candidate.relative_to(model_root)
+            if not candidate.is_file():
+                raise FileNotFoundError(candidate)
+            return str(candidate)
 
         providers = self._select_providers(ort)
         opts = ort.SessionOptions()
@@ -230,14 +205,14 @@ class SiglipOnnxEncoder(VisionEncoder):
 
         if self._vision_session is None:
             self._vision_session = ort.InferenceSession(
-                fetch(_VISION_FILE), sess_options=opts, providers=providers
+                installed(_VISION_FILE), sess_options=opts, providers=providers
             )
         if self._text_session is None:
             self._text_session = ort.InferenceSession(
-                fetch(_TEXT_FILE), sess_options=opts, providers=providers
+                installed(_TEXT_FILE), sess_options=opts, providers=providers
             )
         if self._tokenizer is None:
-            tok = Tokenizer.from_file(fetch(_TOKENIZER_FILE))
+            tok = Tokenizer.from_file(installed(_TOKENIZER_FILE))
             pad_id = tok.token_to_id(_PAD_TOKEN) or 0
             tok.enable_truncation(max_length=_MAX_TOKENS)
             tok.enable_padding(length=_MAX_TOKENS, pad_id=pad_id, pad_token=_PAD_TOKEN)

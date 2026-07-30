@@ -196,7 +196,11 @@ export function SampleComparisonModal({
             {presentation.outcome === "passed"
               ? t("optimization.compare.passed", undefined, "This sample met its contract")
               : presentation.outcome === "failed"
-                ? t("optimization.compare.failed", undefined, "This sample did not meet its contract")
+                ? t(
+                    "optimization.compare.failed",
+                    undefined,
+                    "This sample did not meet its contract",
+                  )
                 : t(
                     "optimization.compare.unproven",
                     undefined,

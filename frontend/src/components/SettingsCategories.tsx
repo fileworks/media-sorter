@@ -118,7 +118,10 @@ export function SettingsCategories({
                     <li key={definition.key} className="space-y-1 px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-sm text-foreground">{definition.label}</span>
-                        <span className={`text-[11px] ${BADGE_CLASS[badge.tone]}`} title={badge.title}>
+                        <span
+                          className={`text-[11px] ${BADGE_CLASS[badge.tone]}`}
+                          title={badge.title}
+                        >
                           {badge.label}
                         </span>
                       </div>
@@ -148,7 +151,9 @@ export function SettingsCategories({
             {consequences.map((consequence) => (
               <li
                 key={consequence.key}
-                className={consequence.severity === "warning" ? "text-warning" : "text-muted-foreground"}
+                className={
+                  consequence.severity === "warning" ? "text-warning" : "text-muted-foreground"
+                }
               >
                 {consequence.text}
               </li>

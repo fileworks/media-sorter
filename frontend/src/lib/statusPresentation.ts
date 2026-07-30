@@ -72,7 +72,8 @@ const DIAGNOSTICS: Record<string, KnownDiagnostic> = {
   destination_full: {
     tone: "error",
     headline: "The destination ran out of space",
-    impact: "Files already written are complete and verified. The remaining files were not started.",
+    impact:
+      "Files already written are complete and verified. The remaining files were not started.",
     actions: ["retry", "open_report"],
   },
   source_unreadable: {

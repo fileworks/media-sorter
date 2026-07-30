@@ -18,6 +18,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
+from app.core.catalog_schema import FINGERPRINT_VERSION
 from app.core.logging_config import get_logger
 from app.services.catalog import FileRecord, MediaCatalog, _to_record
 
@@ -112,13 +113,14 @@ class CatalogDuplicateIndex:
               JOIN roots r ON r.root_id = f.root_id
              WHERE h.sha256 = ?
                AND h.fingerprint = f.fingerprint
+               AND f.fingerprint_version = ?
                AND f.missing_since_generation IS NULL
                AND (f.unit_id IS NULL OR f.unit_primary = 1)
                AND r.role IN ({placeholders})
              ORDER BY f.file_id
              LIMIT ?
             """,
-            (sha256, *roles, limit or self.page_size),
+            (sha256, FINGERPRINT_VERSION, *roles, limit or self.page_size),
         ).fetchall()
         return [_candidate(row) for row in rows]
 
@@ -144,12 +146,13 @@ class CatalogDuplicateIndex:
               JOIN files f ON f.file_id = h.file_id
               JOIN roots r ON r.root_id = f.root_id
              WHERE h.fingerprint = f.fingerprint
+               AND f.fingerprint_version = ?
                AND f.missing_since_generation IS NULL
                AND (f.unit_id IS NULL OR f.unit_primary = 1)
                AND r.role IN ({placeholders})
              ORDER BY h.sha256, f.file_id
             """,
-            tuple(roles),
+            (FINGERPRINT_VERSION, *roles),
         )
         current_hash: str | None = None
         members: list[DuplicateCandidate] = []
@@ -243,11 +246,12 @@ class CatalogDuplicateIndex:
                      WHERE s.kind = ?
                        AND substr(s.value, {index * 4 + 1}, 4) = ?
                        AND s.fingerprint = f.fingerprint
+                       AND f.fingerprint_version = ?
                        AND f.missing_since_generation IS NULL
                        AND (f.unit_id IS NULL OR f.unit_primary = 1)
                        AND r.role IN ({placeholders})
                     """,
-                    (kind, band, *roles),
+                    (kind, band, FINGERPRINT_VERSION, *roles),
                 ).fetchall()
             )
         return rows
@@ -262,12 +266,13 @@ class CatalogDuplicateIndex:
               JOIN roots r ON r.root_id = f.root_id
              WHERE s.kind = ?
                AND s.fingerprint = f.fingerprint
+               AND f.fingerprint_version = ?
                AND f.missing_since_generation IS NULL
                AND (f.unit_id IS NULL OR f.unit_primary = 1)
                AND r.role IN ({placeholders})
              ORDER BY f.file_id
             """,
-            (kind, *roles),
+            (kind, FINGERPRINT_VERSION, *roles),
         ).fetchall()
 
 

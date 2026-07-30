@@ -7,6 +7,7 @@ never silently outrun the indexing work it is built on.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -137,6 +138,38 @@ class TestExecution:
 
 
 class TestRefusals:
+    def test_exact_group_is_blocked_when_keeper_or_duplicate_bytes_drift(
+        self, tmp_path: Path, quarantine: QuarantineStore
+    ) -> None:
+        keeper = _file(tmp_path / "library" / "keeper.jpg", b"same")
+        duplicate = _file(tmp_path / "library" / "duplicate.jpg", b"same")
+        reviewed = hashlib.sha256(b"same").hexdigest()
+        snapshot = _snapshot(
+            ResolvedOutcome(
+                member_id="keep",
+                kind="skip",
+                expected_sha256=reviewed,
+            ),
+            ResolvedOutcome(
+                member_id="dupe",
+                kind="quarantine",
+                expected_sha256=reviewed,
+            ),
+        )
+        duplicate.write_bytes(b"evil")
+
+        report = execute_snapshot(
+            snapshot,
+            quarantine=quarantine,
+            source_for=lambda member: {"keep": keeper, "dupe": duplicate}[member],
+        )
+
+        assert report.code == "failed"
+        assert "full-content validation failed" in (report.actions[0].detail or "")
+        assert keeper.read_bytes() == b"same"
+        assert duplicate.read_bytes() == b"evil"
+        assert quarantine.records() == ()
+
     def test_an_unacknowledged_source_mutation_is_refused_before_anything_runs(
         self, tmp_path: Path, quarantine: QuarantineStore
     ) -> None:

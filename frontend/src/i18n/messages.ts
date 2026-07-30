@@ -547,6 +547,8 @@ export const en = {
   "config.folder.machineWeak":
     "This machine is below the minimum for local AI (needs at least 4 CPU cores and 4 GB RAM)",
   "config.folder.enableLocal": "Turn the local AI model on under AI content tagging first",
+  "config.folder.installLocal":
+    "Install the selected local AI model under AI content tagging first",
   "config.folder.categories": "Categories",
   "config.folder.suggest": "✦ Suggest from photos",
   "config.folder.suggesting": "Analyzing…",
@@ -602,6 +604,9 @@ export const en = {
   "config.ai.explanation":
     "AI tagging writes keywords; smart categorization chooses folders. They can be used independently.",
   "config.ai.enabled": "Tag media by content",
+  "config.ai.localEngine": "Local AI engine",
+  "config.ai.localEngineHelp":
+    "Shared by local content tagging and Smart Categorization. Installing a model does not enable either feature.",
   "config.ai.provider": "Provider",
   "config.ai.local": "Local — offline, free, no key",
   "config.ai.azure": "Azure AI Vision — 5,000/month free",
@@ -660,7 +665,27 @@ export const en = {
   "config.ai.tier.off": "Off — disable the local model",
   "config.ai.slow": " · may be slow",
   "config.ai.download":
-    "Standard / Max download a one-time model (about 100 MB) on first use and run fully offline afterwards.",
+    "Model files are optional. They are downloaded only when you choose Install and run fully offline afterwards.",
+  "config.ai.modelFiles": "Local AI model files",
+  "config.ai.modelChecking": "Checking local model files…",
+  "config.ai.modelStatusUnavailable":
+    "The local model status could not be loaded. Check the backend connection and try again.",
+  "config.ai.modelActionFailed": "The model action could not be completed. Try again.",
+  "config.ai.modelReady": "Ready offline",
+  "config.ai.modelFailed": "Needs attention",
+  "config.ai.modelDownloading": "Downloading",
+  "config.ai.modelNotInstalled": "Not installed",
+  "config.ai.modelProgress": "{done} of {total}",
+  "config.ai.modelVerifying": "Verifying every downloaded file…",
+  "config.ai.modelPublishing": "Finishing the verified installation…",
+  "config.ai.modelOffline":
+    "Installed and verified. The model loads into memory only when an AI feature actually uses it.",
+  "config.ai.modelVerifiedDownload":
+    "The download uses an immutable model revision and verifies every file with SHA-256 before installation.",
+  "config.ai.modelInstall": "Install model",
+  "config.ai.modelRetry": "Retry download",
+  "config.ai.modelRemove": "Remove files",
+  "config.ai.modelConfirmRemove": "Remove model files",
   "config.slider.lenient": "More lenient (85%)",
   "config.slider.strict": "Stricter (100%)",
   "config.slider.pixel": "Nearly pixel-perfect — safest, fewest false positives",
@@ -956,8 +981,7 @@ export const en = {
     "Every folder has a role. Reference folders are compared against and never changed.",
   "sources.addFolder": "Add folder…",
   "sources.folderPickerFailed": "The folder picker could not be opened.",
-  "sources.empty":
-    "Add the folder holding the files you want organized, and one to put them in.",
+  "sources.empty": "Add the folder holding the files you want organized, and one to put them in.",
   "sources.excludedSubfolders": "{count} excluded subfolder(s)",
   "sources.roleFor": "Role for {path}",
   "sources.role.input": "Input",
@@ -987,15 +1011,13 @@ export const en = {
   "sources.freshness.stale": "not scanned recently",
   "sources.freshness.unknown": "never fully scanned",
   "sources.conflict.no_input": "Add at least one input folder.",
-  "sources.conflict.no_input.remedy":
-    "Choose the folder holding the files you want organized.",
+  "sources.conflict.no_input.remedy": "Choose the folder holding the files you want organized.",
   "sources.conflict.no_destination": "Add a destination folder.",
   "sources.conflict.no_destination.remedy": "Choose where organized files should go.",
   "sources.conflict.multiple_destinations": "Only one destination folder is supported.",
   "sources.conflict.multiple_destinations.remedy":
     "Remove the extra destination, or make it a reference.",
-  "sources.conflict.duplicate_path":
-    "{path} is listed twice, as {firstRole} and {secondRole}.",
+  "sources.conflict.duplicate_path": "{path} is listed twice, as {firstRole} and {secondRole}.",
   "sources.conflict.duplicate_path.remedy":
     "Remove one of them, or point it at a different folder.",
   "sources.conflict.destination_inside_input":
@@ -1004,8 +1026,7 @@ export const en = {
     "Put the destination outside the input, or exclude it from the input.",
   "sources.conflict.input_inside_destination":
     "The input {input} is inside the destination {destination}.",
-  "sources.conflict.input_inside_destination.remedy":
-    "Choose an input outside the destination.",
+  "sources.conflict.input_inside_destination.remedy": "Choose an input outside the destination.",
   "sources.conflict.reference_overlaps_mutable":
     "The reference {reference} is inside {role} {path}, so it would be changed.",
   "sources.conflict.reference_overlaps_mutable.remedy":
@@ -1735,6 +1756,8 @@ export const de: Record<MessageKey, string> = {
   "config.folder.machineWeak":
     "Dieser Rechner unterschreitet die Mindestanforderungen für lokale KI (mindestens 4 CPU-Kerne und 4 GB RAM)",
   "config.folder.enableLocal": "Zuerst das lokale KI-Modell unter KI-Inhaltstags einschalten",
+  "config.folder.installLocal":
+    "Zuerst das ausgewählte lokale KI-Modell unter KI-Inhaltstags installieren",
   "config.folder.categories": "Kategorien",
   "config.folder.suggest": "✦ Aus Fotos vorschlagen",
   "config.folder.suggesting": "Analyse läuft…",
@@ -1790,6 +1813,9 @@ export const de: Record<MessageKey, string> = {
   "config.ai.explanation":
     "KI-Tagging schreibt Stichwörter; intelligente Kategorisierung wählt Ordner. Beide Funktionen sind unabhängig.",
   "config.ai.enabled": "Medien nach Inhalt taggen",
+  "config.ai.localEngine": "Lokale KI-Engine",
+  "config.ai.localEngineHelp":
+    "Wird von lokalem Inhaltstagging und intelligenter Kategorisierung gemeinsam verwendet. Die Installation eines Modells aktiviert keine der beiden Funktionen.",
   "config.ai.provider": "Anbieter",
   "config.ai.local": "Lokal — offline, kostenlos, ohne Schlüssel",
   "config.ai.azure": "Azure AI Vision — 5.000/Monat kostenlos",
@@ -1850,7 +1876,28 @@ export const de: Record<MessageKey, string> = {
   "config.ai.tier.off": "Aus — lokales Modell deaktivieren",
   "config.ai.slow": " · möglicherweise langsam",
   "config.ai.download":
-    "Standard / Max laden bei der ersten Verwendung einmalig etwa 100 MB und laufen danach vollständig offline.",
+    "Modelldateien sind optional. Sie werden nur nach Auswahl von „Installieren“ geladen und laufen danach vollständig offline.",
+  "config.ai.modelFiles": "Lokale KI-Modelldateien",
+  "config.ai.modelChecking": "Lokale Modelldateien werden geprüft…",
+  "config.ai.modelStatusUnavailable":
+    "Der Status des lokalen Modells konnte nicht geladen werden. Backend-Verbindung prüfen und erneut versuchen.",
+  "config.ai.modelActionFailed":
+    "Die Modellaktion konnte nicht abgeschlossen werden. Bitte erneut versuchen.",
+  "config.ai.modelReady": "Offline bereit",
+  "config.ai.modelFailed": "Aktion erforderlich",
+  "config.ai.modelDownloading": "Wird heruntergeladen",
+  "config.ai.modelNotInstalled": "Nicht installiert",
+  "config.ai.modelProgress": "{done} von {total}",
+  "config.ai.modelVerifying": "Alle heruntergeladenen Dateien werden geprüft…",
+  "config.ai.modelPublishing": "Die geprüfte Installation wird abgeschlossen…",
+  "config.ai.modelOffline":
+    "Installiert und geprüft. Das Modell wird erst in den Arbeitsspeicher geladen, wenn eine KI-Funktion es wirklich verwendet.",
+  "config.ai.modelVerifiedDownload":
+    "Der Download verwendet eine unveränderliche Modellversion und prüft vor der Installation jede Datei mit SHA-256.",
+  "config.ai.modelInstall": "Modell installieren",
+  "config.ai.modelRetry": "Download wiederholen",
+  "config.ai.modelRemove": "Dateien entfernen",
+  "config.ai.modelConfirmRemove": "Modelldateien entfernen",
   "config.slider.lenient": "Großzügiger (85 %)",
   "config.slider.strict": "Strenger (100 %)",
   "config.slider.pixel": "Nahezu pixelgenau — am sichersten, wenigste Fehlalarme",
@@ -2156,8 +2203,7 @@ export const de: Record<MessageKey, string> = {
     "Jeder Ordner hat eine Rolle. Referenzordner werden nur verglichen und niemals verändert.",
   "sources.addFolder": "Ordner hinzufügen…",
   "sources.folderPickerFailed": "Die Ordnerauswahl konnte nicht geöffnet werden.",
-  "sources.empty":
-    "Füge den Ordner mit den zu organisierenden Dateien und einen Zielordner hinzu.",
+  "sources.empty": "Füge den Ordner mit den zu organisierenden Dateien und einen Zielordner hinzu.",
   "sources.excludedSubfolders": "{count} ausgeschlossene Unterordner",
   "sources.roleFor": "Rolle für {path}",
   "sources.role.input": "Eingabe",
@@ -2205,8 +2251,7 @@ export const de: Record<MessageKey, string> = {
     "Lege das Ziel außerhalb der Eingabe ab oder schließe es aus der Eingabe aus.",
   "sources.conflict.input_inside_destination":
     "Die Eingabe {input} liegt innerhalb des Ziels {destination}.",
-  "sources.conflict.input_inside_destination.remedy":
-    "Wähle eine Eingabe außerhalb des Ziels.",
+  "sources.conflict.input_inside_destination.remedy": "Wähle eine Eingabe außerhalb des Ziels.",
   "sources.conflict.reference_overlaps_mutable":
     "Die Referenz {reference} liegt innerhalb von {role} {path} und würde verändert.",
   "sources.conflict.reference_overlaps_mutable.remedy":
@@ -2228,8 +2273,7 @@ export const de: Record<MessageKey, string> = {
   "operations.kind.cleanup": "Bereinigung",
   "operations.kind.restore": "Wiederherstellung",
   "quarantine.title": "Quarantäne",
-  "quarantine.summary":
-    "{count} Datei(en), {bytes}. Hier wird niemals automatisch etwas gelöscht.",
+  "quarantine.summary": "{count} Datei(en), {bytes}. Hier wird niemals automatisch etwas gelöscht.",
   "quarantine.neverAutomatic": "Hier wird niemals automatisch etwas gelöscht.",
   "quarantine.empty": "Die Quarantäne ist leer.",
   "quarantine.select": "{path} auswählen",

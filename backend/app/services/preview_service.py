@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -54,7 +55,7 @@ class PreviewOutcomeStore:
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        with sqlite3.connect(path) as connection:
+        with contextlib.closing(sqlite3.connect(path)) as connection, connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS outcomes (
@@ -65,7 +66,7 @@ class PreviewOutcomeStore:
             )
 
     def replace(self, items: Iterable[dict[str, Any]]) -> None:
-        with sqlite3.connect(self.path) as connection:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection, connection:
             connection.execute("DELETE FROM outcomes")
             connection.executemany(
                 "INSERT INTO outcomes (source, payload) VALUES (?, ?)",
@@ -83,7 +84,7 @@ class PreviewOutcomeStore:
             return []
         unique = tuple(dict.fromkeys(paths[:500]))
         placeholders = ",".join("?" for _ in unique)
-        with sqlite3.connect(self.path) as connection:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection:
             rows = connection.execute(
                 f"SELECT source, payload FROM outcomes WHERE source IN ({placeholders})",
                 unique,
@@ -118,12 +119,8 @@ class PreviewService:
         self._dups = duplicate_service
         self._classifier = category_classifier_service
         self._latest_config_fingerprint: str | None = None
-        self._outcome_directory = tempfile.TemporaryDirectory[str](
-            prefix="mediasort-preview-outcomes-"
-        )
-        self._outcomes = PreviewOutcomeStore(
-            Path(self._outcome_directory.name) / "outcomes.sqlite3"
-        )
+        self._outcome_directory = Path(tempfile.mkdtemp(prefix="mediasort-preview-outcomes-"))
+        self._outcomes = PreviewOutcomeStore(self._outcome_directory / "outcomes.sqlite3")
         self._plans: dict[str, FrozenSortPlan] = {}
 
     def latest_outcomes(self, paths: list[str]) -> tuple[str | None, list[dict[str, Any]]]:
@@ -133,6 +130,16 @@ class PreviewService:
         from today's configuration.
         """
         return self._latest_config_fingerprint, self._outcomes.get(paths)
+
+    def close(self) -> None:
+        """Release disk-backed preview state without waiting for garbage collection."""
+        directory = getattr(self, "_outcome_directory", None)
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def __del__(self) -> None:
+        with contextlib.suppress(Exception):
+            self.close()
 
     def frozen_plan(self, plan_id: str) -> FrozenSortPlan | None:
         return self._plans.get(plan_id)

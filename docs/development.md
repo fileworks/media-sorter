@@ -171,7 +171,7 @@ the released version.
 ### Building locally
 
 ```bash
-make release      # bundle-backend + bundle-ffmpeg + bundle-clip + build-tauri
+make release      # bundle-backend + bundle-ffmpeg + build-tauri
 ```
 
 Output lands in `frontend/src-tauri/target/release/bundle/`. Builds are

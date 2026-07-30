@@ -77,7 +77,11 @@ describe("summarizeEntry", () => {
       entry({ counts: { ...entry().counts, quarantined: 4, skipped: 2 } }),
     );
 
-    expect(summary.facts.map((fact) => fact.label)).toEqual(["Organized", "Skipped", "Quarantined"]);
+    expect(summary.facts.map((fact) => fact.label)).toEqual([
+      "Organized",
+      "Skipped",
+      "Quarantined",
+    ]);
   });
 
   it("gives a partial run concrete next steps", () => {

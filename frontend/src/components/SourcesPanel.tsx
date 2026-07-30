@@ -79,11 +79,7 @@ function ConflictList({ conflicts, t }: { conflicts: Conflict[]; t: Translate })
             </p>
             {conflict.remedy && (
               <p className="mt-1 text-muted-foreground">
-                {t(
-                  `sources.conflict.${conflict.kind}.remedy`,
-                  conflict.params,
-                  conflict.remedy,
-                )}
+                {t(`sources.conflict.${conflict.kind}.remedy`, conflict.params, conflict.remedy)}
               </p>
             )}
           </div>
@@ -297,12 +293,8 @@ export function SourcesPanel({
       {config && onApplyConfig && <RecipeChooser config={config} onApply={onApplyConfig} />}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">
-            {t("sources.title")}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {t("sources.description")}
-          </p>
+          <h2 className="text-base font-semibold text-foreground">{t("sources.title")}</h2>
+          <p className="text-xs text-muted-foreground">{t("sources.description")}</p>
         </div>
         {onPickFolder && (
           <Button variant="outline" size="sm" onClick={onPickFolder}>
@@ -339,9 +331,9 @@ export function SourcesPanel({
                   onExcludeForRun
                     ? () =>
                         onExcludeForRun(
-                    excludedForRun.includes(card.rootId)
-                      ? excludedForRun.filter((id) => id !== card.rootId)
-                      : excludeForRun(excludedForRun, card.rootId),
+                          excludedForRun.includes(card.rootId)
+                            ? excludedForRun.filter((id) => id !== card.rootId)
+                            : excludeForRun(excludedForRun, card.rootId),
                         )
                     : undefined
                 }

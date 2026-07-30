@@ -246,7 +246,7 @@ Use either, both, or neither.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Local AI model tier | `ai_model_tier` | `"auto"` | Which local encoder to run. `auto` lets the hardware probe pick; explicit values are `lite` (CLIP ViT-B/32 — fast, runs anywhere), `standard` / `max` (SigLIP 2 — more accurate, downloads a ~100 MB model on first use), or `off`. |
+| Local AI model tier | `ai_model_tier` | `"auto"` | Which local encoder to run. `auto` lets the hardware probe pick; explicit values are `lite` (CLIP ViT-B/32 — fast, runs anywhere), `standard` / `max` (SigLIP 2 — more accurate), or `off`. The selected model pack is installed explicitly, verified before publication, and loaded into memory only when first used. |
 | Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML / CUDA / DirectML). Turn off to force CPU-only. Only shown when an accelerator is detected. |
 
 The Configure screen probes your machine (`GET /api/hardware`) and shows a **capability

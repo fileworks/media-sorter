@@ -74,9 +74,7 @@ describe("buildRecoveryPlan", () => {
   });
 
   it("says nothing was deleted whenever a decision is pending", () => {
-    const plan = buildRecoveryPlan(
-      operation({ artifacts: [artifact({ redundant: false })] }),
-    );
+    const plan = buildRecoveryPlan(operation({ artifacts: [artifact({ redundant: false })] }));
 
     expect(plan.guidance).toMatch(/nothing was deleted/i);
   });

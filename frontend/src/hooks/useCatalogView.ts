@@ -104,7 +104,16 @@ export function useCatalogView(query: CatalogViewQuery): CatalogView {
         inFlight.current = false;
         setLoading(false);
       });
-  }, [cursor, exhausted, query.descending, query.pageSize, query.roles, query.search, query.sort, reset]);
+  }, [
+    cursor,
+    exhausted,
+    query.descending,
+    query.pageSize,
+    query.roles,
+    query.search,
+    query.sort,
+    reset,
+  ]);
 
   // The first page loads itself; later ones are asked for by the list.
   useEffect(() => {

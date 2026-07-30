@@ -866,9 +866,8 @@ export function PreviewList({
     breadcrumbs.length === 0
       ? ""
       : breadcrumbs[
-          windowing.virtualItems.find(
-            (item) => item.start + item.size > windowing.scrollTop,
-          )?.index ?? 0
+          windowing.virtualItems.find((item) => item.start + item.size > windowing.scrollTop)
+            ?.index ?? 0
         ];
 
   return (

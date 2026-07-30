@@ -6,7 +6,7 @@ machines rather than hanging or OOM-ing.
 
 Tier definitions:
   off      — machine is below the minimum (< 4 CPUs or < 3.5 GB RAM)
-  lite     — CLIP ViT-B/32 via fastembed (light, already bundled)
+  lite     — CLIP ViT-B/32 via fastembed (optional verified model pack)
   standard — SigLIP 2 base/16 via onnxruntime (default on capable hardware)
   max      — SigLIP 2 large/16 (for machines with an accelerator EP)
 """

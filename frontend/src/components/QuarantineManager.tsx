@@ -135,9 +135,7 @@ export function QuarantineManager() {
 
       <div className="rounded-lg border border-border p-3">
         <h3 className="text-sm text-foreground">{t("quarantine.removeSelected")}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("quarantine.removeDescription")}
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("quarantine.removeDescription")}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             type="button"

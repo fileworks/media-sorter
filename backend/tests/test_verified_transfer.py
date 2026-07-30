@@ -198,7 +198,7 @@ def test_symbolic_link_source_is_rejected(tmp_path: Path) -> None:
     assert error.value.details["reason"] == "unsafe_source_type"
 
 
-def test_same_volume_move_publishes_without_copying_or_rereading_bytes(
+def test_same_volume_move_publishes_without_copying_after_full_revalidation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -213,15 +213,23 @@ def test_same_volume_move_publishes_without_copying_or_rereading_bytes(
         raise AssertionError("a same-volume move must not copy bytes")
 
     monkeypatch.setattr(verified_transfer, "stage_verified_copy", fail_on_copy)
-    monkeypatch.setattr(verified_transfer, "stream_sha256", fail_on_copy)
+    hashed: list[Path] = []
+    real_hash = verified_transfer.stream_sha256
+
+    def observe_hash(path: Path, **kwargs: object) -> tuple[str, int]:
+        hashed.append(path)
+        return real_hash(path, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(verified_transfer, "stream_sha256", observe_hash)
 
     with _journal(state, action) as journal:
         result = execute_transfer(action, journal=journal)
 
     assert result.protocol == "same_volume_link"
     assert result.commit_method == "atomic_rename"
-    assert result.integrity_source == "revalidated_identity"
+    assert result.integrity_source == "measured"
     assert result.integrity.verified is True
+    assert hashed == [source]
     assert result.source_removed is True
     assert result.source_safety == "destination_verified"
     assert result.reduced_guarantee is None
@@ -308,6 +316,47 @@ def test_same_volume_move_rehashes_the_source_when_asked(
     assert hashed == [source]
     assert result.integrity_source == "measured"
     assert destination.read_bytes() == b"rehash me"
+
+
+def test_unplanned_move_records_measured_content_evidence(tmp_path: Path) -> None:
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "destination.bin"
+    source.write_bytes(b"measure before deleting")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+
+    result = verified_transfer.transfer_path(source, destination, move=True)
+
+    assert result.integrity_source == "measured"
+    assert result.integrity is not None
+    assert result.integrity.expected_sha256 == digest
+    assert result.integrity.observed_source_sha256 == digest
+    assert result.integrity.observed_result_sha256 == digest
+    assert result.integrity.verified is True
+
+
+def test_move_blocks_if_source_changes_while_being_revalidated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "destination.bin"
+    source.write_bytes(b"before")
+    action = _move_action(source, destination)
+    real_hash = verified_transfer.stream_sha256
+
+    def mutate_after_hash(path: Path, **kwargs: object) -> tuple[str, int]:
+        result = real_hash(path, **kwargs)  # type: ignore[arg-type]
+        path.write_bytes(b"after!")
+        return result
+
+    monkeypatch.setattr(verified_transfer, "stream_sha256", mutate_after_hash)
+
+    with pytest.raises(IntegrityTransferError) as error:
+        execute_transfer(action)
+
+    assert error.value.details["reason"] == "source_changed_during_copy"
+    assert source.read_bytes() == b"after!"
+    assert destination.exists() is False
 
 
 def test_same_volume_move_blocks_when_the_source_drifted_before_rehashing(

@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 import uuid
 from collections.abc import Callable
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -112,10 +114,18 @@ class DestinationReconciliationService:
         # unchanged second run reuses facts while any primary/companion change
         # invalidates precisely that unit.
         self._facts_cache: dict[str, tuple[str, _UnitFacts]] = {}
-        self._result_directory = tempfile.TemporaryDirectory[str](
-            prefix="mediasort-reconciliation-"
-        )
+        self._result_directory = Path(tempfile.mkdtemp(prefix="mediasort-reconciliation-"))
         self._report_headers: dict[str, ReconciliationReport] = {}
+
+    def close(self) -> None:
+        """Release disk-backed report pages without waiting for finalization."""
+        directory = getattr(self, "_result_directory", None)
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def __del__(self) -> None:
+        with suppress(Exception):
+            self.close()
 
     def compare(
         self,
@@ -151,7 +161,7 @@ class DestinationReconciliationService:
         """Compute into SQLite and return only the first cursor page."""
         report_id = f"recon_{uuid.uuid4().hex[:16]}"
         database = self._report_path(report_id)
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             connection.execute(
                 """
                 CREATE TABLE findings (
@@ -242,7 +252,7 @@ class DestinationReconciliationService:
                 ]
             )
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
                 f"""
@@ -308,7 +318,7 @@ class DestinationReconciliationService:
         if not unique_ids:
             raise ValueError("no reconciliation findings selected")
         placeholders = ",".join("?" for _ in unique_ids)
-        with sqlite3.connect(self._report_path(report_id)) as connection:
+        with closing(sqlite3.connect(self._report_path(report_id))) as connection:
             rows = connection.execute(
                 f"SELECT payload FROM findings WHERE finding_id IN ({placeholders})",
                 unique_ids,
@@ -470,7 +480,7 @@ class DestinationReconciliationService:
         safe = "".join(
             character for character in report_id if character.isalnum() or character in "-_"
         )
-        return Path(self._result_directory.name) / f"{safe}.sqlite3"
+        return self._result_directory / f"{safe}.sqlite3"
 
     def plan(
         self,

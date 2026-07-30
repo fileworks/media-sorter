@@ -21,7 +21,10 @@ function snapshot(overrides: Partial<ProgressSnapshot> = {}): ProgressSnapshot {
 
 describe("progressView", () => {
   it("shows a live count instead of a false percentage while discovering", () => {
-    const view = progressView(snapshot({ total: null, current: 1204, phase: "discovering" }), 1_000);
+    const view = progressView(
+      snapshot({ total: null, current: 1204, phase: "discovering" }),
+      1_000,
+    );
 
     expect(view.determinate).toBe(false);
     expect(view.percentage).toBeNull();
@@ -70,8 +73,9 @@ describe("coalesce", () => {
   it("never drops a phase change or an observed cancellation", () => {
     const previous = snapshot({ sequence: 1 });
 
-    expect(coalesce(previous, snapshot({ sequence: 2, phase: "verifying" }), 1_000, 1_001))
-      .not.toBeNull();
+    expect(
+      coalesce(previous, snapshot({ sequence: 2, phase: "verifying" }), 1_000, 1_001),
+    ).not.toBeNull();
     expect(
       coalesce(previous, snapshot({ sequence: 2, cancellationObserved: true }), 1_000, 1_001),
     ).not.toBeNull();
@@ -80,7 +84,9 @@ describe("coalesce", () => {
   it("never drops the frame that reaches the total", () => {
     const previous = snapshot({ sequence: 1, current: 99 });
 
-    expect(coalesce(previous, snapshot({ sequence: 2, current: 100 }), 1_000, 1_001)).not.toBeNull();
+    expect(
+      coalesce(previous, snapshot({ sequence: 2, current: 100 }), 1_000, 1_001),
+    ).not.toBeNull();
   });
 
   it("ignores frames that arrive out of order", () => {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from app.core.paths import resolve_app_paths
@@ -293,9 +293,9 @@ class DatabaseManager:
             counter += 1
 
         try:
-            with sqlite3.connect(backup) as target:
+            with closing(sqlite3.connect(backup)) as target, target:
                 source.backup(target)
-            with sqlite3.connect(backup) as verification:
+            with closing(sqlite3.connect(backup)) as verification:
                 result = verification.execute("PRAGMA integrity_check").fetchone()
                 if result is None or result[0] != "ok":
                     raise DatabaseMigrationError(

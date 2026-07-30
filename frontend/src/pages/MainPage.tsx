@@ -295,7 +295,9 @@ export default function MainPage() {
 
   const pickRootFolder = useCallback(async () => {
     if (!isTauri) {
-      document.getElementById("source-dir")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document
+        .getElementById("source-dir")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
       window.setTimeout(() => document.getElementById("source-dir")?.focus(), 350);
       return;
     }

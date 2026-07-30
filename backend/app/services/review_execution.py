@@ -20,10 +20,11 @@ from pathlib import Path
 from typing import Literal
 
 from app.core.duplicate_plans import PlanSnapshot, ResolvedOutcome
+from app.core.exceptions import IntegrityTransferError
 from app.core.logging_config import get_logger
 from app.services.quarantine import QuarantineError, QuarantineStore
 from app.services.review_plan import executable_members
-from app.services.verified_transfer import transfer_path
+from app.services.verified_transfer import revalidate_sha256, transfer_path
 
 logger = get_logger(__name__)
 
@@ -98,6 +99,7 @@ def execute_snapshot(
     operation_id: str | None = None,
     cancel: Callable[[], bool] | None = None,
     on_action: Callable[[ActionRecord], None] | None = None,
+    on_validation_progress: Callable[[int, int, str], None] | None = None,
 ) -> ExecutionReport:
     """Perform every actionable outcome in a frozen snapshot.
 
@@ -110,11 +112,31 @@ def execute_snapshot(
 
     operation_id = operation_id or f"exec_{uuid.uuid4().hex[:16]}"
     report = ExecutionReport(operation_id=operation_id, snapshot_id=snapshot.snapshot_id)
+    group_errors = _validate_exact_groups(
+        snapshot,
+        source_for=source_for,
+        cancel=cancel,
+        on_progress=on_validation_progress,
+    )
 
     for group_id, outcome in executable_members(snapshot):
         if cancel is not None and cancel():
             report.cancelled = True
             break
+        if group_id in group_errors:
+            record = ActionRecord(
+                f"act_{uuid.uuid4().hex[:12]}",
+                group_id,
+                outcome.member_id,
+                outcome.kind,
+                "failed",
+                source_path="",
+                detail=group_errors[group_id],
+            )
+            report.actions.append(record)
+            if on_action is not None:
+                on_action(record)
+            continue
         record = _perform(
             group_id,
             outcome,
@@ -223,7 +245,7 @@ def _perform(
             source_path=str(source),
             result_path=str(result.destination_path),
         )
-    except (OSError, QuarantineError) as exc:
+    except (OSError, QuarantineError, IntegrityTransferError) as exc:
         return ActionRecord(
             action_id,
             group_id,
@@ -233,6 +255,68 @@ def _perform(
             source_path=str(source),
             detail=f"{type(exc).__name__}: {exc}",
         )
+
+
+def _validate_exact_groups(
+    snapshot: PlanSnapshot,
+    *,
+    source_for: Callable[[str], Path],
+    cancel: Callable[[], bool] | None,
+    on_progress: Callable[[int, int, str], None] | None,
+) -> dict[str, str]:
+    """Freshly prove both sides before an exact-group source is mutated."""
+    errors: dict[str, str] = {}
+    for group in snapshot.groups:
+        if group.kind != "exact" or not any(
+            outcome.kind == "quarantine" for outcome in group.outcomes
+        ):
+            continue
+        # Old hand-built snapshots may contain only the actionable member.
+        # Production snapshots contain every member; only those can establish
+        # the required two-sided equality proof.
+        candidates = tuple(
+            outcome
+            for outcome in group.outcomes
+            if outcome.kind not in {"blocked", "no_action_reference"}
+        )
+        if len(candidates) < 2 or not all(
+            outcome.expected_sha256 is not None for outcome in candidates
+        ):
+            continue
+        measured: set[str] = set()
+        try:
+            for outcome in candidates:
+                if cancel is not None and cancel():
+                    errors[group.group_id] = "cancelled during full-content validation"
+                    break
+                path = source_for(outcome.member_id)
+                total = path.stat().st_size
+                progress_callback: Callable[[int, int], None] | None = None
+                if on_progress is not None:
+                    member_id = outcome.member_id
+
+                    def progress_callback(
+                        done: int,
+                        _total: int,
+                        *,
+                        _member_id: str = member_id,
+                        _size: int = total,
+                    ) -> None:
+                        on_progress(done, _size, _member_id)
+
+                digest, _size = revalidate_sha256(
+                    path,
+                    expected_sha256=outcome.expected_sha256,
+                    on_progress=progress_callback,
+                )
+                measured.add(digest)
+            if group.group_id not in errors and len(measured) != 1:
+                errors[group.group_id] = (
+                    "exact duplicate members no longer have identical current bytes"
+                )
+        except (KeyError, LookupError, OSError, IntegrityTransferError) as exc:
+            errors[group.group_id] = f"full-content validation failed: {type(exc).__name__}: {exc}"
+    return errors
 
 
 def _destination(

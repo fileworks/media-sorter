@@ -17,7 +17,7 @@ from pathlib import Path
 
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionHandling, bind_media_units
-from app.services.catalog import MediaCatalog, ObservedFile
+from app.services.catalog import MediaCatalog, ObservedFile, bounded_sample_sha256
 from app.services.pipeline import batched
 from app.utils.media_utils import is_media
 
@@ -171,6 +171,7 @@ def walk(
                 mtime_ns=observed.st_mtime_ns,
                 ctime_ns=getattr(observed, "st_ctime_ns", None),
                 file_identity=str(observed.st_ino) or None,
+                sample_sha256=bounded_sample_sha256(entry) if os.name == "nt" else None,
                 unit_id=None if unit is None else unit.unit_id,
                 companion_role=None if member is None else member.companion_role,
                 unit_primary=False if member is None else member.is_primary,

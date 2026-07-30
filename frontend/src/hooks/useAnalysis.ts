@@ -57,9 +57,7 @@ export function useAnalysis(): UseAnalysisReturn {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(
-        userFacingError(status.failure?.message ?? status.error ?? t("analysis.failed")),
-      );
+      setError(userFacingError(status.failure?.message ?? status.error ?? t("analysis.failed")));
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);

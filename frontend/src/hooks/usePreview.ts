@@ -66,9 +66,7 @@ export function usePreview() {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(
-        userFacingError(status.failure?.message ?? status.error ?? t("preview.failed")),
-      );
+      setError(userFacingError(status.failure?.message ?? status.error ?? t("preview.failed")));
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);

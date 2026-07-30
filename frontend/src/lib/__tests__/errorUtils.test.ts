@@ -16,9 +16,7 @@ describe("error presentation boundary", () => {
       response: { data: { detail: "Review and acknowledge the impact first" } },
     };
 
-    expect(extractErrorMessage(error, "Fallback")).toBe(
-      "Review and acknowledge the impact first",
-    );
+    expect(extractErrorMessage(error, "Fallback")).toBe("Review and acknowledge the impact first");
   });
 
   it("maps unstructured native errors to the caller's interface message", () => {

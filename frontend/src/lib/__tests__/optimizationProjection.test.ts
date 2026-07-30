@@ -83,7 +83,9 @@ function projection(overrides: Partial<OptimizationProjection> = {}): Optimizati
 
 describe("projectedSize", () => {
   it("shows one number only when that number was measured", () => {
-    const view = projectedSize(item({ projected_low_bytes: 700_000, projected_high_bytes: 700_000 }));
+    const view = projectedSize(
+      item({ projected_low_bytes: 700_000, projected_high_bytes: 700_000 }),
+    );
 
     expect(view.isRange).toBe(false);
     expect(view.label).toBe("684 KB");
@@ -127,7 +129,10 @@ describe("confidence", () => {
 describe("recommendationView", () => {
   it("recommends skipping a projected size increase and demands an override", () => {
     const view = recommendationView(
-      item({ recommendation: "skip", reason: "optimization is projected to make this file larger" }),
+      item({
+        recommendation: "skip",
+        reason: "optimization is projected to make this file larger",
+      }),
     );
 
     expect(view.tone).toBe("skip");
@@ -178,9 +183,9 @@ describe("modeDisclosure", () => {
 describe("samplePresentation", () => {
   it("offers comparison only when a candidate actually exists", () => {
     expect(samplePresentation(sample()).canCompare).toBe(true);
-    expect(
-      samplePresentation(sample({ comparable: false, candidate_path: null })).canCompare,
-    ).toBe(false);
+    expect(samplePresentation(sample({ comparable: false, candidate_path: null })).canCompare).toBe(
+      false,
+    );
   });
 
   it("always carries the caveat that a sample is not batch approval", () => {

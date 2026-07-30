@@ -78,9 +78,7 @@ describe.each([
     expect(source).toContain(`useFocusTrap(panelRef, ${activeExpression})`);
     expect(source).toMatch(/ref=\{panelRef\}[\s\S]{0,100}tabIndex=\{-1\}/);
     expect(source).toMatch(
-      file === "MediaModal.tsx"
-        ? /keyAction\(event\.key\)/
-        : /key\s*===\s*["']Escape["']/,
+      file === "MediaModal.tsx" ? /keyAction\(event\.key\)/ : /key\s*===\s*["']Escape["']/,
     );
     expect(source).toMatch(/onClose|dismiss/);
   });

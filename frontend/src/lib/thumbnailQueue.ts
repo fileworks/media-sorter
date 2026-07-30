@@ -137,10 +137,8 @@ export function useQueuedThumbnail(
       return;
     }
     setState("loading");
-    const request = queue.enqueue(
-      `${url}:${++requestSequence}`,
-      url,
-      () => viewportPriority(elementRef.current),
+    const request = queue.enqueue(`${url}:${++requestSequence}`, url, () =>
+      viewportPriority(elementRef.current),
     );
     let created: string | null = null;
     void request.promise

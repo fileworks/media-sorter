@@ -75,8 +75,7 @@ const VIEW_ICONS: Record<View, IconType> = {
 
 const INVALIDATION_KEYS: Record<string, string> = {
   "Changing folders makes the current review stale.": "stage.invalidated.folders",
-  "The frozen plan for this run is discarded; a new one will be taken.":
-    "stage.invalidated.plan",
+  "The frozen plan for this run is discarded; a new one will be taken.": "stage.invalidated.plan",
   "A different library profile is active.": "stage.invalidated.profile",
   "The folders were scanned again since you were last here.": "stage.invalidated.scan",
   "The review plan changed.": "stage.invalidated.review",

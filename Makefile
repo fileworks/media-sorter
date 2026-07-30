@@ -1,7 +1,7 @@
 .PHONY: install install-rust check-deps branding branding-check generate-icons dev backend frontend \
         test test-cov test-ci test-unit test-integration test-e2e test-services test-api \
         lint typecheck format clean \
-        bundle-backend bundle-ffmpeg bundle-clip bundle-siglip bundle-portable \
+        bundle-backend bundle-ffmpeg bundle-portable \
         build build-tauri release release-preflight release-prepare release-finalize \
         ci help
 .NOTPARALLEL: release
@@ -29,13 +29,8 @@ export PYTHONUTF8       := 1
 # workflow so macOS / Windows / Linux can never drift apart. End users never need
 # a system ffmpeg/ffprobe.
 #
-# Version overrides (all are optional — defaults are sensible):
-#   make bundle-ffmpeg FFMPEG_MAC_VER=7.1.1
-#   make bundle-ffmpeg FFMPEG_WIN_TAG=autobuild-2025-01-30-12-56  # pin Win build
-FFMPEG_MAC_VER ?= 7.1.1
-# Windows BtbN release tag; "latest" = continuously-updated rolling build.
-# Override for reproducible builds: export FFMPEG_WIN_TAG=autobuild-YYYY-MM-DD-HH-MM
-FFMPEG_WIN_TAG ?= latest
+# Reviewed versions, immutable URLs, digests, architectures, and licenses live
+# in scripts/ffmpeg-sources.json. There are intentionally no rolling overrides.
 
 # ── Cross-platform detection ──────────────────────────────────────────────────
 # The same Makefile drives NATIVE builds on macOS, Linux and Windows. On Windows
@@ -107,7 +102,6 @@ help:
 	@echo "Distribution builds (macOS / Windows):"
 	@echo "  make bundle-backend        Freeze Python backend with PyInstaller"
 	@echo "  make bundle-ffmpeg         Download static ffmpeg + ffprobe into the bundle (no system ffmpeg needed)"
-	@echo "  make bundle-siglip         Bundle SigLIP 2 for offline high-tier AI (optional, ~200 MB; lazy-downloads otherwise)"
 	@echo "  make bundle-portable       Create Windows portable ZIP (Windows only; after build-tauri)"
 	@echo "  make build-tauri           Build Tauri app (requires bundled resources)"
 	@echo "  make release               Full build: bundle-backend + bundle-ffmpeg + build-tauri [+ bundle-portable on Windows]"
@@ -347,34 +341,7 @@ bundle-backend:
 
 bundle-ffmpeg:
 	@echo "==> Bundling static ffmpeg + ffprobe ($(DETECTED_OS)/$(ARCH)) …"
-	FFMPEG_MAC_VER="$(FFMPEG_MAC_VER)" FFMPEG_WIN_TAG="$(FFMPEG_WIN_TAG)" \
-		$(BOOTSTRAP_PY) scripts/fetch_ffmpeg.py --dest "$(TAURI_RES)/ffmpeg"
-
-# ── Distribution: bundle the local CLIP model for offline AI tagging ─────────
-#
-# Downloads the CLIP image + text encoders (via fastembed) into resources/clip/.
-# At runtime the Rust shell / LocalClipTagger points fastembed's cache_dir at
-# this folder (MEDIASORT_CLIP_MODEL_DIR), so the offline "local" tagger works
-# with zero network access. Requires the `local-ai` extra (installed by
-# `make install`). The model is a few hundred MB of git-ignored build output.
-
-bundle-clip:
-	@echo "==> Bundling local CLIP model for offline AI tagging …"
-	$(PYTHON) scripts/fetch_clip_model.py --dest "$(TAURI_RES)/clip"
-	@echo "✓ CLIP model → $(TAURI_RES)/clip/"
-
-# ── Distribution: bundle the SigLIP 2 model (optional, higher AI tier) ────────
-#
-# Bundles the SigLIP 2 base/16 ONNX towers + tokenizer into resources/siglip/ so
-# the "Standard"/"Max" tiers work fully offline. NOT part of `make release` by
-# default: AI is opt-in and the encoder lazily downloads SigLIP on first use, so
-# the base installer stays slim. Run this explicitly to ship a fully-offline
-# higher-quality build (adds ~200 MB). Requires the `local-ai` extra.
-
-bundle-siglip:
-	@echo "==> Bundling SigLIP 2 model for offline high-tier AI …"
-	$(PYTHON) scripts/fetch_siglip_model.py --dest "$(TAURI_RES)/siglip"
-	@echo "✓ SigLIP 2 model → $(TAURI_RES)/siglip/"
+	$(BOOTSTRAP_PY) scripts/fetch_ffmpeg.py --dest "$(TAURI_RES)/ffmpeg"
 
 # ── Windows portable ZIP (run-in-place, no install required) ─────────────────
 #
@@ -411,7 +378,7 @@ endif
 # To ship every OS from one place, push a `v*` tag and let the GitHub Actions
 # matrix build each one natively (see .github/workflows/release.yml).
 
-release: check-deps branding-check bundle-backend bundle-ffmpeg bundle-clip release-prepare build-tauri release-finalize bundle-portable
+release: check-deps branding-check bundle-backend bundle-ffmpeg release-prepare build-tauri release-finalize bundle-portable
 	$(PYTHON) scripts/release_integrity.py verify \
 		--platform "$(RELEASE_PLATFORM)" \
 		--state "$(RELEASE_STATE)"

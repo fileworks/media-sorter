@@ -171,10 +171,7 @@ export function ReviewWorkbench({
   const [modal, setModal] = useState<ModalState | null>(null);
   const [outcomeItem, setOutcomeItem] = useState<PreviewItem | null>(null);
   const originFocusRef = useRef<HTMLElement | null>(null);
-  const previewBySource = useMemo(
-    () => new Map(items.map((item) => [item.source, item])),
-    [items],
-  );
+  const previewBySource = useMemo(() => new Map(items.map((item) => [item.source, item])), [items]);
 
   const kind = kindFilter ?? (filters.kind === "similar" ? "similar" : "exact");
   const { data, isLoading } = useQuery({
@@ -378,11 +375,7 @@ export function ReviewWorkbench({
           style={{ height: LIST_HEIGHT }}
         >
           {isLoading ? (
-            <StateView
-              variant="loading"
-              compact
-              title={t("review.loading")}
-            />
+            <StateView variant="loading" compact title={t("review.loading")} />
           ) : visible.length === 0 ? (
             <StateView
               variant="empty"
@@ -485,9 +478,7 @@ export function ReviewWorkbench({
             role="region"
             aria-label={t("review.shortcuts")}
           >
-            <p className="font-medium text-foreground">
-              {t("review.shortcuts")}
-            </p>
+            <p className="font-medium text-foreground">{t("review.shortcuts")}</p>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-muted-foreground">
               <dt>Alt+↑ / Alt+↓</dt>
               <dd>{t("review.shortcut.groups")}</dd>
@@ -498,9 +489,7 @@ export function ReviewWorkbench({
               <dt>Alt+Enter</dt>
               <dd>{t("review.shortcut.confirm")}</dd>
               <dt>Alt+Z</dt>
-              <dd>
-                {t("review.shortcut.undo")}
-              </dd>
+              <dd>{t("review.shortcut.undo")}</dd>
               <dt>?</dt>
               <dd>{t("review.shortcut.reference")}</dd>
             </dl>
@@ -548,18 +537,12 @@ export function ReviewWorkbench({
 
       <div className="min-w-0">
         {selected === null ? (
-          <p className="text-sm text-muted-foreground">
-            {t("review.selectGroup")}
-          </p>
+          <p className="text-sm text-muted-foreground">{t("review.selectGroup")}</p>
         ) : (
           <div className="space-y-3">
             <header>
               <h2 className="text-base font-semibold text-foreground">
-                {t(
-                  selected.kind === "exact"
-                    ? "review.identicalFiles"
-                    : "review.similarFiles",
-                )}
+                {t(selected.kind === "exact" ? "review.identicalFiles" : "review.similarFiles")}
               </h2>
               <p className="text-xs text-muted-foreground">{selected.evidence_summary}</p>
               {selectedPlan?.stale_reason && (
