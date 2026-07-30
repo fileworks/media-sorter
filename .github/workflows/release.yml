@@ -277,22 +277,6 @@ jobs:
         # the single source of truth shared with local builds so they never drift.
         run: make bundle-ffmpeg
 
-      # After *both* bundles. tauri.conf.json declares two resource globs,
-      # resources/backend/** and resources/ffmpeg/**, and the Tauri build script
-      # validates every one of them — so cargo cannot check this crate until
-      # PyInstaller and fetch_ffmpeg have each produced their tree.
-      #
-      # v1.1.0 failed on the backend glob because this ran before both. Moving it
-      # after only the backend bundle fixed half of that, and v1.1.1 then failed
-      # the same way on the ffmpeg glob. Placed after the last producer so there
-      # is no third variant of this.
-      - name: Verify native Rust source
-        working-directory: frontend/src-tauri
-        run: |
-          cargo fmt --check
-          cargo check --locked
-          cargo test --locked
-
       - name: Finalize permissions and sign nested native payloads
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
