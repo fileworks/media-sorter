@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
@@ -262,7 +263,7 @@ def test_sqlite_migration_snapshot_includes_committed_wal_state(
     finally:
         source.close()
 
-    with sqlite3.connect(current.db_path) as copied:
+    with closing(sqlite3.connect(current.db_path)) as copied:
         assert copied.execute("SELECT value FROM history").fetchone() == ("preserved",)
 
 
@@ -273,7 +274,7 @@ def test_identical_sqlite_destination_is_recorded_without_conflict_backup(
     legacy = _legacy(tmp_path)
     for path in (legacy.db_path, current.db_path):
         path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute("CREATE TABLE history (value TEXT)")
             connection.execute("INSERT INTO history VALUES ('same')")
     monkeypatch.setattr("app.core.state_migration.resolve_legacy_paths", lambda: legacy)
@@ -298,7 +299,7 @@ def test_database_and_split_log_conflicts_preserve_both_sides(
         source.commit()
 
         current.db_path.parent.mkdir(parents=True)
-        with sqlite3.connect(current.db_path) as destination:
+        with closing(sqlite3.connect(current.db_path)) as destination, destination:
             destination.execute("CREATE TABLE history (value TEXT)")
             destination.execute("INSERT INTO history VALUES ('current')")
 
@@ -319,9 +320,9 @@ def test_database_and_split_log_conflicts_preserve_both_sides(
     log_backup = by_kind["log"].backup
     assert database_backup is not None
     assert log_backup is not None
-    with sqlite3.connect(database_backup) as backup:
+    with closing(sqlite3.connect(database_backup)) as backup:
         assert backup.execute("SELECT value FROM history").fetchone() == ("legacy",)
-    with sqlite3.connect(current.db_path) as destination:
+    with closing(sqlite3.connect(current.db_path)) as destination:
         assert destination.execute("SELECT value FROM history").fetchone() == ("current",)
     assert Path(log_backup).read_text(encoding="utf-8") == "legacy log"
     assert (current.log_dir / "backend.log").read_text(encoding="utf-8") == "current log"
@@ -404,7 +405,11 @@ def test_config_unversioned_migration_and_future_rejection(tmp_path: Path) -> No
     loader.config_file.write_text('{"source_directory": "/legacy"}', encoding="utf-8")
     assert loader.load().source_directory == "/legacy"
     migrated = json.loads(loader.config_file.read_text(encoding="utf-8"))
-    assert migrated["$schema"] == "mediasort-config-v1"
+    assert migrated["$schema"] == "mediasort-config-v3"
+    assert migrated["library_profile"]["profile_id"] == "default-library"
+    assert migrated["library_profile"]["catalog"]["mode"] == "application_data"
+    assert migrated["preservation_profile"]["mode"] == "organize_only"
+    assert migrated["optimization_profile"]["mode"] == "disabled"
 
     future = '{"$schema": "mediasort-config-v999", "source_directory": "/future"}'
     loader.config_file.write_text(future, encoding="utf-8")
@@ -445,7 +450,7 @@ def test_database_fresh_current_and_current_restart_is_noop(tmp_path: Path) -> N
 
 def test_database_unversioned_schema_migrates_with_verified_backup(tmp_path: Path) -> None:
     manager = _database(tmp_path / "history.db")
-    with sqlite3.connect(manager.db_path) as conn:
+    with closing(sqlite3.connect(manager.db_path)) as conn, conn:
         _create_v1_schema(conn)
         conn.execute(
             "INSERT INTO operations "
@@ -461,13 +466,13 @@ def test_database_unversioned_schema_migrates_with_verified_backup(tmp_path: Pat
         assert conn.execute("SELECT id FROM operations").fetchone()[0] == "legacy"
     backups = list(tmp_path.glob("*.pre-migration-*.bak"))
     assert len(backups) == 1
-    with sqlite3.connect(backups[0]) as backup:
+    with closing(sqlite3.connect(backups[0])) as backup:
         assert backup.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 
 def test_database_v2_migrates_only_v3_columns(tmp_path: Path) -> None:
     manager = _database(tmp_path / "history.db")
-    with sqlite3.connect(manager.db_path) as conn:
+    with closing(sqlite3.connect(manager.db_path)) as conn, conn:
         _create_v1_schema(conn)
         for column in ("future_dates", "unknown_dates", "corrupted_files"):
             conn.execute(f"ALTER TABLE operations ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
@@ -495,14 +500,14 @@ def test_database_future_version_and_migration_failure_are_actionable(
     tmp_path: Path,
 ) -> None:
     future = _database(tmp_path / "future.db")
-    with sqlite3.connect(future.db_path) as conn:
+    with closing(sqlite3.connect(future.db_path)) as conn, conn:
         conn.execute("CREATE TABLE operations (id TEXT PRIMARY KEY)")
         conn.execute(f"PRAGMA user_version = {CURRENT_DATABASE_SCHEMA + 1}")
     with pytest.raises(DatabaseMigrationError, match="newer"):
         future.init_schema()
 
     failing = _database(tmp_path / "failing.db")
-    with sqlite3.connect(failing.db_path) as conn:
+    with closing(sqlite3.connect(failing.db_path)) as conn, conn:
         _create_v1_schema(conn)
 
     def fail_after_change(conn: sqlite3.Connection, target_version: int) -> None:
@@ -513,21 +518,21 @@ def test_database_future_version_and_migration_failure_are_actionable(
     with patch.object(failing, "_apply_migration", side_effect=fail_after_change):
         with pytest.raises(DatabaseMigrationError, match="pre-upgrade backup"):
             failing.init_schema()
-    with sqlite3.connect(failing.db_path) as conn:
+    with closing(sqlite3.connect(failing.db_path)) as conn:
         assert "transient" not in {row[1] for row in conn.execute("PRAGMA table_info(operations)")}
     assert list(tmp_path.glob("failing.db.pre-migration-*.bak"))
 
 
 def test_database_rejects_unexpected_baseline_before_mutation(tmp_path: Path) -> None:
     manager = _database(tmp_path / "unexpected.db")
-    with sqlite3.connect(manager.db_path) as conn:
+    with closing(sqlite3.connect(manager.db_path)) as conn, conn:
         conn.execute("CREATE TABLE operations (id TEXT PRIMARY KEY)")
         conn.execute("CREATE TABLE file_operations (id TEXT PRIMARY KEY)")
 
     with pytest.raises(DatabaseMigrationError, match="unexpected operations baseline"):
         manager.init_schema()
 
-    with sqlite3.connect(manager.db_path) as conn:
+    with closing(sqlite3.connect(manager.db_path)) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] != "wal"
     assert not list(tmp_path.glob("unexpected.db.pre-migration-*.bak"))
@@ -537,7 +542,7 @@ def test_database_rejects_declared_current_version_with_missing_columns(
     tmp_path: Path,
 ) -> None:
     manager = _database(tmp_path / "incomplete-current.db")
-    with sqlite3.connect(manager.db_path) as conn:
+    with closing(sqlite3.connect(manager.db_path)) as conn, conn:
         _create_v1_schema(conn)
         conn.execute(f"PRAGMA user_version = {CURRENT_DATABASE_SCHEMA}")
 

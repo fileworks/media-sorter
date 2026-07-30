@@ -1,8 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigSections } from "@/hooks/useConfigSections";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { Card, CardContent } from "@/components/ui/card";
+import { StateView } from "@/components/StateView";
 import { cn } from "@/lib/utils";
 import { FiLock } from "react-icons/fi";
 import type { Config } from "@/types/api";
@@ -24,6 +25,9 @@ import { OtherSection } from "@/components/config/sections/OtherSection";
 import type { SectionProps } from "@/components/config/constants";
 import { useI18n } from "@/i18n/I18nContext";
 
+const ADVANCED_DISCLOSURE_KEY = "mediasort_config_advanced_open";
+const BASIC_SECTIONS = new Set<SectionId>(["essentials", "folders", "duplicates"]);
+
 const SECTION_BODIES: Record<SectionId, (props: SectionProps) => ReactNode> = {
   essentials: EssentialsSection,
   folders: FoldersSection,
@@ -43,6 +47,7 @@ const CONFIG_FIELD_MESSAGE_KEYS: Partial<Record<keyof Config, string>> = {
   sort: "config.field.sortEnabled",
   sort_criteria: "config.organizeDate",
   copy_instead_of_move: "config.copyMove",
+  companion_handling: "config.companions.label",
   camera_subfolder_enabled: "config.folder.camera",
   preserve_subfolders: "config.folder.preserve",
   categorize_enabled: "config.folder.categorize",
@@ -86,6 +91,8 @@ const CONFIG_FIELD_MESSAGE_KEYS: Partial<Record<keyof Config, string>> = {
   override_metadata: "config.other.fixDates",
   repair_enabled: "config.other.repair",
   update_check_enabled: "config.field.updateCheck",
+  thumbnail_cache_enabled: "config.thumbnailCache.label",
+  thumbnail_cache_budget_bytes: "config.thumbnailCache.budget",
 };
 
 function localizedConfigValue(
@@ -119,11 +126,19 @@ export function ConfigPanel({
   onSaveConfig?: (patch: Partial<Config>) => void;
   sectionBodyKey?: number;
 }) {
-  const { config, isLoading, error, updateConfig, fieldErrors } = useConfig();
+  const { config, isLoading, error, updateConfig, fieldErrors, resetConfig } = useConfig();
   const saveConfig = onSaveConfig ?? updateConfig;
   const sectionMeta = useConfigSections();
   const defaults = useConfigDefaults();
   const [active, setActive] = useState<SectionId>("essentials");
+  const [query, setQuery] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(() => {
+    try {
+      return localStorage.getItem(ADVANCED_DISCLOSURE_KEY) === "open";
+    } catch {
+      return false;
+    }
+  });
   const { t } = useI18n();
 
   // Declared before the hooks/handlers that reference it. Previously this was a
@@ -157,30 +172,6 @@ export function ConfigPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [active],
   );
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="py-5">
-          <div className="animate-pulse space-y-3">
-            {[...Array(5)].map((_, j) => (
-              <div key={j} className="h-4 rounded bg-muted" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error || !config) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-center">
-          <p className="text-sm text-muted-foreground">{t("common.settingsUnavailable")}</p>
-        </CardContent>
-      </Card>
-    );
-  }
 
   // Reset that section's fields to the backend defaults (comprehensive — covers
   // every field, not just the local mirror's subset). Falls back to the local
@@ -220,11 +211,73 @@ export function ConfigPanel({
     group: m.group,
     active: changed
       ? sectionFields(m.id).some((f) => changed.has(f))
-      : isSectionDirty(config, m.id),
+      : config
+        ? isSectionDirty(config, m.id)
+        : false,
     // A section is in error when any field it owns has a server validation
     // error — the rail flags it so the user can find the problem from any pane.
     error: sectionFields(m.id).some((f) => fieldErrors.has(f)),
   }));
+  const searchNeedle = query.trim().toLocaleLowerCase();
+  const matchedRailItems = railItems.filter((item) => {
+    const advanced = !BASIC_SECTIONS.has(item.id);
+    if (!searchNeedle) return !advanced || advancedOpen;
+    const meta = sectionMeta.get(item.id);
+    const haystack = [
+      item.label,
+      meta?.description ?? SECTION_META.find((candidate) => candidate.id === item.id)?.description,
+      ...sectionFields(item.id),
+      ...sectionFields(item.id).map((field) =>
+        t(CONFIG_FIELD_MESSAGE_KEYS[field as keyof Config] ?? `config.field.${field}`, {}, field),
+      ),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase();
+    return haystack.includes(searchNeedle);
+  });
+  const advancedChanged = railItems.filter(
+    (item) => !BASIC_SECTIONS.has(item.id) && (item.active || item.error),
+  ).length;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ADVANCED_DISCLOSURE_KEY, advancedOpen ? "open" : "closed");
+    } catch {
+      // Disclosure persistence is optional and never affects Config values.
+    }
+  }, [advancedOpen]);
+
+  useEffect(() => {
+    if (matchedRailItems.some((item) => item.id === active)) return;
+    const first = matchedRailItems[0]?.id;
+    if (first) setActive(first);
+  }, [active, matchedRailItems]);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-5">
+          <div className="animate-pulse space-y-3">
+            {[...Array(5)].map((_, j) => (
+              <div key={j} className="h-4 rounded bg-muted" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error || !config) {
+    return (
+      <StateView
+        variant="error"
+        title={t("common.settingsUnavailable")}
+        detail={t("config.loadFailedHelp")}
+        onRetry={resetConfig}
+      />
+    );
+  }
 
   const activeMeta = SECTION_META.find((m) => m.id === active) ?? SECTION_META[0];
   const activeLabel = t(
@@ -243,7 +296,40 @@ export function ConfigPanel({
     <Card>
       <CardContent className="p-0 lg:flex lg:items-stretch">
         <div className="border-b border-border p-2 lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r">
-          <SettingsRail items={railItems} selected={active} onSelect={setActive} />
+          <label className="mb-2 block">
+            <span className="sr-only">{t("settings.search")}</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("settings.search")}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+            />
+          </label>
+          {matchedRailItems.length > 0 ? (
+            <SettingsRail items={matchedRailItems} selected={active} onSelect={setActive} />
+          ) : (
+            <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+              {t("settings.noMatches", { query })}
+            </p>
+          )}
+          {!searchNeedle && (
+            <button
+              type="button"
+              aria-expanded={advancedOpen}
+              onClick={() => setAdvancedOpen((open) => !open)}
+              className="mt-2 flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-xs text-muted-foreground hover:border-primary"
+            >
+              <span>{t("settings.advanced")}</span>
+              <span>
+                {advancedChanged > 0
+                  ? t("settings.advancedChanged", { count: advancedChanged })
+                  : advancedOpen
+                    ? "−"
+                    : "+"}
+              </span>
+            </button>
+          )}
           {!disabled && !defaults && (
             <div className="mt-2 hidden px-3 lg:block">
               <button
@@ -270,6 +356,10 @@ export function ConfigPanel({
             <ChangedFromDefaults
               entries={diffEntries.filter((e) => activeSectionFields.has(e.key as string))}
               onResetAll={() => resetSection(active)}
+              onResetKey={(key) => {
+                if (!defaults || !(key in defaults)) return;
+                saveConfig({ [key]: defaults[key as keyof Config] } as Partial<Config>);
+              }}
               resetLabel={t("common.resetSection")}
               disabled={disabled}
             />

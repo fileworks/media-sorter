@@ -16,6 +16,8 @@ from typing import Any, Literal, Union, get_args, get_origin
 from pydantic import BaseModel, TypeAdapter, ValidationError, field_validator
 
 from app.core.concepts import Locale, bundled_labels
+from app.core.integrity import OptimizationProfile, PreservationProfile, utc_now
+from app.core.library_profiles import LibraryProfile
 from app.core.paths import resolve_app_paths
 from app.core.rules import RuleSet, migrate_legacy_rules, normalized_key
 
@@ -46,6 +48,13 @@ class Config:
     # Directories
     source_directory: str = ""
     target_directory: str = ""
+    # Versioned multi-root contract.  The legacy path fields remain during the
+    # compatibility window and mirror this profile's primary input/destination.
+    library_profile: LibraryProfile | None = None
+    # Media mutation is authorized separately from location/sorting settings.
+    # New and safely migrated configurations use strict Organize Only.
+    preservation_profile: PreservationProfile = field(default_factory=PreservationProfile)
+    optimization_profile: OptimizationProfile = field(default_factory=OptimizationProfile)
 
     # Sorting
     sort: bool = True
@@ -64,6 +73,11 @@ class Config:
 
     # File operations
     copy_instead_of_move: bool = False
+    companion_handling: Literal["keep_with_primary", "leave_in_place", "ignore"] = (
+        "keep_with_primary"
+    )
+    thumbnail_cache_enabled: bool = True
+    thumbnail_cache_budget_bytes: int = 512 * 1024 * 1024
 
     # Renaming
     rename: bool = False
@@ -81,9 +95,7 @@ class Config:
     image_format: Literal["jpeg", "png", "webp", "tiff"] = "jpeg"
 
     # Repair / validation
-    repair_enabled: bool = (
-        True  # validate sorted files; attempt safe repair; quarantine if unrepairable
-    )
+    repair_enabled: bool = False
 
     # Rule-based tagging
     rules_enabled: bool = True
@@ -113,10 +125,10 @@ class Config:
     ai_tagging_endpoint: str | None = None
     # Max tags written per file; whether to embed tags into the media files.
     ai_tagging_max_tags: int = 10
-    embed_tags_in_files: bool = True
+    embed_tags_in_files: bool = False
     # Compatibility input for configurations saved before the common setting.
     # ``None`` means the canonical setting was used.
-    ai_tagging_embed_in_files: bool = True
+    ai_tagging_embed_in_files: bool | None = None
     # Editable label vocabulary scored by the local CLIP zero-shot tagger.
     ai_tagging_labels: list[str] = field(
         default_factory=lambda: [
@@ -239,6 +251,10 @@ class Config:
     duplicate_exact_enabled: bool = True
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
+    burst_detection_enabled: bool = False
+    burst_time_window_seconds: float = 3.0
+    burst_perceptual_distance: int = 4
+    burst_require_camera_identity: bool = True
 
     # Destination media are always indexed when duplicate removal is enabled.
     # Legacy persisted ``dedup_against_destination`` keys are ignored by
@@ -289,6 +305,28 @@ class Config:
     migrated_legacy_rules: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        if isinstance(self.library_profile, dict):
+            self.library_profile = LibraryProfile.model_validate(self.library_profile)
+        if isinstance(self.preservation_profile, dict):
+            self.preservation_profile = PreservationProfile.model_validate(
+                self.preservation_profile
+            )
+        if isinstance(self.optimization_profile, dict):
+            self.optimization_profile = OptimizationProfile.model_validate(
+                self.optimization_profile
+            )
+        if self.library_profile is None:
+            self.library_profile = LibraryProfile.from_legacy(
+                source_directory=self.source_directory,
+                target_directory=self.target_directory,
+                copy_instead_of_move=self.copy_instead_of_move,
+            )
+        else:
+            primary_input = self.library_profile.inputs[0] if self.library_profile.inputs else None
+            destination = self.library_profile.destination
+            self.source_directory = primary_input.path if primary_input is not None else ""
+            self.target_directory = destination.path if destination is not None else ""
+            self.copy_instead_of_move = self.library_profile.transfer_mode == "copy"
         if isinstance(self.rule_set, dict):
             self.rule_set = RuleSet.model_validate(self.rule_set)
         if self.rules and not self.rule_set.tag_rules and not self.rule_set.route_rules:
@@ -296,9 +334,13 @@ class Config:
             self.rule_set = migrated
             self.migration_warnings.extend(warnings)
             self.migrated_legacy_rules = True
-        if not self.ai_tagging_embed_in_files:
-            self.embed_tags_in_files = False
+        if self.ai_tagging_embed_in_files is not None:
+            self.embed_tags_in_files = self.ai_tagging_embed_in_files
         self.ai_tagging_embed_in_files = self.embed_tags_in_files
+        if self.preservation_profile.requires_review:
+            self.migration_warnings.append(
+                "Previously enabled media-modifying settings require review before execution."
+            )
         if self.ai_tagging_labels_provenance is None:
             self.ai_tagging_labels_provenance = (
                 "bundled"
@@ -377,6 +419,9 @@ class Config:
                 else "custom"
             )
 
+        if "preservation_profile" not in source:
+            source["preservation_profile"] = _migrated_preservation_profile(source)
+
         known = {f.name for f in fields(cls)}
         filtered = {
             k: v for k, v in source.items() if k in known and k != "dedup_against_destination"
@@ -385,6 +430,63 @@ class Config:
         filtered["migrated_legacy_rules"] = migrated
         filtered["rules"] = []
         return cls(**filtered)
+
+
+def _migrated_preservation_profile(source: dict[str, Any]) -> PreservationProfile:
+    """Carry a pre-profile configuration forward without changing what it does.
+
+    A configuration saved before mutation profiles existed keeps whatever it had
+    switched on, but it is marked for review: the settings are retained, and the
+    next execution is blocked until someone confirms they are still wanted.
+    Nothing is silently enabled and nothing is silently turned off.
+    """
+    embedded = bool(source.get("override_metadata")) or (
+        bool(source.get("ai_tagging_enabled"))
+        and bool(source.get("embed_tags_in_files", source.get("ai_tagging_embed_in_files")))
+    )
+    repair = bool(source.get("repair_enabled"))
+    conversion = bool(source.get("convert_images")) or bool(source.get("convert_videos"))
+    if not (embedded or repair or conversion):
+        return PreservationProfile()
+    return PreservationProfile(
+        profile_id="migrated-mutation",
+        name="Carried over from a previous configuration",
+        mode="explicit_mutation",
+        allow_embedded_metadata_edits=embedded,
+        allow_repair=repair,
+        allow_conversion=conversion,
+        allow_compression=conversion,
+        authorization_origin="migration",
+        requires_review=True,
+    )
+
+
+def reset_to_organize_only(config: "Config") -> "Config":
+    """Roll a configuration back to the strict byte-identical default.
+
+    This is the rollback path: it can only remove authorization, never grant it,
+    so it cannot weaken the default guarantee no matter what it is applied to.
+    """
+    config.preservation_profile = PreservationProfile()
+    config.optimization_profile = OptimizationProfile()
+    config.override_metadata = False
+    config.embed_tags_in_files = False
+    config.ai_tagging_embed_in_files = False
+    config.repair_enabled = False
+    config.convert_images = False
+    config.convert_videos = False
+    return config
+
+
+def acknowledge_migrated_profile(config: "Config") -> "Config":
+    """Confirm carried-over mutating settings so execution may proceed."""
+    profile = config.preservation_profile
+    if not profile.requires_review:
+        return config
+    config.preservation_profile = profile.model_copy(
+        update={"requires_review": False, "acknowledged_at": utc_now()}
+    )
+    return config
 
 
 def _same_vocabulary(raw: object, expected: list[str]) -> bool:
@@ -496,7 +598,7 @@ def validate_rename_pattern(pattern: str) -> str | None:
     return None
 
 
-CURRENT_CONFIG_SCHEMA = 1
+CURRENT_CONFIG_SCHEMA = 3
 CONFIG_SCHEMA_PREFIX = "mediasort-config-v"
 
 
@@ -646,6 +748,53 @@ class ConfigLoader:
             if version == 0:
                 version = 1
                 document["$schema"] = f"{CONFIG_SCHEMA_PREFIX}{version}"
+            elif version == 1:
+                profile = LibraryProfile.from_legacy(
+                    source_directory=str(document.get("source_directory") or ""),
+                    target_directory=str(document.get("target_directory") or ""),
+                    copy_instead_of_move=bool(document.get("copy_instead_of_move", False)),
+                )
+                document["library_profile"] = profile.model_dump(mode="json")
+                version = 2
+                document["$schema"] = f"{CONFIG_SCHEMA_PREFIX}{version}"
+            elif version == 2:
+                tag_embedding_requested = bool(document.get("ai_tagging_enabled", False)) and bool(
+                    document.get(
+                        "embed_tags_in_files",
+                        document.get("ai_tagging_embed_in_files", False),
+                    )
+                )
+                embedded_requested = (
+                    bool(document.get("override_metadata", False)) or tag_embedding_requested
+                )
+                conversion_requested = bool(document.get("convert_images", False)) or bool(
+                    document.get("convert_videos", False)
+                )
+
+                # Historical repair/tag-embedding defaults were modifying. They
+                # cannot be distinguished from an explicit user choice in the
+                # flat v2 file, so migration chooses the safe interpretation.
+                document["repair_enabled"] = False
+                document["embed_tags_in_files"] = tag_embedding_requested
+                document["ai_tagging_embed_in_files"] = tag_embedding_requested
+
+                if embedded_requested or conversion_requested:
+                    preservation = PreservationProfile(
+                        profile_id="legacy-mutation-review",
+                        name="Review previous modifying settings",
+                        mode="explicit_mutation",
+                        allow_embedded_metadata_edits=embedded_requested,
+                        allow_conversion=conversion_requested,
+                        allow_compression=conversion_requested,
+                        authorization_origin="migration",
+                        requires_review=True,
+                    )
+                else:
+                    preservation = PreservationProfile()
+                document["preservation_profile"] = preservation.model_dump(mode="json")
+                document["optimization_profile"] = OptimizationProfile().model_dump(mode="json")
+                version = 3
+                document["$schema"] = f"{CONFIG_SCHEMA_PREFIX}{version}"
             else:  # pragma: no cover - registry guard for future additions
                 raise ValueError(f"No config migration registered from v{version}")
             self._validate_values(document)
@@ -773,6 +922,24 @@ class ConfigLoader:
                 log.warning("Ignoring bad env override %s=%r: %s", key, value, exc)
                 continue
             setattr(config, config_key, coerced)
+        if any(
+            key in os.environ
+            for key in (
+                "MEDIASORT_SOURCE_DIRECTORY",
+                "MEDIASORT_TARGET_DIRECTORY",
+                "MEDIASORT_COPY_INSTEAD_OF_MOVE",
+            )
+        ):
+            profile = config.library_profile or LibraryProfile.from_legacy(
+                source_directory=config.source_directory,
+                target_directory=config.target_directory,
+                copy_instead_of_move=config.copy_instead_of_move,
+            )
+            config.library_profile = profile.with_legacy_directories(
+                source_directory=config.source_directory,
+                target_directory=config.target_directory,
+                copy_instead_of_move=config.copy_instead_of_move,
+            )
         return config
 
 

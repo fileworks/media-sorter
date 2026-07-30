@@ -6,6 +6,7 @@
  */
 
 import { FiSearch } from "react-icons/fi";
+import { StateView } from "@/components/StateView";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import { Button } from "@/components/ui/button";
@@ -147,19 +148,7 @@ export function AnalysisPanel({
   // Error state
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("analysis.results")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <ValidationBadge severity="error" message={error} />
-          {onRetry && (
-            <Button variant="outline" size="sm" onClick={onRetry}>
-              {t("analysis.retry")}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <StateView variant="error" title={t("analysis.results")} detail={error} onRetry={onRetry} />
     );
   }
 

@@ -4,6 +4,7 @@ import fnmatch
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
 from app.core.exceptions import PathOverlapError, SourceUnavailableError
 
@@ -156,22 +157,36 @@ def _is_component_prefix(parent: tuple[str, ...], child: tuple[str, ...]) -> boo
     return len(parent) <= len(child) and child[: len(parent)] == parent
 
 
+PathRelationship = Literal["equal", "left_contains_right", "right_contains_left"]
+
+
+def path_relationship(left: Path, right: Path) -> PathRelationship | None:
+    """Return the canonical containment relationship between two paths."""
+    try:
+        same = left.exists() and right.exists() and os.path.samefile(left, right)
+    except OSError:
+        same = False
+    left_parts = _identity_parts(left)
+    right_parts = _identity_parts(right)
+    if same or left_parts == right_parts:
+        return "equal"
+    if _is_component_prefix(left_parts, right_parts):
+        return "left_contains_right"
+    if _is_component_prefix(right_parts, left_parts):
+        return "right_contains_left"
+    return None
+
+
 def validate_source_target_overlap(source: Path, target: str | Path) -> tuple[Path, Path]:
     """Return canonical paths, rejecting equality and nesting in either direction."""
     canonical_source = source.resolve(strict=True)
     canonical_target = canonicalize_target(str(target))
 
-    try:
-        same = canonical_target.exists() and os.path.samefile(canonical_source, canonical_target)
-    except OSError:
-        same = False
-
-    source_parts = _identity_parts(canonical_source)
-    target_parts = _identity_parts(canonical_target)
-    if same or source_parts == target_parts:
+    relationship = path_relationship(canonical_source, canonical_target)
+    if relationship == "equal":
         raise PathOverlapError(str(canonical_source), str(canonical_target), "equal")
-    if _is_component_prefix(source_parts, target_parts):
+    if relationship == "left_contains_right":
         raise PathOverlapError(str(canonical_source), str(canonical_target), "target_inside_source")
-    if _is_component_prefix(target_parts, source_parts):
+    if relationship == "right_contains_left":
         raise PathOverlapError(str(canonical_source), str(canonical_target), "source_inside_target")
     return canonical_source, canonical_target

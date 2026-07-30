@@ -27,6 +27,41 @@ export function OtherSection({ config, updateConfig }: SectionProps) {
           onChange={(v) => updateConfig({ repair_enabled: v })}
         />
       </FormRow>
+      <FormRow
+        label={t("config.thumbnailCache.label")}
+        htmlFor="thumbnail-cache-enabled"
+        help={t("config.thumbnailCache.help")}
+        inline
+      >
+        <Toggle
+          id="thumbnail-cache-enabled"
+          checked={config.thumbnail_cache_enabled}
+          onChange={(v) => updateConfig({ thumbnail_cache_enabled: v })}
+        />
+      </FormRow>
+      {config.thumbnail_cache_enabled && (
+        <FormRow
+          label={t("config.thumbnailCache.budget")}
+          htmlFor="thumbnail-cache-budget"
+          help={t("config.thumbnailCache.budgetHelp")}
+        >
+          <input
+            id="thumbnail-cache-budget"
+            type="number"
+            min={16}
+            max={16384}
+            step={16}
+            value={Math.round(config.thumbnail_cache_budget_bytes / (1024 * 1024))}
+            onChange={(event) =>
+              updateConfig({
+                thumbnail_cache_budget_bytes:
+                  Math.max(16, Number(event.target.value) || 16) * 1024 * 1024,
+              })
+            }
+            className="w-28 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          />
+        </FormRow>
+      )}
     </>
   );
 }

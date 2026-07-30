@@ -45,6 +45,17 @@ export function AiSection({ config, updateConfig }: SectionProps) {
         />
       </FormRow>
 
+      <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{t("config.ai.localEngine")}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("config.ai.localEngineHelp")}</p>
+        </div>
+        {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
+        {hardware && !tooWeak && (
+          <ModelTierSelect hardware={hardware} config={config} updateConfig={updateConfig} />
+        )}
+      </div>
+
       {config.ai_tagging_enabled && (
         <div className="ml-2 space-y-3 border-l-2 border-border pl-3">
           <FormRow
@@ -70,12 +81,6 @@ export function AiSection({ config, updateConfig }: SectionProps) {
 
           {config.ai_tagging_provider === "local" && (
             <>
-              {/* Hardware capability + model-tier gating for the local encoder. */}
-              {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
-              {hardware && !tooWeak && (
-                <ModelTierSelect hardware={hardware} config={config} updateConfig={updateConfig} />
-              )}
-
               {/* Label vocabulary is only meaningful when a local model runs. */}
               {!localOff && (
                 <>

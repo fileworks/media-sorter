@@ -4,19 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
+import shutil
+import sqlite3
 import tempfile
 import time
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
+from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConfigError
+from app.core.integrity_policy import authorize_config_mutations
+from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
-from app.services.ai.category_classifier_service import CategoryClassifierService
+from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan
+from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
 from app.services.dedup_index import DedupIndex
 from app.services.destination import (
     build_dest_dir,
+    companion_destination,
     predicted_filename,
     quarantine_dir,
     reserve_destination,
@@ -29,15 +38,70 @@ from app.services.duplicate_service import (
     quality_processing_order,
 )
 from app.services.extraction_service import DateExtractionService
-from app.services.filesystem_service import FileSystemService, validate_source_directory
+from app.services.filesystem_service import FileSystemService
 from app.services.junk_filter import classify_junk
 from app.services.rule_engine_service import RuleEngineService
-from app.utils.path_utils import sanitize_path_segment, validate_source_target_overlap
+from app.utils.media_utils import is_image, is_video
+from app.utils.path_utils import sanitize_path_segment
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
 
 logger = get_logger(__name__)
+
+
+class PreviewOutcomeStore:
+    """Disk-backed inspector records; reads are bounded by the API request cap."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        with contextlib.closing(sqlite3.connect(path)) as connection, connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS outcomes (
+                    source TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL
+                )
+                """
+            )
+
+    def replace(self, items: Iterable[dict[str, Any]]) -> None:
+        with contextlib.closing(sqlite3.connect(self.path)) as connection, connection:
+            connection.execute("DELETE FROM outcomes")
+            connection.executemany(
+                "INSERT INTO outcomes (source, payload) VALUES (?, ?)",
+                (
+                    (
+                        str(item["source"]),
+                        json.dumps(_outcome_payload(item), separators=(",", ":")),
+                    )
+                    for item in items
+                ),
+            )
+
+    def get(self, paths: list[str]) -> list[dict[str, Any]]:
+        if not paths:
+            return []
+        unique = tuple(dict.fromkeys(paths[:500]))
+        placeholders = ",".join("?" for _ in unique)
+        with contextlib.closing(sqlite3.connect(self.path)) as connection:
+            rows = connection.execute(
+                f"SELECT source, payload FROM outcomes WHERE source IN ({placeholders})",
+                unique,
+            ).fetchall()
+        by_source = {str(row[0]): json.loads(str(row[1])) for row in rows}
+        return [by_source[path] for path in unique if path in by_source]
+
+
+def _outcome_payload(item: dict[str, Any]) -> dict[str, Any]:
+    provenance = item.get("provenance")
+    date_record = provenance.get("date", {}) if isinstance(provenance, dict) else {}
+    return {
+        "source": str(item["source"]),
+        "resolved_date": item.get("extracted_date"),
+        "candidates": date_record.get("candidates", []),
+        "provenance": provenance,
+    }
 
 
 class PreviewService:
@@ -54,6 +118,31 @@ class PreviewService:
         self._rules = rule_engine_service
         self._dups = duplicate_service
         self._classifier = category_classifier_service
+        self._latest_config_fingerprint: str | None = None
+        self._outcome_directory = Path(tempfile.mkdtemp(prefix="mediasort-preview-outcomes-"))
+        self._outcomes = PreviewOutcomeStore(self._outcome_directory / "outcomes.sqlite3")
+        self._plans: dict[str, FrozenSortPlan] = {}
+
+    def latest_outcomes(self, paths: list[str]) -> tuple[str | None, list[dict[str, Any]]]:
+        """Return provenance recorded by the last completed preview.
+
+        Review surfaces consume this snapshot instead of recomputing decisions
+        from today's configuration.
+        """
+        return self._latest_config_fingerprint, self._outcomes.get(paths)
+
+    def close(self) -> None:
+        """Release disk-backed preview state without waiting for garbage collection."""
+        directory = getattr(self, "_outcome_directory", None)
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def __del__(self) -> None:
+        with contextlib.suppress(Exception):
+            self.close()
+
+    def frozen_plan(self, plan_id: str) -> FrozenSortPlan | None:
+        return self._plans.get(plan_id)
 
     async def run_preview(self, task: Task, config: Config) -> dict[str, Any]:
         """Task-manager entry point: run the preview while reporting progress.
@@ -79,16 +168,16 @@ class PreviewService:
         logger.info("Preview started", source=str(config.source_directory))
         if task is not None:
             task.transition("validating")
-        # A preview is read-only, so only the source is checked here — but it is
-        # checked, so a missing folder says so instead of previewing nothing.
-        source_root = validate_source_directory(config.source_directory)
-        if not config.target_directory.strip():
+        authorize_config_mutations(config)
+        library = validate_configured_library(config)
+        source_root = library.inputs[0].canonical_path
+        if library.destination is None:  # guaranteed above; keeps the type contract explicit
             raise ConfigError("No destination folder is set. Choose one before previewing.")
-        _, dest_root = validate_source_target_overlap(source_root, config.target_directory)
+        dest_root = library.destination.canonical_path
         if task is not None:
             task.transition("scanning_source")
-        traversal = await self._fs.traverse(
-            source_root,
+        enumerated = await self._fs.traverse_roots(
+            [(item.canonical_path, item.exclusions) for item in library.inputs],
             recursive=config.recursive_scan,
             max_depth=config.max_recursion_depth,
             exclude_patterns=config.exclude_patterns,
@@ -96,8 +185,13 @@ class PreviewService:
             max_file_size_mb=config.max_file_size_mb,
             cancel_token=task.cancel_token if task is not None else None,
             task=task,
+            companion_handling=config.companion_handling,
         )
+        traversal = enumerated.result
+        root_of = enumerated.root_of
         files = traversal.files
+        units = traversal.units
+        primary_files = [unit.primary for unit in units]
         total = len(files)
         logger.info("Preview: scan complete", total=total)
         if task is not None:
@@ -105,6 +199,12 @@ class PreviewService:
 
         stats: dict[str, Any] = {
             "total": total,
+            "eligible_media": total,
+            "media_units": len(units),
+            "companions": sum(len(unit.companions) for unit in units),
+            "unmatched_companions": len(traversal.unmatched_companions),
+            "companion_split_warnings": 0,
+            "conversion_companion_warnings": 0,
             "excluded_files": traversal.excluded_files,
             "partial": traversal.partial,
             "issue_count": len(traversal.issues),
@@ -120,6 +220,7 @@ class PreviewService:
             # are predicted to land in _uncategorized/ (always present; 0 when the
             # feature is off).
             "uncategorized": 0,
+            "review_only": 0,
         }
 
         # Per-preview in-memory duplicate registry (mirrors SortingService).
@@ -165,9 +266,9 @@ class PreviewService:
         # "ranking" progress instead of leaving the bar at 0%.
         cancel_event = task.cancel_event if task is not None else None
         order = await asyncio.to_thread(
-            quality_processing_order, files, config, self._dups, cancel_event, task
+            quality_processing_order, primary_files, config, self._dups, cancel_event, task
         )
-        slots: list[dict[str, Any] | None] = [None] * total
+        slots: list[dict[str, Any] | None] = [None] * len(units)
         reserved_destinations: set[Path] = set()
         operation_rules = (
             self._rules.for_operation(config)
@@ -191,7 +292,7 @@ class PreviewService:
         # Phase 3 — per-file prediction. Reset the counter so the bar restarts
         # cleanly from 0 under the "previewing" label.
         if task is not None:
-            task.transition("previewing", total=total)
+            task.transition("previewing", total=len(units))
 
         for rank, idx in enumerate(order):
             if task is not None and task.cancel_event.is_set():
@@ -201,8 +302,8 @@ class PreviewService:
             # progress polling) is never starved on big directories.
             item = await asyncio.to_thread(
                 self._preview_file,
-                files[idx],
-                source_root,
+                primary_files[idx],
+                root_of.get(primary_files[idx], source_root),
                 dest_root,
                 config,
                 registry,
@@ -215,9 +316,75 @@ class PreviewService:
             )
             slots[idx] = item
             if item.get("destination"):
-                item["destination"] = str(
-                    reserve_destination(Path(item["destination"]), reserved_destinations)
+                proposed = Path(item["destination"])
+                reserved = reserve_destination(proposed, reserved_destinations)
+                item["destination"] = str(reserved)
+                if reserved != proposed:
+                    provenance = item.get("provenance")
+                    if isinstance(provenance, dict):
+                        path_segments = provenance.setdefault("path", [])
+                        path_segments.append(
+                            {
+                                "segment": reserved.name,
+                                "decision": "collision",
+                                "detail": f"reserved after collision with {proposed.name}",
+                            }
+                        )
+            unit = units[idx]
+            unit_warnings: list[str] = []
+            companions: list[dict[str, Any]] = []
+            conversion_warning = bool(unit.companions) and (
+                (config.convert_images and is_image(unit.primary))
+                or (config.convert_videos and is_video(unit.primary))
+            )
+            if conversion_warning:
+                unit_warnings.append(
+                    "Companion contents are preserved; internal references are not rewritten "
+                    "after conversion."
                 )
+                stats["conversion_companion_warnings"] += 1
+            for member in unit.companions:
+                destination: str | None = None
+                status = "attached"
+                warning: str | None = None
+                if config.companion_handling == "leave_in_place":
+                    status = "left_in_place"
+                    warning = "This companion will remain in the source and the unit will split."
+                    stats["companion_split_warnings"] += 1
+                elif item.get("destination"):
+                    destination = str(
+                        companion_destination(Path(str(item["destination"])), member.path)
+                    )
+                member_date: str | None = None
+                with contextlib.suppress(Exception):
+                    detail = self._extraction.extract_detailed(member.path, check_suspicious=False)
+                    member_date = (
+                        None if detail.extracted_date is None else str(detail.extracted_date)
+                    )
+                companions.append(
+                    {
+                        "source": str(member.path),
+                        "destination": destination,
+                        "role": member.companion_role,
+                        "status": status,
+                        "warning": warning,
+                        "extracted_date": member_date,
+                        "placement_date_source": str(unit.primary),
+                    }
+                )
+            item.update(
+                unit_id=unit.unit_id,
+                unit_primary=True,
+                companions=companions,
+                unit_warnings=unit_warnings,
+            )
+            provenance = item.get("provenance")
+            if isinstance(provenance, dict):
+                provenance["unit"] = {
+                    "unit_id": unit.unit_id,
+                    "role": "primary",
+                    "members": [str(member.path) for member in unit.members][:32],
+                }
             self._bump_stats(stats, item["status"])
             if item.get("duplicate_evaluation") == "unknown":
                 stats["duplicate_unknown"] += 1
@@ -235,7 +402,7 @@ class PreviewService:
                 eta: float | None = None
                 if elapsed > 0 and rank > 0:
                     rate = (rank + 1) / elapsed
-                    eta = (total - (rank + 1)) / rate
+                    eta = (len(units) - (rank + 1)) / rate
                 task.update_progress(rank + 1, eta_seconds=eta)
 
         items: list[dict[str, Any]] = [it for it in slots if it is not None]
@@ -247,11 +414,29 @@ class PreviewService:
             quarantine_future=stats["will_quarantine_future"],
             uncategorized=stats["uncategorized"],
         )
+        fingerprint = config_fingerprint(config)
+        self._latest_config_fingerprint = fingerprint
+        self._outcomes.replace(items)
+        plan = build_frozen_sort_plan(items, config)
+        # Only the current reviewed plan remains executable. A stale identifier
+        # can therefore never silently select an older set of consequences.
+        self._plans = {plan.plan_id: plan}
         return {
+            "config_fingerprint": fingerprint,
+            "plan_id": plan.plan_id,
+            "impact": plan.impact.model_dump(mode="json"),
             "items": items,
             "stats": stats,
             "partial": traversal.partial,
             "issues": [issue.to_dict() for issue in traversal.issues],
+            "unmatched_companions": [
+                {
+                    "source": str(item.path),
+                    "role": item.companion_role,
+                    "reason": item.reason,
+                }
+                for item in traversal.unmatched_companions
+            ],
         }
 
     # ------------------------------------------------------------------ #
@@ -262,6 +447,8 @@ class PreviewService:
     def _bump_stats(stats: dict[str, Any], status: str) -> None:
         if status == "sort":
             stats["will_sort"] += 1
+        elif status == "review_only":
+            stats["review_only"] += 1
         elif status == "failed":
             stats["will_fail"] += 1
         elif status == "future_date":
@@ -357,11 +544,12 @@ class PreviewService:
         classifier = operation_classifier if use_operation_services else self._classifier
         tags: list[str] = []
         route_suffix: str | None = None
+        rule_evaluation: Any | None = None
         if rules is not None:
             with contextlib.suppress(Exception):
-                result = rules.evaluate_all(file_path)
-                tags = list(result.tags)
-                route_suffix = result.route
+                rule_evaluation = rules.evaluate_all(file_path)
+                tags = list(rule_evaluation.tags)
+                route_suffix = rule_evaluation.route
 
         status: str
         dest: str | None
@@ -371,6 +559,7 @@ class PreviewService:
         dup_of: str | None = None
         dup_evaluation = "known"
         dup_unknown_reason: str | None = None
+        category_result = CategoryResult(None, 0.0, 0.0)
 
         if extracted_date is None:
             status = "suspicious_date" if extr.suspicious else "unknown_date"
@@ -432,7 +621,8 @@ class PreviewService:
                 status = "duplicate_unknown"
                 dest = None
             else:
-                category = self._classify(file_path, config, classifier)
+                category_result = self._classify(file_path, config, classifier)
+                category = category_result.category
                 status, dest = self._build_dest_path(
                     file_path,
                     extracted_date,
@@ -451,7 +641,8 @@ class PreviewService:
                     )
 
         else:
-            category = self._classify(file_path, config, classifier)
+            category_result = self._classify(file_path, config, classifier)
+            category = category_result.category
             status, dest = self._build_dest_path(
                 file_path,
                 extracted_date,
@@ -469,7 +660,11 @@ class PreviewService:
                     date=str(extracted_date),
                 )
 
-        return {
+        if not config.sort:
+            status = "review_only"
+            dest = None
+
+        item: dict[str, Any] = {
             "source": str(file_path),
             "destination": dest,
             "extracted_date": str(extracted_date) if extracted_date else None,
@@ -487,6 +682,22 @@ class PreviewService:
             "duplicate_evaluation": dup_evaluation,
             "duplicate_unknown_reason": dup_unknown_reason,
         }
+        item["provenance"] = self._provenance(
+            file_path=file_path,
+            source_root=source_root,
+            destination=Path(dest) if dest else None,
+            config=config,
+            extraction=extr,
+            rules=rule_evaluation,
+            category=category_result,
+            duplicate_evaluated=config.remove_duplicates,
+            duplicate_type=dup_type,
+            duplicate_similarity=dup_similarity,
+            duplicate_of=dup_of,
+            duplicate_evaluation=dup_evaluation,
+            route_suffix=route_suffix,
+        )
+        return item
 
     # ------------------------------------------------------------------ #
     # Helpers                                                               #
@@ -497,12 +708,49 @@ class PreviewService:
         file_path: Path,
         config: Config,
         classifier: CategoryClassifierService | None = None,
-    ) -> str | None:
-        """Predict the topic category for *file_path*, or ``None`` (uncategorized)."""
+    ) -> CategoryResult:
+        """Return the classifier's actual decision record, not a display reconstruction."""
         active_classifier = classifier if classifier is not None else self._classifier
         if not config.categorize_enabled or active_classifier is None:
-            return None
-        return active_classifier.classify_file(file_path).category
+            return CategoryResult(None, 0.0, 0.0)
+        return active_classifier.classify_file(file_path)
+
+    def _provenance(
+        self,
+        *,
+        file_path: Path,
+        source_root: Path,
+        destination: Path | None,
+        config: Config,
+        extraction: Any,
+        rules: Any | None,
+        category: CategoryResult,
+        duplicate_evaluated: bool,
+        duplicate_type: str | None,
+        duplicate_similarity: int | None,
+        duplicate_of: str | None,
+        duplicate_evaluation: str,
+        route_suffix: str | None,
+    ) -> dict[str, Any]:
+        """Serialize the shared bounded decisions produced during prediction."""
+        from app.services.outcome_provenance import build_outcome_provenance
+
+        model = build_outcome_provenance(
+            file_path=file_path,
+            source_root=source_root,
+            destination=destination,
+            config=config,
+            extraction=extraction,
+            rules=rules,
+            category=category,
+            duplicate_evaluated=duplicate_evaluated,
+            duplicate_type=duplicate_type,
+            duplicate_similarity=duplicate_similarity,
+            duplicate_of=duplicate_of,
+            duplicate_evaluation=duplicate_evaluation,
+            route_suffix=route_suffix,
+        )
+        return model.model_dump(mode="json")
 
     def _build_dest_path(
         self,

@@ -6,6 +6,7 @@
 
 import axios, { AxiosInstance, AxiosError } from "axios";
 import { invoke } from "@tauri-apps/api/tauri";
+import type { RecoveryOperation } from "@/lib/startupRecovery";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,9 @@ export interface Config {
   language: "en" | "de";
   source_directory: string;
   target_directory: string;
+  library_profile: LibraryProfile;
+  preservation_profile: PreservationProfile;
+  optimization_profile: OptimizationProfile;
   sort: boolean;
   sort_criteria: string[];
   recursive_scan: boolean;
@@ -20,12 +24,19 @@ export interface Config {
   preserve_subfolders: boolean;
   override_metadata: boolean;
   copy_instead_of_move: boolean;
+  companion_handling: "keep_with_primary" | "leave_in_place" | "ignore";
+  thumbnail_cache_enabled: boolean;
+  thumbnail_cache_budget_bytes: number;
   rename: boolean;
   rename_pattern: string;
   remove_duplicates: boolean;
   duplicate_exact_enabled: boolean;
   duplicate_perceptual_enabled: boolean;
   duplicate_perceptual_threshold: number;
+  burst_detection_enabled: boolean;
+  burst_time_window_seconds: number;
+  burst_perceptual_distance: number;
+  burst_require_camera_identity: boolean;
   dedup_index_path: string | null;
   // Junk / thumbnail filter → _junk/ (never deletes).
   junk_filter_enabled: boolean;
@@ -68,6 +79,308 @@ export interface Config {
   // providers (CoreML / CUDA / DirectML) for the local encoder.
   ai_model_tier: AiModelTier;
   ai_allow_gpu: boolean;
+}
+
+export type LibraryRootRole = "input" | "reference" | "destination";
+export type TransferMode = "copy" | "move";
+
+export interface RootIdentity {
+  schema_version: 1;
+  confidence: "high" | "medium" | "path_only" | "unresolved";
+  canonical_path: string;
+  volume_id: string | null;
+  filesystem_id: string | null;
+  root_file_id: string | null;
+  platform: string | null;
+  observed_at: string;
+}
+
+export interface LibraryRoot {
+  root_id: string;
+  role: LibraryRootRole;
+  path: string;
+  display_name: string | null;
+  priority: number;
+  exclusions: string[];
+  identity: RootIdentity | null;
+}
+
+export interface CatalogPlacement {
+  mode: "application_data" | "portable";
+  relative_path: string | null;
+}
+
+export interface ResourcePreferences {
+  mode: "auto" | "conservative" | "custom";
+  memory_limit_mib: number | null;
+  io_workers: number | null;
+  cpu_workers: number | null;
+}
+
+export interface LibraryProfile {
+  schema_version: 1;
+  profile_id: string;
+  name: string;
+  roots: LibraryRoot[];
+  transfer_mode: TransferMode;
+  catalog: CatalogPlacement;
+  resources: ResourcePreferences;
+}
+
+export interface PreservationProfile {
+  schema_version: 1;
+  profile_id: string;
+  name: string;
+  mode: "organize_only" | "explicit_mutation";
+  allow_embedded_metadata_edits: boolean;
+  allow_repair: boolean;
+  allow_conversion: boolean;
+  allow_compression: boolean;
+  preserve_filesystem_timestamps: boolean;
+  derived_metadata: "report_only" | "sidecar_and_report";
+  authorization_origin: "default" | "migration" | "saved_profile" | "run_override";
+  acknowledged_at: string | null;
+  requires_review: boolean;
+}
+
+export interface OptimizationProfile {
+  schema_version: 1;
+  profile_id: string;
+  name: string;
+  mode: "disabled" | "lossless" | "visually_lossless";
+  acknowledged_at: string | null;
+  tool: string | null;
+  tool_version: string | null;
+  parameters: Record<string, unknown>;
+  validation_contract: string | null;
+  memory_limit_mib: number;
+  temporary_space_limit_bytes: number | null;
+  retain_original: boolean;
+}
+
+/** One declared format contract: what an optimizer would promise, and prove. */
+export interface OptimizationContract {
+  contract_id: string;
+  media_kind: "image" | "video";
+  mode: "disabled" | "lossless" | "visually_lossless";
+  status: "declared" | "validated" | "blocked";
+  enabled: boolean;
+  source_formats: string[];
+  output_container: string;
+  output_codec: string;
+  tool: string;
+  tool_available: boolean;
+  tool_version: string | null;
+  minimum_tool_version: string;
+  decoded_content: string;
+  metadata_policy: string;
+  quality_setting: string;
+  metrics: {
+    name: string;
+    comparison: string;
+    threshold: number | string | boolean;
+    applies_to: string;
+    rationale: string;
+  }[];
+  compatibility_warnings: string[];
+}
+
+/** One representative encode the user may open beside its original. */
+export interface SampleEncode {
+  source_path: string;
+  candidate_path: string | null;
+  source_bytes: number;
+  candidate_bytes: number;
+  size_reduction_ratio: number;
+  sampling_scope: string;
+  passed: boolean | null;
+  measurements: Record<string, unknown>;
+  thresholds: Record<string, unknown>;
+  warnings: string[];
+  comparable: boolean;
+}
+
+export interface ItemProjection {
+  path: string;
+  current_bytes: number;
+  projected_low_bytes: number | null;
+  projected_high_bytes: number | null;
+  estimated_saving_bytes: number | null;
+  confidence: "measured" | "sampled" | "estimated" | "unknown";
+  estimate_only: boolean;
+  output_container: string;
+  output_codec: string;
+  quality_setting: string;
+  validation_method: string;
+  compatibility_warnings: string[];
+  temporary_space_bytes: number;
+  quarantine_space_bytes: number;
+  recommendation: "optimize" | "skip" | "blocked";
+  reason: string;
+  sample_source_path: string | null;
+}
+
+export interface OptimizationProjection {
+  contract_id: string;
+  mode: "disabled" | "lossless" | "visually_lossless";
+  output_container: string;
+  output_codec: string;
+  item_count: number;
+  current_bytes: number;
+  projected_low_bytes: number | null;
+  projected_high_bytes: number | null;
+  estimated_saving_bytes: number | null;
+  confidence: "measured" | "sampled" | "estimated" | "unknown";
+  estimate_only: boolean;
+  recommended_count: number;
+  skipped_count: number;
+  blocked_count: number;
+  temporary_space_bytes: number;
+  quarantine_space_bytes: number;
+  samples: SampleEncode[];
+  items: ItemProjection[];
+  warnings: string[];
+  compatibility_warnings: string[];
+  failures: string[];
+}
+
+/** A quarantined original and everything needed to put it back. */
+export interface QuarantineRecord {
+  record_id: string;
+  operation_id: string;
+  reason: string;
+  original_path: string;
+  quarantine_path: string;
+  keeper_path: string | null;
+  size_bytes: number;
+  quarantined_at: string;
+  retention: "retained" | "restored" | "removed";
+  restored_to: string | null;
+  age_days: number;
+  notes: string[];
+}
+
+export interface QuarantineSummary {
+  record_count: number;
+  retained_count: number;
+  restored_count: number;
+  retained_bytes: number;
+  oldest_age_days: number;
+  by_reason: Record<string, number>;
+}
+
+export interface RestorePreview {
+  record_id: string;
+  target_path: string;
+  restorable: boolean;
+  conflict: boolean;
+  conflict_is_identical: boolean;
+  quarantined_file_present: boolean;
+  hash_matches: boolean | null;
+  blocked_reason: string | null;
+}
+
+/** Where the index lives, what it costs, and how fresh each root is. */
+export interface CatalogFreshness {
+  root_id: string;
+  state: "fresh" | "stale" | "unknown" | "rebuilding";
+  generation: number | null;
+  last_complete_scan_at: string | null;
+  issue_count: number;
+}
+
+export interface CatalogDiagnostics {
+  path: string;
+  schema_version: number;
+  size_bytes: number;
+  soft_limit_bytes: number;
+  over_soft_limit: boolean;
+  mode: string;
+  roots: number;
+  files: number;
+  hashed_files: number;
+  missing_files: number;
+  generations: number;
+  open_generations: number;
+  freshness: CatalogFreshness[];
+}
+
+import type {
+  BulkImpact as ReviewBulkImpact,
+  DuplicateGroup as ReviewGroup,
+  GroupPlan as ReviewGroupPlan,
+} from "@/lib/reviewWorkbench";
+
+export type { ReviewGroup, ReviewGroupPlan };
+export type BulkImpactResponse = ReviewBulkImpact;
+
+export interface SimilarRulePreview {
+  groups_considered: number;
+  groups_affected: number;
+  members_quarantined: number;
+  quarantine_only: boolean;
+  proposals: { group_id: string; applies: boolean; reason: string; members: number }[];
+}
+
+export interface ValidationFinding {
+  finding_id: string;
+  category: string;
+  severity: "info" | "warning" | "error";
+  state: "failed" | "passed" | "disabled" | "not_evaluated" | "unknown";
+  root_id: string | null;
+  relative_path: string | null;
+  current_path: string | null;
+  expected_path: string | null;
+  evidence: string;
+  confidence: "high" | "medium" | "low" | "unknown";
+  rule_version: string;
+  catalog_generation: number;
+  actionable: boolean;
+}
+
+export interface ValidationReport {
+  report_id: string;
+  profile_id: string;
+  catalog_generation: number;
+  started_at: string;
+  finished_at: string;
+  findings: ValidationFinding[];
+  unreachable_scopes: string[];
+  disabled_categories: string[];
+}
+
+/** One row of a catalog-backed list — only what a row needs to draw. */
+export interface CatalogViewRow {
+  file_id: number;
+  root_id: string;
+  role: string;
+  relative_path: string;
+  size_bytes: number;
+  mtime_ns: number;
+  sha256: string | null;
+}
+
+export interface CatalogViewPage {
+  rows: CatalogViewRow[];
+  next_cursor: string | null;
+  generation: number;
+  total_rows: number;
+  total_bytes: number;
+}
+
+export interface CleanupImpact {
+  record_ids: string[];
+  item_count: number;
+  total_bytes: number;
+  excluded_reasons: string[];
+  acknowledgement_text: string;
+}
+
+export interface CleanupOutcome {
+  code: string;
+  removed: string[];
+  failed: { record_id: string; reason: string }[];
+  bytes_removed: number;
 }
 
 export type AiModelTier = "auto" | "off" | "lite" | "standard" | "max";
@@ -178,6 +491,10 @@ export interface TaskProgress {
   total: number;
   percentage: number;
   estimated_time_remaining_seconds?: number;
+  unit?: "items" | "bytes";
+  bytes_done?: number;
+  bytes_total?: number;
+  bytes_total_known?: boolean;
   /**
    * Coarse setup/processing stage, so the UI can show meaningful feedback during
    * work that happens before the per-file loop instead of a frozen 0%.
@@ -192,6 +509,9 @@ export interface TaskProgress {
     | "analyzing"
     | "previewing"
     | "sorting"
+    | "downloading_model"
+    | "verifying_model"
+    | "publishing_model"
     | null;
 }
 
@@ -211,7 +531,7 @@ export interface TaskFailure {
 
 export interface TaskStatus<TResult extends Record<string, unknown>> {
   task_id: string;
-  operation_kind: "analysis" | "scan" | "preview" | "sort";
+  operation_kind: "analysis" | "scan" | "preview" | "sort" | "model_download";
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: TaskProgress;
   partial: boolean;
@@ -222,6 +542,30 @@ export interface TaskStatus<TResult extends Record<string, unknown>> {
   failure: TaskFailure | null;
   result: TResult | null;
 }
+
+export type AiModelState = "not_installed" | "downloading" | "ready" | "error";
+
+export interface AiModelPackStatus {
+  pack_id: string;
+  model_id: string;
+  display_name: string;
+  state: AiModelState;
+  total_size: number;
+  installed_size: number;
+  license: string;
+  license_url: string;
+  source: string;
+  task_id: string | null;
+  error: string | null;
+}
+
+export interface AiModelInventory {
+  effective_tier: "off" | "lite" | "standard" | "max";
+  required_pack_id: string | null;
+  packs: AiModelPackStatus[];
+}
+
+export type AiModelTaskStatus = TaskStatus<Record<string, unknown>>;
 
 export interface PreviewItem {
   source: string;
@@ -240,7 +584,8 @@ export interface PreviewItem {
     | "suspicious_date"
     | "junk"
     | "already_in_destination"
-    | "duplicate_unknown";
+    | "duplicate_unknown"
+    | "review_only";
   file_size?: number;
   /** Why the junk filter quarantined this file (junk status only). */
   quarantine_reason?: string | null;
@@ -249,6 +594,57 @@ export interface PreviewItem {
   duplicate_of?: string | null;
   duplicate_evaluation?: "known" | "unknown";
   duplicate_unknown_reason?: "video_perceptual_not_computed" | null;
+  unit_id?: string;
+  unit_primary?: boolean;
+  companions?: Array<{
+    source: string;
+    destination: string | null;
+    role: "edit_sidecar" | "motion_part" | "raw_sibling" | "thumbnail_part" | "audio_note";
+    status: "attached" | "left_in_place";
+    warning?: string | null;
+    extracted_date?: string | null;
+    placement_date_source?: string;
+  }>;
+  unit_warnings?: string[];
+  provenance?: {
+    date: {
+      resolved_date: string | null;
+      winning_source: string | null;
+      candidates: Array<{
+        source: string;
+        value: string | null;
+        accepted: boolean;
+        rejection_reason:
+          | "absent"
+          | "unparseable"
+          | "sentinel_value"
+          | "suspicious"
+          | "overridden"
+          | null;
+      }>;
+    };
+    rules: {
+      matched_tags: Array<{ name: string; priority: number; saved_order: number }>;
+      winning_route: { name: string; priority: number; saved_order: number } | null;
+      route_folder: string | null;
+    };
+    categorization: {
+      enabled: boolean;
+      label: string | null;
+      confidence: number | null;
+      threshold: number | null;
+      passed: boolean | null;
+    };
+    duplicate: {
+      evaluated: boolean;
+      status: "unique" | "duplicate" | "unknown" | "not_evaluated";
+      match_kind: string | null;
+      matched_path: string | null;
+      perceptual_distance: number | null;
+    };
+    unit: { unit_id: string; role: string; members: string[] } | null;
+    path: Array<{ segment: string; decision: string; detail: string }>;
+  };
 }
 
 /**
@@ -287,9 +683,178 @@ export interface AnalysisResult {
   warnings: string[];
   partial: boolean;
   issues: Array<Record<string, unknown>>;
+  media_units?: number;
+  companion_files?: number;
+  unmatched_companions?: number;
+}
+
+export interface AuditFinding {
+  finding_id: string;
+  category:
+    | "unreadable"
+    | "structurally_invalid"
+    | "content_extension_mismatch"
+    | "checksum_divergence"
+    | "missing_companion"
+    | "placement_inconsistency";
+  relative_path: string;
+  evidence: string;
+  actionable: boolean;
+  newly_appeared: boolean;
+  suggested_path: string | null;
+}
+
+export interface AuditActionPlan {
+  plan_id: string;
+  action_count: number;
+  bytes_affected: number;
+  source_mutations: number;
+  config_fingerprint: string;
+}
+
+export interface AuditReport {
+  audit_id: string;
+  root: string;
+  started_at: string;
+  finished_at: string;
+  scope: {
+    subtree: string | null;
+    date_from: string | null;
+    date_to: string | null;
+    sample_proportion: number;
+    sample_seed: string;
+  };
+  selection_method: string;
+  coverage: "full" | "sample" | "partial";
+  scanned_files: number;
+  baseline_established: number;
+  findings: AuditFinding[];
+  issues: string[];
+  cancelled: boolean;
+}
+
+export interface BurstFrame {
+  frame_id: string;
+  unit_id: string;
+  primary_path: string;
+  member_paths: string[];
+  captured_at: string;
+  camera_identity: string;
+  perceptual_distance_from_previous: number | null;
+  sharpness: number | null;
+}
+
+export interface BurstGroup {
+  group_id: string;
+  frames: BurstFrame[];
+  proposed_representative_id: string;
+  reviewed: boolean;
+  dismissed: boolean;
+  kept_frame_ids: string[];
+}
+
+export interface BurstDecision {
+  group: BurstGroup;
+  plan: {
+    plan_id: string;
+    group_id: string;
+    kept_frame_ids: string[];
+    members: Array<{
+      frame_id: string;
+      unit_id: string;
+      path: string;
+      fingerprint: string;
+    }>;
+  };
+  impact: {
+    quarantine_count: number;
+    quarantine_bytes: number;
+    source_mutations: number;
+    irreversible: string;
+  };
+  planned_quarantine_units: Array<{
+    unit_id: string;
+    members: string[];
+    action: "quarantine";
+    delete: false;
+  }>;
+}
+
+export interface BurstRunReport {
+  operation_id: string;
+  plan_id: string;
+  group_id: string;
+  completed_at: string;
+  kept_frame_ids: string[];
+  quarantined: Array<{
+    frame_id: string;
+    unit_id: string;
+    original_path: string;
+    quarantine_path: string;
+    size_bytes: number;
+  }>;
+}
+
+export interface ReconciliationFinding {
+  finding_id: string;
+  classification: "missing" | "misplaced" | "extra" | "matched" | "unknown";
+  identity: "confirmed" | "probable" | "unrelated" | "unknown";
+  input_path: string | null;
+  destination_path: string | null;
+  expected_path: string | null;
+  content_hash: string | null;
+  perceptual_distance: number | null;
+  metadata_agreement: boolean | null;
+  measured_against: string;
+  actionable: boolean;
+  requires_explicit_confirmation: boolean;
+  source_fingerprint: string | null;
+  destination_fingerprint: string | null;
+  unit_members: string[];
+  unit_id: string | null;
+  unit_member_roles: Record<string, string | null>;
+  unit_member_fingerprints: Record<string, string>;
+}
+
+export interface ReconciliationReport {
+  report_id: string;
+  created_at: string;
+  findings: ReconciliationFinding[];
+  next_cursor: string | null;
+  counts: Record<ReconciliationFinding["classification"], number>;
+  input_coverage: "full" | "partial" | "unavailable";
+  destination_coverage: "full" | "partial" | "unavailable";
+  issues: string[];
+  config_fingerprint: string;
+}
+
+export interface ReconciliationPlan {
+  plan_id: string;
+  manifest: Record<string, unknown>;
+  action_count: number;
+  bytes_affected: number;
+  source_mutations: number;
 }
 
 export interface PreviewResult {
+  /** Identity of the exact configuration used to calculate these outcomes. */
+  config_fingerprint: string;
+  /** Identity of the immutable reviewed plan accepted by the executor. */
+  plan_id: string;
+  impact: {
+    actionable_groups: number;
+    copy_count: number;
+    move_count: number;
+    quarantine_count: number;
+    quarantine_bytes: number;
+    skip_count: number;
+    source_mutations: number;
+    required_bytes: number;
+    conversion_without_originals: number;
+    companions_left_in_place: number;
+    embedded_tag_count: number;
+    unresolved_count: number;
+  };
   items: PreviewItem[];
   stats: {
     total: number;
@@ -308,9 +873,20 @@ export interface PreviewResult {
     uncategorized: number;
     partial?: boolean;
     issue_count?: number;
+    eligible_media?: number;
+    media_units?: number;
+    companions?: number;
+    unmatched_companions?: number;
+    companion_split_warnings?: number;
+    conversion_companion_warnings?: number;
   };
   partial: boolean;
   issues: Array<Record<string, unknown>>;
+  unmatched_companions?: Array<{
+    source: string;
+    role: string;
+    reason: string;
+  }>;
 }
 
 export type SortingStatus = TaskStatus<{ operation_id?: string } & Record<string, unknown>>;
@@ -335,6 +911,16 @@ export interface ApiError {
 export interface HealthResponse {
   status: string;
   version: string;
+}
+
+export interface DiagnosticsResponse {
+  version: string;
+  logging: Record<string, unknown>;
+  operations_needing_review: string[];
+  recovery_operations: RecoveryOperation[];
+  rollout_gates: Record<string, boolean>;
+  rollout_summary: string;
+  thumbnail_cache: Record<string, unknown>;
 }
 
 export interface FileOperationRecord {
@@ -600,6 +1186,12 @@ export class MediaSorterApiClient {
     return data;
   }
 
+  async diagnostics(): Promise<DiagnosticsResponse> {
+    await this.ensureReady();
+    const { data } = await this.http.get<DiagnosticsResponse>("/api/diagnostics");
+    return data;
+  }
+
   // ── Config ───────────────────────────────────────────────────────────────────
 
   async getConfig(): Promise<Config> {
@@ -637,6 +1229,36 @@ export class MediaSorterApiClient {
   async getHardware(): Promise<HardwareInfo> {
     await this.ensureReady();
     const { data } = await this.http.get<HardwareInfo>("/api/hardware");
+    return data;
+  }
+
+  async getAiModels(): Promise<AiModelInventory> {
+    await this.ensureReady();
+    const { data } = await this.http.get<AiModelInventory>("/api/ai/models");
+    return data;
+  }
+
+  async installAiModel(packId: string): Promise<string> {
+    return this.startTask(`/api/ai/models/${encodeURIComponent(packId)}/install`, {});
+  }
+
+  async getAiModelTask(taskId: string, afterSequence = 0): Promise<AiModelTaskStatus> {
+    return this.taskStatus<AiModelTaskStatus>(
+      `/api/ai/models/tasks/${encodeURIComponent(taskId)}`,
+      afterSequence,
+    );
+  }
+
+  async cancelAiModelInstall(taskId: string): Promise<void> {
+    await this.cancelTask(`/api/ai/models/tasks/${encodeURIComponent(taskId)}/cancel`);
+  }
+
+  async removeAiModel(packId: string): Promise<AiModelPackStatus> {
+    await this.ensureReady();
+    const { data } = await this.http.delete<AiModelPackStatus>(
+      `/api/ai/models/${encodeURIComponent(packId)}`,
+      { data: { acknowledge_removal: true } },
+    );
     return data;
   }
 
@@ -690,8 +1312,21 @@ export class MediaSorterApiClient {
 
   // ── Sorting ──────────────────────────────────────────────────────────────────
 
-  async startSort(dryRun = false, idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/sorting/start", { dry_run: dryRun }, idempotencyKey);
+  async startSort(
+    dryRun = false,
+    idempotencyKey?: string,
+    expectedConfigFingerprint?: string,
+    planId?: string,
+  ): Promise<string> {
+    return this.startTask(
+      "/api/sorting/start",
+      {
+        dry_run: dryRun,
+        expected_config_fingerprint: expectedConfigFingerprint,
+        plan_id: planId,
+      },
+      idempotencyKey,
+    );
   }
 
   async getSortStatus(taskId: string, afterSequence = 0): Promise<SortingStatus> {
@@ -731,6 +1366,423 @@ export class MediaSorterApiClient {
       { responseType: "blob" },
     );
     return data as Blob;
+  }
+
+  async runLibraryAudit(input: {
+    root: string;
+    subtree?: string;
+    sampleProportion?: number;
+  }): Promise<AuditReport> {
+    await this.ensureReady();
+    const { data } = await this.http.post<AuditReport>("/api/audit", {
+      root: input.root,
+      scope: {
+        subtree: input.subtree || null,
+        sample_proportion: input.sampleProportion ?? 1,
+      },
+    });
+    return data;
+  }
+
+  async auditHistory(): Promise<AuditReport[]> {
+    await this.ensureReady();
+    const { data } = await this.http.get<AuditReport[]>("/api/audit/history");
+    return data;
+  }
+
+  async exportAudit(auditId: string, format: "csv" | "json"): Promise<Blob> {
+    await this.ensureReady();
+    const { data } = await this.http.post(
+      `/api/audit/reports/${encodeURIComponent(auditId)}/export`,
+      { format },
+      { responseType: "blob" },
+    );
+    return data as Blob;
+  }
+
+  async planAuditFixes(auditId: string, findingIds: string[]): Promise<AuditActionPlan> {
+    await this.ensureReady();
+    const { data } = await this.http.post<AuditActionPlan>(
+      `/api/audit/reports/${encodeURIComponent(auditId)}/plan`,
+      { finding_ids: findingIds },
+    );
+    return data;
+  }
+
+  async executeAuditFixes(planId: string): Promise<{ plan_id: string; completed: number }> {
+    await this.ensureReady();
+    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
+      `/api/audit/plans/${encodeURIComponent(planId)}/execute`,
+      { acknowledged: true },
+    );
+    return data;
+  }
+
+  async detectBursts(root: string, paths: string[]): Promise<BurstGroup[]> {
+    await this.ensureReady();
+    const { data } = await this.http.post<BurstGroup[]>("/api/review/bursts/detect", {
+      root,
+      paths,
+    });
+    return data;
+  }
+
+  async decideBurst(
+    group: BurstGroup,
+    keepFrameIds: string[],
+    dismissed = false,
+  ): Promise<BurstDecision> {
+    await this.ensureReady();
+    const { data } = await this.http.post("/api/review/bursts/decision", {
+      group,
+      keep_frame_ids: keepFrameIds,
+      dismissed,
+    });
+    return data;
+  }
+
+  async executeBurstPlan(planId: string): Promise<BurstRunReport> {
+    await this.ensureReady();
+    const { data } = await this.http.post<BurstRunReport>(
+      `/api/review/bursts/plans/${encodeURIComponent(planId)}/execute`,
+      { acknowledged: true },
+    );
+    return data;
+  }
+
+  async reconcileDestination(): Promise<ReconciliationReport> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReconciliationReport>("/api/reconciliation/compare", {
+      input_available: true,
+    });
+    return data;
+  }
+
+  async reconciliationFindings(
+    reportId: string,
+    options: {
+      cursor?: string | null;
+      classification?: ReconciliationFinding["classification"];
+      limit?: number;
+    } = {},
+  ): Promise<ReconciliationReport> {
+    await this.ensureReady();
+    const { data } = await this.http.get<ReconciliationReport>(
+      `/api/reconciliation/reports/${encodeURIComponent(reportId)}/findings`,
+      {
+        params: {
+          ...(options.cursor ? { cursor: options.cursor } : {}),
+          ...(options.classification ? { classification: options.classification } : {}),
+          ...(options.limit ? { limit: options.limit } : {}),
+        },
+      },
+    );
+    return data;
+  }
+
+  async planReconciliation(
+    report: ReconciliationReport,
+    findingIds: string[],
+    confirmedProbable: string[],
+  ): Promise<ReconciliationPlan> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReconciliationPlan>("/api/reconciliation/plan", {
+      report_id: report.report_id,
+      finding_ids: findingIds,
+      confirm_probable: confirmedProbable,
+    });
+    return data;
+  }
+
+  async executeReconciliation(planId: string): Promise<{ plan_id: string; completed: number }> {
+    await this.ensureReady();
+    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
+      `/api/reconciliation/plans/${encodeURIComponent(planId)}/execute`,
+      { acknowledged: true },
+    );
+    return data;
+  }
+
+  // ── Optimization ──────────────────────────────────────────────────────────────
+
+  /** Every declared contract with its status and whether its tool exists here. */
+  async listOptimizationContracts(): Promise<OptimizationContract[]> {
+    await this.ensureReady();
+    const { data } = await this.http.get<OptimizationContract[]>("/api/optimization/contracts");
+    return data;
+  }
+
+  /**
+   * Project what optimization would cost and save for the given files.
+   *
+   * Nothing is mutated: the backend encodes a bounded sample into its own
+   * workspace. With `retainSamples` the candidates stay readable so the
+   * comparison modal has something real to show; without it the response is
+   * numbers only and says so via `estimate_only`.
+   */
+  async previewOptimization(
+    contractId: string,
+    paths: string[],
+    options: { retainSamples?: boolean; maxSamples?: number } = {},
+  ): Promise<OptimizationProjection> {
+    await this.ensureReady();
+    const { data } = await this.http.post<OptimizationProjection>("/api/optimization/preview", {
+      contract_id: contractId,
+      paths,
+      retain_samples: options.retainSamples ?? true,
+      max_samples: options.maxSamples ?? 3,
+    });
+    return data;
+  }
+
+  // ── Quarantine ────────────────────────────────────────────────────────────────
+
+  async listQuarantine(retention?: QuarantineRecord["retention"]): Promise<QuarantineRecord[]> {
+    await this.ensureReady();
+    const { data } = await this.http.get<QuarantineRecord[]>("/api/quarantine", {
+      params: retention ? { retention } : {},
+    });
+    return data;
+  }
+
+  async quarantineSummary(): Promise<QuarantineSummary> {
+    await this.ensureReady();
+    const { data } = await this.http.get<QuarantineSummary>("/api/quarantine/summary");
+    return data;
+  }
+
+  /** Describe a restore fully before any byte moves. */
+  async previewRestore(
+    recordId: string,
+    options: { targetPath?: string; onConflict?: "block" | "alternate_path" | "skip" } = {},
+  ): Promise<RestorePreview> {
+    await this.ensureReady();
+    const { data } = await this.http.post<RestorePreview>("/api/quarantine/restore/preview", {
+      record_id: recordId,
+      target_path: options.targetPath ?? null,
+      on_conflict: options.onConflict ?? "block",
+    });
+    return data;
+  }
+
+  // ── Duplicate review ──────────────────────────────────────────────────────────
+
+  async listReviewGroups(
+    kind: "exact" | "similar" = "exact",
+    options: { limit?: number; maxDistance?: number } = {},
+  ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
+    await this.ensureReady();
+    const { data } = await this.http.get<{
+      groups: ReviewGroup[];
+      next_cursor: string | null;
+      kind: string;
+    }>("/api/review/groups", {
+      params: { kind, limit: options.limit ?? 50, max_distance: options.maxDistance ?? 2 },
+    });
+    return data;
+  }
+
+  /**
+   * Record one review decision. A reference member is refused with 409 — the
+   * backend enforces that, so the UI's disabled controls are a courtesy rather
+   * than the protection itself.
+   */
+  async decideReview(input: {
+    planId?: string;
+    groupId: string;
+    memberId: string;
+    action: string;
+    reason?: string;
+  }): Promise<ReviewGroupPlan> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReviewGroupPlan>("/api/review/decide", {
+      plan_id: input.planId ?? "default",
+      group_id: input.groupId,
+      member_id: input.memberId,
+      action: input.action,
+      reason: input.reason ?? "",
+    });
+    return data;
+  }
+
+  async quarantineAllExcept(
+    groupId: string,
+    keepMemberIds: string[],
+    planId = "default",
+  ): Promise<ReviewGroupPlan> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReviewGroupPlan>("/api/review/quarantine-all-except", {
+      plan_id: planId,
+      group_id: groupId,
+      keep_member_ids: keepMemberIds,
+    });
+    return data;
+  }
+
+  async undoReview(groupId: string, planId = "default"): Promise<ReviewGroupPlan> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReviewGroupPlan>("/api/review/undo", {
+      plan_id: planId,
+      group_id: groupId,
+    });
+    return data;
+  }
+
+  async previewPolicy(input: {
+    scope: string;
+    groupIds?: string[];
+    policyId?: string;
+    filterKey?: string;
+    planId?: string;
+  }): Promise<BulkImpactResponse> {
+    await this.ensureReady();
+    const { data } = await this.http.post<BulkImpactResponse>("/api/review/policy/preview", {
+      plan_id: input.planId ?? "default",
+      scope: input.scope,
+      group_ids: input.groupIds ?? [],
+      policy_id: input.policyId ?? "largest",
+      filter_key: input.filterKey ?? "",
+    });
+    return data;
+  }
+
+  async applyPolicy(input: {
+    scope: string;
+    impact: BulkImpactResponse;
+    groupIds?: string[];
+    policyId?: string;
+    preferredRoots?: string[];
+    filterKey?: string;
+    planId?: string;
+  }): Promise<{ applied_groups: number }> {
+    await this.ensureReady();
+    const { data } = await this.http.post<{ applied_groups: number }>("/api/review/policy/apply", {
+      plan_id: input.planId ?? "default",
+      scope: input.scope,
+      impact: input.impact,
+      group_ids: input.groupIds ?? [],
+      policy_id: input.policyId ?? "largest",
+      preferred_roots: input.preferredRoots ?? [],
+      filter_key: input.filterKey ?? "",
+    });
+    return data;
+  }
+
+  /** What enabling the high-confidence similar rule would affect, before consent. */
+  async previewSimilarRule(
+    input: {
+      maxDistance?: number;
+      requireSameDimensions?: boolean;
+    } = {},
+  ): Promise<SimilarRulePreview> {
+    await this.ensureReady();
+    const { data } = await this.http.post<SimilarRulePreview>("/api/review/similar-rule/preview", {
+      max_distance: input.maxDistance ?? 0,
+      require_same_dimensions: input.requireSameDimensions ?? true,
+    });
+    return data;
+  }
+
+  async snapshotReview(
+    acknowledgeSourceMutations = false,
+    planId = "default",
+  ): Promise<{ snapshot: Record<string, unknown>; stale_groups: string[] }> {
+    await this.ensureReady();
+    const { data } = await this.http.post("/api/review/snapshot", {
+      plan_id: planId,
+      acknowledge_source_mutations: acknowledgeSourceMutations,
+    });
+    return data as { snapshot: Record<string, unknown>; stale_groups: string[] };
+  }
+
+  async runValidation(rootId: string, checks?: string[]): Promise<ValidationReport> {
+    await this.ensureReady();
+    const { data } = await this.http.get<ValidationReport>("/api/review/validation", {
+      params: { root_id: rootId, ...(checks ? { checks: checks.join(",") } : {}) },
+    });
+    return data;
+  }
+
+  /**
+   * One page of the library, read from the catalog by cursor.
+   *
+   * The totals come from the same filter as the rows, so a header can never
+   * describe a different set than the list under it. A cursor from a different
+   * query is refused with 400 rather than reinterpreted.
+   */
+  async listCatalogView(
+    options: {
+      cursor?: string | null;
+      limit?: number;
+      roles?: string[];
+      sort?: "path" | "size" | "modified";
+      descending?: boolean;
+      search?: string;
+      includeTotals?: boolean;
+    } = {},
+  ): Promise<CatalogViewPage> {
+    await this.ensureReady();
+    const { data } = await this.http.get<CatalogViewPage>("/api/review/view", {
+      params: {
+        ...(options.cursor ? { cursor: options.cursor } : {}),
+        limit: options.limit ?? 100,
+        roles: (options.roles ?? ["input", "destination", "reference"]).join(","),
+        sort: options.sort ?? "path",
+        descending: options.descending ?? false,
+        search: options.search ?? "",
+        include_totals: options.includeTotals ?? true,
+      },
+    });
+    return data;
+  }
+
+  // ── Quarantine cleanup ────────────────────────────────────────────────────────
+
+  async previewCleanup(recordIds: string[]): Promise<CleanupImpact> {
+    await this.ensureReady();
+    const { data } = await this.http.post<CleanupImpact>("/api/quarantine/cleanup/preview", {
+      record_ids: recordIds,
+    });
+    return data;
+  }
+
+  /** Permanently delete quarantined files. The only irreversible call here. */
+  async cleanupQuarantine(recordIds: string[], acknowledge: boolean): Promise<CleanupOutcome> {
+    await this.ensureReady();
+    const { data } = await this.http.post<CleanupOutcome>("/api/quarantine/cleanup", {
+      record_ids: recordIds,
+      acknowledge_permanent_deletion: acknowledge,
+    });
+    return data;
+  }
+
+  // ── Catalog ───────────────────────────────────────────────────────────────────
+
+  async catalogDiagnostics(): Promise<CatalogDiagnostics> {
+    await this.ensureReady();
+    const { data } = await this.http.get<CatalogDiagnostics>("/api/catalog/diagnostics");
+    return data;
+  }
+
+  /**
+   * Forget indexed facts so they are recomputed. Media is never touched.
+   *
+   * A `rootId` drops one root; omitting it deletes the whole index and needs
+   * `confirmFullReset`, because that throws away every hash this machine has
+   * ever computed.
+   */
+  async rebuildCatalog(
+    options: { rootId?: string; confirmFullReset?: boolean } = {},
+  ): Promise<{ reset: boolean; path: string }> {
+    await this.ensureReady();
+    const { data } = await this.http.post<{ reset: boolean; path: string }>(
+      "/api/catalog/rebuild",
+      {
+        root_id: options.rootId ?? null,
+        confirm_full_reset: options.confirmFullReset ?? false,
+      },
+    );
+    return data;
   }
 
   // ── Update checker ────────────────────────────────────────────────────────────

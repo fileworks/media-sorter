@@ -27,6 +27,7 @@ export interface ConfigDiffFormatters {
 const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
   sort_criteria: "Date folder levels",
   copy_instead_of_move: "Copy instead of move",
+  companion_handling: "Companion media handling",
   duplicate_exact_enabled: "Exact-match duplicates",
   duplicate_perceptual_enabled: "Visual-similarity duplicates",
   duplicate_perceptual_threshold: "Similarity threshold",
@@ -46,6 +47,8 @@ const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
   override_metadata: "Override existing metadata",
   repair_enabled: "Repair corrupted files",
   update_check_enabled: "Check for updates",
+  thumbnail_cache_enabled: "Thumbnail cache",
+  thumbnail_cache_budget_bytes: "Thumbnail cache budget",
   exif_sanity_check_enabled: "EXIF sanity check",
   ai_tagging_enabled: "AI content tagging",
   ai_tagging_provider: "AI provider",

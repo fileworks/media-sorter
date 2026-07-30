@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FiDownload, FiX, FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import { openExternal } from "@/lib/reveal";
+import { severityClass } from "@/lib/statusPresentation";
 import { useI18n } from "@/i18n/I18nContext";
 import type { UpdateInfo } from "@/services/api";
 
@@ -44,10 +45,15 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm">
+    <div
+      className={`flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm ${severityClass("info")}`}
+      data-severity="info"
+      role="status"
+      aria-live="polite"
+    >
       <div className="flex items-center gap-3">
-        <FiInfo className="shrink-0 h-4 w-4 text-primary" />
-        <span className="text-primary">
+        <FiInfo className="shrink-0 h-4 w-4 text-info" />
+        <span className="text-info">
           {t("update.available", {
             product: `MediaSorter ${info.latest_version}`,
             current: info.current_version,
@@ -58,7 +64,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             <button
               type="button"
               onClick={() => setShowNotes((n) => !n)}
-              className="rounded-md px-2.5 py-1 text-xs font-medium text-primary/80 hover:bg-primary/15"
+              className="rounded-md px-2.5 py-1 text-xs font-medium text-info hover:bg-info/15"
             >
               {showNotes ? t("update.hideNotes") : t("update.whatsNew")}
             </button>
@@ -67,8 +73,8 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             type="button"
             onClick={handleDownload}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border border-primary/30",
-              "bg-primary/15 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/25",
+              "flex items-center gap-1.5 rounded-md border border-info/30",
+              "bg-info/15 px-3 py-1 text-xs font-medium text-info hover:bg-info/25",
             )}
           >
             <FiDownload className="h-3 w-3" />
@@ -78,7 +84,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             type="button"
             onClick={handleDismiss}
             aria-label={t("update.dismiss")}
-            className="rounded-md p-1 text-primary/60 hover:bg-primary/15 hover:text-primary"
+            className="rounded-md p-1 text-info/70 hover:bg-info/15 hover:text-info"
           >
             <FiX className="h-4 w-4" />
           </button>

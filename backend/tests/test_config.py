@@ -12,6 +12,8 @@ from app.core.config import (
     validate_categories,
     validate_rename_pattern,
 )
+from app.core.integrity import PreservationProfile
+from app.core.library_profiles import LibraryProfile, LibraryRoot
 
 
 @pytest.fixture
@@ -27,6 +29,9 @@ def test_defaults_are_valid() -> None:
     assert cfg.sort is True
     assert cfg.sort_criteria == ["year"]
     assert cfg.recursive_scan is True
+    assert cfg.preservation_profile == PreservationProfile()
+    assert cfg.repair_enabled is False
+    assert cfg.embed_tags_in_files is False
 
 
 def test_round_trip(tmp_config_loader: ConfigLoader) -> None:
@@ -35,13 +40,116 @@ def test_round_trip(tmp_config_loader: ConfigLoader) -> None:
     loaded = tmp_config_loader.load()
     assert loaded.source_directory == "/src"
     assert loaded.target_directory == "/dst"
+    assert loaded.library_profile is not None
+    assert [root.path for root in loaded.library_profile.inputs] == ["/src"]
+    assert loaded.library_profile.destination is not None
+    assert loaded.library_profile.destination.path == "/dst"
+
+
+def test_profile_round_trip_preserves_multiple_roots_and_reference(
+    tmp_config_loader: ConfigLoader,
+) -> None:
+    profile = LibraryProfile(
+        profile_id="family-library",
+        name="Family library",
+        roots=[
+            LibraryRoot(root_id="phone", role="input", path="/phone", priority=0),
+            LibraryRoot(root_id="camera", role="input", path="/camera", priority=1),
+            LibraryRoot(root_id="archive", role="reference", path="/archive"),
+            LibraryRoot(root_id="organized", role="destination", path="/organized"),
+        ],
+        transfer_mode="copy",
+    )
+    tmp_config_loader.save(Config(library_profile=profile, rename=True))
+
+    loaded = tmp_config_loader.load()
+
+    assert loaded.library_profile == profile
+    assert loaded.source_directory == "/phone"
+    assert loaded.target_directory == "/organized"
+    assert loaded.copy_instead_of_move is True
+    assert loaded.rename is True
+
+
+def test_v1_config_migrates_to_default_application_data_profile(
+    tmp_config_loader: ConfigLoader,
+) -> None:
+    original = {
+        "$schema": "mediasort-config-v1",
+        "source_directory": "/legacy-source",
+        "target_directory": "/legacy-target",
+        "copy_instead_of_move": True,
+        "rename": True,
+        "rename_pattern": "YYYY_NAME",
+        "remove_duplicates": False,
+    }
+    tmp_config_loader.config_file.write_text(json.dumps(original), encoding="utf-8")
+
+    loaded = tmp_config_loader.load()
+    persisted = json.loads(tmp_config_loader.config_file.read_text(encoding="utf-8"))
+    backup = json.loads(tmp_config_loader.backup_file.read_text(encoding="utf-8"))
+
+    assert persisted["$schema"] == "mediasort-config-v3"
+    assert persisted["library_profile"]["profile_id"] == "default-library"
+    assert persisted["library_profile"]["catalog"] == {
+        "mode": "application_data",
+        "relative_path": None,
+    }
+    assert [root["role"] for root in persisted["library_profile"]["roots"]] == [
+        "input",
+        "destination",
+    ]
+    assert loaded.rename is True
+    assert loaded.rename_pattern == "YYYY_NAME"
+    assert loaded.remove_duplicates is False
+    assert loaded.preservation_profile.mode == "organize_only"
+    assert loaded.optimization_profile.mode == "disabled"
+    assert backup == original
+
+
+def test_v2_modifying_config_migrates_to_blocked_review_profile(
+    tmp_config_loader: ConfigLoader,
+) -> None:
+    original = {
+        "$schema": "mediasort-config-v2",
+        "source_directory": "/legacy-source",
+        "target_directory": "/legacy-target",
+        "library_profile": LibraryProfile.from_legacy(
+            source_directory="/legacy-source",
+            target_directory="/legacy-target",
+            copy_instead_of_move=True,
+        ).model_dump(mode="json"),
+        "copy_instead_of_move": True,
+        "override_metadata": True,
+        "convert_images": True,
+        "image_format": "jpeg",
+        "repair_enabled": True,
+        "embed_tags_in_files": True,
+        "ai_tagging_enabled": False,
+    }
+    tmp_config_loader.config_file.write_text(json.dumps(original), encoding="utf-8")
+
+    loaded = tmp_config_loader.load()
+    persisted = json.loads(tmp_config_loader.config_file.read_text(encoding="utf-8"))
+
+    assert persisted["$schema"] == "mediasort-config-v3"
+    assert loaded.override_metadata is True
+    assert loaded.convert_images is True
+    assert loaded.repair_enabled is False
+    assert loaded.embed_tags_in_files is False
+    assert loaded.preservation_profile.mode == "explicit_mutation"
+    assert loaded.preservation_profile.requires_review is True
+    assert loaded.preservation_profile.allow_embedded_metadata_edits is True
+    assert loaded.preservation_profile.allow_conversion is True
+    assert loaded.optimization_profile.mode == "disabled"
+    assert loaded.migration_warnings
 
 
 def test_ai_tagging_defaults() -> None:
     cfg = Config.defaults()
     assert cfg.ai_tagging_enabled is False
     assert cfg.ai_tagging_provider == "local"  # offline, no-key default
-    assert cfg.ai_tagging_embed_in_files is True
+    assert cfg.ai_tagging_embed_in_files is False
     assert cfg.ai_tagging_max_tags == 10
     assert cfg.ai_tagging_api_key is None
     assert isinstance(cfg.ai_tagging_labels, list) and cfg.ai_tagging_labels
@@ -76,6 +184,9 @@ def test_env_override(tmp_config_loader: ConfigLoader, monkeypatch: pytest.Monke
     cfg = tmp_config_loader.load()
     assert cfg.source_directory == "/env_src"
     assert cfg.copy_instead_of_move is True
+    assert cfg.library_profile is not None
+    assert cfg.library_profile.inputs[0].path == "/env_src"
+    assert cfg.library_profile.transfer_mode == "copy"
 
 
 def test_env_override_optional_int_coerced(

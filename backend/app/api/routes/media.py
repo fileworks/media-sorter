@@ -11,7 +11,7 @@ import io
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Header, Query, Response
 from PIL import Image, ImageChops, ImageOps
 from pydantic import BaseModel
 
@@ -95,8 +95,10 @@ def _render_thumbnail(path_str: str, size: int = _THUMB_MAX_PX) -> bytes | None:
 
 @router.get("/thumbnail")
 async def thumbnail(
+    container: ContainerDep,
     path: str = Query(...),
     size: int = Query(default=_THUMB_MAX_PX),
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
 ) -> Response:
     """Return a JPEG thumbnail for a local image or video file.
 
@@ -109,13 +111,28 @@ async def thumbnail(
     and works on the user's own files, so reading an arbitrary local path here
     is by design — there is no other origin.
     """
-    data = await asyncio.to_thread(_render_thumbnail, path, size)
+    requested_size = max(_THUMB_MIN_PX, min(size, _THUMB_LIMIT_PX))
+    source = Path(path)
+    try:
+        key = await asyncio.to_thread(container.thumbnail_cache.key_for, source, requested_size)
+    except OSError:
+        key = None
+    if key is not None and if_none_match == key.etag:
+        return Response(status_code=304, headers={"ETag": key.etag})
+    data = None if key is None else await asyncio.to_thread(container.thumbnail_cache.get, key)
+    if data is None:
+        data = await asyncio.to_thread(_render_thumbnail, path, requested_size)
+        if data is not None and key is not None:
+            await asyncio.to_thread(container.thumbnail_cache.put, key, data)
     if data is None:
         raise UnsupportedMediaError("No thumbnail available for this file", file_path=path)
+    headers = {"Cache-Control": "private, max-age=3600"}
+    if key is not None:
+        headers["ETag"] = key.etag
     return Response(
         content=data,
         media_type="image/jpeg",
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers=headers,
     )
 
 

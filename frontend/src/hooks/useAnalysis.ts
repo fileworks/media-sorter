@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import type { AnalysisResult } from "@/services/api";
-import { extractErrorMessage } from "@/lib/errorUtils";
+import { extractErrorMessage, userFacingError } from "@/lib/errorUtils";
 import { useI18n } from "@/i18n/I18nContext";
 
 export type { AnalysisResult };
@@ -57,7 +57,7 @@ export function useAnalysis(): UseAnalysisReturn {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(status.failure?.message ?? status.error ?? t("analysis.failed"));
+      setError(userFacingError(status.failure?.message ?? status.error ?? t("analysis.failed")));
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);

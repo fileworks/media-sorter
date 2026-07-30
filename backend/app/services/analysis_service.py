@@ -9,13 +9,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
+from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
-from app.services.filesystem_service import FileSystemService, categorize_media_type
-from app.utils.media_utils import is_media, is_size_included
+from app.core.media_units import CompanionHandling
+from app.services.filesystem_service import (
+    FileSystemService,
+    TraversalResult,
+    categorize_media_type,
+    is_within_any,
+)
 from app.utils.path_utils import (
     is_excluded_by_pattern,
-    validate_source_root,
-    validate_source_target_overlap,
 )
 
 if TYPE_CHECKING:
@@ -37,29 +41,46 @@ class AnalysisService:
     def _analyse_sync(self, config: Config, task: Task | None = None) -> dict[str, Any]:
         if task is not None:
             task.transition("validating")
-        source = validate_source_root(config.source_directory)
-        dest = Path(config.target_directory) if config.target_directory else None
+        library = validate_configured_library(config, require_destination=False)
+        source = library.inputs[0].canonical_path
+        dest = library.destination.canonical_path if library.destination is not None else None
         exclude_patterns = config.exclude_patterns or []
         min_file_size_kb = config.min_file_size_kb
         max_file_size_mb = config.max_file_size_mb
         recursive = config.recursive_scan
         max_depth = config.max_recursion_depth
 
-        if dest is not None:
-            validate_source_target_overlap(source, dest)
-
         logger.info("Analysis started", source=str(source))
         if task is not None:
             task.transition("scanning_source")
-        traversal = self._fs._traverse_sync(
-            source,
-            recursive,
-            max_depth,
-            exclude_patterns,
-            min_file_size_kb,
-            max_file_size_mb,
-            task.cancel_token if task is not None else None,
-        )
+        # Analysis counts every configured input, not only the first one.
+        traversal = TraversalResult()
+        for validated_input in library.inputs:
+            part = self._fs._traverse_sync(
+                validated_input.canonical_path,
+                recursive,
+                max_depth,
+                exclude_patterns,
+                min_file_size_kb,
+                max_file_size_mb,
+                task.cancel_token if task is not None else None,
+                config.companion_handling,
+            )
+            kept = [
+                path for path in part.files if not is_within_any(path, validated_input.exclusions)
+            ]
+            traversal.excluded_directories += len(part.files) - len(kept)
+            traversal.files.extend(kept)
+            kept_set = set(kept)
+            traversal.units.extend(unit for unit in part.units if unit.primary in kept_set)
+            traversal.unmatched_companions.extend(part.unmatched_companions)
+            traversal.companion_candidates.extend(part.companion_candidates)
+            traversal.issues.extend(part.issues)
+            traversal.excluded_by_pattern += part.excluded_by_pattern
+            traversal.excluded_by_size += part.excluded_by_size
+            traversal.excluded_by_type += part.excluded_by_type
+            traversal.excluded_directories += part.excluded_directories
+            traversal.cancelled = traversal.cancelled or part.cancelled
         if task is not None:
             task.mark_partial([issue.to_dict() for issue in traversal.issues])
             for issue in traversal.issues:
@@ -175,6 +196,9 @@ class AnalysisService:
             },
             "excluded_files": excluded_files,
             "estimated_duration_seconds": round(total_files * 0.1),
+            "media_units": len(traversal.units),
+            "companion_files": sum(len(unit.companions) for unit in traversal.units),
+            "unmatched_companions": len(traversal.unmatched_companions),
             "warnings": warnings,
             "partial": traversal.partial,
             "issues": [issue.to_dict() for issue in traversal.issues],
@@ -205,6 +229,7 @@ class AnalysisService:
                 config.exclude_patterns or [],
                 config.min_file_size_kb,
                 config.max_file_size_mb,
+                config.companion_handling,
             )
             if source and source.exists()
             else 0
@@ -259,6 +284,7 @@ class AnalysisService:
         exclude_patterns: list[str],
         min_file_size_kb: int | None,
         max_file_size_mb: int | None,
+        companion_handling: CompanionHandling = "keep_with_primary",
     ) -> int:
         """Total bytes of the media files a sort would actually act on.
 
@@ -267,19 +293,24 @@ class AnalysisService:
         and size filters) of ``_analyse_sync`` so the disk-space check and the
         analysis report never report a different source size.
         """
+        traversal = self._fs._traverse_sync(
+            source,
+            recursive,
+            max_depth,
+            exclude_patterns,
+            min_file_size_kb,
+            max_file_size_mb,
+            None,
+            companion_handling,
+        )
+        included = set(traversal.files)
+        included.update(member.path for unit in traversal.units for member in unit.companions)
         total = 0
-        for file_path in self._iter_candidate_files(source, recursive, max_depth, exclude_patterns):
-            if not file_path.is_file() or not is_media(file_path):
-                continue
-            if is_excluded_by_pattern(file_path, source, exclude_patterns):
-                continue
+        for file_path in included:
             try:
-                size = file_path.stat().st_size
+                total += file_path.stat().st_size
             except OSError:
                 continue
-            if not is_size_included(size, min_file_size_kb, max_file_size_mb):
-                continue
-            total += size
         return total
 
     @staticmethod
@@ -339,4 +370,7 @@ class AnalysisService:
             "warnings": [],
             "partial": False,
             "issues": [],
+            "media_units": 0,
+            "companion_files": 0,
+            "unmatched_companions": 0,
         }

@@ -16,8 +16,39 @@ from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
+def _eta_confidence(
+    eta_seconds: float | None,
+    *,
+    total_known: bool,
+    observed: int,
+) -> EtaConfidence:
+    """Rate an ETA honestly rather than presenting every guess identically.
+
+    Without a real total there is nothing to estimate against, and a handful of
+    samples on variable-sized media says very little about what remains.
+    """
+    if eta_seconds is None or not total_known:
+        return "unknown"
+    if observed < 10:
+        return "low"
+    if observed < 50:
+        return "medium"
+    return "high"
+
+
 TaskStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
-OperationKind = Literal["analysis", "scan", "preview", "sort"]
+OperationKind = Literal[
+    "analysis",
+    "scan",
+    "preview",
+    "sort",
+    "audit",
+    "reconcile",
+    "model_download",
+]
+ProgressUnit = Literal["items", "bytes"]
+EtaConfidence = Literal["unknown", "low", "medium", "high"]
 TaskPhase = Literal[
     "validating",
     "scanning_source",
@@ -26,6 +57,11 @@ TaskPhase = Literal[
     "analyzing",
     "previewing",
     "sorting",
+    "auditing",
+    "reconciling",
+    "downloading_model",
+    "verifying_model",
+    "publishing_model",
 ]
 
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
@@ -56,6 +92,27 @@ class TaskProgress:
     percentage: float = 0.0
     estimated_time_remaining_seconds: float | None = None
     phase: TaskPhase | None = None
+
+    #: Whether ``total`` is a real count or a placeholder. A client must render
+    #: an indeterminate bar when this is false rather than showing "0%", which
+    #: reads as "no progress" when the truth is "we do not know yet".
+    total_known: bool = False
+    unit: ProgressUnit = "items"
+    bytes_done: int = 0
+    bytes_total: int = 0
+    bytes_total_known: bool = False
+    #: How much the ETA is worth. Never "high" while the total is unknown.
+    eta_confidence: EtaConfidence = "unknown"
+    #: Liveness. A client can tell "slow but working" from "stuck" by comparing
+    #: this to the wall clock, without the backend guessing a timeout.
+    last_activity_at: datetime | None = None
+    #: The last point from which an interruption is recoverable without loss.
+    last_checkpoint_at: datetime | None = None
+    last_checkpoint_label: str | None = None
+    outcomes: dict[str, int] = field(default_factory=dict)
+    cancellation_requested: bool = False
+    cancellation_observed_at: datetime | None = None
+    recovery_phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,8 +196,21 @@ class Task:
         with self._lock:
             if self.progress.phase == phase:
                 return
-            self.progress = TaskProgress(phase=phase, total=max(0, total))
-            self.add_event("operation.phase", total=max(0, total))
+            carried = self.progress
+            self.progress = TaskProgress(
+                phase=phase,
+                total=max(0, total),
+                total_known=total > 0,
+                unit=carried.unit,
+                outcomes=dict(carried.outcomes),
+                cancellation_requested=carried.cancellation_requested,
+                cancellation_observed_at=carried.cancellation_observed_at,
+                recovery_phase=carried.recovery_phase,
+                last_activity_at=datetime.now(timezone.utc),
+                last_checkpoint_at=carried.last_checkpoint_at,
+                last_checkpoint_label=carried.last_checkpoint_label,
+            )
+            self.add_event("operation.phase", total=max(0, total), total_known=total > 0)
         logger.info(
             "operation.phase",
             task_id=self.id,
@@ -155,10 +225,22 @@ class Task:
         *,
         total: int | None = None,
         eta_seconds: float | None = None,
+        bytes_done: int | None = None,
+        bytes_total: int | None = None,
+        unit: ProgressUnit | None = None,
     ) -> None:
         with self._lock:
             if total is not None:
                 self.progress.total = max(0, total)
+                self.progress.total_known = total > 0
+            if bytes_done is not None:
+                self.progress.bytes_done = max(0, bytes_done)
+            if bytes_total is not None:
+                self.progress.bytes_total = max(0, bytes_total)
+                self.progress.bytes_total_known = bytes_total > 0
+            if unit is not None:
+                self.progress.unit = unit
+            self.progress.last_activity_at = datetime.now(timezone.utc)
             bounded = max(self.progress.current, current)
             if self.progress.total:
                 bounded = min(bounded, self.progress.total)
@@ -169,12 +251,46 @@ class Task:
                 else 0.0
             )
             self.progress.estimated_time_remaining_seconds = eta_seconds
+            self.progress.eta_confidence = _eta_confidence(
+                eta_seconds,
+                total_known=self.progress.total_known,
+                observed=self.progress.current,
+            )
             self.add_event(
                 "operation.progress",
                 current=self.progress.current,
                 total=self.progress.total,
+                total_known=self.progress.total_known,
                 percentage=self.progress.percentage,
+                eta_confidence=self.progress.eta_confidence,
             )
+
+    def checkpoint(self, label: str) -> None:
+        """Record the last point an interruption could resume from safely."""
+        with self._lock:
+            self.progress.last_checkpoint_at = datetime.now(timezone.utc)
+            self.progress.last_checkpoint_label = label
+            self.add_event("operation.checkpoint", checkpoint=label)
+
+    def record_outcome(self, code: str, *, count: int = 1) -> None:
+        """Tally one terminal per-item outcome so success never hides failures."""
+        with self._lock:
+            self.progress.outcomes[code] = self.progress.outcomes.get(code, 0) + count
+            self.progress.last_activity_at = datetime.now(timezone.utc)
+
+    def observe_cancellation(self) -> None:
+        """Record that the worker actually noticed the cancellation request."""
+        with self._lock:
+            if self.progress.cancellation_observed_at is not None:
+                return
+            self.progress.cancellation_observed_at = datetime.now(timezone.utc)
+            self.add_event("operation.cancellation_observed")
+
+    def enter_recovery(self, phase: str) -> None:
+        """Report that this operation is reconciling rather than doing new work."""
+        with self._lock:
+            self.progress.recovery_phase = phase
+            self.add_event("operation.recovery", recovery_phase=phase)
 
     def mark_partial(self, issues: list[dict[str, Any]]) -> None:
         if not issues:
@@ -416,6 +532,10 @@ class TaskManager:
 
     def get_task(self, task_id: str) -> Task | None:
         return self._tasks.get(task_id)
+
+    def tasks(self) -> tuple[Task, ...]:
+        """Return a stable snapshot for status surfaces."""
+        return tuple(self._tasks.values())
 
     def cancel_task(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)

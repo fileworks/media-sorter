@@ -35,6 +35,10 @@ def test_get_config_contains_expected_fields(client: TestClient) -> None:
     assert "sort_criteria" in data
     assert "recursive_scan" in data
     assert "copy_instead_of_move" in data
+    assert data["library_profile"]["schema_version"] == 1
+    assert data["library_profile"]["catalog"]["mode"] == "application_data"
+    assert data["preservation_profile"]["mode"] == "organize_only"
+    assert data["optimization_profile"]["mode"] == "disabled"
 
 
 def test_get_config_defaults(client: TestClient) -> None:
@@ -169,6 +173,73 @@ def test_post_config_preserves_unmentioned_fields(client: TestClient) -> None:
     assert response.status_code == 200
     # The source_directory set in the previous call should still be there
     assert response.json()["source_directory"] == "/test/source"
+
+
+def test_post_legacy_directory_fields_keep_profile_in_sync(client: TestClient) -> None:
+    response = client.post(
+        "/api/config",
+        json={
+            "source_directory": "/compat/source",
+            "target_directory": "/compat/target",
+            "copy_instead_of_move": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    profile = body["library_profile"]
+    assert profile["transfer_mode"] == "copy"
+    assert [(root["role"], root["path"]) for root in profile["roots"]] == [
+        ("input", "/compat/source"),
+        ("destination", "/compat/target"),
+    ]
+
+
+def test_post_profile_updates_legacy_compatibility_fields(client: TestClient) -> None:
+    original = client.get("/api/config").json()
+    try:
+        response = client.post(
+            "/api/config",
+            json={
+                "library_profile": {
+                    "schema_version": 1,
+                    "profile_id": "multi-root",
+                    "name": "Multi root",
+                    "roots": [
+                        {
+                            "root_id": "first",
+                            "role": "input",
+                            "path": "/first",
+                            "priority": 0,
+                        },
+                        {
+                            "root_id": "reference",
+                            "role": "reference",
+                            "path": "/reference",
+                            "priority": 0,
+                        },
+                        {
+                            "root_id": "destination",
+                            "role": "destination",
+                            "path": "/destination",
+                            "priority": 0,
+                        },
+                    ],
+                    "transfer_mode": "move",
+                    "catalog": {"mode": "application_data"},
+                    "resources": {"mode": "auto"},
+                }
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source_directory"] == "/first"
+        assert body["target_directory"] == "/destination"
+        assert body["copy_instead_of_move"] is False
+        assert len(body["library_profile"]["roots"]) == 3
+    finally:
+        client.post("/api/config", json={"library_profile": original["library_profile"]})
 
 
 def test_post_config_rejects_unknown_key(client: TestClient) -> None:

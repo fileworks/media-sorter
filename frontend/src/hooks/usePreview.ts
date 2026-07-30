@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { useI18n } from "@/i18n/I18nContext";
-import { extractErrorMessage } from "@/lib/errorUtils";
+import { extractErrorMessage, userFacingError } from "@/lib/errorUtils";
 import type { PreviewResult, TaskProgress } from "@/types/api";
 
 /**
@@ -66,7 +66,7 @@ export function usePreview() {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(status.failure?.message ?? status.error ?? t("preview.failed"));
+      setError(userFacingError(status.failure?.message ?? status.error ?? t("preview.failed")));
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);

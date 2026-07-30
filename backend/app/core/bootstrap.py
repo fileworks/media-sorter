@@ -1,7 +1,10 @@
 """Application bootstrap and dependency injection."""
 
+import asyncio
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
@@ -24,18 +27,23 @@ if TYPE_CHECKING:
     from app.services.ai.category_suggestion_service import CategorySuggestionService
     from app.services.ai.encoder_protocol import VisionEncoder
     from app.services.ai.hardware import HardwareProfile
+    from app.services.ai.model_installation import AiModelStore
     from app.services.analysis_service import AnalysisService
+    from app.services.burst_detection import BurstDetectionService
     from app.services.config_service import ConfigService
     from app.services.conversion_service import ConversionService
+    from app.services.destination_reconciliation import DestinationReconciliationService
     from app.services.duplicate_service import DuplicateService
     from app.services.extraction_service import DateExtractionService
     from app.services.filesystem_service import FileSystemService
+    from app.services.library_audit import LibraryAuditService
     from app.services.metadata_service import MetadataService
     from app.services.preview_service import PreviewService
     from app.services.repair_service import RepairService
     from app.services.report_service import ReportService
     from app.services.rule_engine_service import RuleEngineService
     from app.services.sorting_service import SortingService
+    from app.services.thumbnail_cache import ThumbnailCache
     from app.services.update_service import UpdateService
 
 
@@ -63,6 +71,7 @@ class ServiceContainer:
         self._conversion_service: ConversionService | None = None
         self._repair_service: RepairService | None = None
         self._task_manager: TaskManager | None = None
+        self._model_task_manager: TaskManager | None = None
         self._preview_service: PreviewService | None = None
         self._report_service: ReportService | None = None
         self._rule_engine_service: RuleEngineService | None = None
@@ -74,6 +83,11 @@ class ServiceContainer:
         self._category_suggestion_service: CategorySuggestionService | None = None
         self._analysis_service: AnalysisService | None = None
         self._update_service: UpdateService | None = None
+        self._thumbnail_cache: ThumbnailCache | None = None
+        self._library_audit_service: LibraryAuditService | None = None
+        self._burst_detection_service: BurstDetectionService | None = None
+        self._destination_reconciliation_service: DestinationReconciliationService | None = None
+        self._ai_model_store: AiModelStore | None = None
 
     @property
     def config(self) -> Config:
@@ -107,18 +121,17 @@ class ServiceContainer:
             self._rule_engine_service._config = config
         if self._update_service is not None:
             self._update_service.set_enabled(config.update_check_enabled)
+        if self._thumbnail_cache is not None:
+            self._thumbnail_cache.configure(
+                enabled=config.thumbnail_cache_enabled,
+                budget_bytes=config.thumbnail_cache_budget_bytes,
+            )
 
         encoder_changed = (
             prev.ai_model_tier != config.ai_model_tier or prev.ai_allow_gpu != config.ai_allow_gpu
         )
         if encoder_changed:
-            self._encoder = None
-            self._encoder_built = False
-            self._ai_tagging_service = None
-            self._category_classifier_service = None
-            self._category_suggestion_service = None
-            self._sorting_service = None
-            self._preview_service = None
+            self.reset_encoder()
             return
 
         # Encoder unchanged — re-point the live services at the new config in place.
@@ -133,6 +146,31 @@ class ServiceContainer:
             self._ai_tagging_service = fresh_ai
             if self._sorting_service is not None:
                 self._sorting_service._ai = fresh_ai
+
+    def close(self) -> None:
+        """Release the lazy services that own temporary or persistent resources."""
+        for service in (
+            self._preview_service,
+            self._destination_reconciliation_service,
+        ):
+            close = getattr(service, "close", None)
+            if callable(close):
+                close()
+        if self._model_task_manager is not None:
+            self._model_task_manager.shutdown()
+
+    def reset_encoder(self) -> None:
+        """Drop the lazy encoder and every service that captured it."""
+        preview_close = getattr(self._preview_service, "close", None)
+        if callable(preview_close):
+            preview_close()
+        self._encoder = None
+        self._encoder_built = False
+        self._ai_tagging_service = None
+        self._category_classifier_service = None
+        self._category_suggestion_service = None
+        self._sorting_service = None
+        self._preview_service = None
 
     @property
     def config_service(self) -> "ConfigService":
@@ -160,6 +198,36 @@ class ServiceContainer:
             self._extraction_service = DateExtractionService()
             self._logger.debug("Initialized DateExtractionService")
         return self._extraction_service
+
+    @property
+    def library_audit_service(self) -> "LibraryAuditService":
+        if self._library_audit_service is None:
+            from app.services.library_audit import LibraryAuditService
+
+            self._library_audit_service = LibraryAuditService(
+                resolve_app_paths().data_dir / "library-audits.sqlite3",
+                self.extraction_service,
+            )
+            self._logger.debug("Initialized LibraryAuditService")
+        return self._library_audit_service
+
+    @property
+    def burst_detection_service(self) -> "BurstDetectionService":
+        if self._burst_detection_service is None:
+            from app.services.burst_detection import BurstDetectionService
+
+            self._burst_detection_service = BurstDetectionService()
+            self._logger.debug("Initialized BurstDetectionService")
+        return self._burst_detection_service
+
+    @property
+    def destination_reconciliation_service(self) -> "DestinationReconciliationService":
+        if self._destination_reconciliation_service is None:
+            from app.services.destination_reconciliation import DestinationReconciliationService
+
+            self._destination_reconciliation_service = DestinationReconciliationService()
+            self._logger.debug("Initialized DestinationReconciliationService")
+        return self._destination_reconciliation_service
 
     @property
     def duplicate_service(self) -> "DuplicateService":
@@ -229,6 +297,25 @@ class ServiceContainer:
         return self._task_manager
 
     @property
+    def model_task_manager(self) -> "TaskManager":
+        """Independent model transfer tasks must not block ordinary media work."""
+        if self._model_task_manager is None:
+            from app.background_tasks.task_manager import TaskManager
+
+            self._model_task_manager = TaskManager(max_terminal_tasks=5)
+            self._logger.debug("Initialized AI model TaskManager")
+        return self._model_task_manager
+
+    @property
+    def ai_model_store(self) -> "AiModelStore":
+        if self._ai_model_store is None:
+            from app.services.ai.model_installation import AiModelStore
+
+            self._ai_model_store = AiModelStore()
+            self._logger.debug("Initialized AI model store", root=str(self._ai_model_store.root))
+        return self._ai_model_store
+
+    @property
     def rule_engine_service(self) -> "RuleEngineService":
         if self._rule_engine_service is None:
             from app.services.rule_engine_service import RuleEngineService
@@ -250,14 +337,18 @@ class ServiceContainer:
     def encoder(self) -> "VisionEncoder | None":
         """Return the shared local vision encoder, built once via the factory.
 
-        Returns ``None`` when the hardware tier is "off" or the model is
-        unavailable (fastembed not installed / download failed).  Both
+        Returns ``None`` when the hardware tier is "off" or its verified model
+        pack is not installed. Both
         AITaggingService and CategoryClassifierService accept ``None`` gracefully.
         """
         if not self._encoder_built:
             from app.services.ai.encoder_factory import build_encoder
 
-            self._encoder = build_encoder(self._config, self.hardware_profile)
+            self._encoder = build_encoder(
+                self._config,
+                self.hardware_profile,
+                self.ai_model_store,
+            )
             self._encoder_built = True
             self._logger.debug("Initialized vision encoder", encoder=self._encoder)
         return self._encoder
@@ -339,9 +430,108 @@ class ServiceContainer:
             self._logger.debug("Initialized UpdateService")
         return self._update_service
 
+    @property
+    def thumbnail_cache(self) -> "ThumbnailCache":
+        if self._thumbnail_cache is None:
+            from app.services.thumbnail_cache import ThumbnailCache
+
+            self._thumbnail_cache = ThumbnailCache(
+                enabled=self._config.thumbnail_cache_enabled,
+                budget_bytes=self._config.thumbnail_cache_budget_bytes,
+            )
+            self._logger.debug("Initialized ThumbnailCache")
+        return self._thumbnail_cache
+
+
+def _reconcile_interrupted_operations(
+    logger: BoundLogger,
+    state_root: Path,
+) -> tuple[list[str], list[dict[str, object]]]:
+    """Resolve what a previous crash left behind and report what still needs a user.
+
+    Only cleanup the journal already justifies is applied; anything ambiguous is
+    preserved and surfaced. Startup must never fail because of this step — an
+    unreadable record is itself something the user needs to be told about.
+    """
+    from app.services.reconciliation import apply_safe_recovery, reconcile_pending_operations
+
+    needs_review: list[str] = []
+    recovery_operations: list[dict[str, object]] = []
+    try:
+        reports = reconcile_pending_operations(state_root)
+    except Exception:
+        logger.warning("Could not scan for interrupted operations", exc_info=True)
+        return needs_review, recovery_operations
+
+    for report in reports:
+        outcome = apply_safe_recovery(state_root, report)
+        logger.info(
+            "Reconciled interrupted operation",
+            operation_id=report.operation_id,
+            recovery_state=report.recovery_state,
+            discarded_stages=len(outcome.discarded_stages),
+            removed_sources=len(outcome.removed_sources),
+            unresolved=len(outcome.unresolved_actions),
+        )
+        if outcome.unresolved_actions:
+            needs_review.append(report.operation_id)
+            unresolved = set(outcome.unresolved_actions)
+            artifacts: list[dict[str, object]] = []
+            for item in report.actions:
+                if item.action_id not in unresolved:
+                    continue
+                artifacts.extend(
+                    (
+                        {
+                            "action_id": f"{item.action_id}:source",
+                            "kind": "original",
+                            "path": str(item.source_path),
+                            "verified": item.source_matches_manifest,
+                            "redundant": item.destination_verified or bool(item.verified_stages),
+                        },
+                        {
+                            "action_id": f"{item.action_id}:destination",
+                            "kind": "result",
+                            "path": str(item.destination_path),
+                            "verified": item.destination_verified,
+                            "redundant": item.source_matches_manifest or bool(item.verified_stages),
+                        },
+                    )
+                )
+                artifacts.extend(
+                    {
+                        "action_id": f"{item.action_id}:stage:{index}",
+                        "kind": "stage",
+                        "path": str(path),
+                        "verified": True,
+                        "redundant": item.destination_verified or item.source_matches_manifest,
+                    }
+                    for index, path in enumerate(item.verified_stages)
+                )
+                artifacts.extend(
+                    {
+                        "action_id": f"{item.action_id}:stage-unverified:{index}",
+                        "kind": "stage",
+                        "path": str(path),
+                        "verified": False,
+                        "redundant": False,
+                    }
+                    for index, path in enumerate(item.unverified_stages)
+                )
+            recovery_operations.append(
+                {
+                    "operation_id": report.operation_id,
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "state": "reconciliation_required",
+                    "artifacts": artifacts,
+                }
+            )
+    return needs_review, recovery_operations
+
 
 def _make_lifespan(
     logger: BoundLogger,
+    state_root: Path,
 ) -> Callable[[FastAPI], "AbstractAsyncContextManager[None]"]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -349,6 +539,10 @@ def _make_lifespan(
         # (asyncio.to_thread) can be dispatched onto it safely.
         capture_main_loop()
         logger.info("MediaSorter API starting up")
+        (
+            app.state.operations_needing_review,
+            app.state.recovery_operations,
+        ) = await asyncio.to_thread(_reconcile_interrupted_operations, logger, state_root)
         try:
             yield
         finally:
@@ -363,6 +557,7 @@ def _make_lifespan(
                     container._task_manager.shutdown()
                 except Exception:  # pragma: no cover - shutdown is best-effort
                     logger.warning("Error during task manager shutdown", exc_info=True)
+            container.close()
 
     return lifespan
 
@@ -393,7 +588,7 @@ class AppFactory:
             version=__version__,
             docs_url="/api/docs",
             openapi_url="/api/openapi.json",
-            lifespan=_make_lifespan(logger),
+            lifespan=_make_lifespan(logger, paths.data_dir),
         )
 
         app.state.container = container
@@ -445,11 +640,16 @@ class AppFactory:
 def _include_routes(app: FastAPI, logger: BoundLogger) -> None:
     from app.api.routes import (
         ai,
+        audit,
+        bursts,
         config,
+        destination_reconciliation,
         health,
         logs,
         media,
+        optimization,
         reports,
+        review,
         scan,
         sorting,
         update,
@@ -459,9 +659,18 @@ def _include_routes(app: FastAPI, logger: BoundLogger) -> None:
     app.include_router(update.router, prefix="/api", tags=["update"])
     app.include_router(config.router, prefix="/api", tags=["config"])
     app.include_router(ai.router, prefix="/api", tags=["ai"])
+    app.include_router(audit.router, prefix="/api", tags=["audit"])
+    app.include_router(bursts.router, prefix="/api", tags=["bursts"])
+    app.include_router(
+        destination_reconciliation.router,
+        prefix="/api",
+        tags=["reconciliation"],
+    )
     app.include_router(scan.router, prefix="/api", tags=["scan"])
     app.include_router(sorting.router, prefix="/api", tags=["sorting"])
     app.include_router(media.router, prefix="/api", tags=["media"])
     app.include_router(logs.router, prefix="/api", tags=["logs"])
     app.include_router(reports.router, prefix="/api", tags=["reports"])
+    app.include_router(optimization.router, prefix="/api", tags=["optimization"])
+    app.include_router(review.router, prefix="/api", tags=["review"])
     logger.info("All API routes registered")

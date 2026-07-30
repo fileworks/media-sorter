@@ -14,12 +14,11 @@ def client():
     return TestClient(app)
 
 
-def test_suggest_categories_returns_503_when_no_encoder(client: TestClient):
-    """503 when no encoder is available (tier=off / fastembed missing)."""
+def test_suggest_categories_reports_missing_optional_model(client: TestClient):
+    """A selected but uninstalled local model has a specific, actionable error."""
     res = client.post("/api/ai/suggest-categories", json={"n_categories": 5})
-    # Default config has tier=auto; without fastembed the encoder will be None.
-    # The route must return 503 in that case.
-    assert res.status_code in {200, 503}
+    assert res.status_code == 409
+    assert res.json()["code"] == "MODEL_NOT_INSTALLED"
 
 
 def test_suggest_categories_clamps_n_categories(client: TestClient):
@@ -29,10 +28,33 @@ def test_suggest_categories_clamps_n_categories(client: TestClient):
 
 
 def test_suggest_categories_accepts_valid_range(client: TestClient):
-    """n_categories within 2–12 reaches the handler (200 or 503, not 422)."""
+    """n_categories within 2–12 reaches the handler rather than validation."""
     for n in (2, 5, 12):
         res = client.post("/api/ai/suggest-categories", json={"n_categories": n})
-        assert res.status_code in {200, 503}, f"unexpected {res.status_code} for n={n}"
+        assert res.status_code == 409, f"unexpected {res.status_code} for n={n}"
+
+
+def test_model_inventory_exposes_required_pack_without_downloading(client: TestClient):
+    res = client.get("/api/ai/models")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["required_pack_id"] in {"clip-lite-v1", "siglip-standard-v1"}
+    assert {pack["pack_id"] for pack in body["packs"]} == {
+        "clip-lite-v1",
+        "siglip-standard-v1",
+    }
+    assert all(pack["state"] == "not_installed" for pack in body["packs"])
+    assert all(pack["total_size"] > 0 for pack in body["packs"])
+
+
+def test_model_removal_requires_explicit_confirmation(client: TestClient):
+    res = client.request(
+        "DELETE",
+        "/api/ai/models/clip-lite-v1",
+        json={"acknowledge_removal": False},
+    )
+    assert res.status_code == 400
+    assert res.json()["code"] == "MODEL_REMOVAL_CONFIRMATION_REQUIRED"
 
 
 def test_suggest_categories_response_shape(client: TestClient, tmp_path):

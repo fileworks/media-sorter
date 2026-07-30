@@ -14,13 +14,11 @@ CI/tests nor the cloud-only tagging path require onnxruntime. ``image_model`` /
 
 from __future__ import annotations
 
-import os
-import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
+from app.services.ai.model_installation import AiModelStore
 
 if TYPE_CHECKING:
     from PIL.Image import Image
@@ -54,23 +52,6 @@ def _upright_rgb(image: Image) -> Image:
     return img
 
 
-def _clip_cache_dir() -> Path | None:
-    """Resolve where fastembed should find/cache the CLIP model.
-
-    Order: explicit ``MEDIASORT_CLIP_MODEL_DIR`` → the ``clip/`` resource bundled
-    next to the frozen backend (PyInstaller release) → ``None`` (let fastembed use
-    its own cache and download on first use, the dev/desktop path).
-    """
-    env = os.environ.get("MEDIASORT_CLIP_MODEL_DIR")
-    if env:
-        return Path(env)
-    if getattr(sys, "frozen", False):
-        candidate = Path(sys.executable).resolve().parent.parent / "clip"
-        if candidate.is_dir():
-            return candidate
-    return None
-
-
 class ClipEmbedder(VisionEncoder):
     """Lazy, process-wide CLIP ViT-B/32 embedder backed by fastembed ("Lite" tier).
 
@@ -87,9 +68,16 @@ class ClipEmbedder(VisionEncoder):
     _IMAGE_MODEL = "Qdrant/clip-ViT-B-32-vision"
     _TEXT_MODEL = "Qdrant/clip-ViT-B-32-text"
 
-    def __init__(self, image_model: Any | None = None, text_model: Any | None = None) -> None:
+    def __init__(
+        self,
+        image_model: Any | None = None,
+        text_model: Any | None = None,
+        *,
+        model_store: AiModelStore | None = None,
+    ) -> None:
         self._image_model: Any = image_model
         self._text_model: Any = text_model
+        self._model_store = model_store
         self._load_failed = False
         self._text_cache: dict[tuple[str, ...], Any] = {}
 
@@ -102,12 +90,27 @@ class ClipEmbedder(VisionEncoder):
         try:
             from fastembed import ImageEmbedding, TextEmbedding
 
-            cache = _clip_cache_dir()
-            cache_dir = str(cache) if cache is not None else None
+            components = (
+                self._model_store.component_paths("clip-lite-v1", verify=True)
+                if self._model_store is not None
+                else None
+            )
+            if components is None:
+                raise FileNotFoundError("the verified CLIP Lite model pack is not installed")
             if self._image_model is None:
-                self._image_model = ImageEmbedding(self._IMAGE_MODEL, cache_dir=cache_dir)
+                self._image_model = ImageEmbedding(
+                    self._IMAGE_MODEL,
+                    specific_model_path=str(components["image"]),
+                    local_files_only=True,
+                    lazy_load=True,
+                )
             if self._text_model is None:
-                self._text_model = TextEmbedding(self._TEXT_MODEL, cache_dir=cache_dir)
+                self._text_model = TextEmbedding(
+                    self._TEXT_MODEL,
+                    specific_model_path=str(components["text"]),
+                    local_files_only=True,
+                    lazy_load=True,
+                )
             return True
         except Exception as exc:  # pragma: no cover - depends on optional dep
             self._load_failed = True

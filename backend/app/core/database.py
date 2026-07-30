@@ -5,12 +5,12 @@ from __future__ import annotations
 import sqlite3
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from app.core.paths import resolve_app_paths
 
-CURRENT_DATABASE_SCHEMA = 3
+CURRENT_DATABASE_SCHEMA = 4
 BASELINE_OPERATION_COLUMNS = {
     "id",
     "execution_date",
@@ -50,6 +50,8 @@ VERSION_2_FILE_OPERATION_COLUMNS = {
     "suspicious",
 }
 VERSION_3_OPERATION_COLUMNS = {"junk_files", "already_in_destination"}
+VERSION_4_OPERATION_COLUMNS = {"companion_files", "incomplete_units"}
+VERSION_4_FILE_OPERATION_COLUMNS = {"unit_id", "companion_role", "unit_primary_path"}
 
 OPERATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -67,6 +69,8 @@ CREATE TABLE IF NOT EXISTS operations (
     corrupted_files INTEGER NOT NULL DEFAULT 0,
     junk_files INTEGER NOT NULL DEFAULT 0,
     already_in_destination INTEGER NOT NULL DEFAULT 0,
+    companion_files INTEGER NOT NULL DEFAULT 0,
+    incomplete_units INTEGER NOT NULL DEFAULT 0,
     duration_seconds INTEGER,
     config_hash TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -93,6 +97,9 @@ CREATE TABLE IF NOT EXISTS file_operations (
     duplicate_similarity INTEGER,
     duplicate_of TEXT,
     suspicious INTEGER NOT NULL DEFAULT 0,
+    unit_id TEXT,
+    companion_role TEXT,
+    unit_primary_path TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (operation_id) REFERENCES operations(id)
 )
@@ -194,6 +201,23 @@ class DatabaseManager:
                     },
                 ),
             ),
+            4: (
+                (
+                    "operations",
+                    {
+                        "companion_files": "INTEGER NOT NULL DEFAULT 0",
+                        "incomplete_units": "INTEGER NOT NULL DEFAULT 0",
+                    },
+                ),
+                (
+                    "file_operations",
+                    {
+                        "unit_id": "TEXT",
+                        "companion_role": "TEXT",
+                        "unit_primary_path": "TEXT",
+                    },
+                ),
+            ),
         }
         steps = migrations.get(target_version)
         if steps is None:
@@ -242,6 +266,13 @@ class DatabaseManager:
             )
         if version >= 3:
             requirements.append(("operations", VERSION_3_OPERATION_COLUMNS))
+        if version >= 4:
+            requirements.extend(
+                (
+                    ("operations", VERSION_4_OPERATION_COLUMNS),
+                    ("file_operations", VERSION_4_FILE_OPERATION_COLUMNS),
+                )
+            )
         for table, required in requirements:
             missing = required - self._columns(conn, table)
             if missing:
@@ -262,9 +293,9 @@ class DatabaseManager:
             counter += 1
 
         try:
-            with sqlite3.connect(backup) as target:
+            with closing(sqlite3.connect(backup)) as target, target:
                 source.backup(target)
-            with sqlite3.connect(backup) as verification:
+            with closing(sqlite3.connect(backup)) as verification:
                 result = verification.execute("PRAGMA integrity_check").fetchone()
                 if result is None or result[0] != "ok":
                     raise DatabaseMigrationError(

@@ -8,7 +8,7 @@ its resources live directly below that executable directory:
     MediaSorter-portable/
         app/
             MediaSorter.exe          ← double-click or run from terminal
-            resources/               ← copied from src-tauri/resources/**
+            resources/               ← backend + ffmpeg runtime payloads
                 backend/
                     mediasort-backend.exe
                     _internal/       ← PyInstaller support files
@@ -18,7 +18,7 @@ its resources live directly below that executable directory:
                     ffprobe.exe
 
 This layout intentionally mirrors the Tauri resource-glob pattern
-``"resources/**"`` in tauri.conf.json and the launcher's
+the explicit backend/ffmpeg entries in tauri.conf.json and the launcher's
 ``app_dir/resources/...`` lookup.
 
 Usage:
@@ -104,9 +104,16 @@ def main() -> int:
         zf.write(exe_src, f"{root}/app/MediaSorter.exe")
         log("  + app/MediaSorter.exe")
 
-        # Resources: src-tauri/resources/** → <root>/app/resources/**
+        # Only required runtime resources belong in the base package. Optional
+        # AI model caches may exist in this build tree but must never leak into
+        # a portable release.
         # The shell lives in app/, and main.rs resolves app_dir/resources.
-        for path in sorted(RESOURCES_SRC.rglob("*")):
+        package_paths = (
+            path
+            for root_name in ("backend", "ffmpeg")
+            for path in (RESOURCES_SRC / root_name).rglob("*")
+        )
+        for path in sorted(package_paths):
             if not path.is_file():
                 continue
             relative_resource = path.relative_to(RESOURCES_SRC)

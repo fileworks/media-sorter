@@ -79,6 +79,18 @@ class MetadataService:
             return "embedded" if self._write_video_keywords(path, cleaned) else ""
         return "sidecar" if self._write_xmp_sidecar(path, cleaned) else ""
 
+    def write_sidecar(self, path: Path, keywords: list[str]) -> bool:
+        """Record *keywords* beside the media without touching its bytes.
+
+        This is the Organize Only route for derived tags: a standards-shaped
+        ``<file>.xmp`` sidecar for every format, including the JPEG/TIFF and
+        video files that :meth:`write_keywords` would otherwise rewrite.
+        """
+        cleaned = [k.strip() for k in keywords if k and k.strip()]
+        if not cleaned:
+            return False
+        return self._write_xmp_sidecar(path, cleaned)
+
     @staticmethod
     def _write_exif_keywords(path: Path, keywords: list[str]) -> bool:
         """Write keywords to EXIF XPKeywords + ImageDescription (JPEG/TIFF)."""

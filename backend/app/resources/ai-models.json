@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "default_source": "https://huggingface.co",
+  "packs": {
+    "clip-lite-v1": {
+      "model_id": "clip-vit-b-32",
+      "display_name": "CLIP Lite",
+      "license": "MIT",
+      "license_url": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision/blob/e0c24ed0fa57fa3e4f97f30de74c51d944036ace/README.md",
+      "total_size": 608015951,
+      "components": {
+        "image": {
+          "repository": "Qdrant/clip-ViT-B-32-vision",
+          "revision": "e0c24ed0fa57fa3e4f97f30de74c51d944036ace",
+          "files": [
+            {
+              "path": "config.json",
+              "size": 482,
+              "sha256": "43bfed060ab82f57833bdd09acdcc2731995cb984651732a9d2b399e63113b9c"
+            },
+            {
+              "path": "model.onnx",
+              "size": 351686194,
+              "sha256": "c68d3d9a200ddd2a8c8a5510b576d4c94d1ae383bf8b36dd8c084f94e1fb4d63"
+            },
+            {
+              "path": "preprocessor_config.json",
+              "size": 780,
+              "sha256": "ce945ef831c9972c135b5b198a03d8eeb70478cd69c0238f24caf1903a9965e6"
+            }
+          ]
+        },
+        "text": {
+          "repository": "Qdrant/clip-ViT-B-32-text",
+          "revision": "48ca1db27cb4063eb311ec2aa7f087a808112876",
+          "files": [
+            {
+              "path": "config.json",
+              "size": 536,
+              "sha256": "4d5923d94bbc4e29864de837df14c138c12b93a0b738c64f3ca41f0c539e17b7"
+            },
+            {
+              "path": "model.onnx",
+              "size": 254102519,
+              "sha256": "4dbe762b11e36488304471e439cde89da053ad7acaddbf9e096745d142ec8d8b"
+            },
+            {
+              "path": "special_tokens_map.json",
+              "size": 588,
+              "sha256": "2cdb3b8331a60c92fc1e55a13e9fd61fd2293c5a51275fdcccd62b780052530e"
+            },
+            {
+              "path": "tokenizer.json",
+              "size": 2224147,
+              "sha256": "b68d571997a1f81bf521fb73806740ddb91e4ed6666cb6e996c066bb289cf55b"
+            },
+            {
+              "path": "tokenizer_config.json",
+              "size": 705,
+              "sha256": "6bdcee9ccce2a16ca2b4c0c5ed00b42c50ea225f4472a8c4c1e963a2902c2881"
+            }
+          ]
+        }
+      }
+    },
+    "siglip-standard-v1": {
+      "model_id": "siglip2-base-patch16-256",
+      "display_name": "SigLIP Standard / Max",
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/blob/d1114256522a37ffa257a0a58017348ab0058db2/README.md",
+      "total_size": 412538967,
+      "components": {
+        "model": {
+          "repository": "onnx-community/siglip2-base-patch16-256-ONNX",
+          "revision": "d1114256522a37ffa257a0a58017348ab0058db2",
+          "files": [
+            {
+              "path": "onnx/vision_model_quantized.onnx",
+              "size": 94737653,
+              "sha256": "f2eb8ccfa3dc0b3761d9ea9a39554fe0f2be71b247ad7f68a80720ec88895650"
+            },
+            {
+              "path": "onnx/text_model_quantized.onnx",
+              "size": 283438275,
+              "sha256": "6f59b39d880c413042314b79302b74d0dd93b273caf8fbfdb1eb2df61a7fefd4"
+            },
+            {
+              "path": "tokenizer.json",
+              "size": 34363039,
+              "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

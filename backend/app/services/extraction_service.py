@@ -27,6 +27,14 @@ _RESET_SENTINELS: frozenset[tuple[int, int, int]] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class DateCandidate:
+    source: str
+    value: date | None
+    accepted: bool
+    reason: str
+
+
 @dataclass
 class ExtractionResult:
     extracted_date: date | None
@@ -34,6 +42,7 @@ class ExtractionResult:
     suspicious: bool = False
     suspicious_reason: str = ""
     fallback_date: date | None = None
+    candidates: tuple[DateCandidate, ...] = ()
 
 
 class DateExtractionService:
@@ -49,6 +58,7 @@ class DateExtractionService:
     # ------------------------------------------------------------------ #
 
     def _from_exif(self, path: Path) -> DateResult:
+        found_value = False
         try:
             import piexif
 
@@ -59,21 +69,24 @@ class DateExtractionService:
             for tag in (piexif.ExifIFD.DateTimeOriginal, piexif.ExifIFD.DateTimeDigitized):
                 raw = exif_data.get("Exif", {}).get(tag)
                 if raw:
+                    found_value = True
                     dt = datetime.strptime(raw.decode(), "%Y:%m:%d %H:%M:%S")
                     return dt.date(), "exif"
 
             # Fallback to IFD0 DateTime
             raw = exif_data.get("0th", {}).get(piexif.ImageIFD.DateTime)
             if raw:
+                found_value = True
                 dt = datetime.strptime(raw.decode(), "%Y:%m:%d %H:%M:%S")
                 return dt.date(), "exif"
 
         except Exception as exc:
             logger.debug("EXIF extraction failed", path=str(path), error=str(exc))
 
-        return None, "none"
+        return (None, "exif_unparseable") if found_value else (None, "none")
 
     def _from_video(self, path: Path) -> DateResult:
+        found_value = False
         try:
             data = run_ffprobe_json(path, "format_tags=creation_time", timeout=10)
             if data is None:
@@ -81,6 +94,7 @@ class DateExtractionService:
             creation_time = data.get("format", {}).get("tags", {}).get("creation_time")
             if not creation_time:
                 return None, "none"
+            found_value = True
             dt = datetime.fromisoformat(creation_time.replace("Z", "+00:00"))
             # ffprobe occasionally emits naive datetimes for malformed
             # containers — assume UTC (ffprobe's documented contract).
@@ -89,19 +103,21 @@ class DateExtractionService:
             return dt.astimezone(timezone.utc).date(), "video_metadata"
         except Exception as exc:
             logger.debug("Video date extraction failed", path=str(path), error=str(exc))
-        return None, "none"
+        return (None, "video_metadata_unparseable") if found_value else (None, "none")
 
     def _from_filename(self, path: Path) -> DateResult:
         name = path.stem
+        matched = False
         for pattern in _FILENAME_PATTERNS:
             m = pattern.search(name)
             if m:
+                matched = True
                 try:
                     d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                     return d, "filename"
                 except ValueError:
                     pass
-        return None, "none"
+        return (None, "filename_unparseable") if matched else (None, "none")
 
     def _from_filesystem(self, path: Path) -> DateResult:
         try:
@@ -117,6 +133,7 @@ class DateExtractionService:
         """
         primary_date: date | None = None
         primary_source: str = "none"
+        candidates: list[DateCandidate] = []
 
         if is_image(file_path):
             raw_date, raw_source = self._from_exif(file_path)
@@ -125,9 +142,34 @@ class DateExtractionService:
                     file_path, raw_date, raw_source, check_suspicious
                 )
                 if suspicious is not None:
-                    return suspicious
+                    candidates.append(DateCandidate(raw_source, raw_date, False, "suspicious"))
+                    if suspicious.fallback_date is not None:
+                        candidates.append(
+                            DateCandidate(
+                                suspicious.source,
+                                suspicious.fallback_date,
+                                True,
+                                "selected",
+                            )
+                        )
+                    return ExtractionResult(
+                        **{
+                            **suspicious.__dict__,
+                            "candidates": tuple(candidates[:8]),
+                        }
+                    )
                 primary_date = raw_date
                 primary_source = raw_source
+                candidates.append(DateCandidate(raw_source, raw_date, True, "selected"))
+            else:
+                candidates.append(
+                    DateCandidate(
+                        "exif",
+                        None,
+                        False,
+                        "unparseable" if raw_source == "exif_unparseable" else "absent",
+                    )
+                )
 
         if primary_date is None and is_video(file_path):
             raw_date, raw_source = self._from_video(file_path)
@@ -136,8 +178,33 @@ class DateExtractionService:
                     file_path, raw_date, raw_source, check_suspicious
                 )
                 if suspicious is not None:
-                    return suspicious
+                    candidates.append(DateCandidate(raw_source, raw_date, False, "suspicious"))
+                    if suspicious.fallback_date is not None:
+                        candidates.append(
+                            DateCandidate(
+                                suspicious.source,
+                                suspicious.fallback_date,
+                                True,
+                                "selected",
+                            )
+                        )
+                    return ExtractionResult(
+                        **{
+                            **suspicious.__dict__,
+                            "candidates": tuple(candidates[:8]),
+                        }
+                    )
                 primary_date, primary_source = raw_date, raw_source
+                candidates.append(DateCandidate(raw_source, raw_date, True, "selected"))
+            else:
+                candidates.append(
+                    DateCandidate(
+                        "video_metadata",
+                        None,
+                        False,
+                        ("unparseable" if raw_source == "video_metadata_unparseable" else "absent"),
+                    )
+                )
 
         if primary_date is None:
             primary_date, primary_source = self._from_filename(file_path)
@@ -145,15 +212,40 @@ class DateExtractionService:
             # like the suspicious-EXIF fallback path does — the same file must
             # get the same verdict whether or not it also had a bad EXIF date.
             if primary_date is not None and self._is_sentinel(primary_date):
+                candidates.append(
+                    DateCandidate(primary_source, primary_date, False, "sentinel_value")
+                )
                 primary_date, primary_source = None, "none"
+            elif primary_date is not None:
+                candidates.append(DateCandidate(primary_source, primary_date, True, "selected"))
+            else:
+                candidates.append(
+                    DateCandidate(
+                        "filename",
+                        None,
+                        False,
+                        "unparseable" if primary_source == "filename_unparseable" else "absent",
+                    )
+                )
 
         if primary_date is None:
             primary_date, primary_source = self._from_filesystem(file_path)
             # Reject epoch/sentinel filesystem dates — treat as unknown.
             if primary_date is not None and self._is_sentinel(primary_date):
+                candidates.append(
+                    DateCandidate(primary_source, primary_date, False, "sentinel_value")
+                )
                 primary_date, primary_source = None, "none"
+            elif primary_date is not None:
+                candidates.append(DateCandidate(primary_source, primary_date, True, "selected"))
+            else:
+                candidates.append(DateCandidate("filesystem", None, False, "absent"))
 
-        return ExtractionResult(extracted_date=primary_date, source=primary_source)
+        return ExtractionResult(
+            extracted_date=primary_date,
+            source=primary_source,
+            candidates=tuple(candidates[:8]),
+        )
 
     def _resolve_suspicious_date(
         self,

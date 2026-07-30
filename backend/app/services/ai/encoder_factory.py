@@ -6,15 +6,14 @@ of which concrete encoder is running.
 
 Tier → encoder:
   off      → returns None (AI callers must treat None encoder as disabled)
-  lite     → ClipEmbedder (CLIP ViT-B/32 via fastembed — small, always available)
-  standard → SiglipOnnxEncoder (SigLIP 2 base/16 @256, onnxruntime), CLIP fallback
-  max      → SiglipOnnxEncoder (same weights, accelerator EP preferred), CLIP fallback
+  lite     → ClipEmbedder when its verified optional pack is installed
+  standard → SiglipOnnxEncoder when its verified optional pack is installed
+  max      → SiglipOnnxEncoder (same weights, accelerator EP preferred)
 
 SigLIP 2 is a substantially stronger zero-shot encoder than CLIP ViT-B/32 at the
 exact image↔text-label task both features use (~79% vs ~63% zero-shot ImageNet).
-It downloads on first use (~100 MB/tower quantised) and, if onnxruntime/weights
-are unavailable or the model fails to load, the factory transparently falls back
-to CLIP so a sort is never broken.
+No constructor performs I/O or downloads. The user-managed installer owns all
+network access; model objects load their already-verified files only on first use.
 """
 
 from __future__ import annotations
@@ -24,24 +23,16 @@ from app.core.logging_config import get_logger
 from app.services.ai.clip_embedder import ClipEmbedder
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.hardware import HardwareProfile, ModelTier
+from app.services.ai.model_installation import AiModelStore
+from app.services.ai.model_manifest import pack_for_tier
 
 logger = get_logger(__name__)
-
-
-def _build_clip() -> VisionEncoder | None:
-    """The always-available CLIP ViT-B/32 encoder, or ``None`` if fastembed is missing."""
-    encoder = ClipEmbedder()
-    if not encoder.available:
-        logger.warning(
-            "CLIP model unavailable (fastembed not installed or download failed); local AI disabled"
-        )
-        return None
-    return encoder
 
 
 def build_encoder(
     config: Config,
     hardware: HardwareProfile,
+    model_store: AiModelStore,
 ) -> VisionEncoder | None:
     """Return the best available local encoder for *config* and *hardware*.
 
@@ -54,21 +45,17 @@ def build_encoder(
         logger.info("AI model tier is off; local AI disabled")
         return None
 
+    pack_id = pack_for_tier(tier)
+    if pack_id is None or model_store.component_paths(pack_id, verify=False) is None:
+        logger.info("Local AI model pack is not installed", tier=tier, pack_id=pack_id)
+        return None
+
     if tier in ("standard", "max"):
         from app.services.ai.siglip_encoder import SiglipOnnxEncoder
 
-        siglip = SiglipOnnxEncoder(allow_gpu=getattr(config, "ai_allow_gpu", True))
-        if siglip.available:
-            logger.info("Local encoder ready", model_id=siglip.model_id, tier=tier)
-            return siglip
-        # SigLIP unavailable (no onnxruntime/weights, offline first run, …) —
-        # degrade to CLIP rather than disabling AI entirely.
-        logger.info(
-            "SigLIP 2 unavailable; falling back to CLIP ViT-B/32 for this tier",
-            requested_tier=tier,
+        return SiglipOnnxEncoder(
+            allow_gpu=getattr(config, "ai_allow_gpu", True),
+            model_store=model_store,
         )
 
-    encoder = _build_clip()
-    if encoder is not None:
-        logger.info("Local encoder ready", model_id=encoder.model_id, tier=tier)
-    return encoder
+    return ClipEmbedder(model_store=model_store)
