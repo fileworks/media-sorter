@@ -272,23 +272,26 @@ jobs:
       - name: Bundle Python backend (PyInstaller)
         run: make bundle-backend
 
-      # After the backend bundle, not before it. tauri.conf.json declares
-      # resources/backend/** and the Tauri build script validates that glob, so
-      # cargo cannot even check this crate until PyInstaller has produced it.
-      # Running first is why v1.1.0 tagged but shipped nothing: all three
-      # package jobs died on "path matching resources/backend/** not found",
-      # and the release step was skipped.
+      - name: Bundle static ffmpeg + ffprobe
+        # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
+        # the single source of truth shared with local builds so they never drift.
+        run: make bundle-ffmpeg
+
+      # After *both* bundles. tauri.conf.json declares two resource globs,
+      # resources/backend/** and resources/ffmpeg/**, and the Tauri build script
+      # validates every one of them — so cargo cannot check this crate until
+      # PyInstaller and fetch_ffmpeg have each produced their tree.
+      #
+      # v1.1.0 failed on the backend glob because this ran before both. Moving it
+      # after only the backend bundle fixed half of that, and v1.1.1 then failed
+      # the same way on the ffmpeg glob. Placed after the last producer so there
+      # is no third variant of this.
       - name: Verify native Rust source
         working-directory: frontend/src-tauri
         run: |
           cargo fmt --check
           cargo check --locked
           cargo test --locked
-
-      - name: Bundle static ffmpeg + ffprobe
-        # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
-        # the single source of truth shared with local builds so they never drift.
-        run: make bundle-ffmpeg
 
       - name: Finalize permissions and sign nested native payloads
         env:
