@@ -54,3 +54,35 @@ def test_frozen_backend_bundles_runtime_resources() -> None:
     assert "bundle-clip" not in makefile
     assert "bundle-clip" not in release
     assert '"resources/**"' not in tauri
+
+
+def test_every_bundled_resource_glob_matches_something() -> None:
+    """A declared glob that matches nothing aborts the Tauri build.
+
+    `resources/ffmpeg/**` matched nothing and stranded four tags with no
+    installers: `fetch_ffmpeg` writes three flat files and no directory, so a
+    trailing `**` had nothing to descend into. `resources/backend/**` was fine
+    only because that tree happens to contain a subdirectory.
+
+    The declaration deliberately does not use `resources/**` — on-demand AI model
+    packs land under `resources/` and must not ship inside the installer — so the
+    globs have to be right rather than broad.
+    """
+    import json
+
+    config = json.loads(
+        (ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )
+    tauri_root = ROOT / "frontend" / "src-tauri"
+
+    for pattern in config["tauri"]["bundle"]["resources"]:
+        directory, _, tail = pattern.rpartition("/")
+        target = tauri_root / directory
+        if not target.is_dir():
+            continue  # not built in this checkout; the release job builds it
+        if tail == "**":
+            # `**` descends into directories, so it needs at least one.
+            assert any(child.is_dir() for child in target.iterdir()), (
+                f"{pattern} uses ** but {directory} holds no directory to descend into"
+            )
+        assert any(target.iterdir()), f"{pattern} matches nothing"

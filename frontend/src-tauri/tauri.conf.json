@@ -50,7 +50,7 @@
       ],
       "resources": [
         "resources/backend/**",
-        "resources/ffmpeg/**"
+        "resources/ffmpeg/*"
       ],
       "dmg": {
         "background": "installer/dmg-background.png",
