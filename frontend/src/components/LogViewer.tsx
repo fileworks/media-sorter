@@ -51,7 +51,7 @@ function getEntryStyle(
   ) {
     return {
       icon: <FiXCircle className="h-3 w-3 shrink-0 mt-0.5" />,
-      colorClass: "text-red-400",
+      colorClass: "text-error",
     };
   }
 
@@ -63,7 +63,7 @@ function getEntryStyle(
   ) {
     return {
       icon: <FiAlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />,
-      colorClass: "text-yellow-400",
+      colorClass: "text-warning",
     };
   }
 
@@ -75,13 +75,13 @@ function getEntryStyle(
   ) {
     return {
       icon: <FiCheckCircle className="h-3 w-3 shrink-0 mt-0.5" />,
-      colorClass: "text-green-400",
+      colorClass: "text-success",
     };
   }
 
   return {
     icon: <FiInfo className="h-3 w-3 shrink-0 mt-0.5" />,
-    colorClass: "text-blue-400",
+    colorClass: "text-info",
   };
 }
 
@@ -175,14 +175,14 @@ export function LogViewer({ isRunning }: LogViewerProps) {
     <div className="shrink-0 px-6 pb-4">
       <div
         className={[
-          "flex flex-col rounded-xl border border-gray-700 bg-gray-900 shadow-sm",
+          "flex flex-col rounded-xl border border-console-border bg-console shadow-sm",
           "transition-[height] duration-200",
           collapsed ? "h-9" : "h-52",
         ].join(" ")}
       >
         {/* ── Header ── */}
         <div
-          className="flex shrink-0 cursor-pointer select-none items-center justify-between border-b border-gray-700 px-3 py-1.5"
+          className="flex shrink-0 cursor-pointer select-none items-center justify-between border-b border-console-border px-3 py-1.5"
           onClick={() => setCollapsed((v) => !v)}
           style={{ borderBottomColor: collapsed ? "transparent" : undefined }}
         >
@@ -191,20 +191,20 @@ export function LogViewer({ isRunning }: LogViewerProps) {
             <span
               className={[
                 "inline-block h-1.5 w-1.5 rounded-full",
-                isConnected ? "bg-green-400" : isRunning ? "bg-red-400" : "bg-gray-500",
+                isConnected ? "bg-success" : isRunning ? "bg-error" : "bg-console-muted",
               ].join(" ")}
               aria-hidden
             />
-            <span className="text-xs font-semibold text-gray-200">{t("log.title")}</span>
-            <span className="text-xs text-gray-500">({logs.length})</span>
+            <span className="text-xs font-semibold text-console-foreground">{t("log.title")}</span>
+            <span className="text-xs text-console-muted">({logs.length})</span>
             {errorCount > 0 && (
-              <span className="flex items-center gap-0.5 rounded bg-red-900/60 px-1.5 py-0.5 text-xs font-medium text-red-400">
+              <span className="flex items-center gap-0.5 rounded bg-error/15 px-1.5 py-0.5 text-xs font-medium text-error">
                 <FiXCircle className="h-3 w-3" />
                 {errorCount}
               </span>
             )}
             {warningCount > 0 && (
-              <span className="flex items-center gap-0.5 rounded bg-yellow-900/60 px-1.5 py-0.5 text-xs font-medium text-yellow-400">
+              <span className="flex items-center gap-0.5 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning">
                 <FiAlertTriangle className="h-3 w-3" />
                 {warningCount}
               </span>
@@ -222,8 +222,8 @@ export function LogViewer({ isRunning }: LogViewerProps) {
                   className={[
                     "rounded px-2 py-0.5 text-xs transition-colors",
                     filter === f
-                      ? "bg-gray-600 text-gray-100"
-                      : "text-gray-500 hover:text-gray-200",
+                      ? "bg-console-border text-console-foreground"
+                      : "text-console-muted hover:text-console-foreground",
                   ].join(" ")}
                 >
                   {filterLabels[f]}
@@ -234,7 +234,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
               <button
                 type="button"
                 onClick={clear}
-                className="ml-1 rounded px-2 py-0.5 text-xs text-gray-500 hover:text-gray-200"
+                className="ml-1 rounded px-2 py-0.5 text-xs text-console-muted hover:text-console-foreground"
               >
                 {t("log.clear")}
               </button>
@@ -243,7 +243,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
             <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
-              className="p-1 text-gray-400 hover:text-gray-200 rounded"
+              className="p-1 text-console-muted hover:text-console-foreground rounded"
               aria-label={collapsed ? t("log.expand") : t("log.collapse")}
             >
               {collapsed ? (
@@ -256,7 +256,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
             <button
               type="button"
               onClick={() => setVisible(false)}
-              className="p-1 text-gray-400 hover:text-gray-200 rounded"
+              className="p-1 text-console-muted hover:text-console-foreground rounded"
               aria-label={t("log.dismiss")}
             >
               <FiX className="h-3.5 w-3.5" />
@@ -272,7 +272,7 @@ export function LogViewer({ isRunning }: LogViewerProps) {
             onScroll={handleScroll}
           >
             {filtered.length === 0 ? (
-              <p className="text-gray-600">
+              <p className="text-console-muted">
                 {logs.length === 0 ? t("log.empty") : t("log.noMatches")}
               </p>
             ) : (
@@ -291,15 +291,15 @@ export function LogViewer({ isRunning }: LogViewerProps) {
                   <div key={idx} className={`flex items-start gap-2 leading-5 ${colorClass}`}>
                     <span className="shrink-0 font-bold">{icon}</span>
                     <span className="min-w-0 flex-1 break-words">
-                      <span className="text-gray-200">{entry.message}</span>
+                      <span className="text-console-foreground">{entry.message}</span>
                       {ctxPath && (
-                        <span className="block truncate text-gray-500" title={ctxPath}>
+                        <span className="block truncate text-console-muted" title={ctxPath}>
                           {ctxPath}
                         </span>
                       )}
-                      {ctxError && <span className="block text-red-500">{ctxError}</span>}
+                      {ctxError && <span className="block text-error">{ctxError}</span>}
                     </span>
-                    <span className="shrink-0 text-gray-600">
+                    <span className="shrink-0 text-console-muted">
                       {formatTime(entry.timestamp, locale)}
                     </span>
                   </div>

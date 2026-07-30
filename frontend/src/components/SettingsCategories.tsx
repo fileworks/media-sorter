@@ -104,7 +104,7 @@ export function SettingsCategories({
               className="flex w-full items-center justify-between px-3 py-2 text-left"
             >
               <span className="text-sm text-foreground">{category.label}</span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-2xs text-muted-foreground">
                 {category.advanced ? "Advanced" : ""} {category.settings.length}
               </span>
             </button>
@@ -118,10 +118,7 @@ export function SettingsCategories({
                     <li key={definition.key} className="space-y-1 px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-sm text-foreground">{definition.label}</span>
-                        <span
-                          className={`text-[11px] ${BADGE_CLASS[badge.tone]}`}
-                          title={badge.title}
-                        >
+                        <span className={`text-2xs ${BADGE_CLASS[badge.tone]}`} title={badge.title}>
                           {badge.label}
                         </span>
                       </div>
@@ -130,7 +127,7 @@ export function SettingsCategories({
                         <button
                           type="button"
                           onClick={() => onScopesChange(revertRunOverride(scopes, definition.key))}
-                          className="text-[11px] text-muted-foreground underline"
+                          className="text-2xs text-muted-foreground underline"
                         >
                           Use the saved value instead
                         </button>

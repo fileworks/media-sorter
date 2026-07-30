@@ -87,18 +87,18 @@ function MemberRow({
           <p className="truncate text-sm text-foreground">
             {getBasename(member.relative_path)}
             {isKeeper && (
-              <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+              <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-2xs text-primary">
                 {t("review.keeper")}
               </span>
             )}
             {member.role === "reference" && (
-              <span className="ml-2 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              <span className="ml-2 rounded bg-muted px-2 py-0.5 text-2xs text-muted-foreground">
                 {t("review.referenceProtected")}
               </span>
             )}
           </p>
           <p className="truncate text-xs text-muted-foreground">{member.observed_path}</p>
-          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-muted-foreground">
             <span>{formatBytesShort(member.facts.size_bytes)}</span>
             <span title={factTitle(member.facts.width)}>{resolutionLabel(member.facts)}</span>
             <span title={factTitle(member.facts.captured_at)}>
@@ -412,7 +412,7 @@ export function ReviewWorkbench({
                     <span className="truncate text-sm text-foreground">
                       {getBasename(row.representativePath)}
                     </span>
-                    <span className="truncate text-[11px] text-muted-foreground">
+                    <span className="truncate text-2xs text-muted-foreground">
                       {t(`review.kind.${row.kind}`)} ·{" "}
                       {t("review.fileCount", { count: row.memberCount })} ·{" "}
                       {t("review.reclaimable", {

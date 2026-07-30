@@ -144,7 +144,7 @@ function PreviewLoadingSkeleton() {
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
       {children}
@@ -479,7 +479,7 @@ export function PreviewPanel({
                       <span>{t(`preview.filter.${key}`)}</span>
                       <span
                         className={cn(
-                          "rounded-full px-1.5 py-0 text-[10px] font-normal tabular-nums",
+                          "rounded-full px-1.5 py-0 text-3xs font-normal tabular-nums",
                           filter === key
                             ? "bg-primary-foreground/20 text-primary-foreground"
                             : "bg-muted text-muted-foreground",
@@ -494,12 +494,12 @@ export function PreviewPanel({
 
               <SidebarSection title={t("preview.tags")}>
                 {allTags.length === 0 ? (
-                  <p className="text-[11px] italic text-muted-foreground">{t("preview.noTags")}</p>
+                  <p className="text-2xs italic text-muted-foreground">{t("preview.noTags")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1">
                     {tagFilters.size > 0 && (
                       <button
-                        className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground hover:bg-muted/70"
+                        className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted/70"
                         onClick={() => setTagFilters(new Set())}
                         title={t("preview.clearTags")}
                       >
@@ -511,7 +511,7 @@ export function PreviewPanel({
                         key={tag}
                         onClick={() => toggleTag(tag)}
                         className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          "rounded-full px-2 py-0.5 text-2xs font-medium transition-colors",
                           tagFilters.has(tag)
                             ? "bg-primary text-primary-foreground"
                             : "bg-primary/10 text-primary hover:bg-primary/20",
@@ -527,14 +527,14 @@ export function PreviewPanel({
               {categorizeEnabled && (
                 <SidebarSection title={t("preview.categories")}>
                   {allCategories.length === 0 ? (
-                    <p className="text-[11px] italic text-muted-foreground">
+                    <p className="text-2xs italic text-muted-foreground">
                       {t("preview.noCategories")}
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {categoryFilters.size > 0 && (
                         <button
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground hover:bg-muted/70"
+                          className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted/70"
                           onClick={() => setCategoryFilters(new Set())}
                           title={t("preview.clearCategories")}
                         >
@@ -546,7 +546,7 @@ export function PreviewPanel({
                           key={cat}
                           onClick={() => toggleCategory(cat)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
+                            "rounded-full px-2 py-0.5 text-2xs font-medium transition-colors",
                             categoryFilters.has(cat)
                               ? cat === "_uncategorized"
                                 ? "bg-muted-foreground/20 text-foreground"
@@ -684,7 +684,7 @@ export function PreviewPanel({
                     <button
                       type="button"
                       onClick={expandAll}
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
                       title={t("preview.expand")}
                     >
                       <FiMaximize2 className="h-3 w-3" />
@@ -693,7 +693,7 @@ export function PreviewPanel({
                     <button
                       type="button"
                       onClick={collapseAll}
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
                       title={t("preview.collapse")}
                     >
                       <FiMinimize2 className="h-3 w-3" />
@@ -753,7 +753,7 @@ export function PreviewPanel({
 
             {/* Icon legend (list view only) */}
             {viewMode === "list" && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-4 py-1.5 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-4 py-1.5 text-2xs text-muted-foreground">
                 <span className="font-medium uppercase tracking-wide">{t("preview.legend")}</span>
                 <span>
                   <span className="text-success">✓</span> {t("preview.legendSorted")}

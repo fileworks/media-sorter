@@ -87,7 +87,7 @@ export function CatalogPanel() {
         </p>
       )}
 
-      <p className="break-all text-[11px] text-muted-foreground">{data.path}</p>
+      <p className="break-all text-2xs text-muted-foreground">{data.path}</p>
 
       {data.freshness.length > 0 && (
         <ul className="space-y-2">

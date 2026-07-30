@@ -165,7 +165,7 @@ const YearRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <span className="text-sm">{row.year}</span>
       <span className="text-xs text-muted-foreground">
         {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
@@ -189,7 +189,7 @@ const MonthRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <span className="text-sm text-muted-foreground">
         {localizedMonth(row.year, row.month, locale)}
       </span>
@@ -216,7 +216,7 @@ const DayRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <span className="text-xs text-muted-foreground">
         {parseInt(row.day, 10)} {monthName}
       </span>
@@ -253,7 +253,7 @@ const CatHeaderRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <code
         className={cn(
           "text-xs font-medium",
@@ -287,7 +287,7 @@ const DateDupHeaderRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <code className="text-xs font-medium text-info">_duplicates/</code>
       <span className="text-xs text-muted-foreground">
         {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
@@ -396,7 +396,7 @@ const FileRow: FC<{
               <span className="truncate text-foreground">{basename}</span>
               {(item.companions?.length ?? 0) > 0 && (
                 <span
-                  className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-[9px] font-medium text-info"
+                  className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-3xs font-medium text-info"
                   title={t("preview.unitMembers", {
                     count: ((item.companions?.length ?? 0) + 1).toLocaleString(locale),
                   })}
@@ -428,14 +428,14 @@ const FileRow: FC<{
           item.status === "sort" &&
           (item.category ? (
             <span
-              className="shrink-0 rounded-full bg-category/10 px-1.5 py-0.5 text-[10px] font-medium text-category"
+              className="shrink-0 rounded-full bg-category/10 px-1.5 py-0.5 text-3xs font-medium text-category"
               title={t("preview.category", { name: item.category })}
             >
               {item.category}
             </span>
           ) : (
             <span
-              className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-3xs font-medium text-muted-foreground"
               title={t("preview.noConfidentCategory")}
             >
               _uncategorized
@@ -444,7 +444,7 @@ const FileRow: FC<{
         {(item.status === "duplicate" || item.status === "already_in_destination") &&
           item.duplicate_type && (
             <span
-              className="ml-2 shrink-0 rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-info"
+              className="ml-2 shrink-0 rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info"
               title={
                 item.duplicate_of
                   ? t("preview.duplicateOf", { path: item.duplicate_of })
@@ -465,7 +465,7 @@ const FileRow: FC<{
             {(item.tags ?? []).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                className="rounded-full bg-primary/10 px-1.5 py-0.5 text-3xs font-medium text-primary"
               >
                 {tag}
               </span>
@@ -490,7 +490,7 @@ const FolderHeaderRow: FC<{
       onClick={onToggle}
       aria-expanded={isExpanded}
     >
-      <span className="text-[10px] text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
+      <span className="text-3xs text-muted-foreground">{isExpanded ? "▼" : "▶"}</span>
       <code className="text-sm font-medium text-foreground">{row.label}</code>
       <span className="text-xs text-muted-foreground">
         {t(row.count === 1 ? "preview.fileCount.one" : "preview.fileCount", {
@@ -697,7 +697,7 @@ function TreeColumnHeader({
           )}
           style={{ width: colWidths[col] }}
         >
-          <span className="truncate pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="truncate pr-2 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t(`preview.column.${col}`)}
           </span>
           <div
@@ -709,7 +709,7 @@ function TreeColumnHeader({
         </div>
       ))}
       <span className="hidden shrink-0 text-transparent sm:block">→</span>
-      <span className="hidden min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:block">
+      <span className="hidden min-w-0 flex-1 truncate text-3xs font-semibold uppercase tracking-wide text-muted-foreground sm:block">
         {t("preview.column.destination")}
       </span>
     </div>
@@ -874,7 +874,7 @@ export function PreviewList({
     <>
       {/* Sort toolbar */}
       <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("preview.sort")}
         </span>
         <select
@@ -902,7 +902,7 @@ export function PreviewList({
       </div>
 
       {/* Sticky breadcrumb */}
-      <div className="min-h-[26px] border-b bg-muted/40 px-4 py-1 text-[11px] font-medium text-muted-foreground">
+      <div className="min-h-[26px] border-b bg-muted/40 px-4 py-1 text-2xs font-medium text-muted-foreground">
         {scrollContextLabel}
       </div>
 

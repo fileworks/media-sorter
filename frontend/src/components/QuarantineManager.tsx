@@ -107,7 +107,7 @@ export function QuarantineManager() {
                     {t("quarantine.ageDays", { count: Math.round(record.age_days) })}
                   </span>
                   {record.keeper_path && (
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block text-2xs text-muted-foreground">
                       {t("quarantine.keptInstead", {
                         path: redactRoot(record.keeper_path),
                       })}

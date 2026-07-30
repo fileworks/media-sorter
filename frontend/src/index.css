@@ -46,6 +46,27 @@
     /* Smart Categorization accent — category chips and folder labels. */
     --color-category: 263 70% 50%;
     --color-category-foreground: 0 0% 100%;
+
+    /* Categorical series, for charts that show an n-way breakdown. Distinct
+       from the status colours on purpose: "which file type" is not "is this
+       good or bad", and reusing success/error for series would say something
+       the data does not mean. Ordered by hue distance so adjacent slices stay
+       distinguishable. */
+    --chart-1: 217 80% 52%;
+    --chart-2: 145 60% 40%;
+    --chart-3: 32 90% 48%;
+    --chart-4: 263 65% 58%;
+    --chart-5: 345 75% 55%;
+    --chart-6: 215 15% 55%;
+
+    /* The log console is deliberately a fixed dark surface in both themes: it
+       is a terminal, and a terminal that inverts with the page reads as a
+       different component. Declared once here rather than as scattered
+       gray-700/900 values across the viewer. */
+    --console-surface: 24 12% 10%;
+    --console-border: 24 10% 23%;
+    --console-text: 30 8% 88%;
+    --console-muted: 30 6% 55%;
   }
 
   .dark {
@@ -87,6 +108,16 @@
     /* Category accent flips to a light violet on dark surfaces. */
     --color-category: 252 95% 85%;
     --color-category-foreground: 20 15% 10%;
+
+    /* Series lighten on dark so they hold contrast against the surface. */
+    --chart-1: 213 93% 68%;
+    --chart-2: 142 65% 55%;
+    --chart-3: 38 95% 62%;
+    --chart-4: 258 90% 76%;
+    --chart-5: 350 90% 70%;
+    --chart-6: 215 15% 65%;
+
+    /* The console does not flip: it is already the dark variant. */
   }
 }
 

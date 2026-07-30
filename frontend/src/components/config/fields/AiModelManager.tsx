@@ -121,7 +121,7 @@ export function AiModelManager() {
             </div>
             <span
               className={cn(
-                "rounded-full px-2 py-1 text-[11px] font-medium",
+                "rounded-full px-2 py-1 text-2xs font-medium",
                 pack.state === "ready"
                   ? "bg-success/15 text-success"
                   : failed

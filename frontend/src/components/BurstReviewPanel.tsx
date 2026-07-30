@@ -191,10 +191,10 @@ export function BurstReviewPanel({ root, items, enabled }: BurstReviewPanelProps
                       ? t("bursts.sharpnessUnknown")
                       : t("bursts.sharpness", { score: frame.sharpness.toFixed(1) })}
                   </span>
-                  <span className="block text-[11px] text-muted-foreground">
+                  <span className="block text-2xs text-muted-foreground">
                     {frame.member_paths.length} {t("bursts.unitMembers")}
                   </span>
-                  <details className="mt-2 rounded border border-border p-2 text-[11px] text-muted-foreground">
+                  <details className="mt-2 rounded border border-border p-2 text-2xs text-muted-foreground">
                     <summary className="cursor-pointer font-medium text-foreground">
                       {t("preview.explanation.title")}
                     </summary>

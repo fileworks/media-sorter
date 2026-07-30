@@ -133,7 +133,7 @@ function ThumbnailCard({
 
         {/* Video badge */}
         {video && loaded && (
-          <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
+          <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-3xs font-medium text-white">
             <FiFilm className="h-2.5 w-2.5" />
             {t("preview.video")}
           </span>
@@ -152,16 +152,13 @@ function ThumbnailCard({
 
       {/* Caption */}
       <div className="flex min-h-[3rem] flex-col justify-between p-1.5">
-        <p
-          className="line-clamp-2 text-[11px] font-medium leading-tight text-foreground"
-          title={name}
-        >
+        <p className="line-clamp-2 text-2xs font-medium leading-tight text-foreground" title={name}>
           {name}
         </p>
         {categorizeEnabled && item.status === "sort" && (
           <span
             className={cn(
-              "mt-1 self-start rounded-full px-1.5 py-px text-[10px] font-medium leading-none",
+              "mt-1 self-start rounded-full px-1.5 py-px text-3xs font-medium leading-none",
               item.category ? "bg-category/10 text-category" : "bg-muted text-muted-foreground",
             )}
             title={

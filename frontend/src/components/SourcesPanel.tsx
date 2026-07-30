@@ -171,7 +171,7 @@ function LocationCard({
             </p>
           </div>
           {card.exclusions.length > 0 && (
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-2xs text-muted-foreground">
               {t("sources.excludedSubfolders", { count: card.exclusions.length })}
             </p>
           )}

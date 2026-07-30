@@ -105,7 +105,7 @@ export function InfoTooltip({ content, side = "top", className }: InfoTooltipPro
         className={cn(
           "flex h-4 w-4 items-center justify-center rounded-full",
           "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-          "text-[10px] font-bold leading-none",
+          "text-3xs font-bold leading-none",
           "transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           open && "bg-accent text-accent-foreground",
         )}

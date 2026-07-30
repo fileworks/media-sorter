@@ -36,7 +36,7 @@ export function SettingsRail({
             {isGroupStart && (
               <p
                 className={cn(
-                  "hidden select-none px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 lg:block",
+                  "hidden select-none px-3 text-3xs font-semibold uppercase tracking-wider text-muted-foreground/70 lg:block",
                   i === 0 ? "pt-1" : "pt-3",
                 )}
                 aria-hidden
@@ -59,7 +59,7 @@ export function SettingsRail({
               <span>{it.label}</span>
               {it.error ? (
                 <span
-                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error/15 text-[9px] font-bold leading-none text-error lg:ml-auto"
+                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error/15 text-3xs font-bold leading-none text-error lg:ml-auto"
                   title={t("common.hasError")}
                   role="img"
                   aria-label={t("common.hasError")}

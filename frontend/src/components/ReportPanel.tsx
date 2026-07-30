@@ -70,12 +70,12 @@ function BarChart({ data }: { data: Record<string, number> | undefined }) {
     >
       {entries.map(([label, value]) => (
         <div key={label} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
-          <span className="text-[10px] font-mono leading-none text-muted-foreground">{value}</span>
+          <span className="text-3xs font-mono leading-none text-muted-foreground">{value}</span>
           <div
             className="w-full rounded-t bg-info/60 transition-colors hover:bg-info/80"
             style={{ height: `${Math.max((value / max) * BAR_MAX_PX, 4)}px` }}
           />
-          <span className="text-[10px] leading-none text-muted-foreground">{label}</span>
+          <span className="text-3xs leading-none text-muted-foreground">{label}</span>
         </div>
       ))}
     </div>
@@ -83,15 +83,16 @@ function BarChart({ data }: { data: Record<string, number> | undefined }) {
 }
 
 /** Horizontal stacked percentage bar for file types.
- * Categorical chart palette — deliberately raw values: the semantic tokens
- * cover statuses, not an n-way series. */
+ * Categorical series, not statuses: "which file type" is not "is this good or
+ * bad", so these are their own named tokens rather than success/error reused
+ * for something they do not mean. Defined in index.css, themed for both. */
 const TYPE_COLORS = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-amber-500",
-  "bg-purple-500",
-  "bg-rose-500",
-  "bg-slate-400",
+  "bg-chart-1",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
+  "bg-chart-5",
+  "bg-chart-6",
 ];
 
 function TypeBar({ data }: { data: Record<string, number> | undefined }) {
@@ -504,7 +505,7 @@ function FileTableSection({
                       {["duplicate", "already_in_destination"].includes(f.status) &&
                         f.duplicate_type && (
                           <span
-                            className="rounded-full bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-info"
+                            className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info"
                             title={
                               f.duplicate_of
                                 ? t("report.duplicateOf", { path: f.duplicate_of })
