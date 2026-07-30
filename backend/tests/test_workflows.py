@@ -53,7 +53,37 @@ def test_frozen_backend_bundles_runtime_resources() -> None:
     assert "--collect-all=app.resources" in makefile
     assert "bundle-clip" not in makefile
     assert "bundle-clip" not in release
-    assert '"resources/**"' not in tauri
+    # `resources/**` is correct here, and the previous assertion that it must be
+    # absent is what broke four releases.
+    #
+    # It was split into `resources/backend/**` + `resources/ffmpeg/**` to keep
+    # on-demand AI model packs out of the installer. But packs never live here:
+    # ModelInstaller roots them at `resolve_app_paths().data_dir / "ai-models"`,
+    # a PlatformDirs location written at runtime, so no glob over the source tree
+    # can pick them up.
+    #
+    # The split cost two things. `resources/ffmpeg/**` matched nothing, because
+    # fetch_ffmpeg writes three flat files and `**` needs a directory to descend
+    # into. And splitting changed the bundled layout, so the backend landed
+    # somewhere other than Contents/Resources/resources/backend/ and packaging
+    # verification failed on a missing artifact.
+    assert '"resources/**"' in tauri
+
+
+def test_model_packs_are_never_bundled_into_the_installer() -> None:
+    """The reason `resources/**` is safe, asserted rather than assumed.
+
+    Packs are rooted at the PlatformDirs data directory and written at runtime,
+    so no glob over the source tree can sweep them into the bundle. If that ever
+    changes, `resources/**` stops being safe and this fails first.
+    """
+    installer = (ROOT / "backend" / "app" / "services" / "ai" / "model_installation.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'MODEL_ROOT_NAME = "ai-models"' in installer
+    assert "resolve_app_paths().data_dir / MODEL_ROOT_NAME" in installer
+    assert "src-tauri" not in installer
 
 
 def test_every_bundled_resource_glob_matches_something() -> None:
