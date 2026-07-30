@@ -420,9 +420,15 @@ jobs:
           set -euo pipefail
           mkdir -p release
           # One SHA256SUMS covering every artifact, which is what a verifier wants.
+          # `tr -d '\r'` because the Windows job writes its SHA256SUMS with CRLF.
+          # Those lines then end in a carriage return, so the completeness check
+          # below matched nothing for the three Windows installers even though
+          # their checksums were present and correct.
           find artifacts -name SHA256SUMS -print0 \
             | sort -z \
             | xargs -0 cat \
+            | tr -d '\r' \
+            | sed '/^$/d' \
             | sort -u > release/SHA256SUMS
           echo "--- merged checksums:"
           cat release/SHA256SUMS
