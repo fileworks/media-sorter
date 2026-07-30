@@ -266,18 +266,24 @@ jobs:
       - name: Install project dependencies
         run: make install
 
+      - name: Verify deterministic branding
+        run: make branding-check
+
+      - name: Bundle Python backend (PyInstaller)
+        run: make bundle-backend
+
+      # After the backend bundle, not before it. tauri.conf.json declares
+      # resources/backend/** and the Tauri build script validates that glob, so
+      # cargo cannot even check this crate until PyInstaller has produced it.
+      # Running first is why v1.1.0 tagged but shipped nothing: all three
+      # package jobs died on "path matching resources/backend/** not found",
+      # and the release step was skipped.
       - name: Verify native Rust source
         working-directory: frontend/src-tauri
         run: |
           cargo fmt --check
           cargo check --locked
           cargo test --locked
-
-      - name: Verify deterministic branding
-        run: make branding-check
-
-      - name: Bundle Python backend (PyInstaller)
-        run: make bundle-backend
 
       - name: Bundle static ffmpeg + ffprobe
         # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
