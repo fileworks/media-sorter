@@ -157,7 +157,8 @@ export interface SamplePresentation {
 }
 
 export function samplePresentation(sample: SampleEncode): SamplePresentation {
-  const outcome = sample.passed === true ? "passed" : sample.passed === false ? "failed" : "unproven";
+  const outcome =
+    sample.passed === true ? "passed" : sample.passed === false ? "failed" : "unproven";
   return {
     canCompare: sample.comparable && sample.candidate_path !== null,
     scope: sample.sampling_scope,

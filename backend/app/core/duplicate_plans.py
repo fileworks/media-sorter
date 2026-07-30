@@ -224,6 +224,7 @@ class ResolvedOutcome(BaseModel):
 
     member_id: str
     kind: OutcomeKind
+    expected_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     destination_path: str | None = None
     quarantine_reason: str | None = None
     #: True when the action changes the *input* — which a Copy-mode user did not

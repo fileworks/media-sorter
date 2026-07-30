@@ -10,7 +10,7 @@ import sqlite3
 import tempfile
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -103,9 +103,13 @@ def _atomic_sqlite_snapshot(source: Path, destination: Path) -> None:
     temp_path = Path(raw_temp)
     temp_path.unlink(missing_ok=True)
     try:
-        with sqlite3.connect(source) as source_db, sqlite3.connect(temp_path) as target_db:
+        with (
+            closing(sqlite3.connect(source)) as source_db,
+            closing(sqlite3.connect(temp_path)) as target_db,
+            target_db,
+        ):
             source_db.backup(target_db)
-        with sqlite3.connect(temp_path) as verification:
+        with closing(sqlite3.connect(temp_path)) as verification:
             result = verification.execute("PRAGMA integrity_check").fetchone()
             if result is None or result[0] != "ok":
                 raise StateMigrationError(f"SQLite verification failed for {source}")
@@ -123,10 +127,14 @@ def _sqlite_content_fingerprint(path: Path) -> str:
     temp_path = Path(raw_temp)
     temp_path.unlink(missing_ok=True)
     try:
-        with sqlite3.connect(path) as source_db, sqlite3.connect(temp_path) as target_db:
+        with (
+            closing(sqlite3.connect(path)) as source_db,
+            closing(sqlite3.connect(temp_path)) as target_db,
+            target_db,
+        ):
             source_db.backup(target_db)
         digest = hashlib.sha256()
-        with sqlite3.connect(temp_path) as snapshot:
+        with closing(sqlite3.connect(temp_path)) as snapshot:
             for statement in snapshot.iterdump():
                 digest.update(statement.encode("utf-8"))
                 digest.update(b"\n")

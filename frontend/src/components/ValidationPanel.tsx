@@ -67,10 +67,7 @@ export function ValidationPanel({ rootId }: { rootId: string }) {
   return (
     <section className="space-y-3" aria-labelledby="validation-panel-title">
       <header className="space-y-1">
-        <h2
-          id="validation-panel-title"
-          className="text-base font-semibold text-foreground"
-        >
+        <h2 id="validation-panel-title" className="text-base font-semibold text-foreground">
           {t("validation.title")}
         </h2>
         {data.unreachable_scopes.length > 0 ? (

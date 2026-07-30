@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from app.core.database import FILE_OPERATIONS_TABLE, OPERATIONS_TABLE, DatabaseManager
@@ -30,7 +31,7 @@ def test_category_column_migrated_onto_old_db(tmp_path: Path) -> None:
     """A pre-existing DB without `category` gets the column added in place."""
     db = _manager(tmp_path)
     # Simulate the complete v1 schema before tagging/category columns existed.
-    with sqlite3.connect(db.db_path) as conn:
+    with closing(sqlite3.connect(db.db_path)) as conn, conn:
         conn.execute(
             OPERATIONS_TABLE.replace(
                 "    future_dates INTEGER NOT NULL DEFAULT 0,\n"

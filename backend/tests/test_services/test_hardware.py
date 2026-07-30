@@ -161,7 +161,7 @@ def test_build_encoder_off_returns_none() -> None:
     from app.services.ai.encoder_factory import build_encoder
 
     config = Config(ai_model_tier="off")
-    result = build_encoder(config, _make_profile("off"))
+    result = build_encoder(config, _make_profile("off"), MagicMock())
     assert result is None
 
 
@@ -171,33 +171,33 @@ def test_build_encoder_lite_returns_encoder_when_available() -> None:
     from app.services.ai.encoder_factory import build_encoder
 
     mock_encoder = MagicMock(spec=ClipEmbedder)
-    mock_encoder.available = True
     mock_encoder.model_id = "clip-vit-b-32"
+    model_store = MagicMock()
+    model_store.component_paths.return_value = {"image": MagicMock(), "text": MagicMock()}
 
     config = Config(ai_model_tier="auto")
     profile = _make_profile("lite")
 
     with patch("app.services.ai.encoder_factory.ClipEmbedder", return_value=mock_encoder):
-        result = build_encoder(config, profile)
+        result = build_encoder(config, profile, model_store)
 
     assert result is mock_encoder
 
 
 def test_build_encoder_returns_none_when_model_unavailable() -> None:
     from app.core.config import Config
-    from app.services.ai.clip_embedder import ClipEmbedder
     from app.services.ai.encoder_factory import build_encoder
-
-    mock_encoder = MagicMock(spec=ClipEmbedder)
-    mock_encoder.available = False
 
     config = Config(ai_model_tier="auto")
     profile = _make_profile("lite")
+    model_store = MagicMock()
+    model_store.component_paths.return_value = None
 
-    with patch("app.services.ai.encoder_factory.ClipEmbedder", return_value=mock_encoder):
-        result = build_encoder(config, profile)
+    with patch("app.services.ai.encoder_factory.ClipEmbedder") as constructor:
+        result = build_encoder(config, profile, model_store)
 
     assert result is None
+    constructor.assert_not_called()
 
 
 def test_build_encoder_standard_uses_siglip_when_available() -> None:
@@ -206,38 +206,38 @@ def test_build_encoder_standard_uses_siglip_when_available() -> None:
     from app.services.ai.siglip_encoder import SiglipOnnxEncoder
 
     mock_siglip = MagicMock(spec=SiglipOnnxEncoder)
-    mock_siglip.available = True
     mock_siglip.model_id = "siglip2-base-patch16-256"
+    model_store = MagicMock()
+    model_store.component_paths.return_value = {
+        "vision": MagicMock(),
+        "text": MagicMock(),
+        "tokenizer": MagicMock(),
+    }
 
     config = Config(ai_model_tier="standard")
     profile = _make_profile("standard")
 
     with patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder", return_value=mock_siglip):
-        result = build_encoder(config, profile)
+        result = build_encoder(config, profile, model_store)
 
     assert result is mock_siglip
 
 
-def test_build_encoder_standard_falls_back_to_clip_when_siglip_unavailable() -> None:
+def test_build_encoder_standard_does_not_silently_fall_back_to_another_pack() -> None:
     from app.core.config import Config
-    from app.services.ai.clip_embedder import ClipEmbedder
     from app.services.ai.encoder_factory import build_encoder
-    from app.services.ai.siglip_encoder import SiglipOnnxEncoder
-
-    mock_siglip = MagicMock(spec=SiglipOnnxEncoder)
-    mock_siglip.available = False  # e.g. onnxruntime/weights missing, offline
-
-    mock_clip = MagicMock(spec=ClipEmbedder)
-    mock_clip.available = True
-    mock_clip.model_id = "clip-vit-b-32"
 
     config = Config(ai_model_tier="standard")
     profile = _make_profile("standard")
+    model_store = MagicMock()
+    model_store.component_paths.return_value = None
 
     with (
-        patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder", return_value=mock_siglip),
-        patch("app.services.ai.encoder_factory.ClipEmbedder", return_value=mock_clip),
+        patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder") as siglip,
+        patch("app.services.ai.encoder_factory.ClipEmbedder") as clip,
     ):
-        result = build_encoder(config, profile)
+        result = build_encoder(config, profile, model_store)
 
-    assert result is mock_clip
+    assert result is None
+    siglip.assert_not_called()
+    clip.assert_not_called()

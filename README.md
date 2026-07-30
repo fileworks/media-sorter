@@ -229,7 +229,8 @@ with `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_SOURCE_DIRECTORY`, `MEDIASORT_AI_TAGGI
 | `MEDIASORT_PORT` | `8000` | Port the backend binds to |
 | `MEDIASORT_LOG_LEVEL` | `INFO` | Backend log level: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `MEDIASORT_DEBUG` | `false` | Enables verbose/debug server behaviour |
-| `MEDIASORT_CLIP_MODEL_DIR` | fastembed cache | Where the local CLIP model is cached/loaded from |
+| `MEDIASORT_MODEL_DIR` | platform data dir / `ai-models` | Application-managed directory for verified optional AI model packs |
+| `MEDIASORT_MODEL_MIRROR_URL` | Hugging Face pinned revisions | Optional HTTPS mirror root for self-hosted model packs |
 | `MEDIASORT_API_URL` | `http://localhost:8000` | Base URL the **CLI** talks to |
 
 ---
@@ -299,7 +300,7 @@ Choose a **provider**:
 
 | Provider | Cost | What you need |
 |----------|------|----------------|
-| **Local** *(default)* | **Free, offline, no key** | Nothing — runs on your machine. The first sort downloads a one-time model (~a few hundred MB). Edit `ai_tagging_labels` to choose the vocabulary it scores against. |
+| **Local** *(default)* | **Free, offline, no key** | Install the selected model once from the AI settings. Files are pinned and checksum-verified, and inference is offline. Edit `ai_tagging_labels` to choose the vocabulary it scores against. |
 | **Azure AI Vision** | Free **5,000/mo** (F0 tier) | Create a *Computer Vision* resource in the [Azure portal](https://portal.azure.com) → set `ai_tagging_endpoint` + `ai_tagging_api_key`. |
 | **Imagga** | Free **~1,000/mo** | Sign up at [imagga.com](https://imagga.com/auth/signup) → set `ai_tagging_api_key` + `ai_tagging_api_secret`. |
 | **Google Cloud Vision** | Free **1,000/mo** | Enable the [Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com) and create an API key → set `ai_tagging_api_key`. |
@@ -308,8 +309,8 @@ Choose a **provider**:
 (0–1) sets the minimum confidence to keep a tag.
 
 The **local** engine is hardware-aware: MediaSorter probes your CPU/RAM/GPU and recommends a
-model tier — `lite` (CLIP, runs anywhere) or `standard`/`max` (SigLIP 2, more accurate, one-time
-~100 MB download). On a machine below the minimum it auto-disables local AI and points you to a
+model tier — `lite` (CLIP, runs anywhere) or `standard`/`max` (SigLIP 2, more accurate). Model
+files are optional and installed explicitly from the AI settings. On a machine below the minimum it auto-disables local AI and points you to a
 cloud provider instead. Pick a heavier tier than recommended and the UI flags it *"may be slow"*.
 
 Rules match the source file on `extension`, `filename_contains`, `size` (bytes), or

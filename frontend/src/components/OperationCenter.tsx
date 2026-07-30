@@ -57,8 +57,7 @@ export function OperationCenter({
         kind: t(`operations.kind.${state.active.kind}`),
       })
     : state.recent.some(
-          (operation) =>
-            operation.recoveryState === "required" || operation.counts.failed > 0,
+          (operation) => operation.recoveryState === "required" || operation.counts.failed > 0,
         )
       ? t("operations.needsAttention")
       : state.unread.length > 0
@@ -78,7 +77,9 @@ export function OperationCenter({
           <FiActivity className="h-3.5 w-3.5" aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold text-foreground">{t("operations.title")}</span>
+          <span className="block text-xs font-semibold text-foreground">
+            {t("operations.title")}
+          </span>
           <span className={`block truncate text-[11px] ${TONE_CLASS[badge.tone]}`}>
             {badge.count > 0 ? `${badge.count} · ${badgeTitle}` : badgeTitle}
           </span>
@@ -111,9 +112,7 @@ export function OperationCenter({
       {expanded && (
         <ul className="divide-y divide-border border-t border-border">
           {state.recent.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-muted-foreground">
-              {t("operations.empty")}
-            </li>
+            <li className="px-3 py-2 text-xs text-muted-foreground">{t("operations.empty")}</li>
           ) : (
             state.recent.slice(0, 20).map((operation) => {
               const report = reportView(operation);
@@ -192,9 +191,7 @@ export function ExecutePreflight({
         <h2 id="execute-preflight-title" className="text-base font-semibold text-foreground">
           {t("preflight.title")}
         </h2>
-        <p className="text-xs text-muted-foreground">
-          {t("preflight.description")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("preflight.description")}</p>
       </header>
 
       <section className="rounded-xl bg-muted/60 p-4" aria-labelledby="rerunnable-effects">

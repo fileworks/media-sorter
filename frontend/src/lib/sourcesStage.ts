@@ -63,7 +63,10 @@ export interface Conflict {
 }
 
 function normalize(path: string): string {
-  return path.replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
+  return path
+    .replace(/[\\/]+$/, "")
+    .replace(/\\/g, "/")
+    .toLowerCase();
 }
 
 /**
@@ -214,7 +217,9 @@ export function sourcesReadiness(cards: RootCard[]): SourcesReadiness {
   return {
     ready: blocking.length === 0,
     reason: blocking[0]?.message ?? null,
-    warnings: conflicts.filter((conflict) => !conflict.blocking).map((conflict) => conflict.message),
+    warnings: conflicts
+      .filter((conflict) => !conflict.blocking)
+      .map((conflict) => conflict.message),
   };
 }
 
@@ -297,9 +302,14 @@ export function cardStatus(card: RootCard, conflicts: Conflict[]): CardStatus {
     return { tone: "warning", label: "Check this", detail: own[0].message };
   }
   if (card.state === "unknown") {
-    return { tone: "warning", label: "Not checked", detail: "This folder has not been scanned yet." };
+    return {
+      tone: "warning",
+      label: "Not checked",
+      detail: "This folder has not been scanned yet.",
+    };
   }
-  const indexed = card.indexedFiles === null ? "not indexed" : `${card.indexedFiles.toLocaleString()} files`;
+  const indexed =
+    card.indexedFiles === null ? "not indexed" : `${card.indexedFiles.toLocaleString()} files`;
   const freshness =
     card.freshness === "fresh"
       ? "up to date"

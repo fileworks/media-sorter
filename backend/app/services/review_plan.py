@@ -518,16 +518,19 @@ def _outcome_for(
     destination_root: Path | None,
 ) -> ResolvedOutcome:
     """The one place a decision becomes something the executor could perform."""
+    expected_sha256 = member.evidence.sha256
     if member.protected:
         return ResolvedOutcome(
             member_id=member.member_id,
             kind="no_action_reference",
+            expected_sha256=expected_sha256,
             explanation="Reference folders are compared against, never changed.",
         )
     if decision is None or decision.action == "skip":
         return ResolvedOutcome(
             member_id=member.member_id,
             kind="skip",
+            expected_sha256=expected_sha256,
             explanation="Left where it is; nothing will touch this file.",
         )
     if decision.action == "quarantine":
@@ -538,6 +541,7 @@ def _outcome_for(
         return ResolvedOutcome(
             member_id=member.member_id,
             kind="quarantine",
+            expected_sha256=expected_sha256,
             quarantine_reason="duplicate",
             mutates_source=mutates,
             requires_acknowledgement=mutates,
@@ -551,6 +555,7 @@ def _outcome_for(
         return ResolvedOutcome(
             member_id=member.member_id,
             kind="skip",
+            expected_sha256=expected_sha256,
             explanation="Already in the destination; it stays exactly where it is.",
         )
     destination = (
@@ -560,12 +565,14 @@ def _outcome_for(
         return ResolvedOutcome(
             member_id=member.member_id,
             kind="copy_to_destination",
+            expected_sha256=expected_sha256,
             destination_path=destination,
             explanation="Copied to the destination and kept where it is now.",
         )
     return ResolvedOutcome(
         member_id=member.member_id,
         kind="move_to_destination",
+        expected_sha256=expected_sha256,
         destination_path=destination,
         mutates_source=True,
         explanation="Moved to the destination after the copy is verified.",

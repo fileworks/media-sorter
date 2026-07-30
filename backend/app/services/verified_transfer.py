@@ -162,17 +162,54 @@ class _TransferRequest:
 # ---------------------------------------------------------------------- #
 
 
-def stream_sha256(path: Path, *, chunk_bytes: int = TRANSFER_CHUNK_BYTES) -> tuple[str, int]:
+def stream_sha256(
+    path: Path,
+    *,
+    chunk_bytes: int = TRANSFER_CHUNK_BYTES,
+    on_progress: ProgressCallback | None = None,
+) -> tuple[str, int]:
     """Hash a regular file with bounded memory."""
     if chunk_bytes < 4096:
         raise ValueError("hash chunk size must be at least 4096 bytes")
     digest = hashlib.sha256()
     size = 0
+    expected_size = path.stat().st_size
     with _open_regular_source(path) as handle:
         while chunk := handle.read(chunk_bytes):
             digest.update(chunk)
             size += len(chunk)
+            if on_progress is not None:
+                on_progress(size, max(size, expected_size))
     return digest.hexdigest(), size
+
+
+def revalidate_sha256(
+    path: Path,
+    *,
+    expected_sha256: str | None = None,
+    on_progress: ProgressCallback | None = None,
+) -> tuple[str, int]:
+    """Measure complete bytes and reject a file that changes during the read."""
+    request = _TransferRequest(
+        action_id=f"validate-{uuid.uuid4().hex}",
+        source=path,
+        destination=path.with_name(f".{path.name}.validation-only"),
+        removes_source=False,
+        expected_sha256=expected_sha256,
+        expected_size_bytes=None,
+    )
+    before = _snapshot_source(request, path)
+    observed_sha256, observed_size = stream_sha256(path, on_progress=on_progress)
+    _assert_source_unchanged(request, path, before)
+    if expected_sha256 is not None and observed_sha256 != expected_sha256:
+        raise _error(
+            request,
+            "source_drift",
+            "Current content no longer matches the reviewed digest.",
+            observed_size=observed_size,
+            observed_sha256=observed_sha256,
+        )
+    return observed_sha256, observed_size
 
 
 def stage_verified_copy(
@@ -409,16 +446,16 @@ def execute_transfer(
     """Run an authorized manifest action through the protocol its volumes support.
 
     A move whose destination shares the source volume is published by adding a
-    second name for the same content, which needs no byte copy and no re-read.
-    Every other transfer stages, verifies, and commits a copy. In both cases the
-    source is removed only after the destination is verified and the commit is
-    durably journalled.
+    second name for the same content after a fresh full-content digest. Every
+    other transfer hashes while staging, verifies, and commits a copy. In both
+    cases the source is removed only after the destination is verified and the
+    commit is durably journalled.
     """
     return _run(
         _request_from_action(action),
         journal=journal,
         on_progress=on_progress,
-        rehash_source=rehash_source,
+        rehash_source=(rehash_source or action.effects.source == "remove_after_verification"),
     )
 
 
@@ -441,7 +478,7 @@ def transfer_path(
         ),
         journal=journal,
         on_progress=on_progress,
-        rehash_source=False,
+        rehash_source=move,
     )
 
 
@@ -457,7 +494,12 @@ def _run(
     _prepare_destination_directory(request)
 
     if request.removes_source and _same_volume(request.source, request.destination.parent):
-        return _transfer_same_volume(request, journal=journal, rehash_source=rehash_source)
+        return _transfer_same_volume(
+            request,
+            journal=journal,
+            rehash_source=rehash_source,
+            on_progress=on_progress,
+        )
     return _transfer_staged(request, journal=journal, on_progress=on_progress)
 
 
@@ -466,6 +508,7 @@ def _transfer_same_volume(
     *,
     journal: DurableActionJournal | None,
     rehash_source: bool,
+    on_progress: ProgressCallback | None,
 ) -> TransferResult:
     source = request.source
     destination = request.destination
@@ -477,8 +520,10 @@ def _transfer_same_volume(
     integrity_source: IntegritySource = (
         "revalidated_identity" if request.is_authorized else "same_inode"
     )
+    observed_hash: str | None = None
+    observed_size: int | None = None
     if rehash_source:
-        observed_hash, observed_size = stream_sha256(source)
+        observed_hash, observed_size = stream_sha256(source, on_progress=on_progress)
         if request.is_authorized and (
             observed_hash != request.expected_sha256 or observed_size != request.expected_size_bytes
         ):
@@ -489,8 +534,13 @@ def _transfer_same_volume(
                 observed_size=observed_size,
                 observed_sha256=observed_hash,
             )
+        _assert_source_unchanged(request, source, before)
         integrity_source = "measured"
-    integrity = _identity_evidence(request)
+    integrity = _identity_evidence(
+        request,
+        observed_sha256=observed_hash,
+        observed_size_bytes=observed_size,
+    )
     _record(journal, request, "integrity_verified", "source_verified", integrity=integrity)
 
     _record(journal, request, "committing", "source_verified")
@@ -684,7 +734,12 @@ def _remove_verified_source(
         ) from exc
 
 
-def _identity_evidence(request: _TransferRequest) -> IntegrityEvidence | None:
+def _identity_evidence(
+    request: _TransferRequest,
+    *,
+    observed_sha256: str | None = None,
+    observed_size_bytes: int | None = None,
+) -> IntegrityEvidence | None:
     """Evidence for content published without a byte copy.
 
     The destination is a second name for the revalidated source inode, so an
@@ -692,6 +747,21 @@ def _identity_evidence(request: _TransferRequest) -> IntegrityEvidence | None:
     disagree with it. Without a manifest there is no hash to attest, and the
     inode identity is reported through ``integrity_source`` instead.
     """
+    if observed_sha256 is not None and observed_size_bytes is not None:
+        return IntegrityEvidence(
+            expected_sha256=request.expected_sha256 or observed_sha256,
+            observed_source_sha256=observed_sha256,
+            observed_result_sha256=observed_sha256,
+            expected_size_bytes=(
+                request.expected_size_bytes
+                if request.expected_size_bytes is not None
+                else observed_size_bytes
+            ),
+            observed_source_size_bytes=observed_size_bytes,
+            observed_result_size_bytes=observed_size_bytes,
+            verified=True,
+            verified_at=utc_now(),
+        )
     if request.expected_sha256 is None or request.expected_size_bytes is None:
         return None
     return IntegrityEvidence(

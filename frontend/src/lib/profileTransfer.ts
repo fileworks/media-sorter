@@ -40,7 +40,14 @@ export interface ProfileSource {
   name: string;
   transferMode: "copy" | "move";
   settings: Record<string, unknown>;
-  roots: { rootId: string; role: RootRole; path: string; displayName: string | null; priority: number; exclusions: string[] }[];
+  roots: {
+    rootId: string;
+    role: RootRole;
+    path: string;
+    displayName: string | null;
+    priority: number;
+    exclusions: string[];
+  }[];
   catalogMode: "application_data" | "portable";
 }
 
@@ -108,7 +115,10 @@ export function parseProfile(raw: string, knownKeys: string[] = []): ParsedProfi
   if (knownKeys.length > 0) {
     for (const key of Object.keys(candidate.settings ?? {})) {
       if (!knownKeys.includes(key)) {
-        problems.push({ kind: "unknown_setting", detail: `${key} is not a setting this build knows` });
+        problems.push({
+          kind: "unknown_setting",
+          detail: `${key} is not a setting this build knows`,
+        });
       }
     }
   }

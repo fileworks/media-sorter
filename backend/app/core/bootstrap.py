@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.services.ai.category_suggestion_service import CategorySuggestionService
     from app.services.ai.encoder_protocol import VisionEncoder
     from app.services.ai.hardware import HardwareProfile
+    from app.services.ai.model_installation import AiModelStore
     from app.services.analysis_service import AnalysisService
     from app.services.burst_detection import BurstDetectionService
     from app.services.config_service import ConfigService
@@ -70,6 +71,7 @@ class ServiceContainer:
         self._conversion_service: ConversionService | None = None
         self._repair_service: RepairService | None = None
         self._task_manager: TaskManager | None = None
+        self._model_task_manager: TaskManager | None = None
         self._preview_service: PreviewService | None = None
         self._report_service: ReportService | None = None
         self._rule_engine_service: RuleEngineService | None = None
@@ -85,6 +87,7 @@ class ServiceContainer:
         self._library_audit_service: LibraryAuditService | None = None
         self._burst_detection_service: BurstDetectionService | None = None
         self._destination_reconciliation_service: DestinationReconciliationService | None = None
+        self._ai_model_store: AiModelStore | None = None
 
     @property
     def config(self) -> Config:
@@ -128,13 +131,7 @@ class ServiceContainer:
             prev.ai_model_tier != config.ai_model_tier or prev.ai_allow_gpu != config.ai_allow_gpu
         )
         if encoder_changed:
-            self._encoder = None
-            self._encoder_built = False
-            self._ai_tagging_service = None
-            self._category_classifier_service = None
-            self._category_suggestion_service = None
-            self._sorting_service = None
-            self._preview_service = None
+            self.reset_encoder()
             return
 
         # Encoder unchanged — re-point the live services at the new config in place.
@@ -149,6 +146,31 @@ class ServiceContainer:
             self._ai_tagging_service = fresh_ai
             if self._sorting_service is not None:
                 self._sorting_service._ai = fresh_ai
+
+    def close(self) -> None:
+        """Release the lazy services that own temporary or persistent resources."""
+        for service in (
+            self._preview_service,
+            self._destination_reconciliation_service,
+        ):
+            close = getattr(service, "close", None)
+            if callable(close):
+                close()
+        if self._model_task_manager is not None:
+            self._model_task_manager.shutdown()
+
+    def reset_encoder(self) -> None:
+        """Drop the lazy encoder and every service that captured it."""
+        preview_close = getattr(self._preview_service, "close", None)
+        if callable(preview_close):
+            preview_close()
+        self._encoder = None
+        self._encoder_built = False
+        self._ai_tagging_service = None
+        self._category_classifier_service = None
+        self._category_suggestion_service = None
+        self._sorting_service = None
+        self._preview_service = None
 
     @property
     def config_service(self) -> "ConfigService":
@@ -275,6 +297,25 @@ class ServiceContainer:
         return self._task_manager
 
     @property
+    def model_task_manager(self) -> "TaskManager":
+        """Independent model transfer tasks must not block ordinary media work."""
+        if self._model_task_manager is None:
+            from app.background_tasks.task_manager import TaskManager
+
+            self._model_task_manager = TaskManager(max_terminal_tasks=5)
+            self._logger.debug("Initialized AI model TaskManager")
+        return self._model_task_manager
+
+    @property
+    def ai_model_store(self) -> "AiModelStore":
+        if self._ai_model_store is None:
+            from app.services.ai.model_installation import AiModelStore
+
+            self._ai_model_store = AiModelStore()
+            self._logger.debug("Initialized AI model store", root=str(self._ai_model_store.root))
+        return self._ai_model_store
+
+    @property
     def rule_engine_service(self) -> "RuleEngineService":
         if self._rule_engine_service is None:
             from app.services.rule_engine_service import RuleEngineService
@@ -296,14 +337,18 @@ class ServiceContainer:
     def encoder(self) -> "VisionEncoder | None":
         """Return the shared local vision encoder, built once via the factory.
 
-        Returns ``None`` when the hardware tier is "off" or the model is
-        unavailable (fastembed not installed / download failed).  Both
+        Returns ``None`` when the hardware tier is "off" or its verified model
+        pack is not installed. Both
         AITaggingService and CategoryClassifierService accept ``None`` gracefully.
         """
         if not self._encoder_built:
             from app.services.ai.encoder_factory import build_encoder
 
-            self._encoder = build_encoder(self._config, self.hardware_profile)
+            self._encoder = build_encoder(
+                self._config,
+                self.hardware_profile,
+                self.ai_model_store,
+            )
             self._encoder_built = True
             self._logger.debug("Initialized vision encoder", encoder=self._encoder)
         return self._encoder
@@ -512,6 +557,7 @@ def _make_lifespan(
                     container._task_manager.shutdown()
                 except Exception:  # pragma: no cover - shutdown is best-effort
                     logger.warning("Error during task manager shutdown", exc_info=True)
+            container.close()
 
     return lifespan
 

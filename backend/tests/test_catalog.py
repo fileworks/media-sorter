@@ -7,18 +7,22 @@ because a scan that actually finished failed to see it.
 
 from __future__ import annotations
 
+import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from app.core.catalog_schema import (
     CATALOG_SCHEMA_VERSION,
+    FINGERPRINT_ROLE,
+    FINGERPRINT_VERSION,
     CatalogCorruptionError,
     apply_schema,
     fingerprint,
 )
-from app.services.catalog import MediaCatalog, ObservedFile
+from app.services.catalog import MediaCatalog, ObservedFile, bounded_sample_sha256
 
 
 @pytest.fixture()
@@ -74,9 +78,88 @@ class TestSchema:
         assert base != fingerprint(size_bytes=2, mtime_ns=2, file_identity="3")
         assert base != fingerprint(size_bytes=1, mtime_ns=3, file_identity="3")
         assert base != fingerprint(size_bytes=1, mtime_ns=2, file_identity="4")
+        assert base != fingerprint(size_bytes=1, mtime_ns=2, ctime_ns=4, file_identity="3")
+        assert base != fingerprint(
+            size_bytes=1,
+            mtime_ns=2,
+            file_identity="3",
+            sample_sha256="a" * 64,
+        )
+        assert base.startswith(f"v{FINGERPRINT_VERSION}:{FINGERPRINT_ROLE}:")
+
+    def test_legacy_rows_are_cache_misses_and_migration_keeps_a_backup(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "catalog.db"
+        with MediaCatalog(path) as legacy:
+            legacy.register_root("r1", tmp_path)
+            _, records = _scan(legacy, "r1", [observed("a.jpg")])
+            legacy.store_hash(records[0], "a" * 64)
+            legacy._connection.execute(  # noqa: SLF001 - migration fixture
+                "UPDATE files SET fingerprint_version = 1"
+            )
+            legacy._connection.execute("PRAGMA user_version = 2")  # noqa: SLF001
+
+        with MediaCatalog(path) as migrated:
+            record = next(migrated.iter_files("r1"))
+            assert record.fingerprint_version == 1
+            assert migrated.hash_for(record) is None
+            assert migrated.diagnostics().files == 1
+
+        backup = path.with_name("catalog.db.v2.backup")
+        assert backup.is_file()
+        with closing(sqlite3.connect(backup)) as saved:
+            assert saved.execute("PRAGMA user_version").fetchone()[0] == 2
+
+    def test_catalog_can_rebuild_after_migration_from_the_backup(self, tmp_path: Path) -> None:
+        path = tmp_path / "catalog.db"
+        with MediaCatalog(path) as legacy:
+            legacy.register_root("r1", tmp_path)
+            _scan(legacy, "r1", [observed("a.jpg")])
+            legacy._connection.execute("PRAGMA user_version = 2")  # noqa: SLF001
+
+        with MediaCatalog(path):
+            pass
+        backup = path.with_name("catalog.db.v2.backup")
+
+        path.unlink()
+        path.write_bytes(backup.read_bytes())
+        with MediaCatalog(path) as rebuilt:
+            assert [item.relative_path for item in rebuilt.iter_files("r1")] == ["a.jpg"]
 
 
 class TestObservation:
+    def test_same_size_rewrite_with_restored_mtime_invalidates_cached_hash(
+        self, tmp_path: Path
+    ) -> None:
+        root = tmp_path / "library"
+        root.mkdir()
+        path = root / "a.jpg"
+        path.write_bytes(b"before")
+        original_mtime = path.stat().st_mtime_ns
+
+        with MediaCatalog(tmp_path / "rewrite.db") as catalog:
+            catalog.register_root("r1", root)
+            _, records = _scan(catalog, "r1", [ObservedFile.from_path(path, root)])
+            catalog.store_hash(records[0], "a" * 64)
+
+            path.write_bytes(b"after!")
+            os.utime(path, ns=(path.stat().st_atime_ns, original_mtime))
+            _, rescanned = _scan(catalog, "r1", [ObservedFile.from_path(path, root)])
+
+            assert rescanned[0].size_bytes == records[0].size_bytes
+            assert rescanned[0].mtime_ns == records[0].mtime_ns
+            assert rescanned[0].fingerprint != records[0].fingerprint
+            assert catalog.hash_for(rescanned[0]) is None
+
+    def test_bounded_sample_detects_a_windows_style_same_stat_rewrite(self, tmp_path: Path) -> None:
+        path = tmp_path / "sample.bin"
+        path.write_bytes(b"a" * 20_000)
+        first = bounded_sample_sha256(path)
+        path.write_bytes(b"b" + b"a" * 19_998 + b"c")
+
+        assert bounded_sample_sha256(path) != first
+
     def test_observing_the_same_path_twice_updates_one_row(self, catalog: MediaCatalog) -> None:
         catalog.register_root("r1", Path("/library"))
         _scan(catalog, "r1", [observed("a.jpg")])

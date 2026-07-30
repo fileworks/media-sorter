@@ -26,8 +26,13 @@ PlannedDisposition = Literal[
 
 
 def source_fingerprint(path: Path) -> str:
+    """Versioned non-destructive hint used only to detect preview drift."""
     observed = path.stat()
-    return f"{observed.st_size}:{observed.st_mtime_ns}:{observed.st_ino}"
+    return (
+        "v2:cache_hint:"
+        f"{observed.st_size}:{observed.st_mtime_ns}:"
+        f"{getattr(observed, 'st_ctime_ns', 0)}:{observed.st_ino}"
+    )
 
 
 class FrozenSortAction(BaseModel):

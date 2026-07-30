@@ -16,7 +16,9 @@ from __future__ import annotations
 import sqlite3
 from typing import Final
 
-CATALOG_SCHEMA_VERSION: Final = 2
+CATALOG_SCHEMA_VERSION: Final = 3
+FINGERPRINT_VERSION: Final = 2
+FINGERPRINT_ROLE: Final = "cache_hint"
 
 #: Bump the matching extractor version whenever a producer's output could
 #: differ for identical bytes. Rows carrying an older version are recomputed
@@ -59,6 +61,8 @@ CREATE TABLE IF NOT EXISTS files (
     ctime_ns       INTEGER,
     -- The stat fingerprint every derived fact below was computed from.
     fingerprint    TEXT NOT NULL,
+    fingerprint_version INTEGER NOT NULL DEFAULT 1,
+    fingerprint_role TEXT NOT NULL DEFAULT 'cache_hint',
     unit_id         TEXT,
     companion_role  TEXT,
     unit_primary    INTEGER NOT NULL DEFAULT 0,
@@ -159,10 +163,13 @@ def apply_schema(connection: sqlite3.Connection) -> int:
     connection.executescript(SCHEMA)
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(files)").fetchall()}
     additions = {
+        "ctime_ns": "INTEGER",
         "unit_id": "TEXT",
         "companion_role": "TEXT",
         "unit_primary": "INTEGER NOT NULL DEFAULT 0",
         "primary_relative_path": "TEXT",
+        "fingerprint_version": "INTEGER NOT NULL DEFAULT 1",
+        "fingerprint_role": "TEXT NOT NULL DEFAULT 'cache_hint'",
     }
     for column, declaration in additions.items():
         if column not in columns:
@@ -175,11 +182,23 @@ def apply_schema(connection: sqlite3.Connection) -> int:
     return CATALOG_SCHEMA_VERSION
 
 
-def fingerprint(*, size_bytes: int, mtime_ns: int, file_identity: str | None) -> str:
+def fingerprint(
+    *,
+    size_bytes: int,
+    mtime_ns: int,
+    ctime_ns: int | None = None,
+    file_identity: str | None,
+    sample_sha256: str | None = None,
+) -> str:
     """The cheap identity a derived fact is valid for.
 
-    Size and modification time catch ordinary edits; the filesystem identity
-    catches a same-size same-time replacement of a different file. Anything
-    that changes here invalidates the facts computed from it.
+    This is explicitly a cache hint, never destructive proof. Change time catches
+    in-place rewrites on POSIX filesystems; platforms whose change time is a
+    creation time add a bounded byte sample. Destructive actions independently
+    rehash the complete current bytes.
     """
-    return f"{size_bytes}:{mtime_ns}:{file_identity or '-'}"
+    return (
+        f"v{FINGERPRINT_VERSION}:{FINGERPRINT_ROLE}:{size_bytes}:{mtime_ns}:"
+        f"{ctime_ns if ctime_ns is not None else '-'}:{file_identity or '-'}:"
+        f"{sample_sha256 or '-'}"
+    )

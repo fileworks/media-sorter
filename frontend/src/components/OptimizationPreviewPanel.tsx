@@ -185,8 +185,8 @@ export function OptimizationPreviewPanel({
                 >
                   <span className="block text-foreground">{getBasename(sample.source_path)}</span>
                   <span className="block text-muted-foreground">
-                    {formatBytesShort(sample.source_bytes)} → {formatBytesShort(sample.candidate_bytes)}{" "}
-                    · {sample.sampling_scope}
+                    {formatBytesShort(sample.source_bytes)} →{" "}
+                    {formatBytesShort(sample.candidate_bytes)} · {sample.sampling_scope}
                   </span>
                 </button>
               </li>

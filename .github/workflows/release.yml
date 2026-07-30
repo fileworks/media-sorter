@@ -28,10 +28,6 @@ on:
         description: "URL or identifier for completed macOS/Windows clean-machine evidence"
         type: string
         default: ""
-      ffmpeg_win_tag:
-        description: "BtbN Windows ffmpeg tag for reproducible builds (e.g. autobuild-2025-01-30-12-56). Leave blank for rolling 'latest'."
-        type: string
-        default: ""
 
 # Cancel any in-flight build for the same ref so re-tagged pushes don't stack.
 concurrency:
@@ -39,15 +35,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Quality gate: re-verify the tagged commit passes the backend CI gate ──────
-  # semantic-release only tags commits already on main (so they passed CI to get
-  # merged), but this guards the case where a v* tag is pushed by hand onto a commit
-  # that never went through CI — we don't want to burn ~20 min building installers
-  # for a broken commit. Mirrors the full backend gate from ci.yml (ruff lint +
-  # format + mypy + pytest). The frontend build is not re-checked here; if it's broken the
-  # build job below fails at `npm run build` rather than producing a bad installer.
+  # A release never trusts that branch CI ran: tags and manual dispatches repeat
+  # every source and dependency gate against the exact commit being packaged.
   check-ci:
-    name: Verify backend CI gate passes
+    name: Verify complete release source gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,6 +52,18 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/pyproject.toml
 
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -72,6 +75,9 @@ jobs:
 
       - name: Verify deterministic branding
         run: make branding-check
+
+      - name: Report reviewed module growth
+        run: python scripts/check_module_growth.py
 
       - name: Lint — ruff
         working-directory: backend
@@ -88,6 +94,48 @@ jobs:
       - name: Run tests with coverage gate
         working-directory: backend
         run: python -m pytest tests/ --cov=app --cov-fail-under=80 -q
+
+      - name: Export shipped Python dependencies
+        working-directory: backend
+        run: >-
+          uv export --locked --all-extras --no-dev --no-emit-project
+          --format requirements-txt
+          --output-file dependency-audit-requirements.txt
+
+      - name: Audit shipped Python dependencies
+        working-directory: backend
+        run: |
+          uvx --from pip-audit==2.9.0 pip-audit --version
+          uvx --from pip-audit==2.9.0 pip-audit \
+            --requirement dependency-audit-requirements.txt --strict
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend format, lint, tests, build, and production audit
+        working-directory: frontend
+        run: |
+          npm run format:check
+          npm run lint
+          npm test
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
+      - name: Validate reviewed dependency suppressions
+        run: python scripts/validate_dependency_suppressions.py --check
+
+      - name: Audit Rust lock
+        working-directory: frontend/src-tauri
+        shell: bash
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          audit_args=()
+          while IFS= read -r advisory; do
+            audit_args+=(--ignore "$advisory")
+          done < <(python ../../scripts/validate_dependency_suppressions.py --ecosystem rust)
+          cargo audit --version
+          cargo audit "${audit_args[@]}"
 
   package:
     name: package (${{ matrix.label }})
@@ -218,6 +266,13 @@ jobs:
       - name: Install project dependencies
         run: make install
 
+      - name: Verify native Rust source
+        working-directory: frontend/src-tauri
+        run: |
+          cargo fmt --check
+          cargo check --locked
+          cargo test --locked
+
       - name: Verify deterministic branding
         run: make branding-check
 
@@ -227,17 +282,7 @@ jobs:
       - name: Bundle static ffmpeg + ffprobe
         # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
         # the single source of truth shared with local builds so they never drift.
-        # Pass FFMPEG_WIN_TAG when set (via workflow_dispatch input) for reproducible builds.
-        env:
-          # inputs.ffmpeg_win_tag is '' when pushed via tag (no inputs context) — falls through to 'latest'.
-          FFMPEG_WIN_TAG: ${{ inputs.ffmpeg_win_tag || 'latest' }}
         run: make bundle-ffmpeg
-
-      - name: Bundle local CLIP model (offline AI tagging)
-        # Downloads the CLIP image/text encoders into resources/clip/ so the
-        # frozen app's "local" AI tagger works fully offline. Requires the
-        # local-ai extra, installed by `make install` above.
-        run: make bundle-clip
 
       - name: Finalize permissions and sign nested native payloads
         env:

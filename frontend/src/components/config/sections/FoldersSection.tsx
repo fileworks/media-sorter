@@ -9,6 +9,7 @@ import { HELP } from "@/components/config/help";
 import { clampMargin } from "@/components/config/constants";
 import { useHardware } from "@/hooks/useHardware";
 import { useAiSuggestions } from "@/hooks/useAiSuggestions";
+import { useAiModels } from "@/hooks/useAiModels";
 import { isLocalAiOff, machineTooWeak } from "@/lib/aiTier";
 import type { SectionProps } from "@/components/config/constants";
 import { useI18n } from "@/i18n/I18nContext";
@@ -24,17 +25,24 @@ export function FoldersSection({ config, updateConfig }: SectionProps) {
     dismiss,
     clear,
   } = useAiSuggestions();
+  const { inventory: modelInventory } = useAiModels();
   // Smart Categorization is local-only, so it requires a usable local model.
   const localOff = hardware ? isLocalAiOff(config, hardware) : false;
   const tooWeak = machineTooWeak(hardware);
-  const categorizeBlocked = config.preserve_subfolders || localOff;
+  const requiredModel = modelInventory?.packs.find(
+    (pack) => pack.pack_id === modelInventory.required_pack_id,
+  );
+  const modelMissing = !localOff && requiredModel?.state !== "ready";
+  const categorizeBlocked = config.preserve_subfolders || localOff || modelMissing;
   const categorizeReason = config.preserve_subfolders
     ? t("config.folder.disablePreserve")
     : localOff
       ? tooWeak
         ? t("config.folder.machineWeak")
         : t("config.folder.enableLocal")
-      : undefined;
+      : modelMissing
+        ? t("config.folder.installLocal")
+        : undefined;
 
   const acceptSuggestion = (label: string) => {
     const existing = config.categorize_categories ?? [];

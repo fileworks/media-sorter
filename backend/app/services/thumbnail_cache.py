@@ -66,6 +66,7 @@ class ThumbnailCache:
                 content_sample.update(stream.read(_SAMPLE_BYTES))
         payload = "\0".join(
             (
+                "v2:cache_hint",
                 str(canonical),
                 str(observed.st_size),
                 str(observed.st_mtime_ns),

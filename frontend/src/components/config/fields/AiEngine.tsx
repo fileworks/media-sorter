@@ -13,6 +13,7 @@ import {
   type ResolvedTier,
 } from "@/lib/aiTier";
 import { useI18n } from "@/i18n/I18nContext";
+import { AiModelManager } from "@/components/config/fields/AiModelManager";
 
 /**
  * Capability chip: tells the user, in one line, whether their machine can run
@@ -135,6 +136,7 @@ export function ModelTierSelect({
         </FormRow>
       )}
 
+      {eff !== "off" && <AiModelManager />}
       <p className={cn("text-xs text-muted-foreground")}>{t("config.ai.download")}</p>
     </div>
   );

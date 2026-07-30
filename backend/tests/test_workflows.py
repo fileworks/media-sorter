@@ -13,10 +13,10 @@ def _workflow_text() -> str:
 def test_official_actions_use_node_24_compatible_generations() -> None:
     workflows = _workflow_text()
 
-    assert workflows.count("actions/checkout@v7") == 6
-    assert workflows.count("actions/setup-python@v7") == 4
+    assert workflows.count("actions/checkout@v7") == 7
+    assert workflows.count("actions/setup-python@v7") == 5
     assert workflows.count("actions/upload-artifact@v7") == 2
-    assert workflows.count("actions/setup-node@v7") == 3
+    assert workflows.count("actions/setup-node@v7") == 4
     assert workflows.count("actions/download-artifact@v8") == 1
 
     for stale in (
@@ -32,8 +32,8 @@ def test_official_actions_use_node_24_compatible_generations() -> None:
 def test_all_explicit_node_toolchains_use_node_24() -> None:
     workflows = _workflow_text()
 
-    assert workflows.count("Set up Node 24") == 3
-    assert workflows.count('node-version: "24"') == 3
+    assert workflows.count("Set up Node 24") == 4
+    assert workflows.count('node-version: "24"') == 4
     assert "Set up Node 20" not in workflows
     assert 'node-version: "20"' not in workflows
 
@@ -47,5 +47,10 @@ def test_manual_release_validation_cannot_publish_without_a_tag() -> None:
 
 def test_frozen_backend_bundles_runtime_resources() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    tauri = (ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
 
     assert "--collect-all=app.resources" in makefile
+    assert "bundle-clip" not in makefile
+    assert "bundle-clip" not in release
+    assert '"resources/**"' not in tauri

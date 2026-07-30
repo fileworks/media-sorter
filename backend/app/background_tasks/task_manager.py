@@ -38,7 +38,15 @@ def _eta_confidence(
 
 
 TaskStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
-OperationKind = Literal["analysis", "scan", "preview", "sort", "audit", "reconcile"]
+OperationKind = Literal[
+    "analysis",
+    "scan",
+    "preview",
+    "sort",
+    "audit",
+    "reconcile",
+    "model_download",
+]
 ProgressUnit = Literal["items", "bytes"]
 EtaConfidence = Literal["unknown", "low", "medium", "high"]
 TaskPhase = Literal[
@@ -51,6 +59,9 @@ TaskPhase = Literal[
     "sorting",
     "auditing",
     "reconciling",
+    "downloading_model",
+    "verifying_model",
+    "publishing_model",
 ]
 
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
@@ -521,6 +532,10 @@ class TaskManager:
 
     def get_task(self, task_id: str) -> Task | None:
         return self._tasks.get(task_id)
+
+    def tasks(self) -> tuple[Task, ...]:
+        """Return a stable snapshot for status surfaces."""
+        return tuple(self._tasks.values())
 
     def cancel_task(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)

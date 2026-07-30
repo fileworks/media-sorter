@@ -61,7 +61,9 @@ export function effectiveValue(
   defaults: Record<string, unknown> = {},
 ): EffectiveSetting {
   const saved =
-    definition.scope === "application" ? scopes.application[definition.key] : scopes.profile[definition.key];
+    definition.scope === "application"
+      ? scopes.application[definition.key]
+      : scopes.profile[definition.key];
   const hasRun = definition.key in scopes.run;
 
   let value: unknown;
@@ -172,7 +174,11 @@ export function scopeBadge(setting: EffectiveSetting): ScopeBadge {
     case "profile":
       return { label: "library", tone: "info", title: "Saved with this library profile." };
     case "application":
-      return { label: "app", tone: "neutral", title: "An application preference for this machine." };
+      return {
+        label: "app",
+        tone: "neutral",
+        title: "An application preference for this machine.",
+      };
     default:
       return { label: "default", tone: "neutral", title: "The built-in default." };
   }

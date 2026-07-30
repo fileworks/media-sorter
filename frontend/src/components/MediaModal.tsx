@@ -249,7 +249,7 @@ export function MediaModal({
               reference={primary}
               viewport={viewport}
               original={state.originalRequested}
-              label={showPair ? primary.label ?? "This file" : "Preview"}
+              label={showPair ? (primary.label ?? "This file") : "Preview"}
             />
             {showPair && secondary && (
               <Pane

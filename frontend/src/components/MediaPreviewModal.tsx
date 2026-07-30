@@ -394,7 +394,9 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                     className="rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{getBasename(member.source)}</span>
+                      <span className="font-medium text-foreground">
+                        {getBasename(member.source)}
+                      </span>
                       <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
                         {t(`preview.companionRole.${member.role}`)}
                       </span>
@@ -411,7 +413,10 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
                 ))}
               </ul>
               {current.unit_warnings?.map((warning) => (
-                <p key={warning} className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning">
+                <p
+                  key={warning}
+                  className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning"
+                >
                   {warning}
                 </p>
               ))}

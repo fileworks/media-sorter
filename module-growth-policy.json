@@ -1,0 +1,36 @@
+{
+  "reviewed_modules": [
+    {
+      "owner": "release-integrity",
+      "path": "scripts/release_integrity.py",
+      "rationale": "Package layout, signing, provenance, and smoke verification share one release contract.",
+      "warning_lines": 1050
+    },
+    {
+      "owner": "native-tool-supply-chain",
+      "path": "scripts/fetch_ffmpeg.py",
+      "rationale": "Download, archive validation, provenance, and atomic publication form one fail-closed transaction.",
+      "warning_lines": 450
+    },
+    {
+      "owner": "desktop-navigation",
+      "path": "frontend/src/pages/MainPage.tsx",
+      "rationale": "The page owns top-level stage orchestration; separable panels remain lazy components.",
+      "warning_lines": 950
+    },
+    {
+      "owner": "review-execution",
+      "path": "backend/app/services/review_execution.py",
+      "rationale": "Review preflight, execution, and reconciliation share one snapshot contract.",
+      "warning_lines": 450
+    }
+  ],
+  "schema_version": 1,
+  "static_catalogue_exemptions": [
+    "backend/app/resources/concepts.json",
+    "frontend/src/i18n/messages.ts",
+    "frontend/package-lock.json",
+    "frontend/src-tauri/Cargo.lock",
+    "backend/uv.lock"
+  ]
+}

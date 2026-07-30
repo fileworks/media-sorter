@@ -491,6 +491,10 @@ export interface TaskProgress {
   total: number;
   percentage: number;
   estimated_time_remaining_seconds?: number;
+  unit?: "items" | "bytes";
+  bytes_done?: number;
+  bytes_total?: number;
+  bytes_total_known?: boolean;
   /**
    * Coarse setup/processing stage, so the UI can show meaningful feedback during
    * work that happens before the per-file loop instead of a frozen 0%.
@@ -505,6 +509,9 @@ export interface TaskProgress {
     | "analyzing"
     | "previewing"
     | "sorting"
+    | "downloading_model"
+    | "verifying_model"
+    | "publishing_model"
     | null;
 }
 
@@ -524,7 +531,7 @@ export interface TaskFailure {
 
 export interface TaskStatus<TResult extends Record<string, unknown>> {
   task_id: string;
-  operation_kind: "analysis" | "scan" | "preview" | "sort";
+  operation_kind: "analysis" | "scan" | "preview" | "sort" | "model_download";
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: TaskProgress;
   partial: boolean;
@@ -535,6 +542,30 @@ export interface TaskStatus<TResult extends Record<string, unknown>> {
   failure: TaskFailure | null;
   result: TResult | null;
 }
+
+export type AiModelState = "not_installed" | "downloading" | "ready" | "error";
+
+export interface AiModelPackStatus {
+  pack_id: string;
+  model_id: string;
+  display_name: string;
+  state: AiModelState;
+  total_size: number;
+  installed_size: number;
+  license: string;
+  license_url: string;
+  source: string;
+  task_id: string | null;
+  error: string | null;
+}
+
+export interface AiModelInventory {
+  effective_tier: "off" | "lite" | "standard" | "max";
+  required_pack_id: string | null;
+  packs: AiModelPackStatus[];
+}
+
+export type AiModelTaskStatus = TaskStatus<Record<string, unknown>>;
 
 export interface PreviewItem {
   source: string;
@@ -568,12 +599,7 @@ export interface PreviewItem {
   companions?: Array<{
     source: string;
     destination: string | null;
-    role:
-      | "edit_sidecar"
-      | "motion_part"
-      | "raw_sibling"
-      | "thumbnail_part"
-      | "audio_note";
+    role: "edit_sidecar" | "motion_part" | "raw_sibling" | "thumbnail_part" | "audio_note";
     status: "attached" | "left_in_place";
     warning?: string | null;
     extracted_date?: string | null;
@@ -1206,6 +1232,36 @@ export class MediaSorterApiClient {
     return data;
   }
 
+  async getAiModels(): Promise<AiModelInventory> {
+    await this.ensureReady();
+    const { data } = await this.http.get<AiModelInventory>("/api/ai/models");
+    return data;
+  }
+
+  async installAiModel(packId: string): Promise<string> {
+    return this.startTask(`/api/ai/models/${encodeURIComponent(packId)}/install`, {});
+  }
+
+  async getAiModelTask(taskId: string, afterSequence = 0): Promise<AiModelTaskStatus> {
+    return this.taskStatus<AiModelTaskStatus>(
+      `/api/ai/models/tasks/${encodeURIComponent(taskId)}`,
+      afterSequence,
+    );
+  }
+
+  async cancelAiModelInstall(taskId: string): Promise<void> {
+    await this.cancelTask(`/api/ai/models/tasks/${encodeURIComponent(taskId)}/cancel`);
+  }
+
+  async removeAiModel(packId: string): Promise<AiModelPackStatus> {
+    await this.ensureReady();
+    const { data } = await this.http.delete<AiModelPackStatus>(
+      `/api/ai/models/${encodeURIComponent(packId)}`,
+      { data: { acknowledge_removal: true } },
+    );
+    return data;
+  }
+
   async getDiskSpace(): Promise<DiskSpaceResult> {
     await this.ensureReady();
     const { data } = await this.http.get<DiskSpaceResult>("/api/analysis/disk-space");
@@ -1353,9 +1409,7 @@ export class MediaSorterApiClient {
     return data;
   }
 
-  async executeAuditFixes(
-    planId: string,
-  ): Promise<{ plan_id: string; completed: number }> {
+  async executeAuditFixes(planId: string): Promise<{ plan_id: string; completed: number }> {
     await this.ensureReady();
     const { data } = await this.http.post<{ plan_id: string; completed: number }>(
       `/api/audit/plans/${encodeURIComponent(planId)}/execute`,
@@ -1398,10 +1452,9 @@ export class MediaSorterApiClient {
 
   async reconcileDestination(): Promise<ReconciliationReport> {
     await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationReport>(
-      "/api/reconciliation/compare",
-      { input_available: true },
-    );
+    const { data } = await this.http.post<ReconciliationReport>("/api/reconciliation/compare", {
+      input_available: true,
+    });
     return data;
   }
 
@@ -1433,20 +1486,15 @@ export class MediaSorterApiClient {
     confirmedProbable: string[],
   ): Promise<ReconciliationPlan> {
     await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationPlan>(
-      "/api/reconciliation/plan",
-      {
-        report_id: report.report_id,
-        finding_ids: findingIds,
-        confirm_probable: confirmedProbable,
-      },
-    );
+    const { data } = await this.http.post<ReconciliationPlan>("/api/reconciliation/plan", {
+      report_id: report.report_id,
+      finding_ids: findingIds,
+      confirm_probable: confirmedProbable,
+    });
     return data;
   }
 
-  async executeReconciliation(
-    planId: string,
-  ): Promise<{ plan_id: string; completed: number }> {
+  async executeReconciliation(planId: string): Promise<{ plan_id: string; completed: number }> {
     await this.ensureReady();
     const { data } = await this.http.post<{ plan_id: string; completed: number }>(
       `/api/reconciliation/plans/${encodeURIComponent(planId)}/execute`,
@@ -1621,10 +1669,12 @@ export class MediaSorterApiClient {
   }
 
   /** What enabling the high-confidence similar rule would affect, before consent. */
-  async previewSimilarRule(input: {
-    maxDistance?: number;
-    requireSameDimensions?: boolean;
-  } = {}): Promise<SimilarRulePreview> {
+  async previewSimilarRule(
+    input: {
+      maxDistance?: number;
+      requireSameDimensions?: boolean;
+    } = {},
+  ): Promise<SimilarRulePreview> {
     await this.ensureReady();
     const { data } = await this.http.post<SimilarRulePreview>("/api/review/similar-rule/preview", {
       max_distance: input.maxDistance ?? 0,
@@ -1660,15 +1710,17 @@ export class MediaSorterApiClient {
    * describe a different set than the list under it. A cursor from a different
    * query is refused with 400 rather than reinterpreted.
    */
-  async listCatalogView(options: {
-    cursor?: string | null;
-    limit?: number;
-    roles?: string[];
-    sort?: "path" | "size" | "modified";
-    descending?: boolean;
-    search?: string;
-    includeTotals?: boolean;
-  } = {}): Promise<CatalogViewPage> {
+  async listCatalogView(
+    options: {
+      cursor?: string | null;
+      limit?: number;
+      roles?: string[];
+      sort?: "path" | "size" | "modified";
+      descending?: boolean;
+      search?: string;
+      includeTotals?: boolean;
+    } = {},
+  ): Promise<CatalogViewPage> {
     await this.ensureReady();
     const { data } = await this.http.get<CatalogViewPage>("/api/review/view", {
       params: {
@@ -1695,10 +1747,7 @@ export class MediaSorterApiClient {
   }
 
   /** Permanently delete quarantined files. The only irreversible call here. */
-  async cleanupQuarantine(
-    recordIds: string[],
-    acknowledge: boolean,
-  ): Promise<CleanupOutcome> {
+  async cleanupQuarantine(recordIds: string[], acknowledge: boolean): Promise<CleanupOutcome> {
     await this.ensureReady();
     const { data } = await this.http.post<CleanupOutcome>("/api/quarantine/cleanup", {
       record_ids: recordIds,
@@ -1726,10 +1775,13 @@ export class MediaSorterApiClient {
     options: { rootId?: string; confirmFullReset?: boolean } = {},
   ): Promise<{ reset: boolean; path: string }> {
     await this.ensureReady();
-    const { data } = await this.http.post<{ reset: boolean; path: string }>("/api/catalog/rebuild", {
-      root_id: options.rootId ?? null,
-      confirm_full_reset: options.confirmFullReset ?? false,
-    });
+    const { data } = await this.http.post<{ reset: boolean; path: string }>(
+      "/api/catalog/rebuild",
+      {
+        root_id: options.rootId ?? null,
+        confirm_full_reset: options.confirmFullReset ?? false,
+      },
+    );
     return data;
   }
 

@@ -105,18 +105,14 @@ describe("English/German resources", () => {
         if (ts.isJsxText(node)) {
           const text = node.text.trim();
           const keyboardShortcut =
-            /^\(?Alt\+[A-Za-z0-9↑↓…]+(?:\s*\/\s*Alt\+[A-Za-z0-9↑↓…]+)?\)?$/.test(
-              text,
-            );
+            /^\(?Alt\+[A-Za-z0-9↑↓…]+(?:\s*\/\s*Alt\+[A-Za-z0-9↑↓…]+)?\)?$/.test(text);
           if (/[A-Za-z]/.test(text) && !keyboardShortcut) rawText.push(text);
         }
         ts.forEachChild(node, visit);
       };
       visit(sourceFile);
       expect(rawText, panel).toEqual([]);
-      expect(source, panel).not.toMatch(
-        /t\(\s*["'][^"']+["']\s*,\s*undefined\s*,\s*["'][A-Za-z]/,
-      );
+      expect(source, panel).not.toMatch(/t\(\s*["'][^"']+["']\s*,\s*undefined\s*,\s*["'][A-Za-z]/);
     }
   });
 });
