@@ -130,8 +130,10 @@ jobs:
       - name: Install the test runner
         run: python -m pip install pytest
 
+      # Repo root, not backend/: this exercises scripts/fetch_ffmpeg.py with
+      # nothing but pytest installed, and backend/tests/conftest.py imports
+      # FastAPI, so collecting from there failed before a single test ran.
       - name: Exercise malicious archives on the native filesystem
-        working-directory: backend
         run: python -m pytest tests/test_fetch_ffmpeg.py -v
 
   # ── Frontend: typecheck / build ──────────────────────────────────────────────
