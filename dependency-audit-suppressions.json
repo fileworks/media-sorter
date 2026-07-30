@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "suppressions": [
+    {
+      "advisory": "RUSTSEC-2026-0194",
+      "created": "2026-07-29",
+      "ecosystem": "rust",
+      "evidence": "Tauri 1.8.3 reaches quick-xml through plist and Windows notification support. MediaSorter does not parse user-controlled XML through either dependency; plist input is build-owned and notification XML is generated, not parsed. Upgrade is blocked until a compatible Tauri 1 transitive release adopts quick-xml 0.41 or MediaSorter completes its separately reviewed Tauri migration.",
+      "expires": "2026-08-31",
+      "owner": "fileworks/release",
+      "scope": "frontend/src-tauri/Cargo.lock"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0195",
+      "created": "2026-07-29",
+      "ecosystem": "rust",
+      "evidence": "Tauri 1.8.3 reaches quick-xml through plist and Windows notification support. MediaSorter does not use NsReader or parse user-controlled XML through either dependency; plist input is build-owned and notification XML is generated, not parsed. Upgrade is blocked until a compatible Tauri 1 transitive release adopts quick-xml 0.41 or MediaSorter completes its separately reviewed Tauri migration.",
+      "expires": "2026-08-31",
+      "owner": "fileworks/release",
+      "scope": "frontend/src-tauri/Cargo.lock"
+    }
+  ]
+}
