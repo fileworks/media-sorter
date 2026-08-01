@@ -122,6 +122,15 @@ jobs:
           npm run build
           npm audit --omit=dev --audit-level=high
 
+      - name: Verify native source independently of package resources
+        working-directory: frontend/src-tauri
+        env:
+          TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
+        run: |
+          cargo fmt --check
+          cargo check --locked
+          cargo test --locked
+
       - name: Validate reviewed dependency suppressions
         run: python scripts/validate_dependency_suppressions.py --check
 

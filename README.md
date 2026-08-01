@@ -203,7 +203,10 @@ python -m cli.main sort report <task-id>
 python -m cli.main report export <operation-id> --format csv -o report.csv
 ```
 
-Point it at a non-default backend with `--api-url` (or `MEDIASORT_API_URL`). Commands:
+Point it at a non-default backend with `--api-url` (or `MEDIASORT_API_URL`).
+Every backend launch uses a fresh capability token; pass the token printed by the
+headless launcher with `--api-capability` (or `MEDIASORT_API_CAPABILITY`). The
+packaged application passes its token internally and never persists it. Commands:
 `health`, `config show|set|validate`, `scan`, `preview`, `sort start|status|cancel|report`,
 `report export`.
 
@@ -232,6 +235,7 @@ with `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_SOURCE_DIRECTORY`, `MEDIASORT_AI_TAGGI
 | `MEDIASORT_MODEL_DIR` | platform data dir / `ai-models` | Application-managed directory for verified optional AI model packs |
 | `MEDIASORT_MODEL_MIRROR_URL` | Hugging Face pinned revisions | Optional HTTPS mirror root for self-hosted model packs |
 | `MEDIASORT_API_URL` | `http://localhost:8000` | Base URL the **CLI** talks to |
+| `MEDIASORT_API_CAPABILITY` | *(per launch)* | Required capability token for direct CLI/API access; generated and printed by the headless launcher |
 
 ---
 

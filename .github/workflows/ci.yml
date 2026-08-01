@@ -101,6 +101,32 @@ jobs:
           tests/test_services/test_hardware.py
           -v
 
+  backend-types:
+    name: backend-types (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: core
+            extras: dev
+          - profile: shipped-local-ai
+            extras: dev,local-ai
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install profile
+        working-directory: backend
+        run: pip install -e ".[${{ matrix.extras }}]"
+      - name: Type-check the shipped import graph
+        working-directory: backend
+        run: python -m mypy app
+
   archive-security:
     name: Archive security — ${{ matrix.os }} / Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
@@ -195,6 +221,32 @@ jobs:
               print(f"ERROR in tauri.conf.json at '{path}': {e.message}", file=sys.stderr)
               sys.exit(1)
           EOF
+
+  native:
+    name: native
+    # MediaSorter ships macOS and Windows bundles. Building the Tauri 1 Linux
+    # GTK graph here would add an unshipped platform and require legacy system
+    # libraries, so exercise the native source on a shipped host instead.
+    runs-on: macos-latest
+    env:
+      # Source compilation must not depend on release-sized generated payloads.
+      # Release jobs use the canonical config after creating every resource.
+      TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        working-directory: frontend/src-tauri
+        run: cargo fmt --check
+      - name: Compile native source from a clean checkout
+        working-directory: frontend/src-tauri
+        run: cargo check --locked
+      - name: Test native source from a clean checkout
+        working-directory: frontend/src-tauri
+        run: cargo test --locked
 
   docs-links:
     name: docs-links

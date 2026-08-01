@@ -52,12 +52,18 @@ handle the TOCTOU window where another process might grab the port between the
 release and the backend's bind. On window close it sends SIGTERM so uvicorn can
 flush its logs, then force-kills after a short grace period.
 
-The frontend never assumes a port: it calls the `get_api_port` Tauri command and
-builds its base URL from the answer. The one hardcoded port is the `127.0.0.1:8000`
+The frontend never assumes a port: it calls the `get_api_session` Tauri command
+and receives both the selected port and a per-launch capability. HTTP sends the
+capability in `X-MediaSorter-Capability`; WebSocket uses an authenticated
+subprotocol. The backend rejects missing/wrong capabilities and any browser
+origin outside the exact packaged/development allowlist before route dispatch.
+The one hardcoded port is the `127.0.0.1:8000`
 fallback in `services/api.ts`, used only when `invoke` fails — i.e. when the UI is
 opened in a plain browser against the Vite dev server rather than in the Tauri
 window. That path is served by the separate `dev:backend` script, which is
-deliberately pinned to 8000.
+deliberately pinned to 8000. `scripts/dev-session.mjs` generates one capability
+per development launch and supplies it to the backend, Tauri shell, and Vite
+client so hot reload does not weaken authentication.
 
 Both the Rust shell and the Python backend log to the same directory so startup
 failures are always diagnosable:

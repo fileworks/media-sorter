@@ -107,6 +107,23 @@ class TestValidators:
 
 
 class TestReportSemantics:
+    def test_runner_never_materializes_the_complete_catalog(
+        self, catalog: MediaCatalog, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original = catalog.iter_files
+
+        class SinglePass:
+            def __iter__(self):
+                yield from original("r1")
+
+            def __len__(self) -> int:
+                raise AssertionError("validator runner materialized the catalog")
+
+        monkeypatch.setattr(catalog, "iter_files", lambda _root_id: iter(SinglePass()))
+        report = run_validation(_context(catalog), enabled=["inconsistent_name", "unreadable"])
+
+        assert report.findings
+
     def test_a_disabled_check_is_never_reported_as_passed(self, catalog: MediaCatalog) -> None:
         report = run_validation(_context(catalog), enabled=["unreadable"])
 

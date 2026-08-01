@@ -232,31 +232,44 @@ class CatalogDuplicateIndex:
         bands: Sequence[str],
         kind: str,
         roles: Sequence[RootRole],
-    ) -> list[sqlite3.Row]:
+    ) -> sqlite3.Cursor:
         placeholders = ",".join("?" for _ in roles) or "''"
-        rows: list[sqlite3.Row] = []
+        branches: list[str] = []
+        parameters: list[object] = []
         for index, band in enumerate(bands):
-            rows.extend(
-                self.catalog._connection.execute(  # noqa: SLF001
-                    f"""
-                    SELECT f.*, r.role, s.value
-                      FROM signatures s
-                      JOIN files f ON f.file_id = s.file_id
-                      JOIN roots r ON r.root_id = f.root_id
-                     WHERE s.kind = ?
-                       AND substr(s.value, {index * 4 + 1}, 4) = ?
-                       AND s.fingerprint = f.fingerprint
-                       AND f.fingerprint_version = ?
-                       AND f.missing_since_generation IS NULL
-                       AND (f.unit_id IS NULL OR f.unit_primary = 1)
-                       AND r.role IN ({placeholders})
-                    """,
-                    (kind, band, FINGERPRINT_VERSION, *roles),
-                ).fetchall()
+            branches.append(
+                f"""
+                SELECT s.file_id
+                  FROM signatures s
+                  JOIN files f ON f.file_id = s.file_id
+                  JOIN roots r ON r.root_id = f.root_id
+                 WHERE s.kind = ?
+                   AND substr(s.value, {index * 4 + 1}, 4) = ?
+                   AND s.fingerprint = f.fingerprint
+                   AND f.fingerprint_version = ?
+                   AND f.missing_since_generation IS NULL
+                   AND (f.unit_id IS NULL OR f.unit_primary = 1)
+                   AND r.role IN ({placeholders})
+                """
             )
-        return rows
+            parameters.extend((kind, band, FINGERPRINT_VERSION, *roles))
+        # UNION (not UNION ALL) makes SQLite deduplicate the four band hits
+        # before any file row becomes a Python object.
+        candidate_query = " UNION ".join(branches)
+        return self.catalog._connection.execute(  # noqa: SLF001
+            f"""
+            WITH candidates(file_id) AS ({candidate_query})
+            SELECT f.*, r.role, s.value
+              FROM candidates c
+              JOIN signatures s ON s.file_id = c.file_id AND s.kind = ?
+              JOIN files f ON f.file_id = c.file_id
+              JOIN roots r ON r.root_id = f.root_id
+             ORDER BY f.file_id
+            """,
+            (*parameters, kind),
+        )
 
-    def _scan_signatures(self, kind: str, roles: Sequence[RootRole]) -> list[sqlite3.Row]:
+    def _scan_signatures(self, kind: str, roles: Sequence[RootRole]) -> sqlite3.Cursor:
         placeholders = ",".join("?" for _ in roles) or "''"
         return self.catalog._connection.execute(  # noqa: SLF001
             f"""
@@ -273,7 +286,7 @@ class CatalogDuplicateIndex:
              ORDER BY f.file_id
             """,
             (kind, FINGERPRINT_VERSION, *roles),
-        ).fetchall()
+        )
 
 
 # ---------------------------------------------------------------------- #

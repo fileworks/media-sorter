@@ -25,7 +25,7 @@ export function useLogs(): UseLogsReturn {
     // or the built-in fallback of ws://127.0.0.1:8000/api/logs).
     const url = api.getWebSocketUrl();
 
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, api.getWebSocketProtocol());
     wsRef.current = ws;
 
     ws.onopen = () => {

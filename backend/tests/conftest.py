@@ -30,8 +30,23 @@ _TEST_CONFIG_DIR = tempfile.mkdtemp(prefix="mediasort-tests-")
 os.environ["MEDIASORT_CONFIG_DIR"] = _TEST_CONFIG_DIR
 os.environ["MEDIASORT_DATA_DIR"] = _TEST_CONFIG_DIR
 os.environ["MEDIASORT_LOG_DIR"] = str(Path(_TEST_CONFIG_DIR) / "logs")
+_TEST_API_CAPABILITY = "mediasort-test-capability-00000000000000000000000000000000"
+os.environ["MEDIASORT_API_CAPABILITY"] = _TEST_API_CAPABILITY
 # A stale absolute DB path would override the isolated dir — drop it.
 os.environ.pop("MEDIASORT_DB_PATH", None)
+
+# Existing integration clients exercise the authenticated product surface. A
+# security regression test may explicitly remove this default header.
+_test_client_init = TestClient.__init__
+
+
+def _authenticated_test_client_init(self: TestClient, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    headers = dict(kwargs.pop("headers", {}) or {})
+    headers.setdefault("X-MediaSorter-Capability", _TEST_API_CAPABILITY)
+    _test_client_init(self, *args, headers=headers, **kwargs)
+
+
+TestClient.__init__ = _authenticated_test_client_init  # type: ignore[method-assign]
 
 
 @pytest.fixture(scope="session", autouse=True)

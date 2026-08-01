@@ -29,6 +29,8 @@ use std::thread;
 use std::time::Duration;
 
 use native_dialog::{DialogBuilder, MessageLevel};
+use rand::{distributions::Alphanumeric, Rng};
+use serde::Serialize;
 use tauri::{Manager, State};
 
 // ── File logger ───────────────────────────────────────────────────────────────
@@ -328,11 +330,21 @@ fn show_fatal_startup_dialog(error: &StartupError) {
 struct BackendState {
     process: Arc<Mutex<Option<Child>>>,
     api_port: u16,
+    api_capability: String,
+}
+
+#[derive(Serialize)]
+struct ApiSession {
+    port: u16,
+    capability: String,
 }
 
 #[tauri::command]
-fn get_api_port(state: State<BackendState>) -> u16 {
-    state.api_port
+fn get_api_session(state: State<BackendState>) -> ApiSession {
+    ApiSession {
+        port: state.api_port,
+        capability: state.api_capability.clone(),
+    }
 }
 
 /// Reveal a file in the OS file manager (Finder / Explorer / file browser),
@@ -347,9 +359,10 @@ fn reveal_path(path: String) {
 
 // ── Port negotiation ─────────────────────────────────────────────────────────
 
-fn backend_is_ready(port: u16) -> bool {
+fn backend_is_ready(port: u16, capability: &str) -> bool {
     let url = format!("http://127.0.0.1:{}/api/health", port);
     ureq::get(&url)
+        .set("X-MediaSorter-Capability", capability)
         .call()
         .map(|r| r.status() == 200)
         .unwrap_or(false)
@@ -386,6 +399,7 @@ fn find_available_port(log_path: &std::path::Path) -> Result<u16, StartupError> 
 fn acquire_backend(
     max_tries: u32,
     log_path: &std::path::Path,
+    capability: &str,
 ) -> Result<(u16, Child), StartupError> {
     let mut attempted_ports = Vec::new();
     let mut failures = Vec::new();
@@ -399,7 +413,7 @@ fn acquire_backend(
             attempt,
             max_tries
         );
-        let mut child = match spawn_backend(port, log_path) {
+        let mut child = match spawn_backend(port, capability, log_path) {
             Ok(child) => child,
             Err(error) => {
                 failures.push(error.detail);
@@ -426,7 +440,7 @@ fn acquire_backend(
             Ok(None) => {}
         }
 
-        if let Err(error) = wait_for_backend(port, 30, &mut child, log_path) {
+        if let Err(error) = wait_for_backend(port, capability, 30, &mut child, log_path) {
             failures.push(error.detail);
             let _ = child.kill();
             let _ = child.wait();
@@ -457,6 +471,7 @@ fn acquire_backend(
 
 fn wait_for_backend(
     port: u16,
+    capability: &str,
     max_attempts: u32,
     child: &mut Child,
     log_path: &std::path::Path,
@@ -485,7 +500,10 @@ fn wait_for_backend(
             }
             Ok(None) => {}
         }
-        if let Ok(response) = ureq::get(&url).call() {
+        if let Ok(response) = ureq::get(&url)
+            .set("X-MediaSorter-Capability", capability)
+            .call()
+        {
             if response.status() == 200 {
                 log_info!("Backend ready on port {}", port);
                 return Ok(());
@@ -635,7 +653,11 @@ fn spawn_with_startup_error(
     })
 }
 
-fn spawn_backend(port: u16, log_path: &std::path::Path) -> Result<Child, StartupError> {
+fn spawn_backend(
+    port: u16,
+    capability: &str,
+    log_path: &std::path::Path,
+) -> Result<Child, StartupError> {
     let path_env = build_path_with_ffmpeg();
     let log_dir = log_path
         .parent()
@@ -664,6 +686,7 @@ fn spawn_backend(port: u16, log_path: &std::path::Path) -> Result<Child, Startup
             .env("MEDIASORT_PORT", port.to_string())
             .env("MEDIASORT_LOG_LEVEL", "info")
             .env("MEDIASORT_LOG_DIR", log_dir)
+            .env("MEDIASORT_API_CAPABILITY", capability)
             .env("PATH", &path_env)
             .current_dir(&backend_dir);
         spawn_with_startup_error(
@@ -702,6 +725,7 @@ fn spawn_backend(port: u16, log_path: &std::path::Path) -> Result<Child, Startup
             .env("MEDIASORT_PORT", port.to_string())
             .env("MEDIASORT_LOG_LEVEL", "info")
             .env("MEDIASORT_LOG_DIR", log_dir)
+            .env("MEDIASORT_API_CAPABILITY", capability)
             .env("PATH", &path_env);
         spawn_with_startup_error(
             &mut command,
@@ -730,29 +754,41 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
         ));
     }
 
-    let (api_port, backend_child) = if cfg!(debug_assertions) && backend_is_ready(8000) {
-        log_info!("Found existing backend on port 8000 (hot-reload mode)");
-        (8000, None)
-    } else {
-        // Retry up to 5 times in case another process grabs a port between
-        // our probe and the backend's bind (TOCTOU window).
-        let (port, child) = acquire_backend(5, log_path)?;
-        (port, Some(child))
-    };
+    let api_capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(48)
+            .map(char::from)
+            .collect()
+    });
+    let (api_port, backend_child) =
+        if cfg!(debug_assertions) && backend_is_ready(8000, &api_capability) {
+            log_info!("Found existing backend on port 8000 (hot-reload mode)");
+            (8000, None)
+        } else {
+            // Retry up to 5 times in case another process grabs a port between
+            // our probe and the backend's bind (TOCTOU window).
+            let (port, child) = acquire_backend(5, log_path, &api_capability)?;
+            (port, Some(child))
+        };
 
     log_info!("Starting Tauri window (backend port {})", api_port);
 
     let process = Arc::new(Mutex::new(backend_child));
     let process_on_build_error = Arc::clone(&process);
     let app = tauri::Builder::default()
-        .manage(BackendState { process, api_port })
+        .manage(BackendState {
+            process,
+            api_port,
+            api_capability,
+        })
         .setup(|_app| Ok(()))
         .on_window_event(|global_window_event| {
             if let tauri::WindowEvent::Destroyed = global_window_event.event() {
                 kill_backend(global_window_event.window().state::<BackendState>().inner());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_api_port, reveal_path])
+        .invoke_handler(tauri::generate_handler![get_api_session, reveal_path])
         .build(tauri::generate_context!())
         .map_err(|error| {
             kill_process(&process_on_build_error);
@@ -918,8 +954,14 @@ mod tests {
             .expect("spawn fixture");
         let fixture_status = child.wait().expect("wait for fixture");
         assert_eq!(fixture_status.code(), Some(7));
-        let error = wait_for_backend(9, 1, &mut child, std::path::Path::new("/tmp/mediasort.log"))
-            .expect_err("child exit should fail readiness");
+        let error = wait_for_backend(
+            9,
+            "test-capability",
+            1,
+            &mut child,
+            std::path::Path::new("/tmp/mediasort.log"),
+        )
+        .expect_err("child exit should fail readiness");
         assert_eq!(error.stage, StartupStage::Readiness);
         assert!(error.detail.contains("status"));
     }

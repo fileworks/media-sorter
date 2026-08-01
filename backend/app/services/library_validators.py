@@ -12,6 +12,8 @@ library it could not fully read. An inaccessible subtree makes a report
 from __future__ import annotations
 
 import re
+import sqlite3
+import tempfile
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
@@ -221,35 +223,61 @@ def check_missing_sidecars(
     root = context.catalog.root_path(context.root_id)
     if root is None:
         return
-    materialized = list(records)
-    directories: dict[Path, list[FileRecord]] = {}
-    for record in materialized:
-        directories.setdefault(Path(record.relative_path).parent, []).append(record)
-
-    for directory, entries in directories.items():
-        with_sidecar = {
-            record.file_id
-            for record in entries
-            if any(
-                (root / directory / f"{Path(record.relative_path).stem}{suffix}").is_file()
-                for suffix in SIDECAR_SUFFIXES
+    # Directory grouping can itself approach library size. Spool the two small
+    # facts needed by this validator to disk, then let SQLite group them.
+    with tempfile.TemporaryDirectory(prefix="mediasort-sidecar-validation-") as temporary:
+        spool = sqlite3.connect(Path(temporary) / "sidecars.db")
+        try:
+            spool.execute(
+                """
+                CREATE TABLE candidates (
+                    directory TEXT NOT NULL,
+                    file_id INTEGER PRIMARY KEY,
+                    has_sidecar INTEGER NOT NULL
+                )
+                """
             )
-        }
-        # Only meaningful when the folder uses sidecars at all: a library that
-        # never had them is not missing anything.
-        if not with_sidecar or len(with_sidecar) == len(entries):
-            continue
-        for record in entries:
-            if record.file_id in with_sidecar:
-                continue
-            yield _finding(
-                "missing_sidecar",
-                record,
-                context=context,
-                evidence="other files in this folder have sidecars; this one does not",
-                severity="info",
-                confidence="low",
+            for record in records:
+                relative = Path(record.relative_path)
+                directory = relative.parent
+                has_sidecar = any(
+                    (root / directory / f"{relative.stem}{suffix}").is_file()
+                    for suffix in SIDECAR_SUFFIXES
+                )
+                spool.execute(
+                    "INSERT INTO candidates(directory, file_id, has_sidecar) VALUES (?, ?, ?)",
+                    (directory.as_posix(), record.file_id, int(has_sidecar)),
+                )
+            spool.commit()
+            rows = spool.execute(
+                """
+                SELECT file_id
+                  FROM candidates
+                 WHERE has_sidecar = 0
+                   AND directory IN (
+                       SELECT directory
+                         FROM candidates
+                        GROUP BY directory
+                       HAVING sum(has_sidecar) > 0
+                          AND sum(has_sidecar) < count(*)
+                   )
+                 ORDER BY file_id
+                """
             )
+            for row in rows:
+                candidate = context.catalog.file_by_id(int(row[0]))
+                if candidate is None:
+                    continue
+                yield _finding(
+                    "missing_sidecar",
+                    candidate,
+                    context=context,
+                    evidence="other files in this folder have sidecars; this one does not",
+                    severity="info",
+                    confidence="low",
+                )
+        finally:
+            spool.close()
 
 
 def check_catalog_freshness(
@@ -308,22 +336,26 @@ def run_validation(
     )
     disabled = [key for key in VALIDATORS if key not in selected]
 
-    records = list(context.catalog.iter_files(context.root_id))
+    record_count = context.catalog.count_files(context.root_id)
     findings: list[ValidationFinding] = []
     for key in selected:
-        produced = list(VALIDATORS[key](records, context))
-        if produced:
-            findings.extend(produced)
+        produced_any = False
+        for finding in VALIDATORS[key](context.catalog.iter_files(context.root_id), context):
+            findings.append(finding)
+            produced_any = True
+        if produced_any:
             continue
         findings.append(
             ValidationFinding(
                 finding_id=f"{key}:{context.root_id}:passed",
                 category=key,  # type: ignore[arg-type]
                 severity="info",
-                state="passed" if records else "not_evaluated",
+                state="passed" if record_count else "not_evaluated",
                 root_id=context.root_id,
-                evidence=("no problems found" if records else "there was nothing indexed to check"),
-                confidence="high" if records else "unknown",
+                evidence=(
+                    "no problems found" if record_count else "there was nothing indexed to check"
+                ),
+                confidence="high" if record_count else "unknown",
                 rule_version=VALIDATOR_RULE_VERSION,
                 catalog_generation=context.generation,
             )
