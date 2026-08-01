@@ -43,6 +43,16 @@ def test_manual_release_validation_cannot_publish_without_a_tag() -> None:
     assert "if: startsWith(github.ref, 'refs/tags/v')" in release
 
 
+def test_green_tag_pipeline_publishes_through_the_release_environment() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    publish = release.split("  publish:", maxsplit=1)[1]
+
+    assert "environment: github-release" in publish
+    assert "draft: false" in publish
+    assert "publish_release" not in release
+    assert "smoke_evidence" not in release
+
+
 def test_release_native_gate_runs_on_a_shipped_platform() -> None:
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
 

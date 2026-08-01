@@ -66,7 +66,7 @@ deliberately reports *state*, never content:
 
 ```json
 {
-  "version": "1.0.6",
+  "version": "1.2.2",
   "logging": {
     "log_directory": "…/Logs/MediaSorter",
     "level": "INFO",
