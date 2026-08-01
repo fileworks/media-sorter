@@ -43,6 +43,18 @@ def test_manual_release_validation_cannot_publish_without_a_tag() -> None:
     assert "if: startsWith(github.ref, 'refs/tags/v')" in release
 
 
+def test_release_native_gate_runs_on_a_shipped_platform() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+
+    native_gate = release.split("  check-native:", maxsplit=1)[1].split("\n  package:", maxsplit=1)[
+        0
+    ]
+    assert "runs-on: macos-latest" in native_gate
+    assert "cargo check --locked" in native_gate
+    assert "cargo test --locked" in native_gate
+    assert "needs: [check-ci, check-native]" in release
+
+
 def test_frozen_backend_bundles_runtime_resources() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")

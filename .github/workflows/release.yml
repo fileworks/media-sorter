@@ -122,15 +122,6 @@ jobs:
           npm run build
           npm audit --omit=dev --audit-level=high
 
-      - name: Verify native source independently of package resources
-        working-directory: frontend/src-tauri
-        env:
-          TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
-        run: |
-          cargo fmt --check
-          cargo check --locked
-          cargo test --locked
-
       - name: Validate reviewed dependency suppressions
         run: python scripts/validate_dependency_suppressions.py --check
 
@@ -146,9 +137,36 @@ jobs:
           cargo audit --version
           cargo audit "${audit_args[@]}"
 
+  # MediaSorter ships its Tauri shell on macOS and Windows. Running this gate on
+  # Ubuntu needlessly couples a release to GTK development packages that are not
+  # part of the product and caused v1.2.0's installer build to stop before
+  # packaging. macOS exercises a shipped target while remaining independent of
+  # the package matrix and its generated resources.
+  check-native:
+    name: Verify native release source on macOS
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Verify native source independently of package resources
+        working-directory: frontend/src-tauri
+        env:
+          TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
+        run: |
+          cargo fmt --check
+          cargo check --locked
+          cargo test --locked
+
   package:
     name: package (${{ matrix.label }})
-    needs: check-ci # don't build installers until the quality gate is green
+    needs: [check-ci, check-native] # don't build installers until both gates are green
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
