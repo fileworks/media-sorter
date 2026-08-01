@@ -286,11 +286,16 @@ jobs:
 
       - name: Verify optional-model lifecycle on the package host
         working-directory: backend
-        run: >-
-          python -m pytest
-          tests/test_services/test_ai_model_installation.py
-          tests/test_workflows.py
-          -q
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            venv_python=".venv/Scripts/python.exe"
+          else
+            venv_python=".venv/bin/python"
+          fi
+          "$venv_python" -m pytest \
+            tests/test_services/test_ai_model_installation.py \
+            tests/test_workflows.py \
+            -q
 
       - name: Verify deterministic branding
         run: make branding-check
