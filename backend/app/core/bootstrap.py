@@ -1,6 +1,8 @@
 """Application bootstrap and dependency injection."""
 
 import asyncio
+import os
+import secrets
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime, timezone
@@ -13,6 +15,11 @@ from fastapi.responses import JSONResponse
 from structlog import BoundLogger
 
 from app._version import __version__
+from app.core.api_security import (
+    CAPABILITY_HEADER,
+    LocalApiSecurityMiddleware,
+    allowed_origins,
+)
 from app.core.config import Config, ConfigLoader
 from app.core.database import DatabaseManager
 from app.core.exceptions import MediaSortException
@@ -573,8 +580,6 @@ class AppFactory:
             loader = ConfigLoader()
             config = loader.load()
 
-        import os
-
         setup_logging(os.getenv("MEDIASORT_LOG_LEVEL", "INFO"))
         from app.services.filesystem_service import register_heif
 
@@ -593,26 +598,38 @@ class AppFactory:
 
         app.state.container = container
         app.state.config = config
+        capability = os.getenv("MEDIASORT_API_CAPABILITY") or secrets.token_urlsafe(32)
+        origins = allowed_origins(
+            os.getenv(
+                "MEDIASORT_DEV_ORIGINS",
+                "http://localhost:1420,http://127.0.0.1:1420",
+            )
+        )
+        app.state.api_capability = capability
+        app.state.allowed_origins = origins
 
-        # CORS — local only.
+        # Exact browser origins plus a per-launch capability. Loopback transport
+        # alone is not an authorization boundary.
         # tauri://localhost  → macOS/Linux packaged builds.
         # https://tauri.localhost → Windows packaged builds (Tauri 1.5+).
         # http://tauri.localhost  → alternative Windows variant.
-        # The regex covers any localhost:<port> used by `vite dev`.
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[
-                "http://localhost",
-                "http://127.0.0.1",
-                "tauri://localhost",
-                "https://tauri.localhost",
-                "http://tauri.localhost",
-            ],
-            allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+            allow_origins=sorted(origins),
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            allow_headers=["*"],
+            allow_headers=[
+                "Content-Type",
+                CAPABILITY_HEADER,
+                "X-MediaSorter-Retry-Attempt",
+                "X-MediaSorter-Transport-Event",
+            ],
             max_age=3600,
+        )
+        app.add_middleware(
+            LocalApiSecurityMiddleware,
+            capability=capability,
+            origins=origins,
         )
 
         @app.exception_handler(MediaSortException)

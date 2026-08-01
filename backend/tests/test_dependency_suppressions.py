@@ -37,12 +37,9 @@ def _entry() -> dict[str, str]:
     }
 
 
-def test_checked_in_suppressions_are_valid_and_expiring() -> None:
+def test_checked_in_policy_has_no_stale_suppressions() -> None:
     entries = POLICY.load_policy(POLICY.DEFAULT_POLICY, today=date.fromisoformat("2026-07-29"))
-    assert {entry["advisory"] for entry in entries} == {
-        "RUSTSEC-2026-0194",
-        "RUSTSEC-2026-0195",
-    }
+    assert entries == []
 
 
 def test_expired_suppression_fails_closed(tmp_path: Path) -> None:

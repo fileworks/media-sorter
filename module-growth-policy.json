@@ -23,6 +23,12 @@
       "path": "backend/app/services/review_execution.py",
       "rationale": "Review preflight, execution, and reconciliation share one snapshot contract.",
       "warning_lines": 450
+    },
+    {
+      "owner": "verified-sort-orchestration",
+      "path": "backend/app/services/sorting_service.py",
+      "rationale": "The service coordinates one verified sorting transaction; transfer, duplicate, conversion, repair, and persistence implementations already live behind injected services. Splitting the transaction coordinator would duplicate rollback and outcome state.",
+      "warning_lines": 1500
     }
   ],
   "schema_version": 1,

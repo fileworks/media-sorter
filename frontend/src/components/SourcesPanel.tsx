@@ -388,21 +388,24 @@ export function SourcesPanel({
         </div>
       )}
 
-      <ConflictList conflicts={conflicts} t={t} />
-
-      <p
-        className={`text-sm ${readiness.ready ? "text-success" : "text-muted-foreground"}`}
-        role="status"
-      >
-        {readiness.ready
-          ? t("sources.ready")
-          : (() => {
-              const conflict = conflicts.find((item) => item.blocking);
-              return conflict
-                ? t(`sources.conflict.${conflict.kind}`, conflict.params, conflict.message)
-                : readiness.reason;
-            })()}
-      </p>
+      {cards.length > 0 && (
+        <>
+          <ConflictList conflicts={conflicts} t={t} />
+          <p
+            className={`text-sm ${readiness.ready ? "text-success" : "text-muted-foreground"}`}
+            role="status"
+          >
+            {readiness.ready
+              ? t("sources.ready")
+              : (() => {
+                  const conflict = conflicts.find((item) => item.blocking);
+                  return conflict
+                    ? t(`sources.conflict.${conflict.kind}`, conflict.params, conflict.message)
+                    : readiness.reason;
+                })()}
+          </p>
+        </>
+      )}
     </section>
   );
 }

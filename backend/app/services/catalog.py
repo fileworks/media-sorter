@@ -140,16 +140,24 @@ class MediaCatalog:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = self._open(busy_timeout_ms)
-        self.schema_version = self._initialize()
+        try:
+            self.schema_version = self._initialize()
+        except BaseException:
+            self._connection.close()
+            raise
 
     def _open(self, busy_timeout_ms: int) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, isolation_level=None)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            return connection
+        except BaseException:
+            connection.close()
+            raise
 
     def _initialize(self) -> int:
         integrity = self._connection.execute("PRAGMA integrity_check").fetchone()[0]
@@ -542,6 +550,23 @@ class MediaCatalog:
             for row in rows:
                 cursor = int(row["file_id"])
                 yield _to_record(row)
+
+    def count_files(self, root_id: str, *, include_missing: bool = False) -> int:
+        """Count catalog rows without materializing them."""
+        missing_clause = "" if include_missing else " AND missing_since_generation IS NULL"
+        row = self._connection.execute(
+            f"SELECT count(*) AS total FROM files WHERE root_id = ?{missing_clause}",
+            (root_id,),
+        ).fetchone()
+        return int(row["total"]) if row is not None else 0
+
+    def file_by_id(self, file_id: int) -> FileRecord | None:
+        """Return one current catalog row by its stable identifier."""
+        row = self._connection.execute(
+            "SELECT * FROM files WHERE file_id = ? AND missing_since_generation IS NULL",
+            (file_id,),
+        ).fetchone()
+        return _to_record(row) if row is not None else None
 
     def find_by_hash(self, sha256: str, *, limit: int = 50) -> list[FileRecord]:
         rows = self._connection.execute(

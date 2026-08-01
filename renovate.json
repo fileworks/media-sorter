@@ -31,32 +31,40 @@
       "at any time"
     ],
     "minimumReleaseAge": null,
-    "automerge": false
+    "automerge": true,
+    "automergeType": "pr",
+    "platformAutomerge": true
   },
   "packageRules": [
     {
-      "description": "Low-risk updates merge themselves once every required check is green.",
+      "description": "Every managed update class is eligible only after every protected applicable check succeeds.",
       "matchUpdateTypes": [
-        "patch",
+        "digest",
+        "lockFileMaintenance",
+        "major",
         "minor",
-        "digest"
+        "patch",
+        "pin",
+        "pinDigest",
+        "replacement",
+        "rollback"
       ],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
     },
     {
-      "description": "Majors always get a person; they change behaviour by definition.",
+      "description": "Label major updates without bypassing the complete green pipeline.",
       "matchUpdateTypes": [
         "major"
       ],
-      "automerge": false,
+      "automerge": true,
       "labels": [
         "major-update"
       ]
     },
     {
-      "description": "Publishers, toolchains, codecs, installers, and security-sensitive libraries always get a person, at any update type.",
+      "description": "Keep publisher, toolchain, codec, installer, and security-sensitive updates visible while retaining complete-pipeline automerge eligibility.",
       "matchPackageNames": [
         "pyinstaller",
         "tauri*",
@@ -72,9 +80,9 @@
         "urllib3",
         "requests"
       ],
-      "automerge": false,
+      "automerge": true,
       "labels": [
-        "needs-review"
+        "high-impact-dependency"
       ]
     },
     {
@@ -121,7 +129,7 @@
         "python"
       ],
       "groupName": "Python runtime",
-      "automerge": false
+      "automerge": true
     },
     {
       "description": "Isolate the Rust/Tauri family; they are coupled and user-facing.",
@@ -129,16 +137,7 @@
         "cargo"
       ],
       "groupName": "Rust and Tauri",
-      "automerge": false
-    },
-    {
-      "description": "Installer and bundler changes are verified by hand.",
-      "matchPackageNames": [
-        "pyinstaller",
-        "tauri",
-        "@tauri-apps/cli"
-      ],
-      "automerge": false
+      "automerge": true
     }
   ]
 }

@@ -32,12 +32,24 @@ from cli.utils.formatters import (
     show_default=True,
     help="MediaSorter API base URL.",
 )
+@click.option(
+    "--api-capability",
+    envvar="MEDIASORT_API_CAPABILITY",
+    help="Per-launch backend capability token.",
+)
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output.")
 @click.pass_context
-def cli(ctx: click.Context, api_url: str, verbose: bool) -> None:
+def cli(
+    ctx: click.Context,
+    api_url: str,
+    api_capability: str | None,
+    verbose: bool,
+) -> None:
     """MediaSorter CLI — organise your media files intelligently."""
     ctx.ensure_object(dict)
-    ctx.obj["client"] = APIClient(api_url)
+    client = APIClient(api_url, capability=api_capability)
+    ctx.obj["client"] = client
+    ctx.call_on_close(client.close)
     ctx.obj["verbose"] = verbose
 
 

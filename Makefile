@@ -198,8 +198,7 @@ install:
 # ── Development servers ───────────────────────────────────────────────────────
 
 backend:
-	cd $(BACKEND) && $(PYTHON) -m uvicorn app.main:app \
-		--host 127.0.0.1 --port 8000 --reload --timeout-graceful-shutdown 3
+	node scripts/dev-session.mjs --backend-only
 
 frontend:
 	cd $(FRONTEND) && PATH="$(DEV_PATH)" npm run tauri dev

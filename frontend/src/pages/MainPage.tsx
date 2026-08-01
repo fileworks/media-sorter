@@ -426,7 +426,7 @@ export default function MainPage() {
         onSaveConfig={handleConfigSave}
         sectionBodyKey={sectionBodyKey}
       />
-      {analysis.loading ? (
+      {cards.length === 0 ? null : analysis.loading ? (
         <StateView variant="loading" title={t("analysis.scanning")} />
       ) : analysis.error ? (
         <StateView

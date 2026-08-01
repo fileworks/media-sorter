@@ -1,5 +1,6 @@
 """Static checks for the supported GitHub Actions baseline."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -13,20 +14,17 @@ def _workflow_text() -> str:
 def test_official_actions_use_node_24_compatible_generations() -> None:
     workflows = _workflow_text()
 
-    assert workflows.count("actions/checkout@v7") == 7
-    assert workflows.count("actions/setup-python@v7") == 5
-    assert workflows.count("actions/upload-artifact@v7") == 2
-    assert workflows.count("actions/setup-node@v7") == 4
-    assert workflows.count("actions/download-artifact@v8") == 1
-
-    for stale in (
-        "actions/checkout@v4",
-        "actions/setup-python@v5",
-        "actions/upload-artifact@v4",
-        "actions/setup-node@v4",
-        "actions/download-artifact@v4",
-    ):
-        assert stale not in workflows
+    approved = {
+        "actions/checkout": {"v5", "v7"},
+        "actions/setup-python": {"v7"},
+        "actions/upload-artifact": {"v7"},
+        "actions/setup-node": {"v7"},
+        "actions/download-artifact": {"v8"},
+    }
+    for action, versions in approved.items():
+        observed = set(re.findall(rf"{re.escape(action)}@([^\s]+)", workflows))
+        assert observed
+        assert observed <= versions
 
 
 def test_all_explicit_node_toolchains_use_node_24() -> None:

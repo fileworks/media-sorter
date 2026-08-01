@@ -221,6 +221,18 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
 ];
 
 describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
+  it("uses one authoritative empty-source message", () => {
+    const rendered = renderWithProviders(
+      <SourcesPanel cards={[]} onChange={() => undefined} />,
+      locale,
+    );
+
+    expect(
+      within(rendered.container).getAllByText(translate(locale, "sources.empty")),
+    ).toHaveLength(1);
+    expect(within(rendered.container).queryByRole("alert")).toBeNull();
+  });
+
   it("has no automated violations in the navigation shell", async () => {
     const rendered = renderShell(locale);
     await expectNoViolations(rendered.container);

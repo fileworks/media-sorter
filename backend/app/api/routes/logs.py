@@ -3,44 +3,19 @@
 import asyncio
 import contextlib
 import json
-import re
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.core.api_security import websocket_protocol
 from app.core.log_queue import subscribe, unsubscribe
 
 router = APIRouter()
 
 
-_ALLOWED_ORIGINS = (
-    "tauri://localhost",
-    "https://tauri.localhost",
-    "http://tauri.localhost",
-)
-# Anchored so only http://localhost[:port] / http://127.0.0.1[:port] match — a
-# bare ``startswith`` would also accept http://localhost.attacker.com. Browsers
-# don't apply CORS to WebSocket handshakes, so this server-side check is the
-# only gate. Mirrors the CORS regex in bootstrap.py.
-_LOCAL_ORIGIN_RE = re.compile(r"^http://(localhost|127\.0\.0\.1)(:\d+)?$")
-
-
-def _is_origin_allowed(origin: str | None) -> bool:
-    """Return True for local / Tauri origins (or no origin = non-browser client)."""
-    if origin is None:
-        return True  # non-browser client (CLI, test) — allow
-    if origin in _ALLOWED_ORIGINS:
-        return True
-    return bool(_LOCAL_ORIGIN_RE.match(origin))
-
-
 @router.websocket("/logs")
 async def log_stream(websocket: WebSocket) -> None:
-    origin = websocket.headers.get("origin")
-    if not _is_origin_allowed(origin):
-        await websocket.close(code=1008, reason="Origin not allowed")
-        return
-    await websocket.accept()
+    await websocket.accept(subprotocol=websocket_protocol(websocket.headers))
     # Per-connection queue so opening multiple tabs/windows doesn't make them
     # compete for the same single broadcast queue. The structlog processor
     # fans new entries into every subscriber via app.core.log_queue.

@@ -15,7 +15,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
     "dev:backend": "cd ../backend && ./.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --timeout-graceful-shutdown 3",
-    "dev:all": "concurrently -k -n backend,tauri -c cyan,magenta \"npm run dev:backend\" \"npm run tauri dev\""
+    "dev:all": "node ../scripts/dev-session.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.17.0",

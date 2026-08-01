@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import path from "path";
+import path from "node:path";
 
 // Vitest config for the pure-TS utility unit tests under src/lib/__tests__.
 // Uses the same "@" → src alias as the app and a node environment (the
@@ -7,7 +7,7 @@ import path from "path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   test: {

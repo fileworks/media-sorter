@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
     fakeHttp: {
       post,
       get,
-      defaults: { baseURL: "" },
+      defaults: { baseURL: "", headers: { common: {} as Record<string, string> } },
       interceptors: { response: { use: vi.fn() } },
     },
   };

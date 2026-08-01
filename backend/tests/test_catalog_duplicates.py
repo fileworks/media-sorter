@@ -196,6 +196,23 @@ class TestPerceptualEquivalence:
 
         assert len(found) == len({item.record.file_id for item in found})
 
+    def test_band_union_deduplicates_before_python_materialization(
+        self, catalog: MediaCatalog
+    ) -> None:
+        for number in range(25):
+            _add(catalog, "dest", f"{number}.jpg", signature=f"aaaabbbbcccc{number:04x}")
+        index = CatalogDuplicateIndex(catalog)
+        telemetry = LookupTelemetry()
+
+        index.perceptual_candidates(
+            "aaaabbbbcccc0000",
+            max_distance=3,
+            limit=100,
+            telemetry=telemetry,
+        )
+
+        assert telemetry.candidates_examined == 25
+
     def test_results_are_ordered_by_distance(self, catalog: MediaCatalog) -> None:
         base = "ffffffffffffffff"
         _add(catalog, "dest", "two.jpg", signature=f"{int(base, 16) ^ 0b11:016x}")

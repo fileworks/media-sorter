@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -20,6 +21,32 @@ from cli.utils.api_client import APIClient, APIClientError  # noqa: E402
 
 def _response(request: httpx.Request, status: int, payload: dict) -> httpx.Response:
     return httpx.Response(status, request=request, content=json.dumps(payload).encode())
+
+
+def test_client_sends_capability_from_environment() -> None:
+    token = "headless-capability"
+    with patch.dict(os.environ, {"MEDIASORT_API_CAPABILITY": token}):
+        client = APIClient()
+    request = client._http.build_request("GET", "/api/health")
+    assert request.headers["X-MediaSorter-Capability"] == token
+    client._http.close()
+
+
+def test_cli_option_passes_capability_without_echoing_it() -> None:
+    token = "option-capability"
+    fake = MagicMock()
+    fake.get_health.return_value = {"status": "ok"}
+    with patch("cli.main.APIClient", return_value=fake) as client_class:
+        result = CliRunner().invoke(
+            cli,
+            ["--api-capability", token, "health"],
+        )
+    assert result.exit_code == 0
+    client_class.assert_called_once_with(
+        "http://localhost:8000",
+        capability=token,
+    )
+    assert token not in result.output
 
 
 def test_start_retry_reuses_one_idempotency_key() -> None:

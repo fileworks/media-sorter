@@ -1046,6 +1046,7 @@ function isTimeoutError(error: unknown): boolean {
 export class MediaSorterApiClient {
   private http: AxiosInstance;
   private ready: Promise<void>;
+  private capability = "";
 
   constructor() {
     this.http = axios.create({ timeout: 30_000 });
@@ -1063,12 +1064,17 @@ export class MediaSorterApiClient {
 
   private async init(): Promise<void> {
     try {
-      const port: number = await invoke<number>("get_api_port");
-      this.http.defaults.baseURL = `http://127.0.0.1:${port}`;
+      const session = await invoke<{ port: number; capability: string }>("get_api_session");
+      this.http.defaults.baseURL = `http://127.0.0.1:${session.port}`;
+      this.capability = session.capability;
     } catch {
       // Running outside Tauri (browser dev mode) or IPC not yet ready —
       // fall back to the default dev-mode port.
       this.http.defaults.baseURL = `http://127.0.0.1:8000`;
+      this.capability = import.meta.env.VITE_MEDIASORT_API_CAPABILITY ?? "";
+    }
+    if (this.capability) {
+      this.http.defaults.headers.common["X-MediaSorter-Capability"] = this.capability;
     }
   }
 
@@ -1800,6 +1806,10 @@ export class MediaSorterApiClient {
   getWebSocketUrl(): string {
     const base = this.http.defaults.baseURL ?? "http://127.0.0.1:8000";
     return base.replace(/^http/, "ws") + "/api/logs";
+  }
+
+  getWebSocketProtocol(): string {
+    return `mediasorter.${this.capability}`;
   }
 
   // ── AI utilities ─────────────────────────────────────────────────────────────

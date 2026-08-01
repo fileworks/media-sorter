@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, cast
@@ -35,10 +36,28 @@ class APIClientError(RuntimeError):
 class APIClient:
     """Synchronous wrapper around the MediaSorter REST API."""
 
-    def __init__(self, base_url: str = "http://localhost:8000") -> None:
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        capability: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
+        active_capability = (
+            capability
+            if capability is not None
+            else os.environ.get("MEDIASORT_API_CAPABILITY", "")
+        )
         timeout = httpx.Timeout(5.0, connect=2.0)
-        self._http = httpx.Client(base_url=self.base_url, timeout=timeout)
+        headers = (
+            {"X-MediaSorter-Capability": active_capability}
+            if active_capability
+            else None
+        )
+        self._http = httpx.Client(
+            base_url=self.base_url,
+            timeout=timeout,
+            headers=headers,
+        )
 
     def _request(
         self,

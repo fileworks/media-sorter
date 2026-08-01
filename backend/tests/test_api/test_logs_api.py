@@ -14,7 +14,11 @@ from app.core.log_queue import subscriber_count
 def test_logs_ws_accepts_connection() -> None:
     app = AppFactory.create(config=Config.defaults())
     with TestClient(app) as client:
-        with client.websocket_connect("/api/logs"):
+        capability = app.state.api_capability
+        with client.websocket_connect(
+            "/api/logs",
+            subprotocols=[f"mediasorter.{capability}"],
+        ):
             # Reaching here means the server accepted the upgrade.
             pass
 
@@ -24,7 +28,11 @@ def test_logs_ws_unsubscribes_on_disconnect() -> None:
     rather than lingering as an idle task awaiting the log queue."""
     app = AppFactory.create(config=Config.defaults())
     with TestClient(app) as client:
-        with client.websocket_connect("/api/logs"):
+        capability = app.state.api_capability
+        with client.websocket_connect(
+            "/api/logs",
+            subprotocols=[f"mediasorter.{capability}"],
+        ):
             # A subscriber is registered while connected.
             deadline = time.time() + 2
             while subscriber_count() == 0 and time.time() < deadline:
