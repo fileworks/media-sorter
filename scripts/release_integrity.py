@@ -16,6 +16,7 @@ import json
 import os
 import plistlib
 import re
+import secrets
 import shutil
 import socket
 import stat
@@ -618,6 +619,7 @@ def _smoke_backend(path: Path) -> None:
         port = listener.getsockname()[1]
     with tempfile.TemporaryDirectory(prefix="mediasorter-backend-smoke-") as temporary:
         temp = Path(temporary)
+        capability = secrets.token_urlsafe(32)
         env = os.environ.copy()
         env.update(
             {
@@ -625,6 +627,7 @@ def _smoke_backend(path: Path) -> None:
                 "MEDIASORT_CONFIG_DIR": str(temp / "config"),
                 "MEDIASORT_DATA_DIR": str(temp / "data"),
                 "MEDIASORT_LOG_DIR": str(temp / "logs"),
+                "MEDIASORT_API_CAPABILITY": capability,
             }
         )
         process = subprocess.Popen(
@@ -641,9 +644,11 @@ def _smoke_backend(path: Path) -> None:
                         f"packaged backend exited before health check: {path}"
                     )
                 try:
-                    with urllib.request.urlopen(
-                        f"http://127.0.0.1:{port}/api/health", timeout=1
-                    ) as response:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/health",
+                        headers={"X-MediaSorter-Capability": capability},
+                    )
+                    with urllib.request.urlopen(request, timeout=1) as response:
                         if response.status == 200:
                             return
                 except OSError:

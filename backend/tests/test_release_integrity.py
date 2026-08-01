@@ -175,6 +175,76 @@ def test_unsigned_nested_signing_runs_no_commands(
     assert not called
 
 
+def test_packaged_backend_smoke_uses_launch_capability(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: dict[str, object] = {}
+
+    class Listener:
+        def __enter__(self) -> Listener:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def bind(self, address: tuple[str, int]) -> None:
+            assert address == ("127.0.0.1", 0)
+
+        def getsockname(self) -> tuple[str, int]:
+            return ("127.0.0.1", 43123)
+
+    class Process:
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, *, timeout: int) -> int:
+            assert timeout == 10
+            return 0
+
+    class Response:
+        status = 200
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def popen(
+        command: list[str],
+        *,
+        env: dict[str, str],
+        stdout: object,
+        stderr: object,
+    ) -> Process:
+        observed["command"] = command
+        observed["capability"] = env["MEDIASORT_API_CAPABILITY"]
+        assert stdout is subprocess.DEVNULL
+        assert stderr is subprocess.DEVNULL
+        return Process()
+
+    def urlopen(request: object, *, timeout: int) -> Response:
+        assert isinstance(request, release_integrity.urllib.request.Request)
+        observed["header"] = request.get_header("X-mediasorter-capability")
+        assert request.full_url == "http://127.0.0.1:43123/api/health"
+        assert timeout == 1
+        return Response()
+
+    backend = tmp_path / "mediasort-backend"
+    monkeypatch.setattr(release_integrity.socket, "socket", lambda *_args: Listener())
+    monkeypatch.setattr(release_integrity.subprocess, "Popen", popen)
+    monkeypatch.setattr(release_integrity.urllib.request, "urlopen", urlopen)
+
+    release_integrity._smoke_backend(backend)
+
+    assert observed["command"] == [str(backend)]
+    assert observed["header"] == observed["capability"]
+    assert len(str(observed["capability"])) >= 32
+
+
 def test_tauri_sign_command_is_unsigned_noop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
