@@ -235,6 +235,11 @@ with `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_SOURCE_DIRECTORY`, `MEDIASORT_AI_TAGGI
 | `MEDIASORT_DEBUG` | `false` | Enables verbose/debug server behaviour |
 | `MEDIASORT_MODEL_DIR` | platform data dir / `ai-models` | Application-managed directory for verified optional AI model packs |
 | `MEDIASORT_MODEL_MIRROR_URL` | Hugging Face pinned revisions | Optional HTTPS mirror root for self-hosted model packs |
+
+The default and hosting rationale are documented in
+[Optional model distribution](docs/model-distribution.md). Fileworks does not
+operate a first-party model mirror for now; immutable upstream objects remain
+covered by the hashes bundled with the application.
 | `MEDIASORT_API_URL` | `http://localhost:8000` | Base URL the **CLI** talks to |
 | `MEDIASORT_API_CAPABILITY` | *(per launch)* | Required capability token for direct CLI/API access; generated and printed by the headless launcher |
 

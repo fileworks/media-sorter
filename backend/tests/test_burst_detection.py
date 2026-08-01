@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import shutil
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import piexif
 from PIL import Image, ImageDraw
 
+import app.services.burst_detection as burst_module
 from app.services.burst_detection import (
     BurstDetectionService,
     BurstSettings,
@@ -16,6 +20,14 @@ from app.services.burst_detection import (
 )
 from app.services.duplicate_service import DuplicateRegistry, DuplicateService
 from app.services.quarantine import QuarantineStore
+
+
+class _FixtureHash:
+    def __init__(self, value: str) -> None:
+        self.value = int(value, 16)
+
+    def __sub__(self, other: _FixtureHash) -> int:
+        return (self.value ^ other.value).bit_count()
 
 
 def _frame(
@@ -203,3 +215,79 @@ def test_enabling_bursts_cannot_change_duplicate_verdicts(tmp_path: Path) -> Non
         BurstSettings(enabled=True, max_perceptual_distance=12),
     )
     assert verdicts() == before
+
+
+def test_calibration_corpus_has_zero_recorded_false_pairs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fixture_path = Path(__file__).parent / "fixtures" / "burst-calibration.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    observations = fixture["observations"]
+    records = {item["id"]: item for item in observations}
+    paths: list[Path] = []
+    for item in observations:
+        path = tmp_path / f"{item['id']}.jpg"
+        path.write_bytes(item["id"].encode())
+        paths.append(path)
+
+    monkeypatch.setattr(
+        burst_module,
+        "_capture_time",
+        lambda path: datetime.fromisoformat(records[path.stem]["captured_at"]),
+    )
+    monkeypatch.setattr(
+        burst_module,
+        "stream_sha256",
+        lambda path: (
+            f"{int.from_bytes(path.stem.encode(), 'big'):064x}"[-64:],
+            path.stat().st_size,
+        ),
+    )
+    monkeypatch.setattr(burst_module, "_sharpness", lambda _path: 1.0)
+    service = BurstDetectionService()
+    monkeypatch.setattr(
+        service.extraction,
+        "extract_camera_model",
+        lambda path: records[path.stem]["camera"],
+    )
+    monkeypatch.setattr(
+        service.duplicate_service,
+        "image_signature",
+        lambda path: SimpleNamespace(phash=_FixtureHash(records[path.stem]["phash"])),
+    )
+    defaults = fixture["defaults"]
+    settings = BurstSettings(enabled=True, **defaults)
+
+    groups = service.detect(paths, tmp_path, settings)
+    predicted = {
+        tuple(sorted((left.primary_path, right.primary_path)))
+        for group in groups
+        for index, left in enumerate(group.frames)
+        for right in group.frames[index + 1 :]
+    }
+    truth_groups: dict[str, list[str]] = {}
+    for item in observations:
+        if item["truth_burst"] is not None:
+            truth_groups.setdefault(item["truth_burst"], []).append(
+                str(tmp_path / f"{item['id']}.jpg")
+            )
+    expected = {
+        tuple(sorted((left, right)))
+        for members in truth_groups.values()
+        for index, left in enumerate(members)
+        for right in members[index + 1 :]
+    }
+    false_positives = predicted - expected
+    false_negatives = expected - predicted
+    all_pairs = len(paths) * (len(paths) - 1) // 2
+    negative_pairs = all_pairs - len(expected)
+
+    assert len(groups) == fixture["expected"]["true_groups"]
+    assert len(expected) == fixture["expected"]["true_pairs"]
+    assert negative_pairs == fixture["expected"]["negative_pairs"]
+    assert len(false_positives) == fixture["expected"]["false_positives"] == 0
+    assert len(false_negatives) == fixture["expected"]["false_negatives"] == 0
+    assert settings.time_window_seconds == 3.0
+    assert settings.max_perceptual_distance == 4
+    assert settings.require_camera_identity

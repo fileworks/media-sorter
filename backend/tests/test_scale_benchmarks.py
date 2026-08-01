@@ -22,17 +22,25 @@ from types import SimpleNamespace
 import pytest
 
 import app.services.burst_detection as burst_module
+import app.services.library_audit as audit_module
+from app.core.config import Config
 from app.core.media_units import MediaUnit, MediaUnitMember
 from app.services.burst_detection import BurstDetectionService, BurstSettings
 from app.services.catalog import MediaCatalog, ObservedFile
 from app.services.catalog_duplicates import CatalogDuplicateIndex
+from app.services.destination_reconciliation import (
+    DestinationReconciliationService,
+    _UnitFacts,
+)
 from app.services.duplicate_grouping import exact_groups
+from app.services.library_audit import LibraryAuditService
 from app.services.pipeline import batched
 from app.services.preview_service import PreviewOutcomeStore
 
 #: Small by default; the assertions are the same at any size.
 DEFAULT_RECORDS = int(os.environ.get("MEDIASORT_SCALE_FIXTURE", "20000"))
 BATCH = 1_000
+STORAGE_FILES = int(os.environ.get("MEDIASORT_STORAGE_FIXTURE", str(DEFAULT_RECORDS)))
 
 
 def _generate(
@@ -197,6 +205,114 @@ class TestMemory:
         assert len(groups[0].frames) == 100
         assert service.sharpness_computations == 100
         assert peak - baseline < 40 * 1024 * 1024
+
+    def test_large_library_audit_uses_disk_backed_baseline_state(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root = tmp_path / "audited-library"
+        for index in range(STORAGE_FILES):
+            path = root / f"{index // 100:05}" / f"{index:07}.jpg"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"fixture")
+        service = LibraryAuditService(tmp_path / "state" / "audit.sqlite3")
+        monkeypatch.setattr(
+            service.extraction,
+            "extract_detailed",
+            lambda _path: SimpleNamespace(extracted_date=None),
+        )
+        monkeypatch.setattr(
+            audit_module,
+            "assess_readability",
+            lambda _path: SimpleNamespace(readable=True, evidence=None),
+        )
+        monkeypatch.setattr(
+            audit_module,
+            "stream_sha256",
+            lambda path: (f"{int(path.stem):064x}", path.stat().st_size),
+        )
+        monkeypatch.setattr(audit_module, "_media_findings", lambda _path, _relative: [])
+
+        tracemalloc.start()
+        try:
+            baseline = tracemalloc.get_traced_memory()[0]
+            report = service.run(root)
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        assert report.scanned_files == STORAGE_FILES
+        assert report.coverage == "full"
+        assert not report.findings
+        assert peak - baseline < 40 * 1024 * 1024
+
+    def test_large_reconciliation_pages_to_disk_with_responsive_cancellation(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        source = tmp_path / "reconciliation-input"
+        destination = tmp_path / "reconciliation-destination"
+        destination.mkdir()
+        for index in range(STORAGE_FILES):
+            path = source / f"{index // 100:05}" / f"{index:07}.jpg"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"fixture")
+        service = DestinationReconciliationService()
+        captured = datetime(2024, 1, 2).date()
+
+        def fast_facts(unit: MediaUnit) -> _UnitFacts:
+            index = int(unit.primary.stem)
+            return _UnitFacts(
+                unit=unit,
+                digest=f"{index:064x}",
+                signature=None,
+                date=captured,
+                camera="fixture-camera",
+                fingerprint=f"fixture:{index}",
+            )
+
+        monkeypatch.setattr(service, "_facts", fast_facts)
+        config = Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            sort_criteria=["year", "month"],
+            copy_instead_of_move=True,
+        )
+
+        tracemalloc.start()
+        try:
+            baseline = tracemalloc.get_traced_memory()[0]
+            page = service.compare_paged(source, destination, config, page_size=50)
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        assert len(page.findings) == 50
+        assert page.counts["missing"] == STORAGE_FILES
+        assert page.next_cursor is not None
+        assert peak - baseline < 40 * 1024 * 1024
+
+        calls = 0
+
+        def cancel() -> bool:
+            nonlocal calls
+            calls += 1
+            return calls > 500
+
+        partial = service.compare_paged(
+            source,
+            destination,
+            config,
+            page_size=50,
+            cancel=cancel,
+        )
+
+        assert partial.input_coverage == "partial"
+        assert partial.destination_coverage == "partial"
+        assert partial.counts["missing"] < STORAGE_FILES
+        assert any("cancelled" in issue for issue in partial.issues)
 
 
 class TestQueryPlans:

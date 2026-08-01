@@ -121,9 +121,16 @@ async def thumbnail(
         return Response(status_code=304, headers={"ETag": key.etag})
     data = None if key is None else await asyncio.to_thread(container.thumbnail_cache.get, key)
     if data is None:
-        data = await asyncio.to_thread(_render_thumbnail, path, requested_size)
+        try:
+            data = await asyncio.to_thread(_render_thumbnail, path, requested_size)
+        except OSError:
+            # Mounted shares can disappear after the cache key's stat but
+            # before or during decode. This is an unavailable thumbnail, not an
+            # internal server error; the client keeps its normal placeholder.
+            data = None
         if data is not None and key is not None:
-            await asyncio.to_thread(container.thumbnail_cache.put, key, data)
+            with contextlib.suppress(OSError):
+                await asyncio.to_thread(container.thumbnail_cache.put, key, data)
     if data is None:
         raise UnsupportedMediaError("No thumbnail available for this file", file_path=path)
     headers = {"Cache-Control": "private, max-age=3600"}

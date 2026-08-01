@@ -284,6 +284,14 @@ jobs:
       - name: Install project dependencies
         run: make install
 
+      - name: Verify optional-model lifecycle on the package host
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_services/test_ai_model_installation.py
+          tests/test_workflows.py
+          -q
+
       - name: Verify deterministic branding
         run: make branding-check
 
@@ -401,6 +409,66 @@ jobs:
           python scripts/release_integrity.py verify \
             --platform "${{ matrix.platform }}" \
             --state "$RUNNER_TEMP/release-signing-state.json"
+
+      - name: Install, launch, and uninstall MSI on a clean Windows runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = (Get-ChildItem "frontend/src-tauri/target/release/bundle/msi/*.msi").FullName
+          $log = Join-Path $env:RUNNER_TEMP "mediasorter-msi-install.log"
+          $install = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/i", "`"$msi`"", "/quiet", "/norestart", "/l*v", "`"$log`""
+          )
+          if ($install.ExitCode -notin @(0, 3010)) {
+            Get-Content $log -Tail 100
+            throw "MSI installation failed with exit code $($install.ExitCode)"
+          }
+          $candidates = @(
+            "$env:ProgramFiles\MediaSorter\MediaSorter.exe",
+            "$env:LOCALAPPDATA\MediaSorter\MediaSorter.exe"
+          )
+          $shell = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $shell) {
+            throw "MSI completed but the installed MediaSorter.exe was not found"
+          }
+          python scripts/release_integrity.py smoke-webview --path $shell
+          $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/x", "`"$msi`"", "/quiet", "/norestart"
+          )
+          if ($uninstall.ExitCode -notin @(0, 1605, 3010)) {
+            throw "MSI uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+
+      - name: Install, launch, and uninstall NSIS on a clean Windows runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = (
+            Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis/*-setup.exe"
+          ).FullName
+          $install = Start-Process $installer -Wait -PassThru -ArgumentList "/S"
+          if ($install.ExitCode -ne 0) {
+            throw "NSIS installation failed with exit code $($install.ExitCode)"
+          }
+          $candidates = @(
+            "$env:ProgramFiles\MediaSorter\MediaSorter.exe",
+            "$env:LOCALAPPDATA\MediaSorter\MediaSorter.exe"
+          )
+          $shell = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $shell) {
+            throw "NSIS completed but the installed MediaSorter.exe was not found"
+          }
+          python scripts/release_integrity.py smoke-webview --path $shell
+          $uninstaller = Join-Path (Split-Path $shell) "uninstall.exe"
+          if (-not (Test-Path $uninstaller)) {
+            throw "NSIS uninstaller was not installed"
+          }
+          $uninstall = Start-Process $uninstaller -Wait -PassThru -ArgumentList "/S"
+          if ($uninstall.ExitCode -ne 0) {
+            throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)"
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

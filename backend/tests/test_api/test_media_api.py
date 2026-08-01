@@ -90,6 +90,22 @@ def test_thumbnail_changed_source_changes_validator(client: TestClient, tmp_path
     assert second.headers["etag"] != first.headers["etag"]
 
 
+def test_thumbnail_network_disconnect_degrades_to_placeholder(client: TestClient, tmp_path) -> None:
+    image = tmp_path / "mounted-share.jpg"
+    _write_jpeg(image)
+    from app.api.routes import media
+
+    with patch.object(
+        media,
+        "_render_thumbnail",
+        side_effect=OSError("network volume disconnected during read"),
+    ):
+        response = client.get("/api/thumbnail", params={"path": str(image)})
+
+    assert response.status_code == 415
+    assert "network volume" not in response.text
+
+
 # ── /api/media/info ────────────────────────────────────────────────────────────
 
 

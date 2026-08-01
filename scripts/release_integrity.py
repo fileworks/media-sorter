@@ -697,6 +697,37 @@ def _smoke_launcher(path: Path) -> None:
                 )
 
 
+def _smoke_packaged_webview(path: Path) -> None:
+    """Prove the packaged native shell reaches the mounted React application."""
+    with tempfile.TemporaryDirectory(prefix="mediasorter-webview-smoke-") as temporary:
+        log_dir = Path(temporary)
+        env = os.environ.copy()
+        env.update(
+            {
+                "MEDIASORT_LOG_DIR": str(log_dir),
+                "MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE": "1",
+                "MEDIASORT_WEBVIEW_SMOKE": "1",
+            }
+        )
+        try:
+            result = subprocess.run(
+                [str(path)],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=60,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ReleaseIntegrityError(f"packaged WebView smoke failed: {path}") from error
+        if result.returncode != 0:
+            raise ReleaseIntegrityError(f"packaged WebView exited with {result.returncode}: {path}")
+        log_path = log_dir / "mediasort.log"
+        _require_file(log_path)
+        if "packaged_webview_frontend_ready" not in log_path.read_text(encoding="utf-8"):
+            raise ReleaseIntegrityError("packaged React shell never acknowledged WebView readiness")
+
+
 def _zip_required(zip_path: Path) -> tuple[str, dict[str, str]]:
     with zipfile.ZipFile(zip_path) as archive:
         names = set(archive.namelist())
@@ -814,7 +845,17 @@ def verify_release(
                 _smoke_program(ffmpeg, ("-version",))
                 _smoke_program(ffprobe, ("-version",))
                 _smoke_backend(backend)
-                _smoke_launcher(shell)
+                # Copy out of the read-only DMG into a fresh application
+                # directory before launching. This exercises the actual macOS
+                # distribution action instead of running only from the image.
+                with tempfile.TemporaryDirectory(
+                    prefix="mediasorter-clean-macos-install-"
+                ) as install_root:
+                    installed_app = Path(install_root) / app.name
+                    shutil.copytree(app, installed_app, copy_function=shutil.copy2)
+                    installed_shell = _macos_shell(installed_app)
+                    _smoke_launcher(installed_shell)
+                    _smoke_packaged_webview(installed_shell)
         verified.append(dmg)
 
     elif platform_name == "windows":
@@ -851,6 +892,7 @@ def verify_release(
                 _smoke_program(portable["ffprobe"], ("-version",))
                 _smoke_backend(portable["backend"])
                 _smoke_launcher(portable["shell"])
+                _smoke_packaged_webview(portable["shell"])
                 if state.mode == "signed":
                     signed_payloads = sorted(
                         path
@@ -936,6 +978,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--state", type=Path, required=True)
     verify.add_argument("--minimum-size", type=int, default=20 * 1024 * 1024)
     verify.add_argument("--skip-smoke", action="store_true")
+
+    smoke_webview = subparsers.add_parser("smoke-webview")
+    smoke_webview.add_argument("--path", type=Path, required=True)
     return parser
 
 
@@ -976,6 +1021,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 minimum_size=args.minimum_size,
                 run_smoke=not args.skip_smoke,
             )
+        elif args.command == "smoke-webview":
+            _smoke_packaged_webview(args.path)
         else:  # pragma: no cover - argparse enforces the choices.
             raise ReleaseIntegrityError(f"unknown command: {args.command}")
     except (ReleaseIntegrityError, OSError, subprocess.CalledProcessError) as error:

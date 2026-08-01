@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "description": "Privacy-safe metadata and perceptual-signature calibration vectors spanning common phone and interchangeable-lens camera families. No user photographs or generated image content is retained.",
+  "defaults": {
+    "time_window_seconds": 3.0,
+    "max_perceptual_distance": 4,
+    "require_camera_identity": true
+  },
+  "observations": [
+    {"id": "iphone-1", "scenario": "true-burst", "camera": "Apple-iPhone-15-Pro", "captured_at": "2026-01-02T10:00:00.000", "phash": "0000000000000000", "truth_burst": "iphone"},
+    {"id": "iphone-2", "scenario": "true-burst", "camera": "Apple-iPhone-15-Pro", "captured_at": "2026-01-02T10:00:00.350", "phash": "0000000000000001", "truth_burst": "iphone"},
+    {"id": "iphone-3", "scenario": "true-burst", "camera": "Apple-iPhone-15-Pro", "captured_at": "2026-01-02T10:00:00.720", "phash": "0000000000000003", "truth_burst": "iphone"},
+
+    {"id": "pixel-1", "scenario": "moving-subject", "camera": "Google-Pixel-8-Pro", "captured_at": "2026-01-02T10:02:00.000", "phash": "0000000000000100", "truth_burst": "pixel"},
+    {"id": "pixel-2", "scenario": "moving-subject", "camera": "Google-Pixel-8-Pro", "captured_at": "2026-01-02T10:02:00.600", "phash": "0000000000000103", "truth_burst": "pixel"},
+    {"id": "pixel-3", "scenario": "moving-subject", "camera": "Google-Pixel-8-Pro", "captured_at": "2026-01-02T10:02:01.100", "phash": "000000000000010f", "truth_burst": "pixel"},
+
+    {"id": "galaxy-1", "scenario": "true-burst", "camera": "Samsung-SM-S928B", "captured_at": "2026-01-02T10:04:00.000", "phash": "0000000000010000", "truth_burst": "galaxy"},
+    {"id": "galaxy-2", "scenario": "true-burst", "camera": "Samsung-SM-S928B", "captured_at": "2026-01-02T10:04:00.250", "phash": "0000000000010003", "truth_burst": "galaxy"},
+    {"id": "galaxy-3", "scenario": "true-burst", "camera": "Samsung-SM-S928B", "captured_at": "2026-01-02T10:04:00.500", "phash": "000000000001000f", "truth_burst": "galaxy"},
+
+    {"id": "canon-1", "scenario": "continuous-shooting", "camera": "Canon-EOS-R6-Mark-II", "captured_at": "2026-01-02T10:06:00.000", "phash": "0000000001000000", "truth_burst": "canon"},
+    {"id": "canon-2", "scenario": "continuous-shooting", "camera": "Canon-EOS-R6-Mark-II", "captured_at": "2026-01-02T10:06:00.100", "phash": "0000000001000003", "truth_burst": "canon"},
+    {"id": "canon-3", "scenario": "continuous-shooting", "camera": "Canon-EOS-R6-Mark-II", "captured_at": "2026-01-02T10:06:00.200", "phash": "000000000100000f", "truth_burst": "canon"},
+
+    {"id": "nikon-1", "scenario": "continuous-shooting", "camera": "Nikon-Z8", "captured_at": "2026-01-02T10:08:00.000", "phash": "0000000100000000", "truth_burst": "nikon"},
+    {"id": "nikon-2", "scenario": "continuous-shooting", "camera": "Nikon-Z8", "captured_at": "2026-01-02T10:08:00.080", "phash": "0000000100000003", "truth_burst": "nikon"},
+    {"id": "nikon-3", "scenario": "continuous-shooting", "camera": "Nikon-Z8", "captured_at": "2026-01-02T10:08:00.160", "phash": "000000010000000f", "truth_burst": "nikon"},
+
+    {"id": "sony-1", "scenario": "continuous-shooting", "camera": "Sony-ILCE-7M4", "captured_at": "2026-01-02T10:10:00.000", "phash": "0000010000000000", "truth_burst": "sony"},
+    {"id": "sony-2", "scenario": "continuous-shooting", "camera": "Sony-ILCE-7M4", "captured_at": "2026-01-02T10:10:00.120", "phash": "0000010000000003", "truth_burst": "sony"},
+    {"id": "sony-3", "scenario": "continuous-shooting", "camera": "Sony-ILCE-7M4", "captured_at": "2026-01-02T10:10:00.240", "phash": "000001000000000f", "truth_burst": "sony"},
+
+    {"id": "simultaneous-iphone", "scenario": "two-devices-same-scene", "camera": "Apple-iPhone-15-Pro", "captured_at": "2026-01-02T11:00:00.000", "phash": "0100000000000000", "truth_burst": null},
+    {"id": "simultaneous-pixel", "scenario": "two-devices-same-scene", "camera": "Google-Pixel-8-Pro", "captured_at": "2026-01-02T11:00:00.050", "phash": "0100000000000001", "truth_burst": null},
+    {"id": "distinct-canon-1", "scenario": "distinct-photos-one-setting", "camera": "Canon-EOS-R6-Mark-II", "captured_at": "2026-01-02T11:02:00.000", "phash": "0200000000000000", "truth_burst": null},
+    {"id": "distinct-canon-2", "scenario": "distinct-photos-one-setting", "camera": "Canon-EOS-R6-Mark-II", "captured_at": "2026-01-02T11:02:01.000", "phash": "02000000000001ff", "truth_burst": null},
+    {"id": "repeated-sony-1", "scenario": "repeated-subject-longer-period", "camera": "Sony-ILCE-7M4", "captured_at": "2026-01-02T11:04:00.000", "phash": "0400000000000000", "truth_burst": null},
+    {"id": "repeated-sony-2", "scenario": "repeated-subject-longer-period", "camera": "Sony-ILCE-7M4", "captured_at": "2026-01-02T11:04:10.000", "phash": "0400000000000001", "truth_burst": null}
+  ],
+  "expected": {
+    "true_groups": 6,
+    "true_pairs": 18,
+    "negative_pairs": 258,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "largest_true_adjacent_distance": 2,
+    "smallest_visual_negative_distance": 9
+  }
+}

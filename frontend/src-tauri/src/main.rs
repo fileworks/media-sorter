@@ -347,6 +347,20 @@ fn get_api_session(state: State<BackendState>) -> ApiSession {
     }
 }
 
+/// The React root calls this after it has mounted inside the WebView.
+///
+/// Release CI sets `MEDIASORT_WEBVIEW_SMOKE=1`; a successful invocation proves
+/// the packaged shell loaded its bundled frontend (not merely that the native
+/// process started), records durable evidence, and exits cleanly. Normal
+/// launches only record the ready marker and continue.
+#[tauri::command]
+fn frontend_ready(app: tauri::AppHandle) {
+    log_info!("packaged_webview_frontend_ready");
+    if std::env::var("MEDIASORT_WEBVIEW_SMOKE").as_deref() == Ok("1") {
+        app.exit(0);
+    }
+}
+
 /// Reveal a file in the OS file manager (Finder / Explorer / file browser),
 /// selecting it where the platform supports it. Best-effort: the spawn is
 /// non-blocking and any failure is logged rather than surfaced.
@@ -788,7 +802,11 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
                 kill_backend(global_window_event.window().state::<BackendState>().inner());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_api_session, reveal_path])
+        .invoke_handler(tauri::generate_handler![
+            frontend_ready,
+            get_api_session,
+            reveal_path
+        ])
         .build(tauri::generate_context!())
         .map_err(|error| {
             kill_process(&process_on_build_error);

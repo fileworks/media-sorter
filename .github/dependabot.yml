@@ -1,0 +1,77 @@
+# Generated from maintenance/dependabot.py. Edit the generator, not this file.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      uv-compatible:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-compatible:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "cargo"
+    directory: "/frontend/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-compatible:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions-compatible:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

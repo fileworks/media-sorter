@@ -8,11 +8,12 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import closing, suppress
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -21,7 +22,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint as effective_config_fingerprint
 from app.core.integrity import MutationManifest
-from app.core.media_units import CompanionRole, MediaUnit, bind_media_units
+from app.core.media_units import (
+    ROLE_BEARING_EXTENSIONS,
+    CompanionRole,
+    MediaUnit,
+    MediaUnitMember,
+    bind_media_units,
+)
 from app.services.catalog_views import CursorError, decode_cursor, encode_cursor
 from app.services.destination import (
     build_dest_dir,
@@ -32,7 +39,7 @@ from app.services.duplicate_service import DuplicateService
 from app.services.extraction_service import DateExtractionService
 from app.services.mutation_planner import build_placement_action
 from app.services.verified_transfer import stream_sha256
-from app.utils.media_utils import is_image
+from app.utils.media_utils import is_image, is_media
 
 FindingClass = Literal["missing", "misplaced", "extra", "matched", "unknown"]
 IdentityConfidence = Literal["confirmed", "probable", "unrelated", "unknown"]
@@ -99,8 +106,8 @@ class ReconciliationPage(BaseModel):
 class _UnitFacts:
     unit: MediaUnit
     digest: str
-    signature: object | None
-    date: object | None
+    signature: str | None
+    date: date | None
     camera: str
     fingerprint: str
 
@@ -109,16 +116,31 @@ class DestinationReconciliationService:
     def __init__(self) -> None:
         self.duplicates = DuplicateService()
         self.extraction = DateExtractionService()
-        # Content/signature extraction dominates repeated reconciliation cost.
-        # The key includes every media-unit member's filesystem identity, so an
-        # unchanged second run reuses facts while any primary/companion change
-        # invalidates precisely that unit.
-        self._facts_cache: dict[str, tuple[str, _UnitFacts]] = {}
         self._result_directory = Path(tempfile.mkdtemp(prefix="mediasort-reconciliation-"))
+        # Content/signature extraction dominates repeated reconciliation cost.
+        # Keep the cache on disk so a large destination can be reused without
+        # retaining one Python object per media unit.
+        self._facts_database = self._result_directory / "unit-facts.sqlite3"
+        self._cache_lock = threading.Lock()
+        self._cache_connection = sqlite3.connect(self._facts_database, check_same_thread=False)
+        self._cache_connection.execute(
+            """
+            CREATE TABLE unit_facts (
+                primary_path TEXT PRIMARY KEY,
+                unit_fingerprint TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        self._cache_connection.commit()
         self._report_headers: dict[str, ReconciliationReport] = {}
 
     def close(self) -> None:
         """Release disk-backed report pages without waiting for finalization."""
+        connection = getattr(self, "_cache_connection", None)
+        if connection is not None:
+            with suppress(sqlite3.Error):
+                connection.close()
         directory = getattr(self, "_result_directory", None)
         if directory is not None:
             shutil.rmtree(directory, ignore_errors=True)
@@ -135,6 +157,7 @@ class DestinationReconciliationService:
         *,
         input_available: bool = True,
         probable_distance: int = 8,
+        cancel: Callable[[], bool] | None = None,
     ) -> ReconciliationReport:
         """Compare without opening either tree for writing."""
         findings: list[ReconciliationFinding] = []
@@ -144,6 +167,7 @@ class DestinationReconciliationService:
             config,
             input_available=input_available,
             probable_distance=probable_distance,
+            cancel=cancel,
             emit=findings.append,
         )
         return header.model_copy(update={"findings": tuple(sorted(findings, key=_finding_order))})
@@ -157,6 +181,7 @@ class DestinationReconciliationService:
         input_available: bool = True,
         probable_distance: int = 8,
         page_size: int = 100,
+        cancel: Callable[[], bool] | None = None,
     ) -> ReconciliationPage:
         """Compute into SQLite and return only the first cursor page."""
         report_id = f"recon_{uuid.uuid4().hex[:16]}"
@@ -205,6 +230,7 @@ class DestinationReconciliationService:
                 config,
                 input_available=input_available,
                 probable_distance=probable_distance,
+                cancel=cancel,
                 emit=store,
                 report_id=report_id,
             )
@@ -342,6 +368,7 @@ class DestinationReconciliationService:
         *,
         input_available: bool,
         probable_distance: int,
+        cancel: Callable[[], bool] | None,
         emit: Callable[[ReconciliationFinding], None],
         report_id: str | None = None,
     ) -> ReconciliationReport:
@@ -378,100 +405,178 @@ class DestinationReconciliationService:
                 config_fingerprint=config_fingerprint,
             )
 
-        input_paths, input_issues = _walk(input_root)
-        destination_paths, destination_issues = _walk(destination_root)
-        input_units, _ = bind_media_units(input_paths, input_root)
-        destination_units, _ = bind_media_units(destination_paths, destination_root)
-        inputs = [self._facts(unit) for unit in input_units]
-        destinations = [self._facts(unit) for unit in destination_units]
-        by_hash: dict[str, list[_UnitFacts]] = {}
-        for facts in destinations:
-            by_hash.setdefault(facts.digest, []).append(facts)
-
-        used: set[str] = set()
-        for source in inputs:
-            expected = self._expected(source.unit.primary, input_root, destination_root, config)
-            exact = next(
-                (
-                    item
-                    for item in by_hash.get(source.digest, [])
-                    if str(item.unit.primary) not in used
-                ),
-                None,
-            )
-            if exact is not None:
-                used.add(str(exact.unit.primary))
-                complete = len(source.unit.members) == len(exact.unit.members)
-                actual = exact.unit.primary.resolve(strict=False)
-                classification: FindingClass = (
-                    "matched"
-                    if complete and actual == expected.resolve(strict=False)
-                    else "misplaced"
+        input_issues: list[str] = []
+        destination_issues: list[str] = []
+        cancelled = False
+        index_path = self._result_directory / f"destination-{uuid.uuid4().hex}.sqlite3"
+        try:
+            with closing(sqlite3.connect(index_path)) as index, index:
+                index.executescript(
+                    """
+                    CREATE TABLE destination_units (
+                        primary_path TEXT PRIMARY KEY,
+                        digest TEXT NOT NULL,
+                        signature TEXT,
+                        captured_date TEXT,
+                        camera TEXT NOT NULL,
+                        payload TEXT NOT NULL,
+                        used INTEGER NOT NULL DEFAULT 0
+                    );
+                    CREATE INDEX destination_hash
+                        ON destination_units(digest, used, primary_path);
+                    CREATE INDEX destination_metadata
+                        ON destination_units(captured_date, camera, used, primary_path);
+                    """
                 )
-                emit(
-                    self._finding(
-                        classification,
-                        "confirmed",
-                        source,
-                        exact,
-                        expected,
-                        config_fingerprint,
-                        actionable=classification == "misplaced",
+                for unit in _iter_units(destination_root, destination_issues, cancel):
+                    try:
+                        facts = self._facts(unit)
+                    except OSError as error:
+                        destination_issues.append(
+                            f"{unit.primary}: {type(error).__name__} while reading destination"
+                        )
+                        continue
+                    index.execute(
+                        """
+                        INSERT INTO destination_units
+                            (primary_path, digest, signature, captured_date, camera, payload)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            str(unit.primary),
+                            facts.digest,
+                            facts.signature,
+                            None if facts.date is None else facts.date.isoformat(),
+                            facts.camera,
+                            _facts_payload(facts),
+                        ),
                     )
-                )
-                continue
+                if cancel is not None and cancel():
+                    cancelled = True
 
-            probable = self._probable(source, destinations, used, probable_distance)
-            if probable is not None:
-                match, distance = probable
-                used.add(str(match.unit.primary))
-                emit(
-                    self._finding(
-                        "misplaced",
-                        "probable",
-                        source,
-                        match,
-                        expected,
-                        config_fingerprint,
-                        actionable=True,
-                        distance=distance,
-                        explicit=True,
-                    )
-                )
-                continue
-            emit(
-                self._finding(
-                    "missing",
-                    "unrelated",
-                    source,
-                    None,
-                    expected,
-                    config_fingerprint,
-                    actionable=True,
-                )
-            )
+                if not cancelled:
+                    for unit in _iter_units(input_root, input_issues, cancel):
+                        try:
+                            source = self._facts(unit)
+                            expected = self._expected(
+                                source.unit.primary,
+                                input_root,
+                                destination_root,
+                                config,
+                                source.date,
+                            )
+                        except OSError as error:
+                            input_issues.append(
+                                f"{unit.primary}: {type(error).__name__} while reading input"
+                            )
+                            continue
+                        exact_row = index.execute(
+                            """
+                            SELECT payload FROM destination_units
+                             WHERE digest = ? AND used = 0
+                             ORDER BY primary_path LIMIT 1
+                            """,
+                            (source.digest,),
+                        ).fetchone()
+                        if exact_row is not None:
+                            exact = _facts_from_payload(str(exact_row[0]))
+                            index.execute(
+                                "UPDATE destination_units SET used = 1 WHERE primary_path = ?",
+                                (str(exact.unit.primary),),
+                            )
+                            complete = len(source.unit.members) == len(exact.unit.members)
+                            actual = exact.unit.primary.resolve(strict=False)
+                            classification: FindingClass = (
+                                "matched"
+                                if complete and actual == expected.resolve(strict=False)
+                                else "misplaced"
+                            )
+                            emit(
+                                self._finding(
+                                    classification,
+                                    "confirmed",
+                                    source,
+                                    exact,
+                                    expected,
+                                    config_fingerprint,
+                                    actionable=classification == "misplaced",
+                                )
+                            )
+                            continue
 
-        for destination in destinations:
-            if str(destination.unit.primary) in used:
-                continue
-            emit(
-                self._finding(
-                    "extra",
-                    "unrelated",
-                    None,
-                    destination,
-                    None,
-                    config_fingerprint,
-                    actionable=False,
-                )
-            )
+                        probable = self._probable(
+                            source,
+                            index,
+                            probable_distance,
+                        )
+                        if probable is not None:
+                            match, distance = probable
+                            index.execute(
+                                "UPDATE destination_units SET used = 1 WHERE primary_path = ?",
+                                (str(match.unit.primary),),
+                            )
+                            emit(
+                                self._finding(
+                                    "misplaced",
+                                    "probable",
+                                    source,
+                                    match,
+                                    expected,
+                                    config_fingerprint,
+                                    actionable=True,
+                                    distance=distance,
+                                    explicit=True,
+                                )
+                            )
+                            continue
+                        emit(
+                            self._finding(
+                                "missing",
+                                "unrelated",
+                                source,
+                                None,
+                                expected,
+                                config_fingerprint,
+                                actionable=True,
+                            )
+                        )
+                    if cancel is not None and cancel():
+                        cancelled = True
+
+                # Do not call unseen destination content “extra” if either side
+                # stopped early; incomplete coverage makes that claim unsafe.
+                if not cancelled and not input_issues and not destination_issues:
+                    for row in index.execute(
+                        """
+                        SELECT payload FROM destination_units
+                         WHERE used = 0 ORDER BY primary_path
+                        """
+                    ):
+                        destination = _facts_from_payload(str(row[0]))
+                        emit(
+                            self._finding(
+                                "extra",
+                                "unrelated",
+                                None,
+                                destination,
+                                None,
+                                config_fingerprint,
+                                actionable=False,
+                            )
+                        )
+        finally:
+            index_path.unlink(missing_ok=True)
+
+        if cancelled:
+            input_issues.append("reconciliation was cancelled; partial findings were retained")
+            destination_issues.append("reconciliation was cancelled before complete coverage")
         issues = (*input_issues, *destination_issues)
         return ReconciliationReport(
             report_id=report_id or f"recon_{uuid.uuid4().hex[:16]}",
             created_at=datetime.now(timezone.utc),
             findings=(),
-            input_coverage="partial" if input_issues else "full",
-            destination_coverage="partial" if destination_issues else "full",
+            input_coverage="partial" if input_issues or cancelled else "full",
+            destination_coverage="partial" if destination_issues or cancelled else "full",
             issues=issues,
             config_fingerprint=config_fingerprint,
         )
@@ -562,11 +667,19 @@ class DestinationReconciliationService:
         unit_fingerprint = "|".join(
             f"{member.path}:{_fingerprint(member.path)}" for member in unit.members
         )
-        cached = self._facts_cache.get(str(primary))
-        if cached is not None and cached[0] == unit_fingerprint:
-            return cached[1]
+        with self._cache_lock:
+            cached = self._cache_connection.execute(
+                """
+                SELECT payload FROM unit_facts
+                 WHERE primary_path = ? AND unit_fingerprint = ?
+                """,
+                (str(primary), unit_fingerprint),
+            ).fetchone()
+        if cached is not None:
+            return _facts_from_payload(str(cached[0]))
         digest = stream_sha256(primary)[0]
-        signature = self.duplicates.image_signature(primary) if is_image(primary) else None
+        image_signature = self.duplicates.image_signature(primary) if is_image(primary) else None
+        signature = None if image_signature is None else str(image_signature.phash)
         extraction = self.extraction.extract_detailed(primary)
         facts = _UnitFacts(
             unit=unit,
@@ -576,37 +689,48 @@ class DestinationReconciliationService:
             camera=self.extraction.extract_camera_model(primary) or "",
             fingerprint=_fingerprint(primary),
         )
-        self._facts_cache[str(primary)] = (unit_fingerprint, facts)
+        with self._cache_lock, self._cache_connection:
+            self._cache_connection.execute(
+                """
+                INSERT INTO unit_facts(primary_path, unit_fingerprint, payload)
+                VALUES (?, ?, ?)
+                ON CONFLICT(primary_path) DO UPDATE SET
+                    unit_fingerprint = excluded.unit_fingerprint,
+                    payload = excluded.payload
+                """,
+                (str(primary), unit_fingerprint, _facts_payload(facts)),
+            )
         return facts
 
     def _probable(
         self,
         source: _UnitFacts,
-        destinations: list[_UnitFacts],
-        used: set[str],
+        index: sqlite3.Connection,
         max_distance: int,
     ) -> tuple[_UnitFacts, int] | None:
         if source.signature is None or source.date is None or not source.camera:
             return None
-        candidates: list[tuple[int, _UnitFacts]] = []
-        for destination in destinations:
-            if str(destination.unit.primary) in used or destination.signature is None:
-                continue
-            metadata_agrees = (
-                source.date == destination.date and source.camera == destination.camera
-            )
-            if not metadata_agrees:
-                continue
-            distance = int(source.signature.phash - destination.signature.phash)  # type: ignore[attr-defined]
-            if distance <= max_distance:
-                candidates.append((distance, destination))
-        if not candidates:
-            return None
-        distance, destination = min(
-            candidates,
-            key=lambda item: (item[0], str(item[1].unit.primary)),
+        best: tuple[int, _UnitFacts] | None = None
+        rows = index.execute(
+            """
+            SELECT payload FROM destination_units
+             WHERE captured_date = ? AND camera = ? AND signature IS NOT NULL AND used = 0
+             ORDER BY primary_path
+            """,
+            (source.date.isoformat(), source.camera),
         )
-        return destination, distance
+        for row in rows:
+            destination = _facts_from_payload(str(row[0]))
+            assert destination.signature is not None
+            distance = _hamming_distance(source.signature, destination.signature)
+            if distance <= max_distance:
+                candidate = (distance, destination)
+                if best is None or (distance, str(destination.unit.primary)) < (
+                    best[0],
+                    str(best[1].unit.primary),
+                ):
+                    best = candidate
+        return None if best is None else (best[1], best[0])
 
     def _expected(
         self,
@@ -614,8 +738,9 @@ class DestinationReconciliationService:
         input_root: Path,
         destination_root: Path,
         config: Config,
+        extracted: date | None = None,
     ) -> Path:
-        extracted = self.extraction.extract_detailed(source).extracted_date
+        extracted = extracted or self.extraction.extract_detailed(source).extracted_date
         if extracted is None:
             return destination_root / "_unknown_dates" / source.name
         directory = build_dest_dir(source, extracted, input_root, destination_root, config)
@@ -669,18 +794,83 @@ class DestinationReconciliationService:
         )
 
 
-def _walk(root: Path) -> tuple[list[Path], tuple[str, ...]]:
-    paths: list[Path] = []
-    issues: list[str] = []
-    for directory, _subdirs, filenames in os.walk(root):
+def _iter_units(
+    root: Path,
+    issues: list[str],
+    cancel: Callable[[], bool] | None,
+) -> Iterator[MediaUnit]:
+    """Yield one directory's units at a time, retaining no library-sized list."""
+
+    def record_walk_error(error: OSError) -> None:
+        issues.append(f"{error.filename or root}: {type(error).__name__}")
+
+    for directory, _subdirs, filenames in os.walk(root, onerror=record_walk_error):
+        if cancel is not None and cancel():
+            return
+        paths: list[Path] = []
         for name in filenames:
+            if cancel is not None and cancel():
+                return
             path = Path(directory) / name
             try:
-                if not path.is_symlink():
+                if not path.is_symlink() and (
+                    is_media(path) or path.suffix.casefold() in ROLE_BEARING_EXTENSIONS
+                ):
                     paths.append(path)
             except OSError as exc:
                 issues.append(f"{path}: {type(exc).__name__}")
-    return paths, tuple(issues)
+        units, _unmatched = bind_media_units(paths, root)
+        yield from units
+
+
+def _facts_payload(facts: _UnitFacts) -> str:
+    return json.dumps(
+        {
+            "unit_id": facts.unit.unit_id,
+            "primary": str(facts.unit.primary),
+            "members": [
+                {
+                    "path": str(member.path),
+                    "role": member.companion_role,
+                    "primary": member.is_primary,
+                }
+                for member in facts.unit.members
+            ],
+            "digest": facts.digest,
+            "signature": facts.signature,
+            "date": None if facts.date is None else facts.date.isoformat(),
+            "camera": facts.camera,
+            "fingerprint": facts.fingerprint,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _facts_from_payload(payload: str) -> _UnitFacts:
+    item = json.loads(payload)
+    return _UnitFacts(
+        unit=MediaUnit(
+            unit_id=str(item["unit_id"]),
+            primary=Path(str(item["primary"])),
+            members=tuple(
+                MediaUnitMember(
+                    path=Path(str(member["path"])),
+                    companion_role=member["role"],
+                    is_primary=bool(member["primary"]),
+                )
+                for member in item["members"]
+            ),
+        ),
+        digest=str(item["digest"]),
+        signature=None if item["signature"] is None else str(item["signature"]),
+        date=None if item["date"] is None else date.fromisoformat(str(item["date"])),
+        camera=str(item["camera"]),
+        fingerprint=str(item["fingerprint"]),
+    )
+
+
+def _hamming_distance(left: str, right: str) -> int:
+    return (int(left, 16) ^ int(right, 16)).bit_count()
 
 
 def _fingerprint(path: Path) -> str:
