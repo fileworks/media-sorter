@@ -1,10 +1,11 @@
 # Clean-machine release smoke checklist
 
-Attach this completed checklist and the three
-`release-signing-state-<platform>.json` files to the release record. A tag build
-creates a **draft** release. Publishing requires a manual workflow dispatch on
-that tag with `publish_release` selected and a non-empty `smoke_evidence`
-reference.
+Use this checklist for periodic clean-host confidence testing and after changes
+to installers, startup, migration, signing, or operating-system support. A green
+tag workflow publishes the GitHub Release automatically through the protected
+`github-release` environment; routine releases do not wait for manual host
+evidence. Attach completed evidence to the release or a follow-up issue when the
+checklist is run.
 
 Record the commit, tag, artifact SHA-256 values, tester, date, OS version,
 architecture, package form, and whether the artifact is signed or explicitly
@@ -46,6 +47,6 @@ Complete every item for each package form in a fresh Windows VM:
 - Unsigned mode: the SmartScreen flow is recorded and release metadata says
   unsigned without making verification claims.
 
-Do not publish if any package/architecture is missing evidence, if an artifact's
-hash differs from `SHA256SUMS`, or if its documented signing state differs from
-the attached state file.
+Treat a hash mismatch, signing-state mismatch, or clean-host regression as a
+release incident. Stop further distribution updates, preserve the evidence, and
+use the documented recovery playbook; do not silently replace published assets.

@@ -12,7 +12,7 @@ hierarchy. It previews everything first, never deletes anything, and runs entire
 on your machine.
 
 [![CI](https://github.com/fileworks/media-sorter/actions/workflows/ci.yml/badge.svg)](https://github.com/fileworks/media-sorter/actions/workflows/ci.yml)
-[![Latest release: v1.0.6](https://img.shields.io/badge/release-v1.0.6-orange)](https://github.com/fileworks/media-sorter/releases/tag/v1.0.6)
+[![Latest release](https://img.shields.io/github/v/release/fileworks/media-sorter?display_name=tag&sort=semver)](https://github.com/fileworks/media-sorter/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-blue)
 
@@ -24,9 +24,10 @@ on your machine.
 
 ## Status
 
-Released **v1.0.6** — installers for macOS (Apple Silicon and Intel), Windows
-(MSI and NSIS), and a portable ZIP, published as a GitHub Release. There is no
-package-manager channel for the desktop application.
+The [latest release](https://github.com/fileworks/media-sorter/releases/latest)
+includes installers for macOS (Apple Silicon and Intel), Windows (MSI and
+NSIS), and a portable ZIP. There is no package-manager channel for the desktop
+application.
 
 ## Overview
 
@@ -100,7 +101,7 @@ The desktop interface has three durable stages:
    - **Windows** — `MediaSorter_x.x.x_x64_en-US.msi` (or the `…-setup.exe`)
 2. Open / install and launch — the backend starts itself automatically.
 
-The current `v1.0.6` installers are unsigned, so the first launch may warn you:
+The installers are currently unsigned, so the first launch may warn you:
 
 - **macOS** — right-click → **Open** → **Open**.
 - **Windows** — SmartScreen → **More info** → **Run anyway**.

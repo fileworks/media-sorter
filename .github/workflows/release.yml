@@ -19,15 +19,6 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      publish_release:
-        description: "Publish the release after all clean-machine evidence is attached"
-        type: boolean
-        default: false
-      smoke_evidence:
-        description: "URL or identifier for completed macOS/Windows clean-machine evidence"
-        type: string
-        default: ""
 
 # Cancel any in-flight build for the same ref so re-tagged pushes don't stack.
 concurrency:
@@ -420,10 +411,11 @@ jobs:
 
   # ── Publish a GitHub Release (only for v* tags) ───────────────────────────────
   publish:
-    name: Create draft or approved GitHub Release
+    name: Publish GitHub Release
     needs: package
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: github-release
     permissions:
       contents: write
 
@@ -473,10 +465,10 @@ jobs:
           done < <(find artifacts \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.zip' \) )
           exit $missing
 
-      - name: Create draft or publish only with recorded smoke evidence
+      - name: Publish verified release
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ github.event_name != 'workflow_dispatch' || !inputs.publish_release || inputs.smoke_evidence == '' }}
+          draft: false
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |

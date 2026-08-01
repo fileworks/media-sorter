@@ -152,12 +152,15 @@ and pushes a `v<version>` tag. That tag triggers the release workflow, which
 builds every OS natively — macOS arm64 + Intel `.dmg`, Windows `.msi` + `.exe` —
 and uploads them to a GitHub Release.
 
-Tag builds create draft releases. Artifact type/content checks, packaged
-backend/ffmpeg smoke tests, controlled native startup recovery, checksums, and
-the declared signed/unsigned state must pass before upload. The release stays
-draft until the [clean-machine checklist](release-smoke-checklist.md) is
-recorded. Signing is optional but a partial credential set fails before
-packaging; see [release-signing.md](release-signing.md).
+Tag builds publish a GitHub Release only after artifact type/content checks,
+packaged backend/ffmpeg smoke tests, controlled native startup recovery,
+checksums, and the declared signed/unsigned state all pass. The publication job
+uses the protected `github-release` environment, so GitHub records the release
+deployment consistently with the other Fileworks products. The
+[clean-machine checklist](release-smoke-checklist.md) remains a post-release
+confidence and regression procedure; it is not a routine publication gate.
+Signing is optional but a partial credential set fails before packaging; see
+[release-signing.md](release-signing.md).
 
 The backend version is single-sourced from `backend/app/_version.py` (pyproject
 reads it via hatchling's dynamic-version hook), so the running app always reports
