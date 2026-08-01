@@ -134,23 +134,73 @@ class AuditStore:
             """
         )
 
-    def baseline(self, root: str) -> dict[str, _Observed]:
-        rows = self.connection.execute(
+    def baseline_for(self, root: str, relative_path: str) -> _Observed | None:
+        row = self.connection.execute(
             """
             SELECT relative_path, sha256, unit_id, companion_role
-              FROM audit_baselines WHERE root = ?
+              FROM audit_baselines WHERE root = ? AND relative_path = ?
+            """,
+            (root, relative_path),
+        ).fetchone()
+        if row is None:
+            return None
+        return _Observed(
+            relative_path=str(row[0]),
+            sha256=str(row[1]),
+            unit_id=None if row[2] is None else str(row[2]),
+            companion_role=None if row[3] is None else str(row[3]),
+        )
+
+    def begin_observation(self) -> None:
+        """Create a disk-backed set for this run instead of a Python dict."""
+        self.connection.execute(
+            """
+            CREATE TEMP TABLE current_observations (
+                relative_path TEXT PRIMARY KEY,
+                unit_id TEXT,
+                companion_role TEXT
+            )
+            """
+        )
+
+    def observe(self, observed: _Observed) -> None:
+        self.connection.execute(
+            """
+            INSERT OR REPLACE INTO current_observations
+                (relative_path, unit_id, companion_role)
+            VALUES (?, ?, ?)
+            """,
+            (observed.relative_path, observed.unit_id, observed.companion_role),
+        )
+
+    def missing_companions(self, root: str) -> Iterator[_Observed]:
+        rows = self.connection.execute(
+            """
+            SELECT baseline.relative_path, baseline.sha256,
+                   baseline.unit_id, baseline.companion_role
+              FROM audit_baselines AS baseline
+             WHERE baseline.root = ?
+               AND baseline.unit_id IS NOT NULL
+               AND baseline.companion_role IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1 FROM current_observations AS current
+                     WHERE current.relative_path = baseline.relative_path
+               )
+               AND EXISTS (
+                    SELECT 1 FROM current_observations AS sibling
+                     WHERE sibling.unit_id = baseline.unit_id
+               )
+             ORDER BY baseline.relative_path
             """,
             (root,),
         )
-        return {
-            str(row[0]): _Observed(
+        for row in rows:
+            yield _Observed(
                 relative_path=str(row[0]),
                 sha256=str(row[1]),
-                unit_id=None if row[2] is None else str(row[2]),
-                companion_role=None if row[3] is None else str(row[3]),
+                unit_id=str(row[2]),
+                companion_role=str(row[3]),
             )
-            for row in rows
-        }
 
     def establish(self, root: str, observed: _Observed) -> None:
         self.connection.execute(
@@ -255,13 +305,12 @@ class LibraryAuditService:
         root_key = str(root)
         findings: list[AuditFinding] = []
         issues: list[str] = []
-        observed: dict[str, _Observed] = {}
         scanned = 0
         baseline_established = 0
         cancelled = False
 
         with _store(self.store_path) as store:
-            baseline = store.baseline(root_key)
+            store.begin_observation()
             previous = store.previous_finding_ids(root_key, selected_scope.key())
             for _directory, paths, walk_issues in _walk_directories(start, root):
                 issues.extend(walk_issues)
@@ -307,8 +356,8 @@ class LibraryAuditService:
                         )
                         continue
                     current = _Observed(relative, digest, unit_id, role)
-                    observed[relative] = current
-                    prior = baseline.get(relative)
+                    store.observe(current)
+                    prior = store.baseline_for(root_key, relative)
                     if prior is None:
                         store.establish(root_key, current)
                         baseline_established += 1
@@ -332,25 +381,18 @@ class LibraryAuditService:
                     break
 
             if not selected_scope.sampled and not cancelled:
-                current_paths = set(observed)
-                for relative, prior in baseline.items():
-                    if (
-                        prior.unit_id
-                        and prior.companion_role
-                        and relative not in current_paths
-                        and any(item.unit_id == prior.unit_id for item in observed.values())
-                    ):
-                        findings.append(
-                            _finding(
-                                "missing_companion",
-                                relative,
-                                (
-                                    f"{prior.companion_role} previously belonged to media unit "
-                                    f"{prior.unit_id} but is now absent"
-                                ),
-                                actionable=False,
-                            )
+                for prior in store.missing_companions(root_key):
+                    findings.append(
+                        _finding(
+                            "missing_companion",
+                            prior.relative_path,
+                            (
+                                f"{prior.companion_role} previously belonged to media unit "
+                                f"{prior.unit_id} but is now absent"
+                            ),
+                            actionable=False,
                         )
+                    )
 
             findings = [
                 item.model_copy(update={"newly_appeared": item.finding_id not in previous})

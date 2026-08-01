@@ -245,6 +245,55 @@ def test_packaged_backend_smoke_uses_launch_capability(
     assert len(str(observed["capability"])) >= 32
 
 
+def test_packaged_webview_smoke_requires_frontend_ready_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launcher = tmp_path / "MediaSorter"
+
+    def run(
+        command: list[str],
+        *,
+        env: dict[str, str],
+        stdout: object,
+        stderr: object,
+        check: bool,
+        timeout: int,
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert command == [str(launcher)]
+        assert env["MEDIASORT_WEBVIEW_SMOKE"] == "1"
+        assert env["MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE"] == "1"
+        assert stdout is subprocess.DEVNULL
+        assert stderr is subprocess.DEVNULL
+        assert check is False
+        assert timeout == 60
+        log_dir = Path(env["MEDIASORT_LOG_DIR"])
+        (log_dir / "mediasort.log").write_text(
+            "backend ready\npackaged_webview_frontend_ready\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(release_integrity.subprocess, "run", run)
+
+    release_integrity._smoke_packaged_webview(launcher)
+
+
+def test_packaged_webview_smoke_rejects_a_blank_shell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        environment = kwargs["env"]
+        assert isinstance(environment, dict)
+        log_dir = Path(str(environment["MEDIASORT_LOG_DIR"]))
+        (log_dir / "mediasort.log").write_text("backend ready\n", encoding="utf-8")
+        return subprocess.CompletedProcess([], 0)
+
+    monkeypatch.setattr(release_integrity.subprocess, "run", run)
+
+    with pytest.raises(release_integrity.ReleaseIntegrityError, match="never acknowledged"):
+        release_integrity._smoke_packaged_webview(tmp_path / "MediaSorter")
+
+
 def test_tauri_sign_command_is_unsigned_noop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

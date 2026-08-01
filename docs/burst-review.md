@@ -17,6 +17,25 @@ so its RAW sibling, motion component, or sidecar follows the primary as a whole.
 If burst detection is disabled, none of this metadata, perceptual, or sharpness
 work runs.
 
+## Default calibration
+
+The defaults are pinned to the privacy-safe
+`backend/tests/fixtures/burst-calibration.json` corpus. It retains only capture
+timing, normalized camera identity, perceptual-signature vectors, scenario, and
+ground truth—never user photographs. The corpus covers Apple, Google, Samsung,
+Canon, Nikon, and Sony families; true bursts and moving-subject continuous
+shooting; and the three high-risk negatives: two devices photographing one
+scene, distinct photographs in one setting, and repeated shots over a longer
+period.
+
+With the three-second, four-bit, same-camera defaults, all 18 true pairs are
+grouped and none of the three negative pairs is grouped: 0 recorded false
+positives and 0 recorded false negatives. The largest adjacent true distance is
+2 bits; the smallest visual negative distance is 9 bits. These are regression
+rates for the checked-in calibration corpus, not a claim that perceptual hashes
+can classify every camera or scene. Burst review therefore remains disabled by
+default and always requires a person to confirm the result.
+
 Only candidate groups receive a reduced-resolution variance-of-Laplacian
 sharpness score. The highest score is preselected, but sharpness measures edge
 contrast—not aesthetics, faces, smiles, composition, or intent. An unreadable

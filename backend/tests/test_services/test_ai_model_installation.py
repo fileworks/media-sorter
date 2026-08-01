@@ -149,6 +149,25 @@ def test_cancelled_install_cleans_staging_and_publishes_nothing(tmp_path: Path) 
     assert not list(tmp_path.glob(".install-*.staging"))
 
 
+def test_verified_pack_survives_offline_relaunch_and_can_be_removed(tmp_path: Path) -> None:
+    content = b"verified model"
+    store, pack = _store(tmp_path, lambda request, timeout: _Response(content), content=content)
+    store._install(Task("install", operation_kind="model_download"), pack.pack_id)
+
+    def offline(_request: Request, _timeout: float) -> _Response:
+        raise OSError("offline relaunch must not contact the network")
+
+    relaunched = AiModelStore(tmp_path, open_url=offline, environment={})
+    relaunched.packs = {pack.pack_id: pack}
+
+    assert relaunched.status(pack.pack_id).state == "ready"
+    assert relaunched.component_paths(pack.pack_id) is not None
+    assert relaunched.remove(pack.pack_id)
+    assert relaunched.status(pack.pack_id).state == "not_installed"
+    assert relaunched.component_paths(pack.pack_id) is None
+    assert not relaunched.remove(pack.pack_id)
+
+
 def test_mirror_url_is_explicit_and_preserves_pack_layout(tmp_path: Path) -> None:
     requested: list[str] = []
 
