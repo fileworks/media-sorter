@@ -6,10 +6,13 @@ export type {
   LibraryRootRole,
   OptimizationProfile,
   PreservationProfile,
+  RecipeSettings,
+  SavedRecipe,
   RootIdentity,
   CatalogPlacement,
   ResourcePreferences,
   TransferMode,
+  KeeperPolicyId,
   AiModelTier,
   HardwareInfo,
   ConfigSectionMeta,
@@ -45,6 +48,9 @@ export type {
   OperationListItem,
   OperationListResponse,
 } from "@/services/api";
+
+// Value re-export: the selectable keep rules are a runtime list, not a type.
+export { SELECTABLE_KEEPER_POLICIES } from "@/services/api";
 
 // ── Extended types ─────────────────────────────────────────────────────────────
 

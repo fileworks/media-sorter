@@ -52,6 +52,7 @@ OutcomeKind = Literal[
 
 KeeperPolicyId = Literal[
     "largest",
+    "smallest",
     "newest",
     "oldest",
     "highest_resolution",

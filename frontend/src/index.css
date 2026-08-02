@@ -1,46 +1,80 @@
+/* Geist ships with the app rather than from a CDN: this is a desktop tool that
+   has to look identical on a machine that has never been online. Latin subset
+   only — the UI is English and German. Imports lead the file because CSS
+   requires @import before any other rule. */
+@import "@fontsource/geist-sans/latin-400.css";
+@import "@fontsource/geist-sans/latin-500.css";
+@import "@fontsource/geist-sans/latin-600.css";
+@import "@fontsource/geist-sans/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-500.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * The palette is the warm paper/ink scheme from the workflow-screens design,
+ * with one deliberate departure: every value that carries text has been walked
+ * down (light) or up (dark) until it clears WCAG 2.1 AA at 4.5:1 on both the
+ * page and card surfaces. The design's vivid orange survives untouched as
+ * `--brand`, which is only ever used for decoration — bars, rules, dots, the
+ * 2px selected border — where the 3:1 non-text threshold applies.
+ */
 @layer base {
   :root {
     color-scheme: light;
-    --background: 32 33% 98%;
-    --foreground: 24 22% 10%;
+    --background: 37 31% 95%;
+    --foreground: 33 15% 14%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 24 22% 10%;
+    --card: 36 100% 99%;
+    --card-foreground: 33 15% 14%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 24 22% 10%;
+    --popover: 36 100% 99%;
+    --popover-foreground: 33 15% 14%;
 
-    --primary: 20 88% 40%;
+    --primary: 15 81% 43%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 28% 95%;
-    --secondary-foreground: 24 22% 10%;
+    /* One raised neutral, shared by secondary / muted / hover surfaces —
+       the design uses a single `surface2` for all three. */
+    --secondary: 37 29% 91%;
+    --secondary-foreground: 33 15% 14%;
 
-    --muted: 30 20% 94%;
-    --muted-foreground: 24 9% 40%;
+    --muted: 37 29% 91%;
+    --muted-foreground: 34 11% 33%;
 
-    --accent: 24 55% 94%;
-    --accent-foreground: 20 88% 32%;
+    --accent: 37 29% 91%;
+    --accent-foreground: 33 15% 14%;
 
-    --destructive: 0 72% 43%;
+    --destructive: 2 60% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 28 18% 84%;
-    --input: 28 18% 80%;
-    --ring: 20 88% 40%;
+    --border: 39 23% 85%;
+    --input: 39 23% 85%;
+    --ring: 15 81% 43%;
 
     --radius: 0.75rem;
+
+    /* Third text level, below `muted-foreground`: counts, units, row meta. */
+    --faint: 34 10% 42%;
+
+    /* The design's undimmed accent. Decoration only — never text, never a
+       surface with text on it. Kept vivid on purpose. */
+    --brand: 15 81% 54%;
+
+    /* Soft status tints — badge and callout backgrounds. */
+    --tint-primary: 18 76% 93%;
+    --tint-success: 152 44% 92%;
+    --tint-warning: 41 76% 92%;
+    --tint-error: 7 56% 94%;
 
     /* Semantic status colours — theme-aware accents for validation, badges,
        status text, and subtle alert boxes. Exposed as Tailwind utilities
        (success/warning/error/info); tuned for contrast on a light surface. */
-    --color-success: 145 70% 29%;
-    --color-warning: 32 95% 32%;
-    --color-error: 0 72% 43%;
+    --color-success: 158 83% 27%;
+    --color-warning: 36 92% 32%;
+    --color-error: 2 60% 50%;
     --color-info: 217 80% 42%;
 
     /* Smart Categorization accent — category chips and folder labels. */
@@ -59,50 +93,65 @@
     --chart-5: 345 75% 55%;
     --chart-6: 215 15% 55%;
 
-    /* The log console is deliberately a fixed dark surface in both themes: it
-       is a terminal, and a terminal that inverts with the page reads as a
-       different component. Declared once here rather than as scattered
-       gray-700/900 values across the viewer. */
-    --console-surface: 24 12% 10%;
-    --console-border: 24 10% 23%;
-    --console-text: 30 8% 88%;
-    --console-muted: 30 6% 55%;
+    /* The run log reads as part of the page, not as an embedded terminal: the
+       design renders it on the page background with mono type and coloured
+       level tags, so these follow the theme rather than staying fixed dark. */
+    --console-surface: 37 31% 95%;
+    --console-border: 39 23% 85%;
+    --console-text: 34 11% 33%;
+    --console-muted: 34 10% 42%;
+
+    /* Elevation. One card shadow, one lifted shadow — the design uses a single
+       soft, warm, downward shadow rather than a full elevation scale. */
+    --shadow-card:
+      0 1px 2px hsl(33 20% 18% / 0.05), 0 12px 32px -12px hsl(33 20% 18% / 0.14);
   }
 
   .dark {
     color-scheme: dark;
-    --background: 24 14% 8%;
-    --foreground: 30 20% 95%;
+    --background: 30 14% 8%;
+    --foreground: 35 29% 92%;
 
-    --card: 24 13% 11%;
-    --card-foreground: 30 20% 96%;
+    --card: 30 14% 11%;
+    --card-foreground: 35 29% 92%;
 
-    --popover: 24 13% 11%;
-    --popover-foreground: 30 20% 96%;
+    --popover: 30 14% 11%;
+    --popover-foreground: 35 29% 92%;
 
-    --primary: 24 94% 62%;
-    --primary-foreground: 24 22% 9%;
+    --primary: 14 100% 62%;
+    --primary-foreground: 30 14% 8%;
 
-    --secondary: 24 12% 15%;
-    --secondary-foreground: 30 20% 96%;
+    --secondary: 33 15% 15%;
+    --secondary-foreground: 35 29% 92%;
 
-    --muted: 24 11% 17%;
-    --muted-foreground: 28 10% 66%;
+    --muted: 33 15% 15%;
+    --muted-foreground: 34 12% 61%;
 
-    --accent: 24 22% 18%;
-    --accent-foreground: 30 20% 96%;
+    --accent: 33 15% 15%;
+    --accent-foreground: 35 29% 92%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 30 20% 96%;
+    --destructive: 3 83% 65%;
+    --destructive-foreground: 30 14% 8%;
 
-    --border: 24 10% 23%;
-    --input: 24 10% 27%;
-    --ring: 24 94% 62%;
+    --border: 34 14% 19%;
+    --input: 34 14% 19%;
+    --ring: 14 100% 62%;
+
+    --faint: 34 12% 52%;
+
+    /* Dark mode needs no separate decorative accent: the design's dark orange
+       already clears AA, so brand and primary converge. */
+    --brand: 14 100% 62%;
+
+    --tint-primary: 19 41% 16%;
+    --tint-success: 157 32% 14%;
+    --tint-warning: 41 42% 14%;
+    --tint-error: 7 31% 16%;
 
     /* Semantic status colours — brighter so they read on a dark surface. */
-    --color-success: 142 69% 58%;
-    --color-warning: 38 95% 62%;
-    --color-error: 0 91% 71%;
+    --color-success: 158 62% 48%;
+    --color-warning: 35 86% 59%;
+    --color-error: 3 83% 65%;
     --color-info: 213 93% 68%;
 
     /* Category accent flips to a light violet on dark surfaces. */
@@ -117,7 +166,12 @@
     --chart-5: 350 90% 70%;
     --chart-6: 215 15% 65%;
 
-    /* The console does not flip: it is already the dark variant. */
+    --console-surface: 30 14% 8%;
+    --console-border: 34 14% 19%;
+    --console-text: 34 12% 61%;
+    --console-muted: 34 12% 52%;
+
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3), 0 12px 32px -12px hsl(0 0% 0% / 0.5);
   }
 }
 
@@ -126,13 +180,14 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
     min-width: 320px;
     min-height: 100vh;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
   button,
   input,

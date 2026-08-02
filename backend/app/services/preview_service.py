@@ -20,8 +20,10 @@ from app.core.exceptions import ConfigError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
+from app.core.paths import resolve_app_paths
 from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
+from app.services.catalog_indexing import index_library_roots
 from app.services.dedup_index import DedupIndex
 from app.services.destination import (
     build_dest_dir,
@@ -406,6 +408,22 @@ class PreviewService:
                 task.update_progress(rank + 1, eta_seconds=eta)
 
         items: list[dict[str, Any]] = [it for it in slots if it is not None]
+
+        # Fill the persistent index the duplicate workbench reads. The plan
+        # already knows which files are copies of each other, but Review's
+        # per-group evidence — sizes, dimensions, roles, confidence — comes
+        # from the catalog, and nothing else populates it. Advisory: a failure
+        # costs the richer view, never the plan.
+        await asyncio.to_thread(
+            index_library_roots,
+            config.library_profile,
+            data_dir=resolve_app_paths().data_dir,
+            recursive=config.recursive_scan,
+            max_depth=config.max_recursion_depth,
+            exclude_patterns=tuple(config.exclude_patterns or ()),
+            cancel=(lambda: task.cancel_event.is_set()) if task is not None else None,
+        )
+
         logger.info(
             "Preview complete",
             will_sort=stats["will_sort"],

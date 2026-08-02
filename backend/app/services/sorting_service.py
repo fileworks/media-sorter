@@ -187,6 +187,9 @@ class SortingService:
         category_classifier_service: CategoryClassifierService | None = None,
     ) -> None:
         self._config = config
+        # Files whose planned name had to be suffixed because another file
+        # claimed it first. Reset at the start of every run; reported live.
+        self._collisions_planned = 0
         self._config_service = config_service
         self._fs = filesystem_service
         self._extraction = extraction_service
@@ -306,6 +309,11 @@ class SortingService:
 
         operation_id = f"sort_{uuid.uuid4().hex[:12]}"
         start_time = time.monotonic()
+        # Per-run counters. `collisions_reported` is the high-water mark already
+        # pushed to the task, so the live tally is reported as a delta rather
+        # than re-counted from zero on every file.
+        self._collisions_planned = 0
+        collisions_reported = 0
         protected_roots = tuple(item.canonical_path for item in library.references)
         execution = (
             None
@@ -479,6 +487,12 @@ class SortingService:
 
             if rich_task is not None:
                 rich_task.record_outcome(status)
+                if self._collisions_planned > collisions_reported:
+                    rich_task.record_outcome(
+                        "name_collision",
+                        count=self._collisions_planned - collisions_reported,
+                    )
+                    collisions_reported = self._collisions_planned
                 # Every completed file is a point a restart could resume from:
                 # its placement is already verified and journalled.
                 rich_task.checkpoint(f"file:{rank + 1}")
@@ -974,7 +988,7 @@ class SortingService:
                         converted = self._conversion.convert_image(
                             source=dest,
                             target_format=config.image_format,
-                            quality=90,
+                            quality=config.image_quality,
                             preserve_exif=True,
                         )
                         if converted != dest:
@@ -994,7 +1008,7 @@ class SortingService:
                         converted = self._conversion.convert_video(
                             source=dest,
                             target_format=config.video_format,
-                            quality="medium",
+                            quality=config.video_quality,
                         )
                         if converted != dest:
                             dest.unlink(missing_ok=True)
@@ -1237,11 +1251,16 @@ class SortingService:
             camera,
             route_suffix,
         )
-        final = dest_dir / predicted_filename(file_path, extracted_date, config)
+        wanted = dest_dir / predicted_filename(file_path, extracted_date, config)
+        final = wanted
         if reserved_destinations is not None:
             final = reserve_destination(final, reserved_destinations)
         else:
             final = self._fs.find_available_filename(final)
+        # A changed name means two files wanted the same one and this is the
+        # loser. Counting it is what lets the run report "3 name collisions
+        # auto-suffixed" instead of silently producing files nobody expected.
+        self._collisions_planned += int(final != wanted)
         initial = final.with_suffix(file_path.suffix)
         return initial, final
 

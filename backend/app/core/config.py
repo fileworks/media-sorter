@@ -19,6 +19,7 @@ from app.core.concepts import Locale, bundled_labels
 from app.core.integrity import OptimizationProfile, PreservationProfile, utc_now
 from app.core.library_profiles import LibraryProfile
 from app.core.paths import resolve_app_paths
+from app.core.recipes import MAX_SAVED_RECIPES, SavedRecipe
 from app.core.rules import RuleSet, migrate_legacy_rules, normalized_key
 
 
@@ -55,6 +56,9 @@ class Config:
     # New and safely migrated configurations use strict Organize Only.
     preservation_profile: PreservationProfile = field(default_factory=PreservationProfile)
     optimization_profile: OptimizationProfile = field(default_factory=OptimizationProfile)
+    # The user's own named starting points, alongside the four built-in ones the
+    # UI ships. Ordered most-recently-saved first.
+    saved_recipes: list[SavedRecipe] = field(default_factory=list)
 
     # Sorting
     sort: bool = True
@@ -91,8 +95,13 @@ class Config:
     # Conversion
     convert_videos: bool = False
     video_format: Literal["mp4", "mkv", "mov", "webm", "avi"] = "mp4"
+    # Re-encode quality for video conversion, mapped to a CRF by the converter.
+    video_quality: Literal["low", "medium", "high"] = "medium"
     convert_images: bool = False
     image_format: Literal["jpeg", "png", "webp", "tiff"] = "jpeg"
+    # Encoder quality for lossy image formats (JPEG/WebP). Ignored by PNG and
+    # TIFF, which are lossless. Bounded by IMAGE_QUALITY_MIN/MAX.
+    image_quality: int = 90
 
     # Repair / validation
     repair_enabled: bool = False
@@ -251,6 +260,13 @@ class Config:
     duplicate_exact_enabled: bool = True
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
+    # Which copy a duplicate group keeps when nobody has chosen one by hand.
+    # A *default*, not a decision: Review can override it per group, in bulk, or
+    # not at all — an undecided group is quarantined for nothing, it just stays
+    # undecided. A protected reference member always wins regardless.
+    duplicate_keeper_policy: Literal[
+        "newest", "oldest", "largest", "smallest", "highest_resolution"
+    ] = "newest"
     burst_detection_enabled: bool = False
     burst_time_window_seconds: float = 3.0
     burst_perceptual_distance: int = 4
@@ -327,6 +343,10 @@ class Config:
             self.source_directory = primary_input.path if primary_input is not None else ""
             self.target_directory = destination.path if destination is not None else ""
             self.copy_instead_of_move = self.library_profile.transfer_mode == "copy"
+        self.saved_recipes = [
+            recipe if isinstance(recipe, SavedRecipe) else SavedRecipe.model_validate(recipe)
+            for recipe in self.saved_recipes
+        ][:MAX_SAVED_RECIPES]
         if isinstance(self.rule_set, dict):
             self.rule_set = RuleSet.model_validate(self.rule_set)
         if self.rules and not self.rule_set.tag_rules and not self.rule_set.route_rules:
@@ -372,6 +392,11 @@ class Config:
             value = getattr(self, config_field.name)
             if isinstance(value, BaseModel):
                 value = value.model_dump(mode="json")
+            elif isinstance(value, list) and any(isinstance(item, BaseModel) for item in value):
+                value = [
+                    item.model_dump(mode="json") if isinstance(item, BaseModel) else item
+                    for item in value
+                ]
             result[config_field.name] = value
         if self.ai_tagging_labels_provenance == "bundled":
             result["ai_tagging_labels"] = self.resolved_ai_tagging_labels()
@@ -540,6 +565,12 @@ RENAME_TOKENS: frozenset[str] = frozenset({"YYYY", "MM", "DD", "NAME", "TYPE"})
 # Inclusive bounds for ``duplicate_perceptual_threshold`` (matches the UI slider).
 PERCEPTUAL_THRESHOLD_MIN = 85
 PERCEPTUAL_THRESHOLD_MAX = 100
+
+# Inclusive bounds for ``image_quality``. The floor is not 1: below roughly 60
+# the artefacts are visible on any photograph, and offering a setting that only
+# produces bad output is not a choice, it is a trap.
+IMAGE_QUALITY_MIN = 60
+IMAGE_QUALITY_MAX = 100
 
 # Smart Categorization limits.
 # There is no user-facing cap on the number of categories — more categories are

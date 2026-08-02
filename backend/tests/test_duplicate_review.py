@@ -119,6 +119,44 @@ class TestKeeperPolicies:
             == apply_policy(second, PolicySettings("largest")).keeper_member_id
         )
 
+    def test_smallest_is_the_mirror_of_largest(self) -> None:
+        candidates = group(member("a", size=500), member("b", size=100), member("c", size=900))
+
+        assert apply_policy(candidates, PolicySettings("smallest")).keeper_member_id == "b"
+        assert apply_policy(candidates, PolicySettings("largest")).keeper_member_id == "c"
+
+    def test_smallest_breaks_ties_the_same_way_largest_does(self) -> None:
+        first = group(
+            member("a", size=100, mtime=900),
+            member("b", size=100, mtime=100),
+            member("c", size=500),
+            group_id="g",
+        )
+        second = group(
+            member("c", size=500),
+            member("b", size=100, mtime=100),
+            member("a", size=100, mtime=900),
+            group_id="g",
+        )
+
+        # Same members, different order, same answer — and the newer of the two
+        # tied copies wins, exactly as `largest` resolves its own ties.
+        assert apply_policy(first, PolicySettings("smallest")).keeper_member_id == "a"
+        assert (
+            apply_policy(first, PolicySettings("smallest")).keeper_member_id
+            == apply_policy(second, PolicySettings("smallest")).keeper_member_id
+        )
+
+    def test_smallest_still_yields_to_a_protected_reference(self) -> None:
+        candidates = group(
+            member("a", size=100),
+            member("b", size=900, role="reference", root_id="library"),
+        )
+
+        # The reference copy is larger and still wins: protection outranks the
+        # rule, or "keep the smallest" would quarantine somebody's library.
+        assert apply_policy(candidates, PolicySettings("smallest")).keeper_member_id == "b"
+
     def test_newest_and_oldest_pick_opposite_ends(self) -> None:
         candidates = group(member("a", mtime=100), member("b", mtime=900))
 

@@ -203,7 +203,9 @@ async def undo(body: UndoRequest) -> dict[str, Any]:
 class PolicyRequest(BaseModel):
     plan_id: str = "default"
     group_ids: list[str] = Field(default_factory=list)
-    policy_id: str = "largest"
+    # Omitted means "use the configured default keep rule", so a caller that
+    # does not care never has to restate the user's own preference.
+    policy_id: str | None = None
     preferred_roots: list[str] = Field(default_factory=list)
     scope: str = Field(default="selected_groups")
     filter_key: str = ""
@@ -232,7 +234,7 @@ async def apply_policy_route(body: ApplyPolicyRequest, container: ContainerDep) 
     plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
     await _ensure_groups(plan, container)
     settings = PolicySettings(
-        policy_id=body.policy_id,  # type: ignore[arg-type]
+        policy_id=_policy_id(body, container),  # type: ignore[arg-type]
         preferred_roots=tuple(body.preferred_roots),
     )
 
@@ -421,6 +423,13 @@ async def cleanup(body: CleanupRequest) -> dict[str, Any]:
 def _transfer_mode(container: Any) -> str:
     profile = getattr(container.config, "library_profile", None)
     return str(getattr(profile, "transfer_mode", None) or "copy")
+
+
+def _policy_id(body: PolicyRequest, container: Any) -> str:
+    """The requested keep rule, or the configured default when none was sent."""
+    if body.policy_id:
+        return body.policy_id
+    return str(getattr(container.config, "duplicate_keeper_policy", None) or "newest")
 
 
 def _current_groups(container: Any) -> list[Any]:

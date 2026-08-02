@@ -4,7 +4,20 @@ import catalogPanelSource from "@/components/CatalogPanel.tsx?raw";
 import operationCenterSource from "@/components/OperationCenter.tsx?raw";
 import quarantineManagerSource from "@/components/QuarantineManager.tsx?raw";
 import reviewWorkbenchSource from "@/components/ReviewWorkbench.tsx?raw";
-import sourcesPanelSource from "@/components/SourcesPanel.tsx?raw";
+import sourcesScreenSource from "@/components/screens/SourcesScreen.tsx?raw";
+import configureScreenSource from "@/components/screens/ConfigureScreen.tsx?raw";
+import reviewScreenSource from "@/components/screens/ReviewScreen.tsx?raw";
+import executeScreenSource from "@/components/screens/ExecuteScreen.tsx?raw";
+import duplicatesTabSource from "@/components/screens/review/DuplicatesTab.tsx?raw";
+import warningsTabSource from "@/components/screens/review/WarningsTab.tsx?raw";
+import junkTabSource from "@/components/screens/review/JunkTab.tsx?raw";
+import compareModalSource from "@/components/screens/review/CompareModal.tsx?raw";
+import destinationTreeSource from "@/components/screens/review/DestinationTree.tsx?raw";
+import planSummarySource from "@/components/screens/review/PlanSummary.tsx?raw";
+import recipeGridSource from "@/components/screens/RecipeGrid.tsx?raw";
+import runLogSource from "@/components/screens/RunLog.tsx?raw";
+import titleBarSource from "@/components/shell/TitleBar.tsx?raw";
+import stageStepperSource from "@/components/shell/StageStepper.tsx?raw";
 import validationPanelSource from "@/components/ValidationPanel.tsx?raw";
 import { de, en } from "@/i18n/messages";
 import { storedLocale, translate } from "@/i18n/I18nContext";
@@ -85,7 +98,20 @@ describe("English/German resources", () => {
 
   it("keeps every newly reachable staged panel free of raw English UI text", () => {
     const panels = {
-      "SourcesPanel.tsx": sourcesPanelSource,
+      "SourcesScreen.tsx": sourcesScreenSource,
+      "ConfigureScreen.tsx": configureScreenSource,
+      "ReviewScreen.tsx": reviewScreenSource,
+      "ExecuteScreen.tsx": executeScreenSource,
+      "DuplicatesTab.tsx": duplicatesTabSource,
+      "WarningsTab.tsx": warningsTabSource,
+      "JunkTab.tsx": junkTabSource,
+      "CompareModal.tsx": compareModalSource,
+      "DestinationTree.tsx": destinationTreeSource,
+      "PlanSummary.tsx": planSummarySource,
+      "RecipeGrid.tsx": recipeGridSource,
+      "RunLog.tsx": runLogSource,
+      "TitleBar.tsx": titleBarSource,
+      "StageStepper.tsx": stageStepperSource,
       "ReviewWorkbench.tsx": reviewWorkbenchSource,
       "ValidationPanel.tsx": validationPanelSource,
       "CatalogPanel.tsx": catalogPanelSource,
@@ -106,7 +132,15 @@ describe("English/German resources", () => {
           const text = node.text.trim();
           const keyboardShortcut =
             /^\(?Alt\+[A-Za-z0-9↑↓…]+(?:\s*\/\s*Alt\+[A-Za-z0-9↑↓…]+)?\)?$/.test(text);
-          if (/[A-Za-z]/.test(text) && !keyboardShortcut) rawText.push(text);
+          // Three things are the same in every locale and must not be routed
+          // through the catalogue: the product's name, the "v" that prefixes a
+          // version number, and a language's own code in its own language —
+          // translating "EN" into German would make the picker unusable to the
+          // very person who needs it.
+          const localeInvariant = /^(MediaSorter|v|EN|DE)$/.test(text);
+          if (/[A-Za-z]/.test(text) && !keyboardShortcut && !localeInvariant) {
+            rawText.push(text);
+          }
         }
         ts.forEachChild(node, visit);
       };

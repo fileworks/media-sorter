@@ -1,150 +1,64 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FiArrowLeft, FiCheckCircle, FiClock, FiMoon, FiSun, FiX } from "react-icons/fi";
+/**
+ * The application: one window, four screens, one primary action at a time.
+ *
+ * This file owns the wiring — server state, the folder list, the run — and
+ * nothing about presentation. Each screen is handed exactly the data it draws
+ * and exactly the callbacks it can fire, which is what keeps "can I press
+ * Execute?" answerable in one place (`stageModel`) rather than in four.
+ *
+ * The one flow decision that lives here: Configure's primary action runs the
+ * scan and the dry run, then moves to Review. Review is the plan, so there is
+ * nothing to review until that has happened, and making the user press "scan"
+ * and then "preview" as two separate acts was asking them to know why.
+ */
 
-import { AnalysisPanel } from "@/components/AnalysisPanel";
-import { ConfigPanel } from "@/components/ConfigPanel";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FiArrowLeft } from "react-icons/fi";
+
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ExecutePreflight } from "@/components/OperationCenter";
-import { LogViewer } from "@/components/LogViewer";
 import { PreviewProgressCard } from "@/components/PreviewProgressCard";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
-import { SourcesPanel } from "@/components/SourcesPanel";
-import { StageShell } from "@/components/StageShell";
+import { StageShell, type StageNav } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { ActionBar } from "@/components/shell/ActionBar";
+import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
+import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
+import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
+import { ReviewScreen } from "@/components/screens/ReviewScreen";
+import { RunLog } from "@/components/screens/RunLog";
+import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useConfig } from "@/hooks/useConfig";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
+import { useLogs } from "@/hooks/useLogs";
 import { usePreview } from "@/hooks/usePreview";
 import { useSorting } from "@/hooks/useSorting";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
-import { useI18n } from "@/i18n/I18nContext";
-import type { RootCard } from "@/lib/sourcesStage";
-import type { StageState } from "@/lib/stageModel";
-import { startBlock } from "@/lib/startupRecovery";
-import { cn, isTauri } from "@/lib/utils";
-import { formatDuration } from "@/lib/formatters";
+import { useI18n, type Locale } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
+import { formatBytes, formatDuration } from "@/lib/formatters";
+import type { RootCard, RootRole } from "@/lib/sourcesStage";
+import { blockingConflicts, validateRoots } from "@/lib/sourcesStage";
+import type { StageState, View } from "@/lib/stageModel";
+import { startBlock } from "@/lib/startupRecovery";
+import { isTauri } from "@/lib/utils";
 import { api } from "@/services/api";
-import type { Config, OperationReport } from "@/types/api";
+import type { Config, OperationReport, RecipeSettings } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
   import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
-);
-const PreviewPanel = lazy(() =>
-  import("@/components/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
-);
-const ReviewWorkbench = lazy(() =>
-  import("@/components/ReviewWorkbench").then((module) => ({ default: module.ReviewWorkbench })),
-);
-const CatalogPanel = lazy(() =>
-  import("@/components/CatalogPanel").then((module) => ({ default: module.CatalogPanel })),
-);
-const QuarantineManager = lazy(() =>
-  import("@/components/QuarantineManager").then((module) => ({
-    default: module.QuarantineManager,
-  })),
-);
-const ValidationPanel = lazy(() =>
-  import("@/components/ValidationPanel").then((module) => ({ default: module.ValidationPanel })),
-);
-const LibraryAuditPanel = lazy(() =>
-  import("@/components/LibraryAuditPanel").then((module) => ({
-    default: module.LibraryAuditPanel,
-  })),
-);
-const BurstReviewPanel = lazy(() =>
-  import("@/components/BurstReviewPanel").then((module) => ({
-    default: module.BurstReviewPanel,
-  })),
-);
-const DestinationReconciliationPanel = lazy(() =>
-  import("@/components/DestinationReconciliationPanel").then((module) => ({
-    default: module.DestinationReconciliationPanel,
-  })),
-);
-const SortingProgress = lazy(() =>
-  import("@/components/SortingProgress").then((module) => ({
-    default: module.SortingProgress,
-  })),
 );
 const ReportPanel = lazy(() =>
   import("@/components/ReportPanel").then((module) => ({ default: module.ReportPanel })),
 );
 
-const WELCOME_KEY = "mediasort_welcome_seen";
-
-function FirstRunWelcome({ onDismiss }: { onDismiss: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="animate-fade-in rounded-xl border border-primary/20 bg-primary/10 px-5 py-4">
-      <div className="flex items-start gap-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <FiCheckCircle className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{t("app.welcome")}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{t("app.welcomeHelp")}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="shrink-0 rounded p-1 text-muted-foreground/60 hover:text-muted-foreground"
-          aria-label={t("accessibility.dismiss")}
-        >
-          <FiX className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SortCelebration({ report }: { report: OperationReport }) {
-  const { t, locale } = useI18n();
-  const [visible, setVisible] = useState(true);
-  if (!visible) return null;
-  return (
-    <div className="animate-fade-in rounded-xl border border-primary/30 bg-primary/10 px-5 py-4">
-      <div className="flex items-center gap-4">
-        <FiCheckCircle className="h-6 w-6 shrink-0 text-primary" />
-        <p className="min-w-0 flex-1 text-sm font-bold text-foreground">
-          {t(
-            report.summary.sorted === 1
-              ? report.duration_seconds
-                ? "report.organizedIn.one"
-                : "report.organized.one"
-              : report.duration_seconds
-                ? "report.organizedIn"
-                : "report.organized",
-            {
-              count: report.summary.sorted.toLocaleString(locale),
-              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
-            },
-          )}
-        </p>
-        <button
-          type="button"
-          onClick={() => setVisible(false)}
-          aria-label={t("accessibility.dismiss")}
-          className="rounded p-1 text-primary/50 hover:text-primary"
-        >
-          <FiX className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function TopProgressBar({ busy }: { busy: boolean }) {
-  return busy ? (
-    <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />
-  ) : null;
-}
-
+/** The library profile's roots, presented as the cards the Sources screen draws. */
 function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: number): RootCard[] {
   if (!config) return [];
   const profileRoots =
@@ -195,27 +109,27 @@ function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: n
 
 export default function MainPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { theme, toggle: toggleTheme } = useTheme();
   const { config, isValid, updateConfig, saveError, retrySave } = useConfig();
-  const { setLocale, t } = useI18n();
+  const { setLocale, locale, t } = useI18n();
+
   const [historyOpen, setHistoryOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [pendingConfigPatch, setPendingConfigPatch] = useState<Partial<Config> | null>(null);
-  const [sectionBodyKey, setSectionBodyKey] = useState(0);
+  const [bodyKey, setBodyKey] = useState(0);
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
-  const [welcomeVisible, setWelcomeVisible] = useState(() => {
-    try {
-      return !localStorage.getItem(WELCOME_KEY);
-    } catch {
-      return false;
-    }
-  });
+  const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
+  const [stage, setStage] = useState<StageState["stage"]>("sources");
+  const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
 
   const analysis = useAnalysis();
   const preview = usePreview();
   const sorting = useSorting();
   const loaderActive = useGlobalLoader();
+  const { logs } = useLogs();
   const { data: updateInfo } = useUpdateCheck();
+
   const {
     data: health,
     isLoading: healthLoading,
@@ -246,18 +160,26 @@ export default function MainPage() {
   useEffect(() => setImpactAcknowledged(false), [preview.result, config]);
 
   const scanned = analysis.result !== null && analysis.error === null;
-  const reviewed = preview.result !== null && preview.error === null;
+  const planned = preview.result !== null && preview.error === null;
   const isSorting = sorting.status === "running" || sorting.status === "pending";
   const isAnyRunning = analysis.loading || preview.loading || isSorting;
-  const recoveryOperations = diagnostics?.recovery_operations ?? [];
+  const recoveryOperations = useMemo(
+    () => diagnostics?.recovery_operations ?? [],
+    [diagnostics],
+  );
   const recoveryBlock = startBlock(recoveryOperations);
+
   const cards = useMemo(
     () => rootCards(config, scanned, analysis.result?.total_files ?? 0),
     [analysis.result?.total_files, config, scanned],
   );
 
+  // ── Configuration ──────────────────────────────────────────────────────────
+
   const handleConfigSave = useCallback(
     (patch: Partial<Config>) => {
+      // Changing settings after a plan exists invalidates it, so the change is
+      // confirmed rather than applied behind the user's back.
       if (analysis.result || preview.result) {
         setPendingConfigPatch(patch);
         return;
@@ -282,35 +204,41 @@ export default function MainPage() {
           identity: existing?.identity ?? null,
         };
       });
-      const source = roots.find((root) => root.role === "input")?.path ?? "";
-      const destination = roots.find((root) => root.role === "destination")?.path ?? "";
       handleConfigSave({
-        source_directory: source,
-        target_directory: destination,
+        source_directory: roots.find((root) => root.role === "input")?.path ?? "",
+        target_directory: roots.find((root) => root.role === "destination")?.path ?? "",
         library_profile: { ...config.library_profile, roots },
       });
     },
     [config, handleConfigSave],
   );
 
-  const pickRootFolder = useCallback(async () => {
+  /** Ask the OS for a folder. Outside Tauri there is no picker to ask. */
+  const pickFolder = useCallback(async (): Promise<string | null> => {
     if (!isTauri) {
-      document
-        .getElementById("source-dir")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-      window.setTimeout(() => document.getElementById("source-dir")?.focus(), 350);
-      return;
+      toast(t("sources.pickerUnavailable"), "warning");
+      return null;
     }
     try {
       const { open } = await import("@tauri-apps/api/dialog");
       const selected = await open({ directory: true, multiple: false });
-      if (typeof selected !== "string") return;
+      return typeof selected === "string" ? selected : null;
+    } catch {
+      toast(t("sources.folderPickerFailed"), "error");
+      return null;
+    }
+  }, [t, toast]);
+
+  const addFolder = useCallback(
+    async (role: RootRole) => {
+      const path = await pickFolder();
+      if (!path) return;
       handleRootsChange([
         ...cards,
         {
-          rootId: `input-${Date.now()}`,
-          role: "input",
-          path: selected,
+          rootId: `${role}-${Date.now()}`,
+          role,
+          path,
           displayName: null,
           priority: cards.length,
           exclusions: [],
@@ -321,40 +249,77 @@ export default function MainPage() {
           issueCount: 0,
         },
       ]);
-    } catch {
-      toast(t("sources.folderPickerFailed"), "error");
-    }
-  }, [cards, handleRootsChange, t, toast]);
+    },
+    [cards, handleRootsChange, pickFolder],
+  );
 
-  const dismissWelcome = useCallback(() => {
-    try {
-      localStorage.setItem(WELCOME_KEY, "1");
-    } catch {
-      // Local storage is optional.
-    }
-    setWelcomeVisible(false);
-  }, []);
+  const changeFolder = useCallback(
+    async (rootId: string) => {
+      const path = await pickFolder();
+      if (!path) return;
+      handleRootsChange(
+        cards.map((card) => (card.rootId === rootId ? { ...card, path, volume: null } : card)),
+      );
+    },
+    [cards, handleRootsChange, pickFolder],
+  );
 
-  const runAnalysis = async () => {
+  const removeFolder = useCallback(
+    (rootId: string) => handleRootsChange(cards.filter((card) => card.rootId !== rootId)),
+    [cards, handleRootsChange],
+  );
+
+  // ── Recipes ────────────────────────────────────────────────────────────────
+
+  const { data: savedRecipes = [] } = useQuery({
+    queryKey: ["recipes"],
+    queryFn: () => api.listRecipes(),
+    enabled: health?.status === "ok",
+    staleTime: 60_000,
+  });
+
+  const saveRecipe = useMutation({
+    mutationFn: ({ name, settings }: { name: string; settings: RecipeSettings }) =>
+      api.saveRecipe(name, settings),
+    onSuccess: (recipe) => {
+      void queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      toast(t("recipes.saved", { name: recipe.name }), "success");
+    },
+  });
+
+  const deleteRecipe = useMutation({
+    mutationFn: (recipeId: string) => api.deleteRecipe(recipeId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recipes"] }),
+    onError: () => toast(t("recipes.deleteFailed"), "error"),
+  });
+
+  // ── The run ────────────────────────────────────────────────────────────────
+
+  /**
+   * Scan and plan in one act, then hand back whether there is a plan.
+   *
+   * Splitting these into two buttons made the user responsible for knowing that
+   * a dry run needs a fresh index. It does; that is our problem, not theirs.
+   */
+  const buildPlan = useCallback(async (): Promise<boolean> => {
     if (recoveryBlock.blocked) {
       toast(recoveryBlock.reason ?? t("stage.recovery.blocked"), "warning");
-      return;
+      return false;
     }
     if (!isValid) {
       toast(t("analysis.requiredFolders"), "warning");
-      return;
+      return false;
     }
-    preview.clear();
-    await analysis.runAnalysis();
-  };
-
-  const runPreview = async () => {
     if (!analysis.result) {
-      toast(t("analysis.runFirst"), "warning");
-      return;
+      preview.clear();
+      await analysis.runAnalysis();
+      // `runAnalysis` resolves once the task settles; a failure has already been
+      // surfaced through `analysis.error`, and pressing on would plan on nothing.
+      if (analysis.error) return false;
     }
     await preview.generatePreview();
-  };
+    return preview.error === null;
+  }, [analysis, isValid, preview, recoveryBlock, t, toast]);
 
   const cancellableOperation = analysis.loading
     ? "analysis"
@@ -371,19 +336,37 @@ export default function MainPage() {
     if (cancellableOperation === "sort") await sorting.cancelSorting();
   };
 
+  const startRun = useCallback(() => {
+    void sorting.startSorting(
+      false,
+      preview.result?.config_fingerprint,
+      preview.result?.plan_id,
+    );
+  }, [preview.result, sorting]);
+
+  // ── Stage wiring ───────────────────────────────────────────────────────────
+
+  const rootConflicts = useMemo(() => validateRoots(cards), [cards]);
+  const rootBlocker = blockingConflicts(rootConflicts)[0];
+
   const stageInputs = {
-    rootsReady: isValid,
-    rootsReason: isValid ? null : t("stage.gate.roots"),
+    rootsReady: isValid && !rootBlocker,
+    rootsReason: rootBlocker
+      ? t(`sources.conflict.${rootBlocker.kind}`, rootBlocker.params, rootBlocker.message)
+      : isValid
+        ? null
+        : t("stage.gate.roots"),
     scanned,
-    reviewed,
-    reviewedReason: t("stage.gate.review"),
+    planned,
+    plannedReason: t("stage.gate.plan"),
     blocked: recoveryBlock.blocked,
     blockedReason: recoveryBlock.reason,
   };
+
   const stageKey = {
     profileId: config?.library_profile.profile_id ?? "",
     catalogGeneration: scanned ? 1 : 0,
-    planVersion: reviewed ? 1 : 0,
+    planVersion: planned ? 1 : 0,
     taskId: null,
   };
 
@@ -409,257 +392,109 @@ export default function MainPage() {
     embeddedTagCount: impact?.embedded_tag_count ?? 0,
   };
 
-  const renderSources = () => (
-    <div className="space-y-4">
-      {welcomeVisible && !config?.source_directory && (
-        <FirstRunWelcome onDismiss={dismissWelcome} />
+  /** Jump to Configure and scroll to a named setting row once it has mounted. */
+  const openSetting = useCallback((anchorId: string, nav: StageNav) => {
+    setPendingSettingAnchor(anchorId);
+    nav.go("configure");
+  }, []);
+
+  useEffect(() => {
+    if (stage !== "configure" || !pendingSettingAnchor) return;
+    const id = window.setTimeout(() => {
+      document.getElementById(pendingSettingAnchor)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      setPendingSettingAnchor(null);
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [pendingSettingAnchor, stage]);
+
+  const backendState: BackendState =
+    health?.status === "ok" ? "ready" : healthError ? "lost" : healthLoading ? "connecting" : "connecting";
+
+  const titleBar = (
+    <TitleBar
+      runLabel={t(
+        isSorting
+          ? "app.runInProgress"
+          : sorting.report
+            ? "app.runFinished"
+            : planned
+              ? "app.runPlanned"
+              : "app.newRun",
       )}
-      <SourcesPanel
-        cards={cards}
-        onChange={handleRootsChange}
-        onPickFolder={() => void pickRootFolder()}
-        config={config}
-        onApplyConfig={handleConfigSave}
-      />
-      <ConfigPanel
-        disabled={isAnyRunning}
-        onSaveConfig={handleConfigSave}
-        sectionBodyKey={sectionBodyKey}
-      />
-      {cards.length === 0 ? null : analysis.loading ? (
-        <StateView variant="loading" title={t("analysis.scanning")} />
-      ) : analysis.error ? (
-        <StateView
-          variant="error"
-          title={t("analysis.failed")}
-          detail={analysis.error}
-          onRetry={() => void runAnalysis()}
-        />
-      ) : analysis.result ? (
-        <AnalysisPanel
-          result={analysis.result}
-          loading={false}
-          error={null}
-          onRetry={() => void runAnalysis()}
-          onBackToConfig={() => undefined}
-        />
-      ) : (
-        <StateView
-          variant={isValid ? "empty" : "blocked"}
-          title={isValid ? t("stage.sources.ready") : t("stage.sources.blocked")}
-          detail={isValid ? t("stage.sources.scanHelp") : t("stage.gate.roots")}
-          action={
-            <Button
-              size="sm"
-              disabled={!isValid || !health || recoveryBlock.blocked}
-              onClick={() => void runAnalysis()}
-            >
-              {t("analysis.action")}
-            </Button>
-          }
-        />
-      )}
-    </div>
+      backend={backendState}
+      version={health?.version ?? null}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      locale={locale}
+      onLocaleChange={(next: Locale) => {
+        setLocale(next);
+        updateConfig({ language: next });
+      }}
+      historyCount={historyMeta?.total ?? 0}
+      onOpenHistory={() => setHistoryOpen(true)}
+      busy={isAnyRunning || loaderActive}
+    />
   );
 
-  const renderReview = (state: StageState) => {
-    if (!scanned) {
-      return (
+  const banners = (
+    <>
+      {recoveryOperations.map((operation) => (
+        <RecoveryBanner
+          key={operation.operation_id}
+          operation={operation}
+          onOpenReport={() => setHistoryOpen(true)}
+        />
+      ))}
+      {updateInfo?.update_available && <UpdateBanner info={updateInfo} />}
+      {healthError && (
         <StateView
-          variant="blocked"
-          title={t("stage.review.notScanned")}
-          detail={t("stage.gate.scan")}
-        />
-      );
-    }
-    if (state.view === "overview") {
-      return (
-        <div className="space-y-4">
-          <AnalysisPanel
-            result={analysis.result}
-            loading={false}
-            error={analysis.error}
-            onRetry={() => void runAnalysis()}
-            onBackToConfig={() => undefined}
-          />
-          {preview.loading ? (
-            <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
-          ) : (
-            <StateView
-              variant={preview.error ? "error" : preview.result ? "empty" : "blocked"}
-              title={
-                preview.error
-                  ? t("preview.failed")
-                  : preview.result
-                    ? t("stage.review.planReady")
-                    : t("stage.review.planNeeded")
-              }
-              detail={preview.error ?? t("stage.review.planHelp")}
-              onRetry={preview.error ? () => void runPreview() : undefined}
-              action={
-                !preview.error ? (
-                  <Button size="sm" onClick={() => void runPreview()}>
-                    {preview.result ? t("preview.rerun") : t("preview.action")}
-                  </Button>
-                ) : undefined
-              }
-            />
-          )}
-        </div>
-      );
-    }
-    if (state.view === "organization") {
-      return preview.loading ? (
-        <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
-      ) : (
-        <PreviewPanel
-          result={preview.result}
-          loading={false}
-          error={preview.error}
-          onRetry={() => void runPreview()}
-          copyInsteadOfMove={config?.copy_instead_of_move}
-          categorizeEnabled={config?.categorize_enabled}
-          sortCriteria={config?.sort_criteria ?? ["year", "month", "day"]}
-        />
-      );
-    }
-    if (state.view === "exact") {
-      return <ReviewWorkbench kindFilter="exact" items={preview.result?.items ?? []} />;
-    }
-    if (state.view === "similar") {
-      return <ReviewWorkbench kindFilter="similar" items={preview.result?.items ?? []} />;
-    }
-    if (state.view === "bursts") {
-      const inputRoot = config?.library_profile.roots.find((root) => root.role === "input");
-      return inputRoot ? (
-        <BurstReviewPanel
-          root={inputRoot.path}
-          items={preview.result?.items ?? []}
-          enabled={config?.burst_detection_enabled ?? false}
-        />
-      ) : (
-        <StateView variant="blocked" title={t("stage.gate.roots")} />
-      );
-    }
-    if (state.view === "reconciliation") {
-      return <DestinationReconciliationPanel items={preview.result?.items ?? []} />;
-    }
-    if (state.view === "validation") {
-      const inputRoot = config?.library_profile.roots.find((root) => root.role === "input");
-      const destinationRoot = config?.library_profile.roots.find(
-        (root) => root.role === "destination",
-      );
-      return inputRoot ? (
-        <div className="space-y-6">
-          <ValidationPanel rootId={inputRoot.root_id} />
-          {destinationRoot?.path && <LibraryAuditPanel root={destinationRoot.path} />}
-        </div>
-      ) : (
-        <StateView variant="blocked" title={t("stage.gate.roots")} />
-      );
-    }
-    return (
-      <div className="space-y-6">
-        <CatalogPanel />
-        <QuarantineManager />
-      </div>
-    );
-  };
-
-  const renderExecute = () => {
-    if (!reviewed) {
-      return (
-        <StateView
-          variant="blocked"
-          title={t("stage.execute.notReady")}
-          detail={t("stage.gate.review")}
-        />
-      );
-    }
-    if (sorting.report) {
-      return (
-        <div className="space-y-4">
-          <SortCelebration report={sorting.report} />
-          <ReportPanel report={sorting.report} />
-        </div>
-      );
-    }
-    if (sorting.status !== "idle") {
-      return (
-        <SortingProgress
-          progress={sorting.progress ?? null}
-          status={sorting.status}
-          error={sorting.error}
-          onCancel={() => setCancelConfirmOpen(true)}
-          onViewReport={() => undefined}
-          onRetry={() =>
-            void sorting.startSorting(
-              false,
-              preview.result?.config_fingerprint,
-              preview.result?.plan_id,
-            )
+          variant="error"
+          compact
+          title={isTauri ? t("backend.lost") : t("backend.browserLost")}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-lg border border-current px-3 py-1 text-xs"
+            >
+              {t("app.reload")}
+            </button>
           }
         />
-      );
-    }
-    return (
-      <ExecutePreflight
-        input={preflightInput}
-        onAcknowledge={setImpactAcknowledged}
-        onExecute={() =>
-          void sorting.startSorting(
-            false,
-            preview.result?.config_fingerprint,
-            preview.result?.plan_id,
-          )
-        }
-        busy={isSorting}
-      />
-    );
-  };
+      )}
+      {saveError && (
+        <StateView
+          variant="error"
+          compact
+          title={t("config.saveFailed")}
+          detail={extractErrorMessage(saveError, t("config.saveFailedHelp"))}
+          onRetry={retrySave}
+        />
+      )}
+    </>
+  );
 
-  const backendColor =
-    health?.status === "ok"
-      ? "bg-success"
-      : healthLoading
-        ? "bg-warning animate-pulse"
-        : "bg-error";
-  const globalBusy = isAnyRunning || loaderActive;
+  // ── History is a separate place, not a stage ───────────────────────────────
 
   if (historyOpen) {
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-background">
-        <header className="relative shrink-0 border-b border-border/80 bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
-          <TopProgressBar busy={globalBusy} />
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setHistoryOpen(false)}
-              className="text-muted-foreground"
-            >
-              <FiArrowLeft className="h-4 w-4" aria-hidden />
-              {t("app.back")}
-            </Button>
-            <span className="truncate text-sm font-semibold text-foreground">
-              {t("app.sortHistory")}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-            >
-              {theme === "dark" ? (
-                <FiSun className="h-4 w-4" aria-hidden />
-              ) : (
-                <FiMoon className="h-4 w-4" aria-hidden />
-              )}
-            </Button>
-          </div>
-        </header>
-        <main className="flex-1 overflow-y-auto px-6 py-5">
+        {titleBar}
+        <div className="border-b border-border bg-card px-4 py-2.5 sm:px-5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setHistoryOpen(false)}
+            className="text-muted-foreground"
+          >
+            <FiArrowLeft className="h-4 w-4" aria-hidden />
+            {t("app.back")}
+          </Button>
+        </div>
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mx-auto max-w-3xl">
             <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
               <HistoryPanel />
@@ -671,163 +506,183 @@ export default function MainPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="relative shrink-0 border-b border-border/80 bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
-        <TopProgressBar busy={globalBusy} />
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <img
-              src="/icon.svg"
-              alt=""
-              width={36}
-              height={36}
-              className="h-9 w-9 shrink-0 rounded-xl shadow-sm"
+    <>
+      <StageShell
+        inputs={stageInputs}
+        stageKey={stageKey}
+        titleBar={titleBar}
+        banners={banners}
+        onStateChange={(state) => setStage(state.stage)}
+        footer={(state, nav) => {
+          if (state.stage === "execute") return null;
+          if (state.stage === "sources") {
+            return (
+              <ActionBar
+                message={t("footer.sources")}
+                primary={{
+                  label: t("footer.toConfigure"),
+                  onClick: () => nav.go("configure"),
+                  disabled: !nav.canEnter("configure"),
+                  disabledReason: nav.reasonFor("configure"),
+                }}
+              />
+            );
+          }
+          if (state.stage === "configure") {
+            const estimate = analysis.result
+              ? t("footer.estimate", {
+                  files: analysis.result.total_files.toLocaleString(locale),
+                  duration: formatDuration(analysis.result.estimated_duration_seconds, {
+                    style: "long",
+                    locale,
+                  }),
+                  size: formatBytes(analysis.result.total_size_bytes, { locale }),
+                })
+              : t("footer.estimateUnknown");
+            return (
+              <ActionBar
+                tone="estimate"
+                message={estimate}
+                back={{ label: t("common.back"), onClick: () => nav.go("sources") }}
+                primary={{
+                  label: t("footer.preview"),
+                  busy: analysis.loading || preview.loading,
+                  onClick: () => {
+                    void buildPlan().then((ok) => ok && nav.go("review"));
+                  },
+                  disabled: !stageInputs.rootsReady || isAnyRunning,
+                  disabledReason: stageInputs.rootsReason,
+                }}
+              />
+            );
+          }
+          return (
+            <ActionBar
+              message={t("footer.review")}
+              back={{ label: t("common.back"), onClick: () => nav.go("configure") }}
+              primary={{
+                label: t("footer.toExecute"),
+                onClick: () => nav.go("execute"),
+                disabled: !nav.canEnter("execute"),
+                disabledReason: nav.reasonFor("execute"),
+              }}
             />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-base font-bold tracking-tight text-foreground">
-                  MediaSorter
-                </span>
-                {health?.version && (
-                  <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-semibold text-primary sm:inline">
-                    v{health.version}
-                  </span>
-                )}
-              </div>
-              <p className="hidden truncate text-2xs text-muted-foreground sm:block">
-                {t("app.tagline")}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <div
-              className="hidden items-center gap-2 rounded-full border border-border/80 bg-background px-2.5 py-1.5 text-2xs text-muted-foreground md:flex"
-              role="status"
-              title={
-                health?.status === "ok"
-                  ? t("backend.connected", { version: health.version })
-                  : t("backend.connecting")
-              }
-            >
-              <span className={cn("h-2 w-2 rounded-full", backendColor)} />
-              {health?.status === "ok" ? t("backend.ready") : t("backend.connecting")}
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-              aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-            >
-              {theme === "dark" ? (
-                <FiSun className="h-4 w-4" aria-hidden />
-              ) : (
-                <FiMoon className="h-4 w-4" aria-hidden />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setHistoryOpen(true)}
-              className="px-2 text-muted-foreground sm:px-3"
-              title={t("app.history")}
-            >
-              <FiClock className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">{t("app.history")}</span>
-              {(historyMeta?.total ?? 0) > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-3xs font-semibold">
-                  {historyMeta?.total}
-                </span>
-              )}
-            </Button>
-            <div
-              className="flex h-9 w-9 items-center justify-center rounded-lg md:hidden"
-              role="status"
-              aria-label={
-                health?.status === "ok"
-                  ? t("backend.connected", { version: health.version })
-                  : t("backend.connecting")
-              }
-            >
-              <span className={cn("h-2.5 w-2.5 rounded-full", backendColor)} />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main
-        className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:py-7"
-        style={{ scrollbarGutter: "stable" }}
+          );
+        }}
       >
-        <div className="mx-auto max-w-7xl space-y-4">
-          {recoveryOperations.map((operation) => (
-            <RecoveryBanner
-              key={operation.operation_id}
-              operation={operation}
-              onOpenReport={() => setHistoryOpen(true)}
-            />
-          ))}
-          {updateInfo?.update_available && <UpdateBanner info={updateInfo} />}
-          {healthError && (
-            <StateView
-              variant="error"
-              compact
-              title={isTauri ? t("backend.lost") : t("backend.browserLost")}
-              action={
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="rounded-lg border border-current px-3 py-1 text-xs"
-                >
-                  {t("app.reload")}
-                </button>
-              }
-            />
-          )}
-          {saveError && (
-            <StateView
-              variant="error"
-              compact
-              title={t("config.saveFailed")}
-              detail={extractErrorMessage(saveError, t("config.saveFailedHelp"))}
-              onRetry={retrySave}
-            />
-          )}
+        {(state, nav) => {
+          if (state.stage === "sources") {
+            return config ? (
+              <SourcesScreen
+                cards={cards}
+                excludedForRun={excludedForRun}
+                analysis={analysis.result}
+                config={config}
+                savedRecipes={savedRecipes}
+                disabled={isAnyRunning}
+                onChange={handleRootsChange}
+                onExcludeForRun={setExcludedForRun}
+                onAddFolder={(role) => void addFolder(role)}
+                onChangeFolder={(rootId) => void changeFolder(rootId)}
+                onRemove={removeFolder}
+                onApplyConfig={handleConfigSave}
+                onDeleteRecipe={(recipeId) => deleteRecipe.mutate(recipeId)}
+              />
+            ) : (
+              <StateView variant="loading" title={t("state.loading")} />
+            );
+          }
 
-          <StageShell inputs={stageInputs} stageKey={stageKey}>
-            {(state) => {
-              const content =
-                state.stage === "sources"
-                  ? renderSources()
-                  : state.stage === "review"
-                    ? renderReview(state)
-                    : renderExecute();
+          if (state.stage === "configure") {
+            return (
+              <ConfigureScreen
+                disabled={isAnyRunning}
+                bodyKey={bodyKey}
+                onSaveConfig={handleConfigSave}
+                onSaveRecipe={async (name, settings) => {
+                  await saveRecipe.mutateAsync({ name, settings });
+                }}
+              />
+            );
+          }
+
+          if (state.stage === "review") {
+            if (preview.loading) {
               return (
-                <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
-                  {content}
-                </Suspense>
+                <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
               );
-            }}
-          </StageShell>
-        </div>
-      </main>
+            }
+            if (preview.error) {
+              return (
+                <StateView
+                  variant="error"
+                  title={t("preview.failed")}
+                  detail={preview.error}
+                  onRetry={() => void preview.generatePreview()}
+                />
+              );
+            }
+            if (!preview.result || !config) {
+              return (
+                <StateView
+                  variant="blocked"
+                  title={t("stage.review.planNeeded")}
+                  detail={t("stage.gate.plan")}
+                  action={
+                    <Button size="sm" onClick={() => void buildPlan()}>
+                      {t("preview.action")}
+                    </Button>
+                  }
+                />
+              );
+            }
+            return (
+              <ReviewScreen
+                result={preview.result}
+                config={config}
+                view={state.view as View}
+                onSelectView={nav.selectView}
+                onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
+                onRerunPreview={() => void preview.generatePreview()}
+              />
+            );
+          }
 
-      {cancellableOperation && (
-        <footer className="shrink-0 border-t border-border bg-background px-6 py-2">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 text-xs">
-            <span className="text-muted-foreground">{t("state.working")}</span>
-            <button
-              type="button"
-              onClick={() => setCancelConfirmOpen(true)}
-              className="rounded-lg border border-border px-3 py-1 text-warning"
+          // Execute.
+          if (!config) return <StateView variant="loading" title={t("state.loading")} />;
+          if (sorting.report) {
+            return (
+              <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
+                <FinishedRun report={sorting.report} />
+              </Suspense>
+            );
+          }
+          if (sorting.status === "idle") {
+            return (
+              <ExecutePreflight
+                input={preflightInput}
+                onAcknowledge={setImpactAcknowledged}
+                onExecute={startRun}
+                busy={isSorting}
+              />
+            );
+          }
+          return (
+            <ExecuteScreen
+              status={sorting.status === "pending" ? "running" : sorting.status}
+              progress={sorting.progress?.progress ?? null}
+              outcomes={sorting.progress?.progress?.outcomes ?? {}}
+              error={sorting.error}
+              config={config}
+              reportPath={null}
+              onCancel={() => setCancelConfirmOpen(true)}
+              onRetry={startRun}
             >
-              {t("operation.cancel")}
-            </button>
-          </div>
-        </footer>
-      )}
-
-      <LogViewer isRunning={isAnyRunning} />
+              <RunLog entries={logs} running={isSorting} />
+            </ExecuteScreen>
+          );
+        }}
+      </StageShell>
 
       <ConfirmDialog
         open={pendingConfigPatch !== null}
@@ -837,7 +692,7 @@ export default function MainPage() {
         cancelLabel={t("common.cancel")}
         onClose={() => {
           setPendingConfigPatch(null);
-          setSectionBodyKey((key) => key + 1);
+          setBodyKey((key) => key + 1);
         }}
         onConfirm={() => {
           if (pendingConfigPatch) updateConfig(pendingConfigPatch);
@@ -868,6 +723,33 @@ export default function MainPage() {
         onClose={() => setCancelConfirmOpen(false)}
         onConfirm={() => void cancelCurrent()}
       />
+    </>
+  );
+}
+
+/** The run is over: the celebration, then the report it produced. */
+function FinishedRun({ report }: { report: OperationReport }) {
+  const { t, locale } = useI18n();
+  return (
+    <div className="space-y-4">
+      <div className="animate-fade-in rounded-2xl border border-success/40 bg-tint-success px-5 py-4">
+        <p className="text-sm font-bold text-foreground">
+          {t(
+            report.summary.sorted === 1
+              ? report.duration_seconds
+                ? "report.organizedIn.one"
+                : "report.organized.one"
+              : report.duration_seconds
+                ? "report.organizedIn"
+                : "report.organized",
+            {
+              count: report.summary.sorted.toLocaleString(locale),
+              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
+            },
+          )}
+        </p>
+      </div>
+      <ReportPanel report={report} />
     </div>
   );
 }

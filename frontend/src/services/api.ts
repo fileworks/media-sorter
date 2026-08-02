@@ -33,6 +33,8 @@ export interface Config {
   duplicate_exact_enabled: boolean;
   duplicate_perceptual_enabled: boolean;
   duplicate_perceptual_threshold: number;
+  /** Default keeper policy — a starting point Review may override per group. */
+  duplicate_keeper_policy: KeeperPolicyId;
   burst_detection_enabled: boolean;
   burst_time_window_seconds: number;
   burst_perceptual_distance: number;
@@ -45,8 +47,12 @@ export interface Config {
   junk_filename_patterns: string[];
   convert_videos: boolean;
   video_format: "mp4" | "mkv" | "mov" | "webm" | "avi";
+  /** Re-encode quality for video conversion; mapped to a CRF by the backend. */
+  video_quality: "low" | "medium" | "high";
   convert_images: boolean;
   image_format: "jpeg" | "png" | "webp" | "tiff";
+  /** Encoder quality for lossy image formats. Ignored by PNG and TIFF. */
+  image_quality: number;
   repair_enabled: boolean;
   rules_enabled: boolean;
   rule_set: RuleSet;
@@ -79,10 +85,77 @@ export interface Config {
   // providers (CoreML / CUDA / DirectML) for the local encoder.
   ai_model_tier: AiModelTier;
   ai_allow_gpu: boolean;
+  /** The user's own named starting points, most recently saved first. */
+  saved_recipes: SavedRecipe[];
+}
+
+/**
+ * The slice of a configuration a recipe restores.
+ *
+ * Deliberately not the whole config: folders, credentials, vocabularies and
+ * resource preferences are excluded so a recipe stays reusable across
+ * libraries. Mirrors `backend/app/core/recipes.py`.
+ */
+export interface RecipeSettings {
+  sort: boolean;
+  sort_criteria: string[];
+  copy_instead_of_move: boolean;
+  rename: boolean;
+  rename_pattern: string;
+  remove_duplicates: boolean;
+  duplicate_exact_enabled: boolean;
+  duplicate_perceptual_enabled: boolean;
+  duplicate_perceptual_threshold: number;
+  duplicate_keeper_policy: KeeperPolicyId;
+  junk_filter_enabled: boolean;
+  categorize_enabled: boolean;
+  convert_images: boolean;
+  image_format: Config["image_format"];
+  image_quality: number;
+  convert_videos: boolean;
+  video_format: Config["video_format"];
+  video_quality: Config["video_quality"];
+  repair_enabled: boolean;
+  rules_enabled: boolean;
+  ai_tagging_enabled: boolean;
+  embed_tags_in_files: boolean;
+  ai_model_tier: AiModelTier;
+}
+
+export interface SavedRecipe {
+  schema_version: 1;
+  recipe_id: string;
+  name: string;
+  created_at: string;
+  settings: RecipeSettings;
 }
 
 export type LibraryRootRole = "input" | "reference" | "destination";
 export type TransferMode = "copy" | "move";
+
+/**
+ * How a duplicate group picks its keeper. Mirrors the backend's
+ * `KeeperPolicyId`; the first five are the ones the UI offers as a default,
+ * the rest are only reachable through a specific decision.
+ */
+export type KeeperPolicyId =
+  | "newest"
+  | "oldest"
+  | "largest"
+  | "smallest"
+  | "highest_resolution"
+  | "preferred_root"
+  | "protected_reference"
+  | "manual";
+
+/** The keep rules the Configure and Review screens let a user choose between. */
+export const SELECTABLE_KEEPER_POLICIES = [
+  "newest",
+  "oldest",
+  "largest",
+  "smallest",
+  "highest_resolution",
+] as const satisfies readonly KeeperPolicyId[];
 
 export interface RootIdentity {
   schema_version: 1;
@@ -495,6 +568,13 @@ export interface TaskProgress {
   bytes_done?: number;
   bytes_total?: number;
   bytes_total_known?: boolean;
+  /**
+   * Terminal per-item outcomes tallied as they happen, keyed by the same status
+   * codes the report uses (`sorted`, `duplicate`, `junk`, `name_collision`,
+   * `failed`, …). This is what makes a live "so far" panel possible without
+   * re-reading the operation log.
+   */
+  outcomes?: Record<string, number>;
   /**
    * Coarse setup/processing stage, so the UI can show meaningful feedback during
    * work that happens before the per-file loop instead of a frozen 0%.
@@ -1231,6 +1311,25 @@ export class MediaSorterApiClient {
     return data;
   }
 
+  /** The user's own saved recipes. Built-ins ship with the frontend. */
+  async listRecipes(): Promise<SavedRecipe[]> {
+    await this.ensureReady();
+    const { data } = await this.http.get<SavedRecipe[]>("/api/config/recipes");
+    return data;
+  }
+
+  /** Save the current run behaviour under a name, replacing any same-named one. */
+  async saveRecipe(name: string, settings: RecipeSettings): Promise<SavedRecipe> {
+    await this.ensureReady();
+    const { data } = await this.http.post<SavedRecipe>("/api/config/recipes", { name, settings });
+    return data;
+  }
+
+  async deleteRecipe(recipeId: string): Promise<void> {
+    await this.ensureReady();
+    await this.http.delete(`/api/config/recipes/${encodeURIComponent(recipeId)}`);
+  }
+
   /** AI-relevant hardware profile (probed once at startup on the backend). */
   async getHardware(): Promise<HardwareInfo> {
     await this.ensureReady();
@@ -1646,7 +1745,9 @@ export class MediaSorterApiClient {
       plan_id: input.planId ?? "default",
       scope: input.scope,
       group_ids: input.groupIds ?? [],
-      policy_id: input.policyId ?? "largest",
+      // Omitted rather than defaulted: the backend falls back to the
+      // configured keep rule, so the client never has to restate it.
+      policy_id: input.policyId ?? null,
       filter_key: input.filterKey ?? "",
     });
     return data;
@@ -1667,7 +1768,7 @@ export class MediaSorterApiClient {
       scope: input.scope,
       impact: input.impact,
       group_ids: input.groupIds ?? [],
-      policy_id: input.policyId ?? "largest",
+      policy_id: input.policyId ?? null,
       preferred_roots: input.preferredRoots ?? [],
       filter_key: input.filterKey ?? "",
     });

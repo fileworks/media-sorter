@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { CONFIG_RECIPES, applyRecipe, recipeChanges } from "@/lib/configRecipes";
+import {
+  CONFIG_RECIPES,
+  activeRecipeId,
+  applyRecipe,
+  captureRecipeSettings,
+  matchesRecipe,
+  recipeChanges,
+} from "@/lib/configRecipes";
 import { SECTION_DEFAULTS } from "@/components/config/constants";
 import type { Config } from "@/types/api";
 
@@ -47,6 +54,8 @@ const base = {
   },
 } as Config;
 
+const [SAFE_SORT, CLEAN_SWEEP, ARCHIVE_CONVERT, SCRATCH] = CONFIG_RECIPES;
+
 describe("built-in configuration recipes", () => {
   it("pins every default a recipe relies on", () => {
     const defaults = Object.assign({}, ...Object.values(SECTION_DEFAULTS));
@@ -65,39 +74,21 @@ describe("built-in configuration recipes", () => {
     });
   });
 
-  it("keeps each recipe field set explicit and reviewable", () => {
-    expect(Object.keys(applyRecipe(base, CONFIG_RECIPES[0])).sort()).toEqual([
-      "convert_images",
-      "convert_videos",
-      "copy_instead_of_move",
-      "duplicate_exact_enabled",
-      "duplicate_perceptual_enabled",
-      "preservation_profile",
-      "remove_duplicates",
-      "repair_enabled",
-      "sort",
+  it("offers the four cards the Sources screen draws, in order", () => {
+    expect(CONFIG_RECIPES.map((recipe) => recipe.id)).toEqual([
+      "safe_sort",
+      "clean_sweep",
+      "archive_convert",
+      "scratch",
     ]);
-    expect(Object.keys(applyRecipe(base, CONFIG_RECIPES[1])).sort()).toEqual([
-      "convert_images",
-      "convert_videos",
-      "copy_instead_of_move",
-      "duplicate_exact_enabled",
-      "duplicate_perceptual_enabled",
-      "image_format",
-      "optimization_profile",
-      "preservation_profile",
-      "remove_duplicates",
-      "repair_enabled",
-      "sort",
-      "sort_criteria",
-      "video_format",
-    ]);
+    expect(SAFE_SORT.recommended).toBe(true);
+    expect(SCRATCH.outline).toBe(true);
   });
 
-  it("keeps the duplicate-only recipe non-mutating", () => {
-    const patch = applyRecipe(base, CONFIG_RECIPES[0]);
+  it("keeps Safe Sort genuinely reversible", () => {
+    const patch = applyRecipe(base, SAFE_SORT);
+
     expect(patch).toMatchObject({
-      sort: false,
       copy_instead_of_move: true,
       remove_duplicates: true,
       convert_images: false,
@@ -105,39 +96,73 @@ describe("built-in configuration recipes", () => {
       repair_enabled: false,
     });
     expect(patch.preservation_profile?.mode).toBe("organize_only");
+    expect(SAFE_SORT.irreversible).toBe(false);
   });
 
-  it("makes both cleanup recipes explicit and differs only in transfer posture", () => {
-    const move = applyRecipe(base, CONFIG_RECIPES[1]);
-    const copy = applyRecipe(base, CONFIG_RECIPES[2]);
-    expect(move).toMatchObject({
-      sort: true,
-      sort_criteria: ["year"],
-      copy_instead_of_move: false,
-      remove_duplicates: true,
-      convert_images: true,
-      convert_videos: true,
-      repair_enabled: true,
+  it("marks the two recipes that touch originals or bytes", () => {
+    expect(CLEAN_SWEEP.irreversible).toBe(true);
+    expect(ARCHIVE_CONVERT.irreversible).toBe(true);
+    expect(applyRecipe(base, CLEAN_SWEEP).copy_instead_of_move).toBe(false);
+  });
+
+  it("only authorizes mutation for the recipe that rewrites files", () => {
+    expect(applyRecipe(base, ARCHIVE_CONVERT).preservation_profile?.mode).toBe(
+      "explicit_mutation",
+    );
+    expect(applyRecipe(base, ARCHIVE_CONVERT).optimization_profile?.mode).toBe(
+      "visually_lossless",
+    );
+    for (const recipe of [SAFE_SORT, CLEAN_SWEEP, SCRATCH]) {
+      expect(applyRecipe(base, recipe).preservation_profile?.mode).toBe("organize_only");
+      expect(applyRecipe(base, recipe).optimization_profile?.mode).toBe("disabled");
+    }
+  });
+
+  it("turns everything off when starting from scratch", () => {
+    expect(applyRecipe(base, SCRATCH)).toMatchObject({
+      sort: false,
+      remove_duplicates: false,
+      duplicate_exact_enabled: false,
+      duplicate_perceptual_enabled: false,
+      junk_filter_enabled: false,
+      rules_enabled: false,
+      ai_tagging_enabled: false,
     });
-    expect(copy).toMatchObject({
-      sort: move.sort,
-      sort_criteria: move.sort_criteria,
-      copy_instead_of_move: true,
-      remove_duplicates: move.remove_duplicates,
-      convert_images: move.convert_images,
-      convert_videos: move.convert_videos,
-      repair_enabled: move.repair_enabled,
-    });
-    expect(move.preservation_profile?.mode).toBe("explicit_mutation");
-    expect(move.preservation_profile?.requires_review).toBe(false);
-    expect(move.preservation_profile?.allow_compression).toBe(true);
-    expect(move.optimization_profile?.mode).toBe("visually_lossless");
+  });
+
+  it("keeps each recipe's field set explicit and reviewable", () => {
+    for (const recipe of CONFIG_RECIPES) {
+      const keys = Object.keys(applyRecipe(base, recipe));
+      expect(keys.length, recipe.id).toBeGreaterThan(0);
+      // A recipe must never reach into a folder, a credential or a vocabulary.
+      expect(keys, recipe.id).not.toContain("source_directory");
+      expect(keys, recipe.id).not.toContain("target_directory");
+      expect(keys, recipe.id).not.toContain("ai_tagging_api_key");
+      expect(keys, recipe.id).not.toContain("ai_tagging_labels");
+    }
   });
 
   it("reports only fields that the one-shot write changes", () => {
-    const patch = applyRecipe(base, CONFIG_RECIPES[0]);
+    const patch = applyRecipe(base, SAFE_SORT);
     const changes = recipeChanges(base, patch);
+
     expect(changes.map((change) => change.key)).not.toContain("duplicate_exact_enabled");
-    expect(changes.map((change) => change.key)).toContain("sort");
+    expect(changes.map((change) => change.key)).toContain("copy_instead_of_move");
+  });
+
+  it("recognises the recipe a configuration currently corresponds to", () => {
+    const applied = { ...base, ...applyRecipe(base, SAFE_SORT) };
+
+    expect(matchesRecipe(applied, SAFE_SORT)).toBe(true);
+    expect(activeRecipeId(applied, CONFIG_RECIPES)).toBe("safe_sort");
+    expect(activeRecipeId({ ...applied, copy_instead_of_move: false }, [SAFE_SORT])).toBeNull();
+  });
+
+  it("captures only the reusable slice when saving a recipe", () => {
+    const settings = captureRecipeSettings(base);
+
+    expect(settings.copy_instead_of_move).toBe(base.copy_instead_of_move);
+    expect(settings).not.toHaveProperty("source_directory");
+    expect(settings).not.toHaveProperty("ai_tagging_api_key");
   });
 });

@@ -1,17 +1,21 @@
 """Configuration routes."""
 
 import asyncio
+import logging
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import ConfigDep, ContainerDep
+from app.core.bootstrap import ServiceContainer
 from app.core.config import (
     CATEGORIZE_MIN_MARGIN_MAX,
     CATEGORIZE_MIN_MARGIN_MIN,
     CATEGORIZE_THRESHOLD_MAX,
     CATEGORIZE_THRESHOLD_MIN,
+    IMAGE_QUALITY_MAX,
+    IMAGE_QUALITY_MIN,
     PERCEPTUAL_THRESHOLD_MAX,
     PERCEPTUAL_THRESHOLD_MIN,
     Config,
@@ -24,6 +28,15 @@ from app.core.config_sections import SECTIONS
 from app.core.exceptions import ConfigValidationError, MediaSortException
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
+from app.core.recipes import (
+    MAX_SAVED_RECIPES,
+    RecipeSettings,
+    SavedRecipe,
+    new_recipe_id,
+    normalized_recipe_name,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -154,6 +167,95 @@ async def save_config(
     # One public call propagates the new config to every live service.
     container.set_config(new_config)
     return new_config.to_dict()
+
+
+class SaveRecipeRequest(BaseModel):
+    """A name for the current run behaviour, plus the behaviour itself.
+
+    The name is normalised and bounded *here*, at the request boundary, so a
+    blank or oversized one is a 422 from FastAPI's own validation rather than
+    an exception raised while building the model further down — which would
+    surface as a 500 and tell the user nothing.
+    """
+
+    name: str
+    settings: RecipeSettings
+
+    @field_validator("name")
+    @classmethod
+    def name_is_a_label(cls, value: str) -> str:
+        return normalized_recipe_name(value)
+
+
+@router.get("/config/recipes", response_model=list[SavedRecipe])
+async def list_recipes(config: ConfigDep) -> list[SavedRecipe]:
+    """The user's own saved recipes, most recent first.
+
+    The four built-in recipes are not listed here: they are presentation, they
+    never change, and they ship with the frontend.
+    """
+    return list(config.saved_recipes)
+
+
+@router.post("/config/recipes", response_model=SavedRecipe, status_code=201)
+async def save_recipe(
+    body: SaveRecipeRequest, container: ContainerDep, config: ConfigDep
+) -> SavedRecipe:
+    """Save the current run behaviour under a name.
+
+    Saving over an existing name replaces it rather than accumulating a second
+    entry — the name is what the user identifies the recipe by, so two of them
+    would be indistinguishable in the picker.
+    """
+    recipe = SavedRecipe(recipe_id=new_recipe_id(), name=body.name, settings=body.settings)
+    remaining = [
+        existing
+        for existing in config.saved_recipes
+        if existing.name.casefold() != recipe.name.casefold()
+    ]
+    if len(remaining) >= MAX_SAVED_RECIPES:
+        raise ConfigValidationError(
+            [f"At most {MAX_SAVED_RECIPES} saved recipes are supported."],
+            [
+                {
+                    "field": "saved_recipes",
+                    "message": f"At most {MAX_SAVED_RECIPES} saved recipes are supported.",
+                    "message_key": "config.recipes.limit",
+                    "params": {"limit": MAX_SAVED_RECIPES},
+                }
+            ],
+        )
+
+    await _persist_recipes(container, config, [recipe, *remaining])
+    logger.info(
+        "config.recipe_saved",
+        extra={"recipe_id": recipe.recipe_id, "recipe_count": len(remaining) + 1},
+    )
+    return recipe
+
+
+@router.delete("/config/recipes/{recipe_id}", status_code=204)
+async def delete_recipe(recipe_id: str, container: ContainerDep, config: ConfigDep) -> None:
+    """Forget a saved recipe. Deleting one that is already gone is not an error."""
+    remaining = [existing for existing in config.saved_recipes if existing.recipe_id != recipe_id]
+    if len(remaining) == len(config.saved_recipes):
+        logger.info("config.recipe_delete_noop", extra={"recipe_id": recipe_id})
+        return
+    await _persist_recipes(container, config, remaining)
+    logger.info(
+        "config.recipe_deleted",
+        extra={"recipe_id": recipe_id, "recipe_count": len(remaining)},
+    )
+
+
+async def _persist_recipes(
+    container: ServiceContainer, config: Config, recipes: list[SavedRecipe]
+) -> None:
+    """Write a new recipe list through the same path a normal config save takes."""
+    merged = {**config.to_dict(), "saved_recipes": [r.model_dump(mode="json") for r in recipes]}
+    new_config = Config.from_dict(merged)
+    await asyncio.to_thread(ConfigLoader().save, new_config)
+    container.set_config(new_config)
 
 
 @router.post("/config/validate", response_model=ValidateConfigResponse)
@@ -309,6 +411,18 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             f"and {PERCEPTUAL_THRESHOLD_MAX}.",
             "config.duplicates.threshold_range",
             {"minimum": PERCEPTUAL_THRESHOLD_MIN, "maximum": PERCEPTUAL_THRESHOLD_MAX},
+        )
+
+    # Encoder quality, checked only while image conversion is on — the same
+    # reasoning as the threshold above: an ignored value must not block a save.
+    if config.convert_images and not (
+        IMAGE_QUALITY_MIN <= config.image_quality <= IMAGE_QUALITY_MAX
+    ):
+        err(
+            "image_quality",
+            f"Image quality must be between {IMAGE_QUALITY_MIN} and {IMAGE_QUALITY_MAX}.",
+            "config.conversion.quality_range",
+            {"minimum": IMAGE_QUALITY_MIN, "maximum": IMAGE_QUALITY_MAX},
         )
 
     # Smart Categorization — validate the category list and confidence bar, but

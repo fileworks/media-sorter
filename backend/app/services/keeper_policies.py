@@ -117,6 +117,14 @@ def _choose(
         ranked = sorted(members, key=lambda m: (-_size(m), -(_modified(m) or 0), _identity(m)))
         return ranked[0], f"largest copy ({ranked[0].facts.size_bytes} bytes)"
 
+    if policy == "smallest":
+        # For someone reclaiming space from re-saves of the same shot, the
+        # smallest copy is the wanted one. Ties resolve the same way as
+        # `largest` — newest first, then identity — so the two are mirror
+        # images rather than two differently-behaved policies.
+        ranked = sorted(members, key=lambda m: (_size(m), -(_modified(m) or 0), _identity(m)))
+        return ranked[0], f"smallest copy ({ranked[0].facts.size_bytes} bytes)"
+
     if policy in {"newest", "oldest"}:
         dated = [member for member in members if _modified(member) is not None]
         if not dated:

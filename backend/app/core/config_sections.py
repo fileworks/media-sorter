@@ -76,6 +76,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "duplicate_exact_enabled",
             "duplicate_perceptual_enabled",
             "duplicate_perceptual_threshold",
+            "duplicate_keeper_policy",
             "burst_detection_enabled",
             "burst_time_window_seconds",
             "burst_perceptual_distance",
@@ -92,7 +93,14 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "conversion",
         "Convert formats",
         "Standardize everything to one image and/or video format.",
-        ("convert_images", "image_format", "convert_videos", "video_format"),
+        (
+            "convert_images",
+            "image_format",
+            "image_quality",
+            "convert_videos",
+            "video_format",
+            "video_quality",
+        ),
     ),
     ConfigSection(
         "filters",
@@ -165,5 +173,8 @@ UNGROUPED_FIELDS: frozenset[str] = frozenset(
         "library_profile",
         "preservation_profile",
         "optimization_profile",
+        # Named snapshots of the settings above, managed through their own
+        # endpoints rather than edited as a field on the settings screen.
+        "saved_recipes",
     }
 )

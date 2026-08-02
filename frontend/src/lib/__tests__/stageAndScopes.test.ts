@@ -273,8 +273,8 @@ const READY: StageInputs = {
   rootsReady: true,
   rootsReason: null,
   scanned: true,
-  reviewed: true,
-  reviewedReason: null,
+  planned: true,
+  plannedReason: null,
   blocked: false,
   blockedReason: null,
 };
@@ -284,13 +284,20 @@ describe("stage readiness", () => {
     expect(readiness("sources", { ...READY, rootsReady: false }).canEnter).toBe(true);
   });
 
-  it("blocks Review until the folders are chosen and scanned", () => {
-    expect(readiness("review", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
-    expect(readiness("review", { ...READY, scanned: false }).reason).toMatch(/scan/i);
+  it("lets Configure be entered as soon as the folders are usable", () => {
+    expect(readiness("configure", { ...READY, planned: false }).canEnter).toBe(true);
+    expect(readiness("configure", { ...READY, rootsReady: false }).reason).toMatch(
+      /input folder/i,
+    );
   });
 
-  it("blocks Execute until something has been reviewed", () => {
-    expect(readiness("execute", { ...READY, reviewed: false }).canEnter).toBe(false);
+  it("blocks Review until the folders are chosen and a plan exists", () => {
+    expect(readiness("review", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
+    expect(readiness("review", { ...READY, planned: false }).canEnter).toBe(false);
+  });
+
+  it("blocks Execute until a plan has been calculated", () => {
+    expect(readiness("execute", { ...READY, planned: false }).canEnter).toBe(false);
   });
 
   it("reports a hard block ahead of a missing prerequisite", () => {
@@ -305,8 +312,9 @@ describe("stage readiness", () => {
   });
 
   it("lists exactly the stages that can be entered", () => {
-    expect(availableStages(READY)).toEqual(["sources", "review", "execute"]);
-    expect(availableStages({ ...READY, scanned: false })).toEqual(["sources"]);
+    expect(availableStages(READY)).toEqual(["sources", "configure", "review", "execute"]);
+    expect(availableStages({ ...READY, planned: false })).toEqual(["sources", "configure"]);
+    expect(availableStages({ ...READY, rootsReady: false })).toEqual(["sources"]);
   });
 });
 
@@ -321,19 +329,26 @@ describe("stage transitions", () => {
     expect(transition.invalidated.join(" ")).toMatch(/frozen plan/i);
   });
 
+  it("says that going back to Configure also makes the review stale", () => {
+    const transition = goTo({ ...INITIAL_STATE, stage: "review" as const }, "configure");
+
+    expect(transition.invalidated.join(" ")).toMatch(/changing settings/i);
+  });
+
   it("invalidates nothing when moving forward", () => {
+    expect(goTo(INITIAL_STATE, "configure").invalidated).toEqual([]);
     expect(goTo(INITIAL_STATE, "review").invalidated).toEqual([]);
   });
 
   it("falls back to the stage's first view for an invalid one", () => {
-    expect(goTo(INITIAL_STATE, "review", "exact").state.view).toBe("exact");
-    expect(goTo(INITIAL_STATE, "sources", "exact").state.view).toBe("overview");
+    expect(goTo(INITIAL_STATE, "review", "junk").state.view).toBe("junk");
+    expect(goTo(INITIAL_STATE, "sources", "junk").state.view).toBe("overview");
   });
 
   it("refuses a view the current stage does not have", () => {
     const state = { ...INITIAL_STATE, stage: "sources" as const };
 
-    expect(selectView(state, "similar")).toBe(state);
+    expect(selectView(state, "warnings")).toBe(state);
   });
 });
 
@@ -360,7 +375,26 @@ describe("stage reconciliation", () => {
     const transition = reconcile(state, { ...key, catalogGeneration: 4, planVersion: 3 });
 
     expect(transition.state.stage).toBe("review");
+    expect(transition.state.view).toBe("duplicates");
     expect(transition.invalidated).toHaveLength(2);
+  });
+
+  it("says nothing when the first scan and the first plan simply arrive", () => {
+    const fresh = { profileId: "p1", catalogGeneration: 0, planVersion: 0, taskId: null };
+    const state = { ...INITIAL_STATE, stage: "configure" as const, key: fresh };
+
+    const transition = reconcile(state, { ...fresh, catalogGeneration: 1, planVersion: 1 });
+
+    expect(transition.invalidated).toEqual([]);
+    expect(transition.state.stage).toBe("review");
+  });
+
+  it("lands on Configure when the plan is gone rather than on an empty Review", () => {
+    const state = { ...INITIAL_STATE, stage: "execute" as const, key };
+
+    const transition = reconcile(state, { ...key, planVersion: 0 });
+
+    expect(transition.state.stage).toBe("configure");
   });
 
   it("notices a different profile", () => {

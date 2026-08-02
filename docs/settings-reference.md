@@ -14,29 +14,46 @@ Defaults below are the real backend defaults from `backend/app/core/config.py`.
 
 ## Recipes and visibility
 
-Recipes are optional one-shot starting points. Applying one writes ordinary
+Recipes are starting points, not modes. Applying one writes ordinary
 configuration fields, reports the exact keys it changed, and leaves every field
-editable. There is no active recipe, saved recipe entity, profile badge, import,
-or export.
+editable. A recipe never reaches into a folder, a credential or a vocabulary,
+which is what makes it reusable across libraries.
 
 | Recipe | Fields it establishes | Consequence stated before applying |
 |---|---|---|
-| **Just find duplicates** | scanning/review only, exact and perceptual duplicate review, no transfer/conversion/repair | No file mutation |
-| **Full clean-up** | move, organize by year, duplicate handling, JPEG/MP4 conversion, repair | Verified moves remove sources; conversion/repair can change bytes |
-| **Copy, leave originals** | the full clean-up field set with Copy | Originals stay; converted copies differ and quarantine may affect source folders |
+| **Safe Sort** *(recommended)* | copy, year/month folders, exact + near duplicate review, no junk filter, no conversion | Nothing in the input folder moves and nothing anywhere is rewritten |
+| **Clean Sweep** | move, year/month folders, duplicates and junk parked in review folders | Originals leave the input folder — after each file has been verified |
+| **Archive & Convert** | copy, duplicates and junk, JPEG/MP4 conversion, repair | Rewrites image and video bytes; requires a reviewed mutation profile |
+| **Start from scratch** | everything off, including duplicate detection | A clean slate to build a recipe on |
 
-The initial surface shows the frequently decided **Basic** sections:
-Essentials, Folder structure, and Duplicates. Scan filters, naming, conversion,
-rules, AI, and other tuning live under **Advanced**. This changes visibility
-only: all nine sections and all backend defaults remain intact. Search matches
-section names, descriptions, and configuration keys even while Advanced is
-closed, and settings differing from defaults remain flagged and individually
-resettable.
+### Saved recipes
 
-New settings belong in Advanced unless their value is normally decided for each
-run or library. The rationale is decision frequency: Basic contains the choices
-needed to start safely; Advanced contains thresholds, patterns, models, and
-once-only tuning.
+A user can name the current run behaviour and reuse it later.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/config/recipes` | The user's own recipes, most recent first |
+| `POST /api/config/recipes` | Save under a name; saving over an existing name replaces it |
+| `DELETE /api/config/recipes/{recipe_id}` | Forget one; deleting an absent id is not an error |
+
+Stored on `Config.saved_recipes` as `SavedRecipe` records
+(`backend/app/core/recipes.py`). The captured slice is an explicit
+`RecipeSettings` model rather than a free-form mapping, so the round trip stays
+typed and a recipe written by an older build loads with the current defaults
+filled in. At most 50 recipes; names are whitespace-collapsed, at most 60
+characters, and may not shadow a built-in id.
+
+### Where settings appear
+
+The Configure screen groups every setting into three numbered cards in the order
+the work happens: **01 Sort** (how files travel and land) → **02 Clean**
+(duplicates and junk) → **03 Enrich** (convert and tag). The rail beside them
+carries the *current value* of each entry, so reading it top to bottom answers
+"what is this run going to do?" without expanding anything.
+
+Consequential detail — cloud credentials, label vocabularies, thresholds, rule
+editing — sits behind a per-row disclosure. A new setting belongs in a
+disclosure unless its value is normally decided for each run or library.
 
 ---
 
@@ -113,6 +130,7 @@ access.
 | Exact-match duplicates | `duplicate_exact_enabled` | `true` | SHA-256 byte-identical detection. |
 | Visual-similarity duplicates | `duplicate_perceptual_enabled` | `true` | Perceptual-hash near-duplicate detection (images and video). |
 | Similarity threshold | `duplicate_perceptual_threshold` | `95` | 0–100; how visually similar two files must be to count as duplicates. Higher = stricter. |
+| Default keep rule | `duplicate_keeper_policy` | `"newest"` | Which copy a group keeps when nobody has chosen one by hand: `newest` · `oldest` · `largest` · `smallest` · `highest_resolution`. A *default* — Review overrides it per group or in bulk, and a protected reference member always wins regardless. |
 | Dedup index path | `dedup_index_path` | `null` | Override where the index database lives. `null` → `<destination>/.mediasort-dedup-index.sqlite3`. |
 
 When duplicate detection is enabled, MediaSorter always compares source files with
@@ -136,8 +154,10 @@ is accepted when loading old config files but is ignored and is not saved.
 |---|---|---|---|
 | Convert videos | `convert_videos` | `false` | Transcode videos during the sort (bundled ffmpeg). Needs a reviewed mutation profile plus an acknowledged optimization profile. |
 | Video format | `video_format` | `"mp4"` | Target container: `mp4` · `mkv` · `mov` · `webm` · `avi`. |
+| Video quality | `video_quality` | `"medium"` | `low` · `medium` · `high`, mapped to a CRF by the converter. |
 | Convert images | `convert_images` | `false` | Transcode images during the sort. Needs a reviewed mutation profile plus an acknowledged optimization profile. |
 | Image format | `image_format` | `"jpeg"` | Target format: `jpeg` · `png` · `webp` · `tiff`. |
+| Image quality | `image_quality` | `90` | 60–100, for lossy formats only (JPEG/WebP); ignored by PNG and TIFF. The floor is not 1: below roughly 60 the artefacts are visible on any photograph, and a setting that only produces bad output is a trap rather than a choice. Validated only while image conversion is on. |
 | Repair corrupted files | `repair_enabled` | `true` | Validate sorted files; attempt a safe repair; quarantine if unrepairable. Repair rewrites media, so it needs a reviewed mutation profile. |
 
 ## Library roots
