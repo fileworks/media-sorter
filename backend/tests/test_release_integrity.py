@@ -278,6 +278,18 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
     release_integrity._smoke_packaged_webview(launcher)
 
 
+def test_packaged_webview_smoke_reaps_backend_before_exit() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    source = (repository / "frontend/src-tauri/src/main.rs").read_text(encoding="utf-8")
+    handler = source[
+        source.index("fn frontend_ready(") : source.index(
+            "/// Reveal a file in the OS file manager"
+        )
+    ]
+
+    assert handler.index("kill_backend(") < handler.index("app.exit(0)")
+
+
 def test_packaged_webview_smoke_rejects_a_blank_shell(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
