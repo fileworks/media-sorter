@@ -9,7 +9,7 @@ const FOCUSABLE =
  * it, and restores focus to the previously focused element on release.
  * The container needs `tabIndex={-1}` so it can receive initial focus.
  */
-export function useFocusTrap(ref: RefObject<HTMLElement>, active: boolean): void {
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, active: boolean): void {
   const restoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
