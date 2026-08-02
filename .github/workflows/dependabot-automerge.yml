@@ -2,7 +2,9 @@
 name: Dependabot auto-merge
 
 on:
-  pull_request:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,16 +12,25 @@ permissions:
 
 jobs:
   enable-auto-merge:
-    if: >-
-      github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.event.pull_request.base.ref == github.event.repository.default_branch
+    if: github.repository_owner == 'fileworks'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - name: Enable protected squash auto-merge
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Queue protected Dependabot squash merges
+        run: |
+          gh pr list \
+            --state open \
+            --author app/dependabot \
+            --limit 100 \
+            --json url \
+            --jq '.[].url' |
+          while IFS= read -r pr_url; do
+            gh pr merge --auto --squash "$pr_url"
+          done
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          # A scheduled base-branch workflow can safely use the existing release
+          # credential without exposing it to Dependabot-authored workflow code.
+          # Unlike GITHUB_TOKEN, it preserves post-merge push/release events.
+          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}

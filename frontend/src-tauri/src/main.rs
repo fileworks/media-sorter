@@ -357,6 +357,10 @@ fn get_api_session(state: State<BackendState>) -> ApiSession {
 fn frontend_ready(app: tauri::AppHandle) {
     log_info!("packaged_webview_frontend_ready");
     if std::env::var("MEDIASORT_WEBVIEW_SMOKE").as_deref() == Ok("1") {
+        // app.exit() does not consistently deliver the normal exit callbacks
+        // before Windows tears down the WebView. Reap the packaged backend
+        // explicitly so release verification can remove its extracted payload.
+        kill_backend(app.state::<BackendState>().inner());
         app.exit(0);
     }
 }
