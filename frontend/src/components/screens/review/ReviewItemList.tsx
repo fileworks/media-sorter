@@ -10,6 +10,7 @@ import { useI18n } from "@/i18n/I18nContext";
 type Translate = ReturnType<typeof useI18n>["t"];
 import { formatBytes } from "@/lib/formatters";
 import { groupIntoStacks, isStack, type ReviewRow, type Stack } from "@/lib/reviewRows";
+import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
 import { cn } from "@/lib/utils";
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 
@@ -42,7 +43,10 @@ interface ReviewItemListProps {
   onDissolve: (stackId: string) => void;
   onKeepOnly: (row: ReviewRow) => void;
   onCompareStack: (stack: Stack) => void;
+  /** Apply a keep rule to one stack only, leaving every other stack alone. */
+  onOverrideKeeper: (stackId: string, policy: KeeperPolicyId) => void;
   dissolvePending: string | null;
+  keeperPending: string | null;
 }
 
 /**
@@ -60,7 +64,9 @@ export function ReviewItemList({
   onDissolve,
   onKeepOnly,
   onCompareStack,
+  onOverrideKeeper,
   dissolvePending,
+  keeperPending,
 }: ReviewItemListProps) {
   const { t, locale } = useI18n();
   const entries = useMemo(() => flatten(rows), [rows]);
@@ -125,8 +131,10 @@ export function ReviewItemList({
                 <StackHeader
                   stack={entry.stack}
                   dissolving={dissolvePending === entry.stack.id}
+                  overridePending={keeperPending === entry.stack.id}
                   onDissolve={() => onDissolve(entry.stack.id)}
                   onCompare={() => onCompareStack(entry.stack)}
+                  onOverrideKeeper={(policy) => onOverrideKeeper(entry.stack.id, policy)}
                 />
               ) : (
                 <ListRow
@@ -153,15 +161,27 @@ function entryKey(entry: Entry): string {
 function StackHeader({
   stack,
   dissolving,
+  overridePending,
   onDissolve,
   onCompare,
+  onOverrideKeeper,
 }: {
   stack: Stack;
   dissolving: boolean;
+  overridePending: boolean;
   onDissolve: () => void;
   onCompare: () => void;
+  onOverrideKeeper: (policy: KeeperPolicyId) => void;
 }) {
   const { t } = useI18n();
+  // A keep *rule* only decides an exact stack. A perceptual match — similar or
+  // burst — is not proof that two files are the same file, so the backend never
+  // resolves one in bulk and neither does this menu; those stacks are decided
+  // one file at a time, with Compare and "Keep only this".
+  const ruleApplies = stack.kind === "exact" && !stack.hasBaseline;
+  const ruleReason = stack.hasBaseline
+    ? t("review.stack.keeperBaseline")
+    : t("review.stack.keeperPerceptual");
   return (
     <div
       className="flex items-center gap-2 border-b border-border bg-muted/50 px-3"
@@ -183,10 +203,42 @@ function StackHeader({
       )}
       {stack.keeper && (
         <span className="min-w-0 truncate text-xs text-muted-foreground">
-          {t("review.stack.keeping", { name: stack.keeper.name })}
+          {t(stack.keeperPromoted ? "review.stack.keepingInstead" : "review.stack.keeping", {
+            name: stack.keeper.name,
+          })}
+        </span>
+      )}
+      {stack.keeper === null && stack.rows.length > 0 && (
+        <span className="min-w-0 truncate text-xs text-muted-foreground">
+          {t("review.stack.allExcluded")}
         </span>
       )}
       <span className="flex-1" />
+      <Tooltip label={ruleApplies ? t("review.stack.keeperOverrideHelp") : ruleReason}>
+        <label className="flex items-center gap-1.5 text-3xs text-muted-foreground">
+          <span className="sr-only">{t("review.stack.keeperOverride")}</span>
+          <select
+            value=""
+            disabled={!ruleApplies || overridePending}
+            aria-label={t("review.stack.keeperOverride")}
+            onChange={(event) => {
+              if (event.target.value) onOverrideKeeper(event.target.value as KeeperPolicyId);
+            }}
+            className="rounded-md border border-border bg-background px-1.5 py-0.5 text-3xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="">
+              {overridePending
+                ? t("review.stack.keeperApplying")
+                : t("review.stack.keeperOverride")}
+            </option>
+            {SELECTABLE_KEEPER_POLICIES.map((policy) => (
+              <option key={policy} value={policy}>
+                {t(`config.keeper.${policy}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Tooltip>
       <button
         type="button"
         onClick={onCompare}
@@ -294,6 +346,17 @@ function ListRow({
           {row.name}
         </span>
       </Tooltip>
+
+      {/* A companion never travels alone: excluding one member of a media unit
+          takes the whole unit, so the row says how many files that is before
+          the checkbox is ticked, not after. */}
+      {row.companionCount > 0 && (
+        <Tooltip label={t("review.row.companionsHelp")}>
+          <span className="hidden shrink-0 text-3xs text-faint sm:inline">
+            {t("review.row.companions", { count: row.companionCount })}
+          </span>
+        </Tooltip>
+      )}
 
       <span className="hidden shrink-0 text-muted-foreground sm:inline">
         {formatBytes(row.sizeBytes, { locale })}

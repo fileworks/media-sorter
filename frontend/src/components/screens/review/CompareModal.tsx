@@ -33,42 +33,56 @@ interface CompareModalProps {
   onKeep: (memberId: string) => void;
   onKeepBoth: () => void;
   onClose: () => void;
+  /** A decision is in flight. The dialog stays open until it lands. */
+  pending?: boolean;
+  /** The decision was refused. Shown here, not behind the dialog. */
+  error?: string | null;
 }
 
-/** One comparison row, with the winning side marked. */
+/**
+ * One comparison row, with the winning side marked.
+ *
+ * Marked three ways, not one: weight, colour and a word only a screen reader
+ * reads. Colour alone would leave the whole table meaningless to anyone who
+ * cannot see it, and this table is what the choice is actually made on when the
+ * two images look identical.
+ */
 function FactRow({
   label,
   left,
   right,
   winner,
+  winnerNote,
 }: {
   label: string;
   left: string;
   right: string;
   winner: "a" | "b" | null;
+  /** Why this side wins, e.g. "larger". Announced, never drawn. */
+  winnerNote: string;
 }) {
+  const cell = (value: string, side: "a" | "b") => (
+    <span
+      className={cn(
+        "break-words",
+        winner === side ? "font-semibold text-success" : "text-foreground",
+      )}
+    >
+      {value}
+      {winner === side && <span className="sr-only"> — {winnerNote}</span>}
+    </span>
+  );
   return (
     <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border px-5 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
       <span className="text-faint">{label}</span>
-      <span
-        className={cn(
-          "break-words",
-          winner === "a" ? "font-semibold text-success" : "text-foreground",
-        )}
-      >
-        {left}
-      </span>
-      <span
-        className={cn(
-          "break-words",
-          winner === "b" ? "font-semibold text-success" : "text-foreground",
-        )}
-      >
-        {right}
-      </span>
+      {cell(left, "a")}
+      {cell(right, "b")}
     </div>
   );
 }
+
+//: How much a match is worth, ordered, so the stronger evidence can be marked.
+const CONFIDENCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1, unknown: 0 };
 
 /** Compare two numbers, tolerating either being unknown. */
 function larger(a: number | null, b: number | null): "a" | "b" | null {
@@ -89,7 +103,16 @@ function capturedAt(member: GroupMember): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-export function CompareModal({ a, b, keeperId, onKeep, onKeepBoth, onClose }: CompareModalProps) {
+export function CompareModal({
+  a,
+  b,
+  keeperId,
+  onKeep,
+  onKeepBoth,
+  onClose,
+  pending = false,
+  error = null,
+}: CompareModalProps) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<Mode>("slide");
   const [split, setSplit] = useState(50);
@@ -191,17 +214,20 @@ export function CompareModal({ a, b, keeperId, onKeep, onKeepBoth, onClose }: Co
           left={factLabel(a.facts.captured_at)}
           right={factLabel(b.facts.captured_at)}
           winner={larger(capturedAt(a), capturedAt(b))}
+          winnerNote={t("review.compare.wins.newer")}
         />
         <FactRow
           label={t("review.column.resolution")}
           left={resolutionLabel(a.facts)}
           right={resolutionLabel(b.facts)}
           winner={larger(pixels(a), pixels(b))}
+          winnerNote={t("review.compare.wins.moreDetail")}
         />
         <FactRow
           label={t("review.column.size")}
           left={formatBytes(a.facts.size_bytes, { locale })}
           right={formatBytes(b.facts.size_bytes, { locale })}
+          winnerNote={t("review.compare.wins.larger")}
           winner={larger(a.facts.size_bytes, b.facts.size_bytes)}
         />
         <FactRow
@@ -209,24 +235,37 @@ export function CompareModal({ a, b, keeperId, onKeep, onKeepBoth, onClose }: Co
           left={a.relative_path}
           right={b.relative_path}
           winner={null}
+          winnerNote=""
         />
         <FactRow
           label={t("review.column.evidence")}
           left={t(`review.confidenceValue.${a.evidence.confidence}`)}
           right={t(`review.confidenceValue.${b.evidence.confidence}`)}
-          winner={null}
+          winner={larger(
+            CONFIDENCE_RANK[a.evidence.confidence] ?? null,
+            CONFIDENCE_RANK[b.evidence.confidence] ?? null,
+          )}
+          winnerNote={t("review.compare.wins.stronger")}
         />
       </ModalBody>
 
+      {error !== null && (
+        <p role="alert" className="border-t border-border px-5 py-2 text-xs text-error">
+          {error}
+        </p>
+      )}
+
       <ModalFooter>
-        <span className="mr-auto min-w-0 text-xs text-faint">{t("review.compare.scopeNote")}</span>
-        <Button size="sm" variant="outline" onClick={onKeepBoth}>
+        <span className="mr-auto min-w-0 text-xs text-faint">
+          {pending ? t("review.compare.saving") : t("review.compare.scopeNote")}
+        </span>
+        <Button size="sm" variant="outline" disabled={pending} onClick={onKeepBoth}>
           {t("review.compare.keepBoth")}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => onKeep(b.member_id)}>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => onKeep(b.member_id)}>
           {t("review.compare.keepB")}
         </Button>
-        <Button size="sm" onClick={() => onKeep(a.member_id)}>
+        <Button size="sm" disabled={pending} onClick={() => onKeep(a.member_id)}>
           {t("review.compare.keepA")}
         </Button>
       </ModalFooter>

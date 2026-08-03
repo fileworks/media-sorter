@@ -68,9 +68,7 @@ function ChangedMarker({ field }: { field: SettingField }) {
   const diff = useSettingsDiff();
   if (!diff) return null;
 
-  const fields: readonly (keyof Config)[] = Array.isArray(field)
-    ? field
-    : [field as keyof Config];
+  const fields: readonly (keyof Config)[] = Array.isArray(field) ? field : [field as keyof Config];
   const changed = fields.filter((key) => diff.changed.has(key));
   if (changed.length === 0) return null;
 
@@ -85,9 +83,7 @@ function ChangedMarker({ field }: { field: SettingField }) {
     )
     .join(" · ");
 
-  const dot = (
-    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-  );
+  const dot = <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />;
 
   if (diff.locked) {
     return (
@@ -184,7 +180,13 @@ export function SettingRow({
  * above it — the example path, the example filename. Reading an example beats
  * reading a description of one.
  */
-export function SettingPreview({ children, last = false }: { children: ReactNode; last?: boolean }) {
+export function SettingPreview({
+  children,
+  last = false,
+}: {
+  children: ReactNode;
+  last?: boolean;
+}) {
   return (
     <div
       className={cn(

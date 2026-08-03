@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { FiFile, FiZoomIn } from "react-icons/fi";
+import { FiAlertTriangle, FiFile, FiZoomIn } from "react-icons/fi";
 import { api } from "@/services/api";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -8,9 +8,13 @@ import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 
 /**
  * Lazily-loaded image thumbnail for a local media file. The backend renders a
- * small JPEG on demand; videos and unreadable files respond 415, which trips
- * `onError` and shows a neutral placeholder instead. Nothing is fetched until
- * the element mounts, so this is safe to drop into hover cards.
+ * small JPEG on demand and answers 415 where there is none. Nothing is fetched
+ * until the element mounts, so this is safe to drop into hover cards.
+ *
+ * "There is no preview for this file" and "the preview did not load" are drawn
+ * differently and worded differently. They used to be the same grey square,
+ * which told a user their library was failing to load when in fact it had been
+ * asked to preview a format that has no preview.
  *
  * Sizing comes from `className` (e.g. `h-32 w-full`). The wrapper inherits the
  * sizing classes; the inner `<img>` fills it with `object-contain`. A spinner
@@ -42,15 +46,25 @@ export function Thumbnail({
 }) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { objectUrl, loading, waiting, errored } = useQueuedThumbnail(
+  const { objectUrl, loading, waiting, errored, unavailable } = useQueuedThumbnail(
     api.thumbnailUrl(path, maxPx),
     wrapperRef,
   );
 
-  const body: ReactNode = errored ? (
-    <div className="flex h-full w-full items-center justify-center bg-muted" aria-hidden>
-      <FiFile className="h-6 w-6 text-muted-foreground/60" />
-    </div>
+  const body: ReactNode = unavailable ? (
+    <Tooltip label={t("preview.noThumbnail")}>
+      <div className="flex h-full w-full items-center justify-center bg-muted">
+        <FiFile className="h-6 w-6 text-muted-foreground/60" aria-hidden />
+        <span className="sr-only">{t("preview.noThumbnail")}</span>
+      </div>
+    </Tooltip>
+  ) : errored ? (
+    <Tooltip label={t("preview.thumbnailFailed")}>
+      <div className="flex h-full w-full items-center justify-center bg-muted">
+        <FiAlertTriangle className="h-6 w-6 text-warning/70" aria-hidden />
+        <span className="sr-only">{t("preview.thumbnailFailed")}</span>
+      </div>
+    </Tooltip>
   ) : (
     <>
       {loading && (

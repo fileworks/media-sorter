@@ -194,6 +194,46 @@ describe("groupIntoStacks", () => {
   });
 });
 
+describe("groupIntoStacks — excluding the keeper", () => {
+  const three = stack({
+    member_count: 3,
+    anchor_member_id: "m1",
+    members: [
+      member("m1", "/in/a.jpg"),
+      member("m2", "/in/b.jpg"),
+      member("m3", "/in/c.jpg"),
+    ],
+  } as Partial<DuplicateGroup>);
+  const plan = result(
+    item({ source: "/in/a.jpg", destination: "/out/a.jpg", status: "duplicate" }),
+    item({ source: "/in/b.jpg", destination: "/out/b.jpg", status: "duplicate" }),
+    item({ source: "/in/c.jpg", destination: "/out/c.jpg", status: "duplicate" }),
+  );
+  const stacksFor = (excluded: string[]) =>
+    groupIntoStacks(toReviewRows(plan, [three], {}, new Set(excluded))).filter(isStack);
+
+  it("promotes the next copy when the keeper is excluded", () => {
+    const [only] = stacksFor(["/in/a.jpg"]);
+
+    expect(only.keeper?.source).toBe("/in/b.jpg");
+    expect(only.keeperPromoted).toBe(true);
+  });
+
+  it("keeps the chosen keeper when it is not excluded", () => {
+    const [only] = stacksFor(["/in/b.jpg"]);
+
+    expect(only.keeper?.source).toBe("/in/a.jpg");
+    expect(only.keeperPromoted).toBe(false);
+  });
+
+  it("keeps nothing when every copy is excluded, rather than keeping an excluded one", () => {
+    const [only] = stacksFor(["/in/a.jpg", "/in/b.jpg", "/in/c.jpg"]);
+
+    expect(only.keeper).toBeNull();
+    expect(only.keeperPromoted).toBe(false);
+  });
+});
+
 describe("applyFilters", () => {
   const rows = toReviewRows(
     result(

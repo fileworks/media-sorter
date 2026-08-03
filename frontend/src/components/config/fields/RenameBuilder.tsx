@@ -38,9 +38,7 @@ function collidesByPattern(pattern: string): boolean {
 /** The name the second file of a colliding pair gets — `reserve_destination`'s. */
 function withCollisionSuffix(filename: string): string {
   const dot = filename.lastIndexOf(".");
-  return dot > 0
-    ? `${filename.slice(0, dot)}_001${filename.slice(dot)}`
-    : `${filename}_001`;
+  return dot > 0 ? `${filename.slice(0, dot)}_001${filename.slice(dot)}` : `${filename}_001`;
 }
 
 function PreviewRow({

@@ -116,7 +116,9 @@ function splitName(path: string): { stem: string; extension: string } {
  * the run has one — the rename preview says something about `TYPE` only if it
  * has both kinds to say it with.
  */
-export function sampleFiles(sources: readonly { source: string; extracted_date: string | null }[]): SampleFile[] {
+export function sampleFiles(
+  sources: readonly { source: string; extracted_date: string | null }[],
+): SampleFile[] {
   const files = sources.map((item) => {
     const { stem, extension } = splitName(item.source);
     const parsed = item.extracted_date ? new Date(item.extracted_date) : null;

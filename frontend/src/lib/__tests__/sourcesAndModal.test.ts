@@ -397,6 +397,21 @@ describe("execute preflight", () => {
     );
   });
 
+  it("tells indecision apart from a deliberate exclude-everything", () => {
+    const undecided = preflight({ ...base, actionableGroups: 0 });
+    const excluded = preflight({ ...base, actionableGroups: 0, excludedCount: 12 });
+
+    expect(undecided.canExecute).toBe(false);
+    expect(undecided.blocking[0].messageKey).toBe("preflight.blocking.empty");
+
+    // Same zero, opposite advice: one needs a decision, the other needs a file
+    // put back. Reporting "nothing has been decided" to somebody who has just
+    // decided to exclude everything is a misdiagnosis.
+    expect(excluded.canExecute).toBe(false);
+    expect(excluded.blocking[0].messageKey).toBe("preflight.blocking.allExcluded");
+    expect(excluded.blocking[0].params).toMatchObject({ count: 12 });
+  });
+
   it("blocks on stale review", () => {
     const result = preflight({ ...base, staleGroups: 2 });
 

@@ -37,7 +37,7 @@ import {
 import type { DuplicateGroup, GroupMember, GroupPlan } from "@/lib/reviewWorkbench";
 import type { View } from "@/lib/stageModel";
 import { api } from "@/services/api";
-import type { Config, PreviewResult } from "@/types/api";
+import type { Config, KeeperPolicyId, PreviewResult } from "@/types/api";
 
 interface ReviewScreenProps {
   result: PreviewResult;
@@ -113,6 +113,30 @@ export function ReviewScreen({
         memberId: row.stack?.memberId ?? "",
         action: "replace_keeper",
       }),
+    onSuccess: invalidateGroups,
+  });
+
+  /**
+   * A keep rule applied to one stack, leaving every other stack alone.
+   *
+   * The same preview-then-apply pair as the global rule, scoped to
+   * `this_group`: the set acted on is the set that was shown, even when that
+   * set is one.
+   */
+  const overrideStackKeeper = useMutation({
+    mutationFn: async (input: { stackId: string; policy: KeeperPolicyId }) => {
+      const impact = await api.previewPolicy({
+        policyId: input.policy,
+        scope: "this_group",
+        groupIds: [input.stackId],
+      });
+      return api.applyPolicy({
+        policyId: input.policy,
+        scope: "this_group",
+        groupIds: [input.stackId],
+        impact,
+      });
+    },
     onSuccess: invalidateGroups,
   });
 
@@ -203,7 +227,22 @@ export function ReviewScreen({
   };
 
   const mutationFailure =
-    dissolve.error ?? keepOnly.error ?? decideKeeper.error ?? applyKeepPolicy.error ?? null;
+    dissolve.error ??
+    keepOnly.error ??
+    decideKeeper.error ??
+    applyKeepPolicy.error ??
+    overrideStackKeeper.error ??
+    null;
+
+  // A decision taken inside Compare belongs inside Compare: the dialog stays
+  // open until it lands, and a refusal is shown there rather than behind it.
+  const comparePending = decideKeeper.isPending || dissolve.isPending;
+  const compareError = comparing
+    ? ((decideKeeper.error ?? dissolve.error) &&
+        extractErrorMessage(decideKeeper.error ?? dissolve.error, t("review.actionFailed"))
+          .message) ||
+      null
+    : null;
 
   return (
     <div className="space-y-5">
@@ -364,7 +403,15 @@ export function ReviewScreen({
               onDissolve={(stackId) => dissolve.mutate(stackId)}
               onKeepOnly={(row) => keepOnly.mutate(row)}
               onCompareStack={compareFromStack}
+              onOverrideKeeper={(stackId, policy) =>
+                overrideStackKeeper.mutate({ stackId, policy })
+              }
               dissolvePending={dissolve.isPending ? (dissolve.variables ?? null) : null}
+              keeperPending={
+                overrideStackKeeper.isPending
+                  ? (overrideStackKeeper.variables?.stackId ?? null)
+                  : null
+              }
             />
           )}
         </div>
@@ -376,13 +423,16 @@ export function ReviewScreen({
           b={comparing.b}
           keeperId={comparing.keeperId}
           onClose={() => setComparing(null)}
+          pending={comparePending}
+          error={compareError}
           onKeep={(memberId) => {
-            decideKeeper.mutate({ groupId: comparing.stackId, memberId });
-            setComparing(null);
+            decideKeeper.mutate(
+              { groupId: comparing.stackId, memberId },
+              { onSuccess: () => setComparing(null) },
+            );
           }}
           onKeepBoth={() => {
-            dissolve.mutate(comparing.stackId);
-            setComparing(null);
+            dissolve.mutate(comparing.stackId, { onSuccess: () => setComparing(null) });
           }}
         />
       )}

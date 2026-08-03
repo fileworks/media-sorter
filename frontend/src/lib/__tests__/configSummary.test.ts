@@ -206,9 +206,7 @@ describe("example filenames", () => {
     const toJpeg = { ...BASE, convert_images: true, image_format: "jpeg" } as Config;
     // Already JPEG — the backend skips the re-encode, so the suffix survives.
     expect(predictedExtension(toJpeg, INVENTED_SAMPLES[0])).toBe(".JPG");
-    expect(
-      predictedExtension(toJpeg, { ...INVENTED_SAMPLES[0], extension: ".HEIC" }),
-    ).toBe(".jpg");
+    expect(predictedExtension(toJpeg, { ...INVENTED_SAMPLES[0], extension: ".HEIC" })).toBe(".jpg");
   });
 });
 

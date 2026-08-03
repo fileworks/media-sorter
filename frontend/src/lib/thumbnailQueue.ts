@@ -12,6 +12,20 @@ type QueueEntry = {
   state: "queued" | "running";
 };
 
+/**
+ * A thumbnail the server answered but did not send.
+ *
+ * The status is the whole point: 415 is the backend saying there is no
+ * thumbnail for this file and never will be, which is a different thing from a
+ * request that failed and could succeed on the next try.
+ */
+export class ThumbnailHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`thumbnail HTTP ${status}`);
+    this.name = "ThumbnailHttpError";
+  }
+}
+
 export class ThumbnailRequestQueue {
   private entries = new Map<string, QueueEntry>();
 
@@ -80,7 +94,7 @@ export class ThumbnailRequestQueue {
       next.state = "running";
       void this.fetcher(next.url, { signal: next.controller.signal })
         .then((response) => {
-          if (!response.ok) throw new Error(`thumbnail HTTP ${response.status}`);
+          if (!response.ok) throw new ThumbnailHttpError(response.status);
           return response.blob();
         })
         .then((blob) => next.resolve(blob))
@@ -98,7 +112,9 @@ export class ThumbnailRequestQueue {
 // The live queue authenticates; the class keeps a plain `fetch` default so the
 // unit tests can drive it with a stub.
 const queue = new ThumbnailRequestQueue(6, api.mediaFetch);
-const negativeUntil = new Map<string, number>();
+
+/** What a failed URL failed with, and until when that answer stands. */
+const negativeCache = new Map<string, { until: number; unavailable: boolean }>();
 let listenersInstalled = false;
 let requestSequence = 0;
 
@@ -132,13 +148,27 @@ function viewportPriority(element: HTMLElement | null): number {
  * returned without touching state — so a tile scrolled past mid-request kept a
  * spinner for the life of the screen and never asked again. A waiting tile is
  * quiet, not animated, and re-enqueues the moment it comes back into view.
+ *
+ * `unavailable` is not `errored`. A 415 is the backend's settled answer that
+ * this file has no thumbnail; a broken pipe is a request that could work next
+ * time. Drawing both as the same grey square told a user their library was
+ * failing to load when in fact it had simply been asked to preview a file
+ * format that has no preview.
  */
 export function useQueuedThumbnail(
   url: string,
   elementRef: RefObject<HTMLElement | null>,
-): { objectUrl: string | null; loading: boolean; waiting: boolean; errored: boolean } {
+): {
+  objectUrl: string | null;
+  loading: boolean;
+  waiting: boolean;
+  errored: boolean;
+  unavailable: boolean;
+} {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [state, setState] = useState<"loading" | "waiting" | "loaded" | "error">("loading");
+  const [state, setState] = useState<"loading" | "waiting" | "loaded" | "error" | "unavailable">(
+    "loading",
+  );
   const [attempt, setAttempt] = useState(0);
   const requestId = useRef(0);
 
@@ -159,8 +189,9 @@ export function useQueuedThumbnail(
     installListeners();
     const id = ++requestId.current;
     setObjectUrl(null);
-    if ((negativeUntil.get(url) ?? 0) > Date.now()) {
-      setState("error");
+    const cached = negativeCache.get(url);
+    if (cached !== undefined && cached.until > Date.now()) {
+      setState(cached.unavailable ? "unavailable" : "error");
       return;
     }
     setState("loading");
@@ -182,8 +213,14 @@ export function useQueuedThumbnail(
           if (requestId.current === id) setState("waiting");
           return;
         }
-        negativeUntil.set(url, Date.now() + 5_000);
-        if (requestId.current === id) setState("error");
+        // A file that has no thumbnail will not grow one, so that answer is
+        // cached for far longer than a transient failure is.
+        const unavailable = error instanceof ThumbnailHttpError && error.status === 415;
+        negativeCache.set(url, {
+          until: Date.now() + (unavailable ? 600_000 : 5_000),
+          unavailable,
+        });
+        if (requestId.current === id) setState(unavailable ? "unavailable" : "error");
       });
     return () => {
       request.cancel();
@@ -196,6 +233,7 @@ export function useQueuedThumbnail(
     loading: state === "loading",
     waiting: state === "waiting",
     errored: state === "error",
+    unavailable: state === "unavailable",
   };
 }
 

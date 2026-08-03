@@ -93,7 +93,9 @@ describe("per-row changed markers", () => {
     // One marker per deviation and no more: a row at its default is unmarked.
     const markers = screen
       .getAllByRole("button")
-      .filter((button) => button.getAttribute("aria-label")?.startsWith("Changed from the default"));
+      .filter((button) =>
+        button.getAttribute("aria-label")?.startsWith("Changed from the default"),
+      );
     expect(markers).toHaveLength(3);
   });
 

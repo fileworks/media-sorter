@@ -42,7 +42,20 @@ export const en = {
   "review.stack.kind.exact": "identical",
   "review.stack.kind.similar": "similar",
   "review.stack.kind.burst": "burst",
+  "review.stack.keepingInstead": "keeping {name} instead",
+  "review.stack.allExcluded": "every copy excluded — this set does nothing",
+  "review.row.companions": "+{count} companions",
+  "review.row.companionsHelp":
+    "Sidecars and other files that belong to this one. They travel with it, and excluding either excludes both.",
   "review.stack.keeping": "keeping {name}",
+  "review.stack.keeperOverride": "Keep rule for this set",
+  "review.stack.keeperOverrideHelp":
+    "Pick which copy this set keeps, without changing any other set.",
+  "review.stack.keeperApplying": "Applying…",
+  "review.stack.keeperBaseline":
+    "This set contains a baseline file, which always wins. No rule can change it.",
+  "review.stack.keeperPerceptual":
+    "These files only look alike. Compare them and choose, rather than letting a rule decide.",
   "review.stack.baseline": "Baseline",
   "review.stack.baselineHelp":
     "A baseline copy is compared against and never changed, so it always wins.",
@@ -478,6 +491,8 @@ export const en = {
   "preview.status.duplicateUnknown":
     "Video perceptual duplicate check completes during the full sort",
   "preview.compareFile": "Compare duplicate {name}",
+  "preview.noThumbnail": "No preview for this file",
+  "preview.thumbnailFailed": "The preview did not load",
   "preview.openFile": "Open preview of {name}",
   "preview.lightbox.unavailable": "This file cannot be previewed here.",
   "preview.category": "Category: {name}",
@@ -870,6 +885,8 @@ export const en = {
   "preflight.description": "Everything below is what will happen. Nothing has moved yet.",
   "preflight.reversible.title": "Reversible by re-running",
   "preflight.irreversible.title": "Not reversible",
+  "preflight.blocking.allExcluded":
+    "All {count} files are excluded, so this run would do nothing. Include some in Review, or go back and change the configuration.",
   "preflight.blocking.empty": "Nothing has been decided yet — there is no work to run.",
   "preflight.blocking.stale":
     "{count} group(s) changed since you reviewed them and must be looked at again.",
@@ -1393,6 +1410,11 @@ export const en = {
   "review.compare.keepA": "Keep A",
   "review.compare.keepB": "Keep B",
   "review.compare.keepBoth": "Keep both — not duplicates",
+  "review.compare.wins.newer": "the later capture",
+  "review.compare.wins.moreDetail": "more detail",
+  "review.compare.wins.larger": "the larger file",
+  "review.compare.wins.stronger": "the stronger evidence",
+  "review.compare.saving": "Saving your choice…",
   "review.compare.scopeNote": "Applies to this group only.",
   "review.junk.intro": "Grouped by the filter that caught them.",
   "review.junk.count": "{count} files",
@@ -1524,7 +1546,20 @@ export const de: Record<MessageKey, string> = {
   "review.stack.kind.exact": "identisch",
   "review.stack.kind.similar": "ähnlich",
   "review.stack.kind.burst": "Serie",
+  "review.stack.keepingInstead": "behält stattdessen {name}",
+  "review.stack.allExcluded": "alle Kopien ausgeschlossen — dieser Satz bewirkt nichts",
+  "review.row.companions": "+{count} Begleitdateien",
+  "review.row.companionsHelp":
+    "Sidecar- und andere Dateien, die zu dieser gehören. Sie wandern mit; wird eine ausgeschlossen, sind es beide.",
   "review.stack.keeping": "behält {name}",
+  "review.stack.keeperOverride": "Behaltregel für diesen Satz",
+  "review.stack.keeperOverrideHelp":
+    "Wählen, welche Kopie dieser Satz behält — ohne andere Sätze zu verändern.",
+  "review.stack.keeperApplying": "Wird angewendet…",
+  "review.stack.keeperBaseline":
+    "Dieser Satz enthält eine Referenzdatei, die immer gewinnt. Keine Regel ändert das.",
+  "review.stack.keeperPerceptual":
+    "Diese Dateien sehen sich nur ähnlich. Vergleichen und selbst wählen, statt eine Regel entscheiden zu lassen.",
   "review.stack.baseline": "Referenz",
   "review.stack.baselineHelp":
     "Eine Referenzkopie wird nur verglichen und nie verändert, sie gewinnt daher immer.",
@@ -1980,6 +2015,8 @@ export const de: Record<MessageKey, string> = {
   "preview.status.duplicateUnknown":
     "Die Prüfung auf visuelle Videoduplikate erfolgt beim vollständigen Sortieren",
   "preview.compareFile": "Duplikat {name} vergleichen",
+  "preview.noThumbnail": "Für diese Datei gibt es keine Vorschau",
+  "preview.thumbnailFailed": "Die Vorschau wurde nicht geladen",
   "preview.openFile": "Vorschau von {name} öffnen",
   "preview.lightbox.unavailable": "Diese Datei lässt sich hier nicht anzeigen.",
   "preview.category": "Kategorie: {name}",
@@ -2380,6 +2417,8 @@ export const de: Record<MessageKey, string> = {
     "Unten steht vollständig, was geschehen wird. Es wurde noch nichts verschoben.",
   "preflight.reversible.title": "Durch erneutes Ausführen wiederholbar",
   "preflight.irreversible.title": "Nicht rückgängig zu machen",
+  "preflight.blocking.allExcluded":
+    "Alle {count} Dateien sind ausgeschlossen — dieser Durchlauf würde nichts tun. In der Prüfung wieder aufnehmen oder die Konfiguration ändern.",
   "preflight.blocking.empty":
     "Es wurde noch nichts entschieden — es gibt keine Arbeit auszuführen.",
   "preflight.blocking.stale":
@@ -2926,6 +2965,11 @@ export const de: Record<MessageKey, string> = {
   "review.compare.keepA": "A behalten",
   "review.compare.keepB": "B behalten",
   "review.compare.keepBoth": "Beide behalten — keine Duplikate",
+  "review.compare.wins.newer": "die spätere Aufnahme",
+  "review.compare.wins.moreDetail": "mehr Details",
+  "review.compare.wins.larger": "die größere Datei",
+  "review.compare.wins.stronger": "der stärkere Beleg",
+  "review.compare.saving": "Auswahl wird gespeichert…",
   "review.compare.scopeNote": "Gilt nur für diese Gruppe.",
   "review.junk.intro": "Gruppiert nach dem Filter, der sie erfasst hat.",
   "review.junk.count": "{count} Dateien",

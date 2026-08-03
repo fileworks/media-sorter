@@ -199,6 +199,13 @@ export interface Stack {
   rows: ReviewRow[];
   keeper: ReviewRow | null;
   hasBaseline: boolean;
+  /**
+   * The stack's own keeper was excluded and the next-best copy stands in its
+   * place. Excluding a keeper is allowed — it is how "none of these, keep the
+   * other one" is expressed — but a stack that silently kept nothing would
+   * quarantine every copy it has.
+   */
+  keeperPromoted: boolean;
 }
 
 /**
@@ -223,12 +230,22 @@ export function groupIntoStacks(rows: ReviewRow[]): Array<Stack | ReviewRow> {
         rows: [],
         keeper: null,
         hasBaseline: row.stack.hasBaseline,
+        keeperPromoted: false,
       };
       byId.set(row.stack.id, stack);
       out.push(stack);
     }
     stack.rows.push(row);
     if (row.stack.isKeeper) stack.keeper = row;
+  }
+
+  // Excluding the keeper promotes the next copy the run may still act on. A
+  // baseline is never excludable, so it can never be the one displaced.
+  for (const stack of byId.values()) {
+    if (stack.keeper === null || !stack.keeper.excluded) continue;
+    const replacement = stack.rows.find((row) => !row.excluded && row.status !== "baseline");
+    stack.keeper = replacement ?? null;
+    stack.keeperPromoted = replacement !== undefined;
   }
   return out;
 }

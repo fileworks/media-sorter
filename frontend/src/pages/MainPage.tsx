@@ -464,6 +464,7 @@ export default function MainPage() {
       impact?.actionable_groups ?? 0,
       excludedOff.transfers + excludedOff.quarantine,
     ),
+    excludedCount: excludedOff.transfers + excludedOff.quarantine,
     quarantineCount: withoutExcluded(impact?.quarantine_count ?? 0, excludedOff.quarantine),
     quarantineBytes: impact?.quarantine_bytes ?? 0,
     copyCount: withoutExcluded(impact?.copy_count ?? 0, copying ? excludedOff.transfers : 0),

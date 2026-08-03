@@ -181,9 +181,7 @@ export function ConfigureScreen({
 
   const settingsDiff = useMemo<SettingsDiffValue | null>(
     () =>
-      changed && defaults
-        ? { changed, defaults, revert: revertFields, locked: disabled }
-        : null,
+      changed && defaults ? { changed, defaults, revert: revertFields, locked: disabled } : null,
     [changed, defaults, revertFields, disabled],
   );
 
