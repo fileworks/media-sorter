@@ -231,33 +231,6 @@ export interface OptimizationProfile {
   retain_original: boolean;
 }
 
-/** One declared format contract: what an optimizer would promise, and prove. */
-export interface OptimizationContract {
-  contract_id: string;
-  media_kind: "image" | "video";
-  mode: "disabled" | "lossless" | "visually_lossless";
-  status: "declared" | "validated" | "blocked";
-  enabled: boolean;
-  source_formats: string[];
-  output_container: string;
-  output_codec: string;
-  tool: string;
-  tool_available: boolean;
-  tool_version: string | null;
-  minimum_tool_version: string;
-  decoded_content: string;
-  metadata_policy: string;
-  quality_setting: string;
-  metrics: {
-    name: string;
-    comparison: string;
-    threshold: number | string | boolean;
-    applies_to: string;
-    rationale: string;
-  }[];
-  compatibility_warnings: string[];
-}
-
 /** One representative encode the user may open beside its original. */
 export interface SampleEncode {
   source_path: string;
@@ -291,66 +264,6 @@ export interface ItemProjection {
   recommendation: "optimize" | "skip" | "blocked";
   reason: string;
   sample_source_path: string | null;
-}
-
-export interface OptimizationProjection {
-  contract_id: string;
-  mode: "disabled" | "lossless" | "visually_lossless";
-  output_container: string;
-  output_codec: string;
-  item_count: number;
-  current_bytes: number;
-  projected_low_bytes: number | null;
-  projected_high_bytes: number | null;
-  estimated_saving_bytes: number | null;
-  confidence: "measured" | "sampled" | "estimated" | "unknown";
-  estimate_only: boolean;
-  recommended_count: number;
-  skipped_count: number;
-  blocked_count: number;
-  temporary_space_bytes: number;
-  quarantine_space_bytes: number;
-  samples: SampleEncode[];
-  items: ItemProjection[];
-  warnings: string[];
-  compatibility_warnings: string[];
-  failures: string[];
-}
-
-/** A quarantined original and everything needed to put it back. */
-export interface QuarantineRecord {
-  record_id: string;
-  operation_id: string;
-  reason: string;
-  original_path: string;
-  quarantine_path: string;
-  keeper_path: string | null;
-  size_bytes: number;
-  quarantined_at: string;
-  retention: "retained" | "restored" | "removed";
-  restored_to: string | null;
-  age_days: number;
-  notes: string[];
-}
-
-export interface QuarantineSummary {
-  record_count: number;
-  retained_count: number;
-  restored_count: number;
-  retained_bytes: number;
-  oldest_age_days: number;
-  by_reason: Record<string, number>;
-}
-
-export interface RestorePreview {
-  record_id: string;
-  target_path: string;
-  restorable: boolean;
-  conflict: boolean;
-  conflict_is_identical: boolean;
-  quarantined_file_present: boolean;
-  hash_matches: boolean | null;
-  blocked_reason: string | null;
 }
 
 /** Where the index lives, what it costs, and how fresh each root is. */
@@ -439,21 +352,6 @@ export interface CatalogViewPage {
   generation: number;
   total_rows: number;
   total_bytes: number;
-}
-
-export interface CleanupImpact {
-  record_ids: string[];
-  item_count: number;
-  total_bytes: number;
-  excluded_reasons: string[];
-  acknowledgement_text: string;
-}
-
-export interface CleanupOutcome {
-  code: string;
-  removed: string[];
-  failed: { record_id: string; reason: string }[];
-  bytes_removed: number;
 }
 
 export type AiModelTier = "auto" | "off" | "lite" | "standard" | "max";
@@ -784,35 +682,6 @@ export interface AuditFinding {
   suggested_path: string | null;
 }
 
-export interface AuditActionPlan {
-  plan_id: string;
-  action_count: number;
-  bytes_affected: number;
-  source_mutations: number;
-  config_fingerprint: string;
-}
-
-export interface AuditReport {
-  audit_id: string;
-  root: string;
-  started_at: string;
-  finished_at: string;
-  scope: {
-    subtree: string | null;
-    date_from: string | null;
-    date_to: string | null;
-    sample_proportion: number;
-    sample_seed: string;
-  };
-  selection_method: string;
-  coverage: "full" | "sample" | "partial";
-  scanned_files: number;
-  baseline_established: number;
-  findings: AuditFinding[];
-  issues: string[];
-  cancelled: boolean;
-}
-
 export interface BurstFrame {
   frame_id: string;
   unit_id: string;
@@ -831,48 +700,6 @@ export interface BurstGroup {
   reviewed: boolean;
   dismissed: boolean;
   kept_frame_ids: string[];
-}
-
-export interface BurstDecision {
-  group: BurstGroup;
-  plan: {
-    plan_id: string;
-    group_id: string;
-    kept_frame_ids: string[];
-    members: Array<{
-      frame_id: string;
-      unit_id: string;
-      path: string;
-      fingerprint: string;
-    }>;
-  };
-  impact: {
-    quarantine_count: number;
-    quarantine_bytes: number;
-    source_mutations: number;
-    irreversible: string;
-  };
-  planned_quarantine_units: Array<{
-    unit_id: string;
-    members: string[];
-    action: "quarantine";
-    delete: false;
-  }>;
-}
-
-export interface BurstRunReport {
-  operation_id: string;
-  plan_id: string;
-  group_id: string;
-  completed_at: string;
-  kept_frame_ids: string[];
-  quarantined: Array<{
-    frame_id: string;
-    unit_id: string;
-    original_path: string;
-    quarantine_path: string;
-    size_bytes: number;
-  }>;
 }
 
 export interface ReconciliationFinding {
@@ -894,26 +721,6 @@ export interface ReconciliationFinding {
   unit_id: string | null;
   unit_member_roles: Record<string, string | null>;
   unit_member_fingerprints: Record<string, string>;
-}
-
-export interface ReconciliationReport {
-  report_id: string;
-  created_at: string;
-  findings: ReconciliationFinding[];
-  next_cursor: string | null;
-  counts: Record<ReconciliationFinding["classification"], number>;
-  input_coverage: "full" | "partial" | "unavailable";
-  destination_coverage: "full" | "partial" | "unavailable";
-  issues: string[];
-  config_fingerprint: string;
-}
-
-export interface ReconciliationPlan {
-  plan_id: string;
-  manifest: Record<string, unknown>;
-  action_count: number;
-  bytes_affected: number;
-  source_mutations: number;
 }
 
 export interface PreviewResult {
@@ -1492,150 +1299,9 @@ export class MediaSorterApiClient {
     return data as Blob;
   }
 
-  async runLibraryAudit(input: {
-    root: string;
-    subtree?: string;
-    sampleProportion?: number;
-  }): Promise<AuditReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<AuditReport>("/api/audit", {
-      root: input.root,
-      scope: {
-        subtree: input.subtree || null,
-        sample_proportion: input.sampleProportion ?? 1,
-      },
-    });
-    return data;
-  }
-
-  async auditHistory(): Promise<AuditReport[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<AuditReport[]>("/api/audit/history");
-    return data;
-  }
-
-  async exportAudit(auditId: string, format: "csv" | "json"): Promise<Blob> {
-    await this.ensureReady();
-    const { data } = await this.http.post(
-      `/api/audit/reports/${encodeURIComponent(auditId)}/export`,
-      { format },
-      { responseType: "blob" },
-    );
-    return data as Blob;
-  }
-
-  async planAuditFixes(auditId: string, findingIds: string[]): Promise<AuditActionPlan> {
-    await this.ensureReady();
-    const { data } = await this.http.post<AuditActionPlan>(
-      `/api/audit/reports/${encodeURIComponent(auditId)}/plan`,
-      { finding_ids: findingIds },
-    );
-    return data;
-  }
-
-  async executeAuditFixes(planId: string): Promise<{ plan_id: string; completed: number }> {
-    await this.ensureReady();
-    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
-      `/api/audit/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
-  async detectBursts(root: string, paths: string[]): Promise<BurstGroup[]> {
-    await this.ensureReady();
-    const { data } = await this.http.post<BurstGroup[]>("/api/review/bursts/detect", {
-      root,
-      paths,
-    });
-    return data;
-  }
-
-  async decideBurst(
-    group: BurstGroup,
-    keepFrameIds: string[],
-    dismissed = false,
-  ): Promise<BurstDecision> {
-    await this.ensureReady();
-    const { data } = await this.http.post("/api/review/bursts/decision", {
-      group,
-      keep_frame_ids: keepFrameIds,
-      dismissed,
-    });
-    return data;
-  }
-
-  async executeBurstPlan(planId: string): Promise<BurstRunReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<BurstRunReport>(
-      `/api/review/bursts/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
-  async reconcileDestination(): Promise<ReconciliationReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationReport>("/api/reconciliation/compare", {
-      input_available: true,
-    });
-    return data;
-  }
-
-  async reconciliationFindings(
-    reportId: string,
-    options: {
-      cursor?: string | null;
-      classification?: ReconciliationFinding["classification"];
-      limit?: number;
-    } = {},
-  ): Promise<ReconciliationReport> {
-    await this.ensureReady();
-    const { data } = await this.http.get<ReconciliationReport>(
-      `/api/reconciliation/reports/${encodeURIComponent(reportId)}/findings`,
-      {
-        params: {
-          ...(options.cursor ? { cursor: options.cursor } : {}),
-          ...(options.classification ? { classification: options.classification } : {}),
-          ...(options.limit ? { limit: options.limit } : {}),
-        },
-      },
-    );
-    return data;
-  }
-
-  async planReconciliation(
-    report: ReconciliationReport,
-    findingIds: string[],
-    confirmedProbable: string[],
-  ): Promise<ReconciliationPlan> {
-    await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationPlan>("/api/reconciliation/plan", {
-      report_id: report.report_id,
-      finding_ids: findingIds,
-      confirm_probable: confirmedProbable,
-    });
-    return data;
-  }
-
-  async executeReconciliation(planId: string): Promise<{ plan_id: string; completed: number }> {
-    await this.ensureReady();
-    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
-      `/api/reconciliation/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
   // ── Optimization ──────────────────────────────────────────────────────────────
 
   /** Every declared contract with its status and whether its tool exists here. */
-  async listOptimizationContracts(): Promise<OptimizationContract[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<OptimizationContract[]>("/api/optimization/contracts");
-    return data;
-  }
-
   /**
    * Project what optimization would cost and save for the given files.
    *
@@ -1644,51 +1310,9 @@ export class MediaSorterApiClient {
    * comparison modal has something real to show; without it the response is
    * numbers only and says so via `estimate_only`.
    */
-  async previewOptimization(
-    contractId: string,
-    paths: string[],
-    options: { retainSamples?: boolean; maxSamples?: number } = {},
-  ): Promise<OptimizationProjection> {
-    await this.ensureReady();
-    const { data } = await this.http.post<OptimizationProjection>("/api/optimization/preview", {
-      contract_id: contractId,
-      paths,
-      retain_samples: options.retainSamples ?? true,
-      max_samples: options.maxSamples ?? 3,
-    });
-    return data;
-  }
-
   // ── Quarantine ────────────────────────────────────────────────────────────────
 
-  async listQuarantine(retention?: QuarantineRecord["retention"]): Promise<QuarantineRecord[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<QuarantineRecord[]>("/api/quarantine", {
-      params: retention ? { retention } : {},
-    });
-    return data;
-  }
-
-  async quarantineSummary(): Promise<QuarantineSummary> {
-    await this.ensureReady();
-    const { data } = await this.http.get<QuarantineSummary>("/api/quarantine/summary");
-    return data;
-  }
-
   /** Describe a restore fully before any byte moves. */
-  async previewRestore(
-    recordId: string,
-    options: { targetPath?: string; onConflict?: "block" | "alternate_path" | "skip" } = {},
-  ): Promise<RestorePreview> {
-    await this.ensureReady();
-    const { data } = await this.http.post<RestorePreview>("/api/quarantine/restore/preview", {
-      record_id: recordId,
-      target_path: options.targetPath ?? null,
-      on_conflict: options.onConflict ?? "block",
-    });
-    return data;
-  }
-
   // ── Duplicate review ──────────────────────────────────────────────────────────
 
   async listReviewGroups(
@@ -1864,24 +1488,7 @@ export class MediaSorterApiClient {
 
   // ── Quarantine cleanup ────────────────────────────────────────────────────────
 
-  async previewCleanup(recordIds: string[]): Promise<CleanupImpact> {
-    await this.ensureReady();
-    const { data } = await this.http.post<CleanupImpact>("/api/quarantine/cleanup/preview", {
-      record_ids: recordIds,
-    });
-    return data;
-  }
-
   /** Permanently delete quarantined files. The only irreversible call here. */
-  async cleanupQuarantine(recordIds: string[], acknowledge: boolean): Promise<CleanupOutcome> {
-    await this.ensureReady();
-    const { data } = await this.http.post<CleanupOutcome>("/api/quarantine/cleanup", {
-      record_ids: recordIds,
-      acknowledge_permanent_deletion: acknowledge,
-    });
-    return data;
-  }
-
   // ── Catalog ───────────────────────────────────────────────────────────────────
 
   async catalogDiagnostics(): Promise<CatalogDiagnostics> {

@@ -16,31 +16,16 @@
 
 export type Stage = "sources" | "configure" | "review" | "execute";
 
-/**
- * Views only exist inside Review. The first four are the design's tabs; the
- * rest are the specialist workbenches this app has that the tab bar reveals
- * only when the run actually contains that kind of work.
- */
-export type View =
-  | "overview"
-  | "duplicates"
-  | "junk"
-  | "changes"
-  | "warnings"
-  | "bursts"
-  | "reconciliation"
-  | "library";
+/** Views only exist inside Review, where they are the design's four tabs. */
+export type View = "overview" | "duplicates" | "junk" | "changes" | "warnings";
 
 /** The four tabs the Review screen always shows, in order. */
 export const PRIMARY_REVIEW_VIEWS: View[] = ["duplicates", "junk", "changes", "warnings"];
 
-/** Shown as extra tabs, and only when the run has something to put in them. */
-export const ADVANCED_REVIEW_VIEWS: View[] = ["bursts", "reconciliation", "library"];
-
 export const VIEWS_BY_STAGE: Record<Stage, View[]> = {
   sources: ["overview"],
   configure: ["overview"],
-  review: [...PRIMARY_REVIEW_VIEWS, ...ADVANCED_REVIEW_VIEWS],
+  review: [...PRIMARY_REVIEW_VIEWS],
   execute: ["overview"],
 };
 

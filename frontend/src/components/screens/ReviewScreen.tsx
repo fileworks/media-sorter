@@ -40,21 +40,6 @@ import type { Config, PreviewItem, PreviewResult } from "@/types/api";
 const PreviewPanel = lazy(() =>
   import("@/components/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
-const BurstReviewPanel = lazy(() =>
-  import("@/components/BurstReviewPanel").then((module) => ({
-    default: module.BurstReviewPanel,
-  })),
-);
-const DestinationReconciliationPanel = lazy(() =>
-  import("@/components/DestinationReconciliationPanel").then((module) => ({
-    default: module.DestinationReconciliationPanel,
-  })),
-);
-const LibraryAuditPanel = lazy(() =>
-  import("@/components/LibraryAuditPanel").then((module) => ({
-    default: module.LibraryAuditPanel,
-  })),
-);
 
 interface ReviewScreenProps {
   result: PreviewResult;
@@ -102,26 +87,11 @@ export function ReviewScreen({
     [config, result.items],
   );
 
-  const inputRoot = config.library_profile.roots.find((root) => root.role === "input");
-  const destinationRoot = config.library_profile.roots.find(
-    (root) => root.role === "destination",
-  );
   const rootCount = config.library_profile.roots.filter(
     (root) => root.role !== "destination",
   ).length;
 
-  const hasBursts = config.burst_detection_enabled && Boolean(inputRoot);
-  const hasReconciliation = result.items.some(
-    (item) => item.status === "already_in_destination",
-  );
-  const hasLibraryChecks = Boolean(destinationRoot?.path);
-
-  const advancedViews: View[] = [
-    ...(hasBursts ? (["bursts"] as View[]) : []),
-    ...(hasReconciliation ? (["reconciliation"] as View[]) : []),
-    ...(hasLibraryChecks ? (["library"] as View[]) : []),
-  ];
-  const tabs: View[] = [...PRIMARY_REVIEW_VIEWS, ...advancedViews];
+  const tabs: View[] = PRIMARY_REVIEW_VIEWS;
 
   const tabCount = (tab: View): number | null => {
     if (tab === "duplicates") return counts.duplicates;
@@ -269,21 +239,6 @@ export function ReviewScreen({
               />
             )}
 
-            {view === "bursts" && inputRoot && (
-              <BurstReviewPanel
-                root={inputRoot.path}
-                items={result.items}
-                enabled={config.burst_detection_enabled}
-              />
-            )}
-
-            {view === "reconciliation" && (
-              <DestinationReconciliationPanel items={result.items} />
-            )}
-
-            {view === "library" && destinationRoot?.path && (
-              <LibraryAuditPanel root={destinationRoot.path} />
-            )}
           </Suspense>
         </div>
       </div>

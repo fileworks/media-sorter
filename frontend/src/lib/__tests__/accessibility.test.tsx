@@ -6,10 +6,7 @@ import axe from "axe-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
-import { BurstReviewPanel } from "@/components/BurstReviewPanel";
-import { CatalogPanel } from "@/components/CatalogPanel";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
-import { DestinationReconciliationPanel } from "@/components/DestinationReconciliationPanel";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { RunLog } from "@/components/screens/RunLog";
@@ -18,13 +15,10 @@ import { PlanSummary } from "@/components/screens/review/PlanSummary";
 import { WarningsTab } from "@/components/screens/review/WarningsTab";
 import { destinationTree, type PlanTotals } from "@/lib/reviewPlan";
 import { PreviewPanel } from "@/components/PreviewPanel";
-import { QuarantineManager } from "@/components/QuarantineManager";
 import { RecipeGrid } from "@/components/screens/RecipeGrid";
-import { ReviewWorkbench } from "@/components/ReviewWorkbench";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { StageShell } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
-import { ValidationPanel } from "@/components/ValidationPanel";
 import { SECTION_DEFAULTS } from "@/components/config/constants";
 import { I18nProvider, translate, type Locale } from "@/i18n/I18nContext";
 import { type StageState } from "@/lib/stageModel";
@@ -112,30 +106,6 @@ beforeEach(() => {
     groups: [],
     next_cursor: null,
     kind: "exact",
-  });
-  vi.spyOn(api, "catalogDiagnostics").mockResolvedValue({
-    path: "/state/catalog.sqlite3",
-    schema_version: 1,
-    size_bytes: 0,
-    soft_limit_bytes: 1,
-    over_soft_limit: false,
-    mode: "application_data",
-    roots: 0,
-    files: 0,
-    hashed_files: 0,
-    missing_files: 0,
-    generations: 0,
-    open_generations: 0,
-    freshness: [],
-  });
-  vi.spyOn(api, "listQuarantine").mockResolvedValue([]);
-  vi.spyOn(api, "quarantineSummary").mockResolvedValue({
-    record_count: 0,
-    retained_count: 0,
-    restored_count: 0,
-    retained_bytes: 0,
-    oldest_age_days: 0,
-    by_reason: {},
   });
   vi.spyOn(api, "getConfig").mockResolvedValue(ACCESSIBILITY_CONFIG);
   vi.spyOn(api, "validateConfig").mockResolvedValue({
@@ -256,20 +226,6 @@ const PLAN_TOTALS: PlanTotals = {
 const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   ["Sources", () => <SourcesScreen {...SOURCES_PROPS} />],
   ["organization", () => <PreviewPanel result={null} loading={false} error={null} />],
-  ["exact review", () => <ReviewWorkbench kindFilter="exact" />],
-  ["similar review", () => <ReviewWorkbench kindFilter="similar" />],
-  ["burst review", () => <BurstReviewPanel root="/library" items={[]} enabled={false} />],
-  ["reconciliation", () => <DestinationReconciliationPanel />],
-  ["validation", () => <ValidationPanel rootId="" />],
-  [
-    "issues",
-    () => (
-      <div>
-        <CatalogPanel />
-        <QuarantineManager />
-      </div>
-    ),
-  ],
   [
     "plan summary",
     () => (
@@ -429,16 +385,6 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
         name: translate(locale, `config.group.${group}.label`),
       });
     }
-    await expectNoViolations(rendered.container);
-  });
-
-  it("covers the expanded shortcut reference", async () => {
-    const rendered = renderWithProviders(<ReviewWorkbench kindFilter="exact" />, locale);
-    fireEvent.click(
-      within(rendered.container).getByRole("button", {
-        name: new RegExp(translate(locale, "review.shortcuts")),
-      }),
-    );
     await expectNoViolations(rendered.container);
   });
 

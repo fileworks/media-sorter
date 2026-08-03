@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ts from "typescript";
-import catalogPanelSource from "@/components/CatalogPanel.tsx?raw";
 import operationCenterSource from "@/components/OperationCenter.tsx?raw";
-import quarantineManagerSource from "@/components/QuarantineManager.tsx?raw";
-import reviewWorkbenchSource from "@/components/ReviewWorkbench.tsx?raw";
 import sourcesScreenSource from "@/components/screens/SourcesScreen.tsx?raw";
 import configureScreenSource from "@/components/screens/ConfigureScreen.tsx?raw";
 import reviewScreenSource from "@/components/screens/ReviewScreen.tsx?raw";
@@ -18,11 +15,60 @@ import recipeGridSource from "@/components/screens/RecipeGrid.tsx?raw";
 import runLogSource from "@/components/screens/RunLog.tsx?raw";
 import titleBarSource from "@/components/shell/TitleBar.tsx?raw";
 import stageStepperSource from "@/components/shell/StageStepper.tsx?raw";
-import validationPanelSource from "@/components/ValidationPanel.tsx?raw";
 import { de, en } from "@/i18n/messages";
 import { storedLocale, translate } from "@/i18n/I18nContext";
 import { formatBytes, formatCount, formatDuration } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
+
+/**
+ * Every source file, so key usage can be checked against the catalogue rather
+ * than against a hand-maintained list that goes stale the moment a file moves.
+ */
+const RAW_SOURCES = import.meta.glob("../../**/*.{ts,tsx}", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+/** Surfaces `remove-unreachable-frontend-surfaces` deleted outright. */
+const REMOVED_NAMESPACES = [
+  "quarantine.",
+  "audit.",
+  "reconcile.",
+  "bursts.",
+  "catalog.",
+  "validation.",
+];
+
+const PRODUCT_SOURCES = Object.entries(RAW_SOURCES).filter(
+  ([path]) => !path.includes("__tests__") && !path.includes("i18n/messages.ts"),
+);
+
+/**
+ * Keys named by a string literal at a `t(...)` or `translate(...)` call site.
+ *
+ * Deliberately not every dotted string in the tree: `"config.json"` and
+ * `"app.tsx"` are not keys. Keys built from a template — `` t(`config.keeper.${id}`) ``
+ * — use backticks and so never match here; they are covered by the prefix scan
+ * below, which is why a literal search alone must never drive a deletion.
+ */
+function literalKeyReferences(): Set<string> {
+  const keys = new Set<string>();
+  for (const [, source] of PRODUCT_SOURCES) {
+    for (const match of source.matchAll(/\bt\(\s*"([^"]+)"/g)) keys.add(match[1]);
+    for (const match of source.matchAll(/\btranslate\(\s*[^,()]+,\s*"([^"]+)"/g)) keys.add(match[1]);
+  }
+  return keys;
+}
+
+/** Prefixes of keys assembled at runtime, e.g. `` `config.keeper.${id}` `` . */
+function templateKeyPrefixes(): Set<string> {
+  const prefixes = new Set<string>();
+  for (const [, source] of PRODUCT_SOURCES) {
+    for (const match of source.matchAll(/`([a-zA-Z][a-zA-Z0-9_.]*\.)\$\{/g)) prefixes.add(match[1]);
+  }
+  return prefixes;
+}
 
 describe("English/German resources", () => {
   afterEach(() => {
@@ -34,6 +80,44 @@ describe("English/German resources", () => {
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
       expect(en[key].trim(), `English ${key}`).not.toBe("");
       expect(de[key].trim(), `German ${key}`).not.toBe("");
+    }
+  });
+
+  it("keeps no key belonging to a deleted surface", () => {
+    const survivors = Object.keys(en).filter((key) =>
+      REMOVED_NAMESPACES.some((namespace) => key.startsWith(namespace)),
+    );
+
+    expect(survivors).toEqual([]);
+  });
+
+  it("resolves every key the interface asks for by name", () => {
+    const catalogue = new Set(Object.keys(en));
+    const missing = [...literalKeyReferences()].filter(
+      (key) =>
+        !catalogue.has(key) &&
+        // A dotted literal at a t()/translate() call site that is not a key is
+        // a caller passing a fallback string, which is allowed.
+        /^[a-z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$/.test(key),
+    );
+
+    expect(missing, "keys used by the interface but absent from the catalogue").toEqual([]);
+  });
+
+  it("keeps every runtime-assembled key family populated", () => {
+    const keys = Object.keys(en);
+    const i18nPrefixes = [...templateKeyPrefixes()].filter((prefix) =>
+      keys.some((key) => key.startsWith(prefix)),
+    );
+
+    // Guards task 5.3: these families are built at runtime, so a literal search
+    // reports them as unreferenced. Deleting one would break silently.
+    expect(i18nPrefixes.length).toBeGreaterThan(0);
+    for (const prefix of i18nPrefixes) {
+      expect(
+        keys.filter((key) => key.startsWith(prefix)).length,
+        `no key remains for the runtime-built family ${prefix}*`,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -112,10 +196,6 @@ describe("English/German resources", () => {
       "RunLog.tsx": runLogSource,
       "TitleBar.tsx": titleBarSource,
       "StageStepper.tsx": stageStepperSource,
-      "ReviewWorkbench.tsx": reviewWorkbenchSource,
-      "ValidationPanel.tsx": validationPanelSource,
-      "CatalogPanel.tsx": catalogPanelSource,
-      "QuarantineManager.tsx": quarantineManagerSource,
       "OperationCenter.tsx": operationCenterSource,
     };
     for (const [panel, source] of Object.entries(panels)) {
