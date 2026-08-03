@@ -674,6 +674,7 @@ def _include_routes(app: FastAPI, logger: BoundLogger) -> None:
         bursts,
         config,
         destination_reconciliation,
+        fs,
         health,
         logs,
         media,
@@ -688,6 +689,7 @@ def _include_routes(app: FastAPI, logger: BoundLogger) -> None:
     app.include_router(health.router, prefix="/api", tags=["health"])
     app.include_router(update.router, prefix="/api", tags=["update"])
     app.include_router(config.router, prefix="/api", tags=["config"])
+    app.include_router(fs.router, prefix="/api", tags=["fs"])
     app.include_router(ai.router, prefix="/api", tags=["ai"])
     app.include_router(audit.router, prefix="/api", tags=["audit"])
     app.include_router(bursts.router, prefix="/api", tags=["bursts"])
