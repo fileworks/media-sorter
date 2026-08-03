@@ -12,9 +12,7 @@ import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { RunLog } from "@/components/screens/RunLog";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
 import { PlanSummary } from "@/components/screens/review/PlanSummary";
-import { WarningsTab } from "@/components/screens/review/WarningsTab";
 import { destinationTree, type PlanTotals } from "@/lib/reviewPlan";
-import { PreviewPanel } from "@/components/PreviewPanel";
 import { RecipeGrid } from "@/components/screens/RecipeGrid";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { StageShell } from "@/components/StageShell";
@@ -225,7 +223,6 @@ const PLAN_TOTALS: PlanTotals = {
 
 const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   ["Sources", () => <SourcesScreen {...SOURCES_PROPS} />],
-  ["organization", () => <PreviewPanel result={null} loading={false} error={null} />],
   [
     "plan summary",
     () => (
@@ -255,19 +252,6 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
           "Sorted",
           { rootPath: "/out" },
         )}
-      />
-    ),
-  ],
-  [
-    "warnings",
-    () => (
-      <WarningsTab
-        warnings={[
-          { id: "unreadable", count: 2, severity: "error", statuses: ["failed"] },
-          { id: "no_date", count: 9, severity: "warning", statuses: ["unknown_date"] },
-        ]}
-        onShowFiles={() => undefined}
-        onOpenSetting={() => undefined}
       />
     ),
   ],

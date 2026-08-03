@@ -15,10 +15,8 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import confirmDialogSource from "@/components/ConfirmDialog.tsx?raw";
-import duplicateComparisonSource from "@/components/DuplicateComparison.tsx?raw";
 import folderBrowserDialogSource from "@/components/FolderBrowserDialog.tsx?raw";
 import historyPanelSource from "@/components/HistoryPanel.tsx?raw";
-import mediaPreviewModalSource from "@/components/MediaPreviewModal.tsx?raw";
 import compareModalSource from "@/components/screens/review/CompareModal.tsx?raw";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -169,9 +167,7 @@ describe("Modal", () => {
 describe.each([
   ["ConfirmDialog.tsx", confirmDialogSource],
   ["FolderBrowserDialog.tsx", folderBrowserDialogSource],
-  ["MediaPreviewModal.tsx", mediaPreviewModalSource],
   ["CompareModal.tsx", compareModalSource],
-  ["DuplicateComparison.tsx", duplicateComparisonSource],
   ["HistoryPanel.tsx", historyPanelSource],
 ])("%s", (_file, source) => {
   it("gets its modal behaviour from the shared shell", () => {

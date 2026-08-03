@@ -129,6 +129,12 @@ export default function MainPage() {
   const [stage, setStage] = useState<StageState["stage"]>("sources");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
   const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
+  // What Review decided for this run. Lifted here so Execute sends it and the
+  // preflight can count the post-exclusion plan rather than the whole one.
+  const [runDecisions, setRunDecisions] = useState<{
+    excludedSources: string[];
+    excludedTally: { transfers: number; quarantine: number; bytes: number };
+  }>({ excludedSources: [], excludedTally: { transfers: 0, quarantine: 0, bytes: 0 } });
 
   const analysis = useAnalysis();
   const preview = usePreview();
@@ -372,8 +378,13 @@ export default function MainPage() {
   };
 
   const startRun = useCallback(() => {
-    void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id);
-  }, [preview.result, sorting]);
+    void sorting.startSorting(
+      false,
+      preview.result?.config_fingerprint,
+      preview.result?.plan_id,
+      runDecisions,
+    );
+  }, [preview.result, runDecisions, sorting]);
 
   // ── Stage wiring ───────────────────────────────────────────────────────────
 
@@ -411,12 +422,21 @@ export default function MainPage() {
   );
 
   const impact = preview.result?.impact;
+  // The preflight asks for an acknowledgement of what is about to happen, so it
+  // must describe the plan *after* Review's exclusions. Counting the whole plan
+  // would ask somebody to acknowledge moving files they had just excluded.
+  const excludedOff = runDecisions.excludedTally;
+  const withoutExcluded = (value: number, taken: number) => Math.max(0, value - taken);
+  const copying = config?.copy_instead_of_move ?? true;
   const preflightInput = {
-    actionableGroups: impact?.actionable_groups ?? 0,
-    quarantineCount: impact?.quarantine_count ?? 0,
+    actionableGroups: withoutExcluded(
+      impact?.actionable_groups ?? 0,
+      excludedOff.transfers + excludedOff.quarantine,
+    ),
+    quarantineCount: withoutExcluded(impact?.quarantine_count ?? 0, excludedOff.quarantine),
     quarantineBytes: impact?.quarantine_bytes ?? 0,
-    copyCount: impact?.copy_count ?? 0,
-    moveCount: impact?.move_count ?? 0,
+    copyCount: withoutExcluded(impact?.copy_count ?? 0, copying ? excludedOff.transfers : 0),
+    moveCount: withoutExcluded(impact?.move_count ?? 0, copying ? 0 : excludedOff.transfers),
     skipCount: impact?.skip_count ?? 0,
     referenceCount: 0,
     sourceMutations: impact?.source_mutations ?? 0,
@@ -425,7 +445,7 @@ export default function MainPage() {
     unresolvedGroups: impact?.unresolved_count ?? 0,
     unplannedCount: impact?.unresolved_count ?? 0,
     freeBytes: analysis.result?.disk_space.destination_free_bytes ?? null,
-    requiredBytes: impact?.required_bytes ?? 0,
+    requiredBytes: withoutExcluded(impact?.required_bytes ?? 0, excludedOff.bytes),
     quarantineWritable: true,
     conversionWithoutOriginals: impact?.conversion_without_originals ?? 0,
     companionsLeftInPlace: impact?.companions_left_in_place ?? 0,
@@ -702,6 +722,7 @@ export default function MainPage() {
                 onSelectView={nav.selectView}
                 onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
                 onRerunPreview={() => void preview.generatePreview()}
+                onDecisionsChange={setRunDecisions}
               />
             );
           }

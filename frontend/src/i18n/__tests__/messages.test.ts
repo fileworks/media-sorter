@@ -5,9 +5,6 @@ import sourcesScreenSource from "@/components/screens/SourcesScreen.tsx?raw";
 import configureScreenSource from "@/components/screens/ConfigureScreen.tsx?raw";
 import reviewScreenSource from "@/components/screens/ReviewScreen.tsx?raw";
 import executeScreenSource from "@/components/screens/ExecuteScreen.tsx?raw";
-import duplicatesTabSource from "@/components/screens/review/DuplicatesTab.tsx?raw";
-import warningsTabSource from "@/components/screens/review/WarningsTab.tsx?raw";
-import junkTabSource from "@/components/screens/review/JunkTab.tsx?raw";
 import compareModalSource from "@/components/screens/review/CompareModal.tsx?raw";
 import destinationTreeSource from "@/components/screens/review/DestinationTree.tsx?raw";
 import planSummarySource from "@/components/screens/review/PlanSummary.tsx?raw";
@@ -187,9 +184,6 @@ describe("English/German resources", () => {
       "ConfigureScreen.tsx": configureScreenSource,
       "ReviewScreen.tsx": reviewScreenSource,
       "ExecuteScreen.tsx": executeScreenSource,
-      "DuplicatesTab.tsx": duplicatesTabSource,
-      "WarningsTab.tsx": warningsTabSource,
-      "JunkTab.tsx": junkTabSource,
       "CompareModal.tsx": compareModalSource,
       "DestinationTree.tsx": destinationTreeSource,
       "PlanSummary.tsx": planSummarySource,

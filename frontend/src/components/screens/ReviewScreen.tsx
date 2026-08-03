@@ -2,43 +2,42 @@
  * Screen 3 — the dry run. Nothing has happened yet, and this screen's whole job
  * is to make that reviewable rather than to make it reassuring.
  *
- * Layout: the figures across the top, the folder tree this would produce down
- * the left, and the work itself in tabs on the right — the four the design
- * specifies, always present. The specialist workbenches that used to appear as
- * extra tabs (burst review, destination reconciliation, library checks) were
- * removed with their panels; a run's work is now described in one vocabulary.
+ * One surface, not four tabs: the destination tree on the left, filter chips and
+ * a toolbar across the top, and a single item list. Everything on it — the
+ * tiles, the chips, the tree, the list — is the same arithmetic over the same
+ * rows, which is why a tile can no longer read "0 duplicates found" beside four
+ * duplicate stacks.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { PlanSummary } from "@/components/screens/review/PlanSummary";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
-import { DuplicatesTab } from "@/components/screens/review/DuplicatesTab";
-import { JunkTab } from "@/components/screens/review/JunkTab";
-import { WarningsTab } from "@/components/screens/review/WarningsTab";
 import { CompareModal } from "@/components/screens/review/CompareModal";
+import { ReviewItemList } from "@/components/screens/review/ReviewItemList";
+import { ReviewToolbar } from "@/components/screens/review/ReviewToolbar";
+import { SelectionBar } from "@/components/screens/review/SelectionBar";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
+import { Button } from "@/components/ui/button";
 import { useReviewGroups } from "@/hooks/useReviewGroups";
+import { useReviewSurface } from "@/hooks/useReviewSurface";
 import { useI18n } from "@/i18n/I18nContext";
+import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes } from "@/lib/formatters";
+import { planTotals, planWarnings, warningTotal } from "@/lib/reviewPlan";
 import {
-  destinationRootName,
-  destinationTree,
-  planTotals,
-  planWarnings,
-  tabCounts,
-  warningTotal,
-} from "@/lib/reviewPlan";
-import { PRIMARY_REVIEW_VIEWS, type View } from "@/lib/stageModel";
+  comparePair,
+  excludedTally,
+  selectionActions,
+  type ReviewRow,
+  type Stack,
+} from "@/lib/reviewRows";
 import type { DuplicateGroup, GroupMember, GroupPlan } from "@/lib/reviewWorkbench";
-import { cn } from "@/lib/utils";
+import type { View } from "@/lib/stageModel";
 import { api } from "@/services/api";
-import type { Config, PreviewItem, PreviewResult } from "@/types/api";
-
-const PreviewPanel = lazy(() =>
-  import("@/components/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
-);
+import type { Config, PreviewResult } from "@/types/api";
 
 interface ReviewScreenProps {
   result: PreviewResult;
@@ -48,98 +47,163 @@ interface ReviewScreenProps {
   /** Jump to Configure, scrolled to a specific setting row. */
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
+  /** Run-scoped decisions, lifted so Execute can send them with the run. */
+  onDecisionsChange?: (decisions: {
+    excludedSources: string[];
+    /** What those exclusions take off the plan, for the Execute preflight. */
+    excludedTally: { transfers: number; quarantine: number; bytes: number };
+  }) => void;
 }
 
 export function ReviewScreen({
   result,
   config,
-  view,
   onSelectView,
-  onOpenSetting,
   onRerunPreview,
+  onDecisionsChange,
 }: ReviewScreenProps) {
   const { t, locale } = useI18n();
-  const [statusFilter, setStatusFilter] = useState<PreviewItem["status"][] | null>(null);
+  const queryClient = useQueryClient();
+  const [plans] = useState<Record<string, GroupPlan | undefined>>({});
   const [comparing, setComparing] = useState<{
-    group: DuplicateGroup;
-    plan: GroupPlan | undefined;
+    a: GroupMember;
+    b: GroupMember;
+    keeperId: string | null;
+    stackId: string;
   } | null>(null);
 
-  // The duplicate figures come from the workbench's own catalog query, not from
-  // the dry run's skip count, so the tile, the tab badge and the tab agree.
-  const { tally: duplicateTally } = useReviewGroups();
+  const groups = useReviewGroups();
+  const surface = useReviewSurface(result, groups.groups, plans, config.duplicate_keeper_policy);
+
+  // Execute must acknowledge the counts that will actually happen, so the
+  // decisions leave this screen rather than living only inside it.
+  useEffect(() => {
+    onDecisionsChange?.({
+      excludedSources: [...surface.excluded],
+      excludedTally: excludedTally(surface.rows),
+    });
+  }, [onDecisionsChange, surface.excluded, surface.rows]);
+
+  const invalidateGroups = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["review", "groups"] });
+  }, [queryClient]);
+
+  const dissolve = useMutation({
+    mutationFn: (stackId: string) =>
+      api.quarantineAllExcept(
+        stackId,
+        (groups.groups.find((group) => group.group_id === stackId)?.members ?? []).map(
+          (member) => member.member_id,
+        ),
+      ),
+    onSuccess: invalidateGroups,
+  });
+
+  /** Choose a keeper by member id — the shape both Compare and the row use. */
+  const decideKeeper = useMutation({
+    mutationFn: (input: { groupId: string; memberId: string }) =>
+      api.decideReview({ ...input, action: "replace_keeper" }),
+    onSuccess: invalidateGroups,
+  });
+
+  const keepOnly = useMutation({
+    mutationFn: (row: ReviewRow) =>
+      api.decideReview({
+        groupId: row.stack?.id ?? "",
+        memberId: row.stack?.memberId ?? "",
+        action: "replace_keeper",
+      }),
+    onSuccess: invalidateGroups,
+  });
+
+  const applyKeepPolicy = useMutation({
+    mutationFn: async () => {
+      // Previewed then applied, so the set acted on is the set that was shown.
+      const impact = await api.previewPolicy({
+        policyId: surface.keepPolicy,
+        scope: "current_filtered_exact",
+      });
+      return api.applyPolicy({
+        policyId: surface.keepPolicy,
+        scope: "current_filtered_exact",
+        impact,
+      });
+    },
+    onSuccess: invalidateGroups,
+  });
+
+  /** The comparison acts on catalog members, so rows are mapped back to them. */
+  const openCompare = useCallback(
+    (rows: [ReviewRow, ReviewRow] | null) => {
+      if (rows === null) return;
+      const [left, right] = rows;
+      const stackId = left.stack?.id ?? right.stack?.id ?? null;
+      const group: DuplicateGroup | undefined = groups.groups.find(
+        (candidate) => candidate.group_id === stackId,
+      );
+      const find = (row: ReviewRow): GroupMember | undefined =>
+        group?.members.find((member) => member.observed_path === row.source);
+      const a = find(left);
+      const b = find(right);
+      if (a === undefined || b === undefined || stackId === null) return;
+      setComparing({
+        a,
+        b,
+        keeperId: left.stack?.isKeeper ? a.member_id : right.stack?.isKeeper ? b.member_id : null,
+        stackId,
+      });
+    },
+    [groups.groups],
+  );
 
   const warnings = useMemo(() => planWarnings(result), [result]);
   const totals = useMemo(
-    () => planTotals(result, warningTotal(warnings), duplicateTally),
-    [duplicateTally, result, warnings],
+    () => planTotals(result, warningTotal(warnings), groups.tally),
+    [groups.tally, result, warnings],
   );
-  const counts = useMemo(
-    () => tabCounts(result, warnings, duplicateTally),
-    [duplicateTally, result, warnings],
-  );
-  const tree = useMemo(
-    () =>
-      destinationTree(result.items, destinationRootName(config), {
-        rootPath: config.target_directory,
-      }),
-    [config, result.items],
-  );
-
   const rootCount = config.library_profile.roots.filter(
     (root) => root.role !== "destination",
   ).length;
 
-  const tabs: View[] = PRIMARY_REVIEW_VIEWS;
+  const actions = selectionActions(surface.selectedRows);
 
-  const tabCount = (tab: View): number | null => {
-    if (tab === "duplicates") return counts.duplicates;
-    if (tab === "junk") return counts.junk;
-    if (tab === "changes") return counts.changes;
-    if (tab === "warnings") return counts.warnings;
-    return null;
-  };
+  // Chips carrying a decision get a dot: excluded rows anywhere, and duplicates
+  // once a stack has been resolved.
+  const decided = useMemo(() => {
+    const set = new Set<import("@/lib/reviewRows").FilterKey>();
+    if (surface.counts.excluded > 0) set.add("excluded");
+    if (surface.rows.some((row) => row.stack !== null && row.excluded)) set.add("duplicates");
+    return set;
+  }, [surface.counts.excluded, surface.rows]);
 
-  const showFiles = useCallback(
-    (statuses: PreviewItem["status"][]) => {
-      setStatusFilter(statuses);
-      onSelectView("changes");
-    },
-    [onSelectView],
+  const unresolvedStacks = useMemo(
+    () =>
+      new Set(surface.rows.filter((row) => row.stack !== null).map((row) => row.stack!.id)).size,
+    [surface.rows],
   );
 
-  // Comparison acts on the two members the user is choosing between: the
-  // current keeper, and the first copy that is not it and not protected.
-  const comparePair = useMemo((): { a: GroupMember; b: GroupMember; keeperId: string } | null => {
-    if (!comparing) return null;
-    const { group, plan } = comparing;
-    const keeperId =
-      plan?.keeper_member_id ?? group.anchor_member_id ?? group.members[0]?.member_id ?? null;
-    const a = group.members.find((member) => member.member_id === keeperId);
-    const b = group.members.find(
-      (member) => member.member_id !== keeperId && member.role !== "reference",
-    );
-    return a && b && keeperId ? { a, b, keeperId } : null;
-  }, [comparing]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") surface.clearSelection();
+      if (event.key === "a" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        surface.selectAllVisible();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [surface]);
 
-  const decideFromCompare = async (memberId: string) => {
-    if (!comparing) return;
-    await api.decideReview({
-      groupId: comparing.group.group_id,
-      memberId,
-      action: "replace_keeper",
-    });
-    setComparing(null);
+  // From a stack header, the keeper is pre-selected and the second copy asked
+  // for — never an arbitrary partner picked for the user.
+  const compareFromStack = (stack: Stack) => {
+    const keeper = stack.keeper ?? stack.rows[0];
+    const other = stack.rows.find((row) => row.source !== keeper.source);
+    if (other) openCompare([keeper, other]);
   };
 
-  const keepBothFromCompare = async () => {
-    if (!comparing) return;
-    await api.quarantineAllExcept(
-      comparing.group.group_id,
-      comparing.group.members.map((member) => member.member_id),
-    );
-    setComparing(null);
-  };
+  const mutationFailure =
+    dissolve.error ?? keepOnly.error ?? decideKeeper.error ?? applyKeepPolicy.error ?? null;
 
   return (
     <div className="space-y-5">
@@ -149,106 +213,177 @@ export function ReviewScreen({
           totals={totals}
           sizeLabel={formatBytes(result.impact.required_bytes, { locale })}
           rootCount={rootCount}
-          onOpen={onSelectView}
+          onOpen={(view) => {
+            // Tiles are filter shortcuts now, not tabs.
+            onSelectView(view);
+            surface.setFilter(
+              view === "duplicates"
+                ? "duplicates"
+                : view === "junk"
+                  ? "junk"
+                  : view === "warnings"
+                    ? "no_date"
+                    : "all",
+            );
+          }}
         />
       </div>
 
+      {surface.droppedExclusions > 0 && (
+        <StateView
+          variant="info"
+          compact
+          title={t("review.exclusionsDropped", { count: surface.droppedExclusions })}
+          action={
+            <Button variant="ghost" size="sm" onClick={surface.acknowledgeDropped}>
+              {t("common.dismiss")}
+            </Button>
+          }
+        />
+      )}
+
+      {mutationFailure && (
+        <StateView
+          variant="error"
+          compact
+          title={t("review.actionFailed")}
+          detail={extractErrorMessage(mutationFailure, t("review.actionFailed")).message}
+          code={extractErrorMessage(mutationFailure, t("review.actionFailed")).code}
+        />
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <div className="lg:sticky lg:top-4 lg:self-start">
-          <DestinationTree root={tree} />
+          <DestinationTree
+            root={surface.tree}
+            selectedPath={surface.treePath}
+            onSelect={(path) => surface.setTreePath(path === surface.treePath ? null : path)}
+          />
         </div>
 
         <div className="min-w-0 space-y-3">
-          <nav aria-label={t("view.navigation")} className="-mx-1 overflow-x-auto px-1 pb-1">
-            <ul className="flex min-w-max gap-1">
-              {tabs.map((tab) => {
-                const active = view === tab;
-                const count = tabCount(tab);
-                return (
-                  <li key={tab}>
-                    <button
-                      type="button"
-                      aria-current={active ? "page" : undefined}
-                      onClick={() => {
-                        setStatusFilter(null);
-                        onSelectView(tab);
-                      }}
-                      className={cn(
-                        "rounded-lg px-3.5 py-1.5 text-xs transition-colors",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        active
-                          ? "border border-border bg-card font-semibold text-foreground shadow-card"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      {t(`view.${tab}`)}
-                      {count !== null && count > 0 && (
-                        <span
-                          className={cn(
-                            "ml-1.5 font-semibold",
-                            tab === "warnings" ? "text-warning" : "text-primary",
-                          )}
-                        >
-                          {count.toLocaleString(locale)}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+          <ReviewToolbar
+            counts={surface.counts}
+            decided={decided}
+            filter={surface.filter}
+            onFilter={surface.setFilter}
+            search={surface.search}
+            onSearch={surface.setSearch}
+            view={surface.view}
+            onView={surface.setView}
+            keepPolicy={surface.keepPolicy}
+            onKeepPolicy={surface.setKeepPolicy}
+            unresolvedStacks={unresolvedStacks}
+            onApplyKeepPolicy={() => applyKeepPolicy.mutate()}
+            applyPending={applyKeepPolicy.isPending}
+          />
 
-          <Suspense
-            fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
-          >
-            {view === "duplicates" && (
-              <DuplicatesTab
-                defaultPolicy={config.duplicate_keeper_policy}
-                onCompare={(group, plan) => setComparing({ group, plan })}
-              />
-            )}
+          <SelectionBar
+            selected={surface.selectedRows}
+            actions={actions}
+            onExclude={() => {
+              surface.exclude(surface.selectedRows.map((row) => row.source));
+              surface.clearSelection();
+            }}
+            onInclude={() => {
+              surface.include(surface.selectedRows.map((row) => row.source));
+              surface.clearSelection();
+            }}
+            onKeepOnlyThis={() => {
+              const row = surface.selectedRows[0];
+              if (row) keepOnly.mutate(row);
+            }}
+            onCompare={() => openCompare(comparePair(surface.selectedRows))}
+            onClear={surface.clearSelection}
+          />
 
-            {view === "junk" && <JunkTab items={result.items} onOpenSetting={onOpenSetting} />}
+          <p className="text-xs text-muted-foreground" role="status">
+            {t("review.showing", {
+              visible: surface.visible.length.toLocaleString(locale),
+              total: surface.rows.length.toLocaleString(locale),
+            })}
+          </p>
 
-            {view === "changes" && (
-              <PreviewPanel
-                result={
-                  statusFilter
-                    ? {
-                        ...result,
-                        items: result.items.filter((item) => statusFilter.includes(item.status)),
-                      }
-                    : result
-                }
-                loading={false}
-                error={null}
-                onRetry={onRerunPreview}
-                copyInsteadOfMove={config.copy_instead_of_move}
-                categorizeEnabled={config.categorize_enabled}
-                sortCriteria={config.sort_criteria ?? ["year", "month"]}
-              />
-            )}
-
-            {view === "warnings" && (
-              <WarningsTab
-                warnings={warnings}
-                onShowFiles={showFiles}
-                onOpenSetting={onOpenSetting}
-              />
-            )}
-          </Suspense>
+          {groups.isError ? (
+            <StateView
+              variant="error"
+              title={t("review.stacksFailed")}
+              detail={t("review.stacksFailedHelp")}
+              onRetry={groups.refetch}
+            />
+          ) : surface.rows.length === 0 ? (
+            <StateView
+              variant="empty"
+              title={t("review.nothingScanned")}
+              detail={t("review.nothingScannedHelp")}
+              action={
+                <Button size="sm" onClick={onRerunPreview}>
+                  {t("preview.action")}
+                </Button>
+              }
+            />
+          ) : surface.counts.excluded === surface.rows.length ? (
+            <StateView
+              variant="warning"
+              title={t("review.everythingExcluded")}
+              detail={t("review.everythingExcludedHelp")}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => surface.include(surface.rows.map((row) => row.source))}
+                >
+                  {t("review.includeEverything")}
+                </Button>
+              }
+            />
+          ) : surface.visible.length === 0 ? (
+            <StateView
+              variant="empty"
+              title={t("review.filterMatchesNothing")}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    surface.setFilter("all");
+                    surface.setSearch("");
+                    surface.setTreePath(null);
+                  }}
+                >
+                  {t("review.clearFilter")}
+                </Button>
+              }
+            />
+          ) : (
+            <ReviewItemList
+              rows={surface.visible}
+              view={surface.view}
+              selected={surface.selected}
+              onToggle={surface.toggle}
+              onDissolve={(stackId) => dissolve.mutate(stackId)}
+              onKeepOnly={(row) => keepOnly.mutate(row)}
+              onCompareStack={compareFromStack}
+              dissolvePending={dissolve.isPending ? (dissolve.variables ?? null) : null}
+            />
+          )}
         </div>
       </div>
 
-      {comparePair && (
+      {comparing && (
         <CompareModal
-          a={comparePair.a}
-          b={comparePair.b}
-          keeperId={comparePair.keeperId}
-          onKeep={(memberId) => void decideFromCompare(memberId)}
-          onKeepBoth={() => void keepBothFromCompare()}
+          a={comparing.a}
+          b={comparing.b}
+          keeperId={comparing.keeperId}
           onClose={() => setComparing(null)}
+          onKeep={(memberId) => {
+            decideKeeper.mutate({ groupId: comparing.stackId, memberId });
+            setComparing(null);
+          }}
+          onKeepBoth={() => {
+            dissolve.mutate(comparing.stackId);
+            setComparing(null);
+          }}
         />
       )}
     </div>

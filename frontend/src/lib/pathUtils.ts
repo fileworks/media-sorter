@@ -2,7 +2,8 @@
  * Cross-platform path helpers.
  *
  * Consolidates the identical `basename`/`getBasename` implementations that were
- * duplicated across PreviewPanel, DuplicateComparison, and MediaPreviewModal.
+ * duplicated across the preview and comparison surfaces the Review rework
+ * replaced.
  * Both Windows (`\`) and POSIX (`/`) separators are handled.
  */
 
