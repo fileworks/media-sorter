@@ -14,16 +14,11 @@
 import { useMemo, useState } from "react";
 import type { IconType } from "react-icons";
 import {
-  FiArrowDown,
-  FiArrowUp,
   FiCheck,
-  FiChevronDown,
-  FiChevronUp,
   FiClipboard,
   FiEye,
   FiEyeOff,
   FiFolder,
-  FiLayers,
   FiMapPin,
   FiPlus,
   FiX,
@@ -31,7 +26,6 @@ import {
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RecipeGrid } from "@/components/screens/RecipeGrid";
-import { Select, SelectItem } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -44,21 +38,12 @@ import {
   cardStatus,
   changeRole,
   excludeForRun,
-  reorder,
   validateRoots,
   type Conflict,
   type RootCard,
   type RootRole,
 } from "@/lib/sourcesStage";
 import type { AnalysisResult, Config, SavedRecipe } from "@/types/api";
-
-const ROLES: RootRole[] = ["input", "reference", "destination"];
-
-const ROLE_ICON: Record<RootRole, IconType> = {
-  input: FiArrowDown,
-  reference: FiLayers,
-  destination: FiArrowUp,
-};
 
 const ROLE_BADGE: Record<RootRole, string> = {
   input: "bg-tint-primary text-primary",
@@ -152,11 +137,8 @@ function FolderCard({
   facts,
   conflicts,
   excluded,
-  canMoveEarlier,
-  canMoveLater,
   disabled,
-  onRole,
-  onMove,
+  onToggleBaseline,
   onChangeFolder,
   onRemove,
   onToggleExcluded,
@@ -167,14 +149,12 @@ function FolderCard({
   facts: string[];
   conflicts: Conflict[];
   excluded: boolean;
-  canMoveEarlier: boolean;
-  canMoveLater: boolean;
   disabled: boolean;
-  onRole: (role: RootRole) => void;
-  onMove: (direction: -1 | 1) => void;
+  /** Absent on the destination, which cannot be a baseline. */
+  onToggleBaseline: ((baseline: boolean) => void) | undefined;
   onChangeFolder: () => void;
   onRemove: (() => void) | undefined;
-  onToggleExcluded: () => void;
+  onToggleExcluded: (() => void) | undefined;
   onRemap: (() => void) | undefined;
   t: Translate;
 }) {
@@ -253,49 +233,41 @@ function FolderCard({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <Select
-          size="sm"
-          value={card.role}
-          disabled={disabled}
-          aria-label={t("sources.roleFor", { path: card.path })}
-          onValueChange={(value) => onRole(value as RootRole)}
-        >
-          {ROLES.map((role) => (
-            <SelectItem key={role} value={role}>
-              {t(`sources.useAs.${role}`, undefined, `Use as ${ROLE_LABEL[role]}`)}
-            </SelectItem>
-          ))}
-        </Select>
+        {onToggleBaseline && (
+          <label className="flex min-w-0 items-start gap-2 py-1">
+            <input
+              type="checkbox"
+              checked={card.role === "reference"}
+              disabled={disabled}
+              onChange={(event) => onToggleBaseline(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-foreground">
+                {t("sources.baseline")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t("sources.baselineHelp")}
+              </span>
+            </span>
+          </label>
+        )}
 
         <span className="flex-1" />
 
-        {(canMoveEarlier || canMoveLater) && (
-          <>
-            <IconButton
-              label={t("sources.moveEarlier", { path: card.path })}
-              disabled={disabled || !canMoveEarlier}
-              onClick={() => onMove(-1)}
-              icon={FiChevronUp}
-            />
-            <IconButton
-              label={t("sources.moveLater", { path: card.path })}
-              disabled={disabled || !canMoveLater}
-              onClick={() => onMove(1)}
-              icon={FiChevronDown}
-            />
-          </>
-        )}
         <IconButton
           label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
           onClick={() => void copyPath()}
           icon={copied ? FiCheck : FiClipboard}
         />
-        <IconButton
-          label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
-          disabled={disabled}
-          onClick={onToggleExcluded}
-          icon={excluded ? FiEye : FiEyeOff}
-        />
+        {onToggleExcluded && (
+          <IconButton
+            label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
+            disabled={disabled}
+            onClick={onToggleExcluded}
+            icon={excluded ? FiEye : FiEyeOff}
+          />
+        )}
         {offline && onRemap && (
           <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
         )}
@@ -350,10 +322,18 @@ export function SourcesScreen({
 
   const active = useMemo(() => activeCards(cards, excludedForRun), [cards, excludedForRun]);
   const conflicts = useMemo(() => validateRoots(active), [active]);
-  const ordered = useMemo(() => [...cards].sort((a, b) => a.priority - b.priority), [cards]);
 
-  // A role change that would introduce a blocking conflict is previewed rather
-  // than applied: the user gets to see what it breaks before it breaks.
+  // Inputs and baselines are one list: a baseline is an input folder that is
+  // only ever compared against, which is a property of the folder, not a
+  // separate place to put one.
+  const inputs = useMemo(() => cards.filter((card) => card.role !== "destination"), [cards]);
+  const destination = useMemo(
+    () => cards.find((card) => card.role === "destination") ?? null,
+    [cards],
+  );
+
+  // Turning a folder into a baseline can introduce a blocking conflict, so it
+  // is previewed rather than applied behind the user's back.
   const preview = pendingRole ? changeRole(cards, pendingRole.rootId, pendingRole.role) : null;
   const previewBlocking = preview ? blockingConflicts(preview.conflicts) : [];
 
@@ -368,109 +348,130 @@ export function SourcesScreen({
 
   const globalConflicts = conflicts.filter((conflict) => conflict.rootIds.length === 0);
 
+  const cardFor = (card: RootCard, isDestination: boolean) => (
+    <FolderCard
+      key={card.rootId}
+      card={card}
+      facts={cardFacts(card, analysis, false, config.copy_instead_of_move, t, locale)}
+      conflicts={conflicts}
+      excluded={excludedForRun.includes(card.rootId)}
+      disabled={disabled}
+      onToggleBaseline={
+        isDestination
+          ? undefined
+          : (baseline) => requestRole(card.rootId, baseline ? "reference" : "input")
+      }
+      onChangeFolder={() => onChangeFolder(card.rootId)}
+      onRemove={isDestination ? undefined : () => onRemove(card.rootId)}
+      onToggleExcluded={
+        isDestination
+          ? undefined
+          : () =>
+              onExcludeForRun(
+                excludedForRun.includes(card.rootId)
+                  ? excludedForRun.filter((id) => id !== card.rootId)
+                  : excludeForRun(excludedForRun, card.rootId),
+              )
+      }
+      onRemap={onRemap ? () => onRemap(card.rootId) : undefined}
+      t={t}
+    />
+  );
+
   return (
     <div className="space-y-7">
       <div>
         <ScreenHeader title={t("sources.title")} subtitle={t("sources.description")} />
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {ROLES.map((role) => {
-            const inRole = ordered.filter((card) => card.role === role);
-            const Icon = ROLE_ICON[role];
-            const canAdd = role !== "destination" || inRole.length === 0;
-            return (
-              <section key={role} aria-labelledby={`role-${role}`} className="min-w-0">
-                <div className="mb-2.5 flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-lg",
-                      ROLE_BADGE[role],
-                    )}
-                    aria-hidden
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  <h2
-                    id={`role-${role}`}
-                    className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint"
-                  >
-                    {t(`sources.role.${role}`, undefined, ROLE_LABEL[role])}
-                  </h2>
-                  {role === "reference" && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-3xs font-semibold text-faint">
-                      {t("sources.optional")}
-                    </span>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section aria-labelledby="sources-inputs" className="min-w-0">
+            <div className="mb-2.5 flex items-center gap-2">
+              <span
+                className={cn("flex h-6 w-6 items-center justify-center rounded-lg", ROLE_BADGE.input)}
+                aria-hidden
+              >
+                <FiFolder className="h-3.5 w-3.5" />
+              </span>
+              <h2
+                id="sources-inputs"
+                className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint"
+              >
+                {t("sources.inputFolders")}
+              </h2>
+            </div>
+
+            {inputs.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => onAddFolder("input")}
+                disabled={disabled}
+                className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FiFolder className="h-5 w-5 text-faint" aria-hidden />
+                <span className="text-xs font-medium text-foreground">
+                  {t("sources.empty.input")}
+                </span>
+                <span className="text-xs text-faint">
+                  {t("sources.role.input.description", undefined, ROLE_DESCRIPTION.input)}
+                </span>
+              </button>
+            ) : (
+              <ul className="space-y-2.5">{inputs.map((card) => cardFor(card, false))}</ul>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onAddFolder("input")}
+              disabled={disabled}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              <FiPlus className="h-3.5 w-3.5" aria-hidden />
+              {t("sources.addFolder")}
+            </button>
+          </section>
+
+          <section aria-labelledby="sources-destination" className="min-w-0">
+            <div className="mb-2.5 flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-lg",
+                  ROLE_BADGE.destination,
+                )}
+                aria-hidden
+              >
+                <FiFolder className="h-3.5 w-3.5" />
+              </span>
+              <h2
+                id="sources-destination"
+                className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint"
+              >
+                {t("sources.role.destination", undefined, ROLE_LABEL.destination)}
+              </h2>
+            </div>
+
+            {destination === null ? (
+              <button
+                type="button"
+                onClick={() => onAddFolder("destination")}
+                disabled={disabled}
+                className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FiFolder className="h-5 w-5 text-faint" aria-hidden />
+                <span className="text-xs font-medium text-foreground">
+                  {t("sources.empty.destination")}
+                </span>
+                <span className="text-xs text-faint">
+                  {t(
+                    "sources.role.destination.description",
+                    undefined,
+                    ROLE_DESCRIPTION.destination,
                   )}
-                </div>
-
-                {inRole.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => onAddFolder(role)}
-                    disabled={disabled}
-                    className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FiFolder className="h-5 w-5 text-faint" aria-hidden />
-                    <span className="text-xs font-medium text-foreground">
-                      {t(`sources.empty.${role}`)}
-                    </span>
-                    <span className="text-xs text-faint">
-                      {t(`sources.role.${role}.description`, undefined, ROLE_DESCRIPTION[role])}
-                    </span>
-                  </button>
-                ) : (
-                  <ul className="space-y-2.5">
-                    {inRole.map((card, index) => (
-                      <FolderCard
-                        key={card.rootId}
-                        card={card}
-                        facts={cardFacts(
-                          card,
-                          analysis,
-                          role === "input" && index === 0,
-                          config.copy_instead_of_move,
-                          t,
-                          locale,
-                        )}
-                        conflicts={conflicts}
-                        excluded={excludedForRun.includes(card.rootId)}
-                        canMoveEarlier={role === "input" && index > 0}
-                        canMoveLater={role === "input" && index < inRole.length - 1}
-                        disabled={disabled}
-                        onRole={(next) => requestRole(card.rootId, next)}
-                        onMove={(direction) => onChange(reorder(cards, card.rootId, direction))}
-                        onChangeFolder={() => onChangeFolder(card.rootId)}
-                        onRemove={
-                          role === "destination" ? undefined : () => onRemove(card.rootId)
-                        }
-                        onToggleExcluded={() =>
-                          onExcludeForRun(
-                            excludedForRun.includes(card.rootId)
-                              ? excludedForRun.filter((id) => id !== card.rootId)
-                              : excludeForRun(excludedForRun, card.rootId),
-                          )
-                        }
-                        onRemap={onRemap ? () => onRemap(card.rootId) : undefined}
-                        t={t}
-                      />
-                    ))}
-                  </ul>
-                )}
-
-                {inRole.length > 0 && canAdd && (
-                  <button
-                    type="button"
-                    onClick={() => onAddFolder(role)}
-                    disabled={disabled}
-                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                  >
-                    <FiPlus className="h-3.5 w-3.5" aria-hidden />
-                    {t("sources.addFolder")}
-                  </button>
-                )}
-              </section>
-            );
-          })}
+                </span>
+              </button>
+            ) : (
+              <ul className="space-y-2.5">{cardFor(destination, true)}</ul>
+            )}
+          </section>
         </div>
 
         {/* The live region sits inside each item, not on it: a `listitem` may

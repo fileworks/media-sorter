@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import confirmDialogSource from "@/components/ConfirmDialog.tsx?raw";
 import duplicateComparisonSource from "@/components/DuplicateComparison.tsx?raw";
-import folderPathDialogSource from "@/components/FolderPathDialog.tsx?raw";
+import folderBrowserDialogSource from "@/components/FolderBrowserDialog.tsx?raw";
 import historyPanelSource from "@/components/HistoryPanel.tsx?raw";
 import mediaPreviewModalSource from "@/components/MediaPreviewModal.tsx?raw";
 import compareModalSource from "@/components/screens/review/CompareModal.tsx?raw";
@@ -168,7 +168,7 @@ describe("Modal", () => {
 
 describe.each([
   ["ConfirmDialog.tsx", confirmDialogSource],
-  ["FolderPathDialog.tsx", folderPathDialogSource],
+  ["FolderBrowserDialog.tsx", folderBrowserDialogSource],
   ["MediaPreviewModal.tsx", mediaPreviewModalSource],
   ["CompareModal.tsx", compareModalSource],
   ["DuplicateComparison.tsx", duplicateComparisonSource],

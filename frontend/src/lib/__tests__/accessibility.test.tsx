@@ -335,14 +335,19 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
 ];
 
 describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
-  it("offers exactly one way to add a folder per empty role column", () => {
+  it("offers exactly one way to add a folder per empty section", () => {
     const rendered = renderWithProviders(<SourcesScreen {...SOURCES_PROPS} />, locale);
 
-    for (const role of ["input", "reference", "destination"] as const) {
+    // Two sections, not three: a baseline is a checkbox on an input folder, so
+    // there is no separate reference column to add one to.
+    for (const role of ["input", "destination"] as const) {
       expect(
         within(rendered.container).getAllByText(translate(locale, `sources.empty.${role}`)),
       ).toHaveLength(1);
     }
+    expect(
+      within(rendered.container).queryByText(translate(locale, "sources.empty.reference")),
+    ).toBeNull();
   });
 
   it("has no automated violations in the navigation shell", async () => {

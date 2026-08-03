@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiArrowLeft } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { FolderPathDialog } from "@/components/FolderPathDialog";
+import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { PreviewProgressCard } from "@/components/PreviewProgressCard";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
@@ -38,6 +38,7 @@ import { useAnalysis } from "@/hooks/useAnalysis";
 import { useConfig } from "@/hooks/useConfig";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
 import { useLogs } from "@/hooks/useLogs";
+import { useRootProbes } from "@/hooks/useRootProbes";
 import { usePreview } from "@/hooks/usePreview";
 import { useSorting } from "@/hooks/useSorting";
 import { useTheme } from "@/hooks/useTheme";
@@ -175,9 +176,16 @@ export default function MainPage() {
   );
   const recoveryBlock = startBlock(recoveryOperations);
 
-  const cards = useMemo(
+  const configuredCards = useMemo(
     () => rootCards(config, scanned, analysis.result?.total_files ?? 0),
     [analysis.result?.total_files, config, scanned],
+  );
+  // The probe is the authority on whether a folder is usable; the scan only
+  // knows what it saw last time it ran.
+  const probes = useRootProbes(configuredCards);
+  const cards = useMemo(
+    () => configuredCards.map((card) => ({ ...card, state: probes[card.rootId] ?? card.state })),
+    [configuredCards, probes],
   );
 
   // ── Configuration ──────────────────────────────────────────────────────────
@@ -237,7 +245,9 @@ export default function MainPage() {
           role: target.role,
           path,
           displayName: null,
-          priority: cards.length,
+          // Priority is no longer written: the reorder controls are gone and
+          // nothing consumes the order. The field stays in the model.
+          priority: 0,
           exclusions: [],
           state: "unknown",
           volume: null,
@@ -251,8 +261,9 @@ export default function MainPage() {
   );
 
   /**
-   * Ask for a folder. The desktop shell has an OS picker; a browser does not, so
-   * it falls back to the typed-path dialog rather than to nothing at all.
+   * Ask for a folder. The desktop shell has the OS picker; a browser gets the
+   * folder browser, which lists through the same endpoint that validates a
+   * root. Both paths land in `applyFolder`, so the two builds cannot diverge.
    */
   const requestFolder = useCallback(
     async (target: FolderTarget) => {
@@ -716,14 +727,19 @@ export default function MainPage() {
         }}
       </StageShell>
 
-      <FolderPathDialog
+      <FolderBrowserDialog
         open={folderPrompt !== null}
         initialPath={
           folderPrompt?.kind === "change"
             ? (cards.find((card) => card.rootId === folderPrompt.rootId)?.path ?? "")
             : ""
         }
-        onSubmit={(path) => folderPrompt && applyFolder(folderPrompt, path)}
+        requireWritable={
+          folderPrompt?.kind === "change"
+            ? cards.find((card) => card.rootId === folderPrompt.rootId)?.role === "destination"
+            : folderPrompt?.role === "destination"
+        }
+        onSelect={(path) => folderPrompt && applyFolder(folderPrompt, path)}
         onClose={() => setFolderPrompt(null)}
       />
 

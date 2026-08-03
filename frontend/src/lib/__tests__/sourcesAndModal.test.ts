@@ -240,6 +240,72 @@ describe("cardStatus", () => {
   });
 });
 
+describe("probe-driven blocking conflicts", () => {
+  const kindsOf = (cards: RootCard[]) =>
+    blockingConflicts(validateRoots(cards)).map((conflict) => conflict.kind);
+
+  it("blocks when no input folder can be read", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "missing" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
+
+    expect(kinds).toContain("no_readable_input");
+  });
+
+  it("does not block while an input is still being probed", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "checking" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
+
+    expect(kinds).not.toContain("no_readable_input");
+  });
+
+  it("counts a baseline as no substitute for a readable input", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "missing" }),
+      card({ rootId: "ref", role: "reference", path: "/library/ref", state: "ready" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
+
+    expect(kinds).toContain("no_readable_input");
+  });
+
+  it("blocks a destination that is missing, unreadable, or read-only", () => {
+    for (const [state, kind] of [
+      ["missing", "destination_missing"],
+      ["unreadable", "destination_unreadable"],
+      ["not_writable", "destination_not_writable"],
+    ] as const) {
+      const kinds = kindsOf([
+        card({ rootId: "in", role: "input", path: "/library/photos" }),
+        card({ rootId: "out", role: "destination", path: "/library/sorted", state }),
+      ]);
+
+      expect(kinds, state).toContain(kind);
+    }
+  });
+
+  it("states an unreadable destination once, not twice", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", path: "/library/photos" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted", state: "unreadable" }),
+    ]);
+
+    expect(kinds.filter((kind) => kind === "offline")).toEqual([]);
+  });
+
+  it("opens the gate once every probe comes back ready", () => {
+    expect(
+      kindsOf([
+        card({ rootId: "in", role: "input", path: "/library/photos", state: "ready" }),
+        card({ rootId: "out", role: "destination", path: "/library/sorted", state: "ready" }),
+      ]),
+    ).toEqual([]);
+  });
+});
+
 // ── Operation center ─────────────────────────────────────────────────────────
 
 function operation(overrides: Partial<OperationSummary> = {}): OperationSummary {

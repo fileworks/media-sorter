@@ -387,6 +387,23 @@ export interface UpdateInfo {
  * `app/core/config_sections.py` is the source of the labels/descriptions; the
  * frontend supplies the icon + control body per id.
  */
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  readable: boolean;
+}
+
+export interface DirectoryListing {
+  path: string;
+  /** `null` at a root, so the browser knows it cannot ascend further. */
+  parent: string | null;
+  exists: boolean;
+  readable: boolean;
+  writable: boolean;
+  entries: DirectoryEntry[];
+}
+
 export interface ConfigSectionMeta {
   id: string;
   label_key: string;
@@ -1121,6 +1138,20 @@ export class MediaSorterApiClient {
   async validateConfig(): Promise<ValidateConfigResult> {
     await this.ensureReady();
     const { data } = await this.http.post<ValidateConfigResult>("/api/config/validate", {});
+    return data;
+  }
+
+  /**
+   * List the sub-directories of one folder, and report what it permits.
+   *
+   * The same call browses and validates: a root's card state is derived from
+   * this, so the folder a person picks is checked by the code that listed it.
+   */
+  async listDirectory(path: string): Promise<DirectoryListing> {
+    await this.ensureReady();
+    const { data } = await this.http.get<DirectoryListing>("/api/fs/list", {
+      params: { path },
+    });
     return data;
   }
 
