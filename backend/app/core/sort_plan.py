@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -87,9 +88,46 @@ class FrozenSortPlan(BaseModel):
     config_fingerprint: str
     actions: tuple[FrozenSortAction, ...]
     impact: FrozenSortImpact
+    #: Content hash → the path Review chose to keep for that content. Seeding
+    #: the run's duplicate registry with these makes the reviewed copy the
+    #: "first seen" one, which is the same mechanism the configured policy uses
+    #: — so a reviewed keeper wins without a second, parallel notion of keeping.
+    reviewed_keepers: dict[str, str] = Field(default_factory=dict)
+    #: Sources Review excluded from this run. They are skipped before anything
+    #: touches them, and are not failures — the plan is unchanged, a derived
+    #: copy of it simply declines to act on these.
+    skipped_sources: frozenset[str] = frozenset()
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
+
+    def is_skipped(self, source: Path | str) -> bool:
+        return str(source) in self.skipped_sources
+
+    def with_reviewed_keepers(self, keepers: dict[str, str]) -> FrozenSortPlan:
+        """A new plan carrying Review's keeper choices. The stored plan is untouched."""
+        return self.model_copy(update={"reviewed_keepers": dict(keepers)})
+
+    def with_exclusions(self, sources: Iterable[str]) -> FrozenSortPlan:
+        """A new plan that declines the given sources, expanded to whole units.
+
+        Excluding one half of a RAW+JPEG pair would leave the other half moving
+        on its own, so a companion drags its unit with it. The stored plan is
+        never mutated: the exclusions belong to one run, not to the plan.
+        """
+        requested = {str(source) for source in sources}
+        units = {
+            action.unit_id
+            for action in self.actions
+            if action.unit_id is not None and action.source_path in requested
+        }
+        expanded = {
+            action.source_path
+            for action in self.actions
+            if action.source_path in requested
+            or (action.unit_id is not None and action.unit_id in units)
+        }
+        return self.model_copy(update={"skipped_sources": frozenset(expanded)})
 
 
 def build_frozen_sort_plan(
@@ -222,6 +260,7 @@ class FrozenPlanGuard:
     def __init__(self, plan: FrozenSortPlan) -> None:
         self.plan = plan
         self._remaining = plan.action_map()
+        self.skipped_sources = plan.skipped_sources
 
     def authorize(
         self,
@@ -232,7 +271,15 @@ class FrozenPlanGuard:
         move: bool,
         unit_id: str | None,
         companion_role: str | None,
-    ) -> FrozenSortAction:
+    ) -> FrozenSortAction | None:
+        """The planned action, or ``None`` when Review excluded this source.
+
+        A skip is not a whitelist violation: the source *is* in the plan, and the
+        user decided not to act on it. Every other path through the whitelist is
+        unchanged — an unplanned action still raises.
+        """
+        if str(source) in self.skipped_sources:
+            return None
         source_effect: SourceEffect = "remove_after_verification" if move else "retained"
         candidate = FrozenSortAction(
             source_path=str(source),

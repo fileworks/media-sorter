@@ -51,15 +51,37 @@ OutcomeKind = Literal[
 ]
 
 KeeperPolicyId = Literal[
+    "best_quality",
     "largest",
     "smallest",
     "newest",
     "oldest",
     "highest_resolution",
+    "longest_filename",
+    "shortest_filename",
     "preferred_root",
     "protected_reference",
     "manual",
 ]
+
+#: The policies a person may choose, in Configure or as a per-run override in
+#: Review. Exported from one place so the two cannot offer different sets.
+#:
+#: `protected_reference` is absent deliberately: it is automatic and always
+#: wins, so offering it as a choice would imply it could be turned off.
+#: `preferred_root` is absent because the root order it depended on is no longer
+#: something the interface lets anyone set.
+SELECTABLE_KEEPER_POLICIES: tuple[KeeperPolicyId, ...] = (
+    "best_quality",
+    "largest",
+    "smallest",
+    "newest",
+    "oldest",
+    "highest_resolution",
+    "longest_filename",
+    "shortest_filename",
+    "manual",
+)
 
 BulkScopeId = Literal[
     "this_group",

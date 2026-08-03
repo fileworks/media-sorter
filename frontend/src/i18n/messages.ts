@@ -1,4 +1,12 @@
 export const en = {
+  "config.keeper.best_quality": "Keep the best quality",
+  "config.keeper.best_quality.short": "Keep best",
+  "config.keeper.longest_filename": "Keep the longest filename",
+  "config.keeper.longest_filename.short": "Keep longest name",
+  "config.keeper.shortest_filename": "Keep the shortest filename",
+  "config.keeper.shortest_filename.short": "Keep shortest name",
+  "config.keeper.manual": "Decide each group myself",
+  "config.keeper.manual.short": "Decide myself",
   "preflight.cannotExecute": "This plan cannot be executed as it stands.",
   "preflight.needsAcknowledgement": "Acknowledge what this run changes first.",
   "footer.busy": "Wait for the current operation to finish.",
@@ -1423,6 +1431,14 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const de: Record<MessageKey, string> = {
+  "config.keeper.best_quality": "Beste Qualität behalten",
+  "config.keeper.best_quality.short": "Beste behalten",
+  "config.keeper.longest_filename": "Längsten Dateinamen behalten",
+  "config.keeper.longest_filename.short": "Längster Name",
+  "config.keeper.shortest_filename": "Kürzesten Dateinamen behalten",
+  "config.keeper.shortest_filename.short": "Kürzester Name",
+  "config.keeper.manual": "Jede Gruppe selbst entscheiden",
+  "config.keeper.manual.short": "Selbst entscheiden",
   "preflight.cannotExecute": "Der Plan kann so nicht ausgeführt werden.",
   "preflight.needsAcknowledgement": "Bestätige zuerst, was dieser Durchlauf verändert.",
   "footer.busy": "Warte, bis der laufende Vorgang abgeschlossen ist.",

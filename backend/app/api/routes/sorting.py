@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Header, Query
+from pydantic import Field
 
 from app.api.deps import ContainerDep
 from app.api.schemas import (
@@ -21,6 +22,13 @@ class StartSortRequest(TaskStartRequest):
     dry_run: bool = False
     expected_config_fingerprint: str | None = None
     plan_id: str | None = None
+    #: Sources Review decided not to act on. Applied to a derived copy of the
+    #: stored plan; the stored plan is never mutated, so a second run of the
+    #: same plan is unaffected by one run's exclusions.
+    excluded_sources: list[str] = Field(default_factory=list)
+    #: Content hash → the path Review chose to keep. Applied to the derived
+    #: plan, so one run's overrides do not follow the stored plan around.
+    reviewed_keepers: dict[str, str] = Field(default_factory=dict)
 
 
 @router.post("/sorting/start", response_model=TaskStartResponse)
@@ -57,6 +65,13 @@ async def start_sorting(
                 "The configuration changed after preview; generate and review a new plan.",
                 details={"reason": "stale_plan", "plan_id": request.plan_id},
             )
+        if request.reviewed_keepers:
+            frozen_plan = frozen_plan.with_reviewed_keepers(request.reviewed_keepers)
+        if request.excluded_sources:
+            # A derived plan, never an edit of the stored one. Excluding a
+            # companion excludes its whole unit, which is expanded server-side
+            # so a client cannot half-exclude a RAW+JPEG pair.
+            frozen_plan = frozen_plan.with_exclusions(request.excluded_sources)
     task, replayed = container.task_manager.start_task(
         "sort",
         request.idempotency_key,

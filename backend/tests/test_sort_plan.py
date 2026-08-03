@@ -119,3 +119,158 @@ def test_changed_final_destination_is_rejected_before_transfer(tmp_path: Path) -
             unit_id="unit-photo",
             companion_role=None,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Exclusions                                                                    #
+# --------------------------------------------------------------------------- #
+
+
+def _unit_plan(tmp_path: Path):
+    """A RAW+JPEG unit plus an unrelated file, so unit expansion is observable."""
+    inputs = tmp_path / "input"
+    inputs.mkdir()
+    raw = inputs / "shot.raw"
+    jpeg = inputs / "shot.jpg"
+    other = inputs / "other.jpg"
+    for path, payload in ((raw, b"raw bytes"), (jpeg, b"jpeg bytes"), (other, b"other bytes")):
+        path.write_bytes(payload)
+    config = _config(tmp_path)
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(raw),
+                "destination": str(tmp_path / "output" / "shot.raw"),
+                "status": "sort",
+                "file_size": raw.stat().st_size,
+                "unit_id": "unit-shot",
+                "companions": [],
+            },
+            {
+                "source": str(jpeg),
+                "destination": str(tmp_path / "output" / "shot.jpg"),
+                "status": "sort",
+                "file_size": jpeg.stat().st_size,
+                "unit_id": "unit-shot",
+                "companions": [],
+            },
+            {
+                "source": str(other),
+                "destination": str(tmp_path / "output" / "other.jpg"),
+                "status": "sort",
+                "file_size": other.stat().st_size,
+                "unit_id": "unit-other",
+                "companions": [],
+            },
+        ],
+        config,
+    )
+    return config, raw, jpeg, other, plan
+
+
+def _execution(tmp_path: Path, config: Config, plan):
+    return OperationExecution.start(
+        operation_id="exclusions",
+        state_root=tmp_path / "state",
+        preservation=config.preservation_profile,
+        authorization=authorize_config_mutations(config),
+        effective_config_sha256=hashlib.sha256(b"config").hexdigest(),
+        frozen_plan=plan,
+    )
+
+
+def test_excluding_a_companion_excludes_its_whole_unit(tmp_path: Path) -> None:
+    _config_value, raw, jpeg, other, plan = _unit_plan(tmp_path)
+
+    derived = plan.with_exclusions([str(jpeg)])
+
+    assert derived.is_skipped(raw)
+    assert derived.is_skipped(jpeg)
+    assert not derived.is_skipped(other)
+
+
+def test_exclusions_never_mutate_the_stored_plan(tmp_path: Path) -> None:
+    _config_value, _raw, jpeg, _other, plan = _unit_plan(tmp_path)
+
+    plan.with_exclusions([str(jpeg)])
+
+    assert plan.skipped_sources == frozenset()
+
+
+def test_an_excluded_source_is_never_attempted(tmp_path: Path) -> None:
+    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
+    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
+    before = other.read_bytes()
+
+    result = execution.place(
+        other,
+        tmp_path / "output" / "other.jpg",
+        kind="copy",
+        move=False,
+        root_id="input",
+        relative_path="other.jpg",
+        unit_id="unit-other",
+    )
+
+    assert result is None
+    assert other.read_bytes() == before
+    assert not (tmp_path / "output" / "other.jpg").exists()
+    assert [outcome.code for outcome in execution.outcomes] == ["excluded"]
+
+
+def test_an_unplanned_action_still_raises_when_others_are_excluded(tmp_path: Path) -> None:
+    """The skip is not a hole in the whitelist — only the named sources skip."""
+    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
+    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
+
+    with pytest.raises(ValueError, match="differs from the reviewed plan"):
+        execution.place(
+            tmp_path / "input" / "shot.jpg",
+            tmp_path / "output" / "somewhere-else.jpg",
+            kind="copy",
+            move=False,
+            root_id="input",
+            relative_path="shot.jpg",
+            unit_id="unit-shot",
+        )
+
+
+def test_excluding_everything_completes_with_zero_actions(tmp_path: Path) -> None:
+    config, raw, jpeg, other, plan = _unit_plan(tmp_path)
+    everything = [str(raw), str(jpeg), str(other)]
+    execution = _execution(tmp_path, config, plan.with_exclusions(everything))
+
+    for source in (raw, jpeg, other):
+        assert (
+            execution.place(
+                source,
+                tmp_path / "output" / source.name,
+                kind="copy",
+                move=False,
+                root_id="input",
+                relative_path=source.name,
+                unit_id="unit-shot",
+            )
+            is None
+        )
+
+    assert not (tmp_path / "output").exists()
+    assert {outcome.code for outcome in execution.outcomes} == {"excluded"}
+
+
+def test_an_excluded_file_is_reported_as_excluded_not_failed(tmp_path: Path) -> None:
+    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
+    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
+
+    execution.place(
+        other,
+        tmp_path / "output" / "other.jpg",
+        kind="copy",
+        move=False,
+        root_id="input",
+        relative_path="other.jpg",
+        unit_id="unit-other",
+    )
+
+    assert execution.outcomes[0].code == "excluded"
+    assert execution.outcomes[0].code != "failed"

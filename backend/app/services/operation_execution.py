@@ -7,6 +7,7 @@ pipeline step can move media by any other route.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -164,8 +165,28 @@ class OperationExecution:
         companion_role: CompanionRole | None = None,
         unit_primary_path: str | None = None,
         provenance: OutcomeProvenance | None = None,
-    ) -> TransferResult:
-        """Authorize, journal, and verify one placement, then record its outcome."""
+    ) -> TransferResult | None:
+        """Authorize, journal, and verify one placement, then record its outcome.
+
+        Returns ``None`` when Review excluded this source. The check is first —
+        before protection, authorization and the journal — so an excluded file is
+        never opened, never journalled, and cannot be half-acted-on. It returns
+        no ``TransferResult`` because no transfer happened, and inventing one
+        would put a placement that never occurred into the audit record.
+        """
+        if self.plan_guard is not None and self.plan_guard.plan.is_skipped(source):
+            self.record_failure(
+                action_id=f"excluded_{hashlib.sha256(str(source).encode()).hexdigest()[:16]}",
+                source_path=source,
+                code="excluded",
+                diagnostic_code=None,
+            )
+            self.emit(
+                "action.excluded",
+                phase="executing",
+                source_path=str(source),
+            )
+            return None
         self._assert_not_protected(source, destination)
         planned = (
             self.plan_guard.authorize(

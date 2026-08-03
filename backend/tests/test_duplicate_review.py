@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import review as review_routes
 from app.core.duplicate_plans import (
+    SELECTABLE_KEEPER_POLICIES,
     Decision,
     DuplicateGroup,
     FactValue,
@@ -729,3 +730,148 @@ class TestPolicyPreviewFailures:
         # Its sibling routes raise HTTPException, so the body is FastAPI's
         # ``detail`` shape rather than the MediaSortException envelope.
         assert "no-such-group" in response.json()["detail"]
+
+
+class TestNewKeeperPolicies:
+    """Each policy must be total, deterministic, and never beat a baseline."""
+
+    def _settings(self, policy: str) -> PolicySettings:
+        return PolicySettings(policy_id=policy)  # type: ignore[arg-type]
+
+    def test_best_quality_prefers_pixels_then_bytes(self) -> None:
+        result = apply_policy(
+            group(
+                member("small", width=100, height=100, size=9_000),
+                member("big", width=400, height=400, size=1_000),
+            ),
+            self._settings("best_quality"),
+        )
+
+        assert result.decided
+        assert result.keeper_member_id == "big"
+
+    def test_best_quality_decides_where_highest_resolution_refuses(self) -> None:
+        """The point of the default: an unreadable member does not stall the group.
+
+        `highest_resolution` sends the whole group to a person when any member's
+        dimensions cannot be read. A library is full of such files, so the
+        default must still decide — preferring the member whose pixels are
+        known, and falling back to size only between equals.
+        """
+        candidates = group(
+            member("unreadable", width=None, height=None, size=9_000),
+            member("readable", width=100, height=100, size=1_000),
+        )
+
+        assert apply_policy(candidates, self._settings("highest_resolution")).outcome == (
+            "needs_review"
+        )
+        best = apply_policy(candidates, self._settings("best_quality"))
+        assert best.decided
+        assert best.keeper_member_id == "readable"
+
+    def test_best_quality_falls_back_to_size_between_equal_pixels(self) -> None:
+        result = apply_policy(
+            group(
+                member("small", width=100, height=100, size=1_000),
+                member("large", width=100, height=100, size=9_000),
+            ),
+            self._settings("best_quality"),
+        )
+
+        assert result.keeper_member_id == "large"
+
+    def test_filename_length_policies_are_mirror_images(self) -> None:
+        members = (
+            member("short", path="a.jpg"),
+            member("long", path="a final edit.jpg"),
+        )
+
+        assert apply_policy(
+            group(*members), self._settings("longest_filename")
+        ).keeper_member_id == ("long")
+        assert (
+            apply_policy(group(*members), self._settings("shortest_filename")).keeper_member_id
+            == "short"
+        )
+
+    @pytest.mark.parametrize("policy", ["best_quality", "longest_filename", "shortest_filename"])
+    def test_each_policy_is_stable_across_scan_order(self, policy: str) -> None:
+        members = [
+            member("a", path="one.jpg", size=100, width=100, height=100),
+            member("b", path="two words.jpg", size=200, width=200, height=200),
+            member("c", path="three.jpg", size=300, width=150, height=150),
+        ]
+        forward = apply_policy(group(*members), self._settings(policy)).keeper_member_id
+        backward = apply_policy(group(*reversed(members)), self._settings(policy)).keeper_member_id
+
+        assert forward == backward
+
+    @pytest.mark.parametrize(
+        "policy",
+        [
+            "best_quality",
+            "largest",
+            "smallest",
+            "newest",
+            "oldest",
+            "longest_filename",
+            "shortest_filename",
+            "highest_resolution",
+        ],
+    )
+    def test_a_baseline_member_wins_under_every_policy(self, policy: str) -> None:
+        result = apply_policy(
+            group(
+                member("input", size=9_999, width=999, height=999, path="a very long name.jpg"),
+                member("ref", role="reference", root_id="library", size=1, path="r.jpg"),
+            ),
+            self._settings(policy),
+        )
+
+        assert result.keeper_member_id == "ref"
+
+    def test_the_selectable_set_excludes_the_automatic_and_the_retired(self) -> None:
+        assert "protected_reference" not in SELECTABLE_KEEPER_POLICIES
+        assert "preferred_root" not in SELECTABLE_KEEPER_POLICIES
+        assert SELECTABLE_KEEPER_POLICIES[0] == "best_quality"
+
+
+class TestReviewedKeepersSurviveThePolicy:
+    """Review's choice must beat the configured rule, or the review is theatre."""
+
+    def test_a_reviewed_keeper_is_seeded_as_the_first_seen_copy(self) -> None:
+        from app.core.config import Config
+        from app.core.sort_plan import build_frozen_sort_plan
+
+        plan = build_frozen_sort_plan([], Config())
+        reviewed = plan.with_reviewed_keepers({"a" * 64: "/library/keep-this.jpg"})
+
+        assert reviewed.reviewed_keepers == {"a" * 64: "/library/keep-this.jpg"}
+        # Seeding uses the same map the registry keys on, so the reviewed copy
+        # is "already seen" and every later copy of those bytes is a duplicate.
+        assert plan.reviewed_keepers == {}
+
+    def test_reviewed_keepers_never_mutate_the_stored_plan(self) -> None:
+        from app.core.config import Config
+        from app.core.sort_plan import build_frozen_sort_plan
+
+        plan = build_frozen_sort_plan([], Config())
+        plan.with_reviewed_keepers({"b" * 64: "/x.jpg"})
+
+        assert plan.reviewed_keepers == {}
+
+    def test_an_undecided_group_still_follows_the_policy(self) -> None:
+        candidates = group(member("a", size=100), member("b", size=900))
+
+        # No reviewed keeper for this content: the configured rule decides.
+        assert apply_policy(candidates, PolicySettings("largest")).keeper_member_id == "b"
+
+    def test_a_baseline_member_is_never_overridden(self) -> None:
+        candidates = group(
+            member("a", size=9_000),
+            member("ref", role="reference", root_id="library", size=10),
+        )
+
+        # Protection is checked before any policy or reviewed choice runs.
+        assert apply_policy(candidates, PolicySettings("largest")).keeper_member_id == "ref"

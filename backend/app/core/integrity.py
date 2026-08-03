@@ -67,6 +67,9 @@ OutcomeCode = Literal[
     "verified_success",
     "success_with_metadata_limitation",
     "skipped",
+    # Review excluded this source from the run. Distinct from "skipped", which
+    # is the pipeline's own decision, so a report can state the two separately.
+    "excluded",
     "quarantined",
     "cancelled",
     "blocked",

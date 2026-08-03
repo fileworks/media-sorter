@@ -65,6 +65,10 @@ def _modified(member: GroupMember) -> int | None:
     return int(value.value) if value.known and value.value is not None else None  # type: ignore[arg-type]
 
 
+def _filename(member: GroupMember) -> str:
+    return member.relative_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+
+
 def _identity(member: GroupMember) -> str:
     """The final tie-break: stable, total, and independent of scan order."""
     return f"{member.root_id}:{member.relative_path}:{member.member_id}"
@@ -111,6 +115,34 @@ def _choose(
 
     if policy == "protected_reference":
         return None, "no protected reference is present in this group"
+
+    if policy == "best_quality":
+        # The default, and the one most people mean by "keep the good one":
+        # most pixels, then most bytes. Unlike `highest_resolution` it does not
+        # refuse a group whose dimensions could not all be read — it falls back
+        # to size for those, because a photo library is full of files whose
+        # dimensions no library can parse, and refusing them all would leave the
+        # common case undecided.
+        ranked = sorted(
+            members,
+            key=lambda m: (-(m.facts.pixels or 0), -_size(m), -(_modified(m) or 0), _identity(m)),
+        )
+        return ranked[0], "best quality (most pixels, then largest)"
+
+    if policy in {"longest_filename", "shortest_filename"}:
+        # "IMG_0421 final edit.jpg" over "IMG_0421.jpg", or the reverse for
+        # somebody whose exports gained " (1)" suffixes. Length is compared
+        # before identity so the result cannot depend on scan order.
+        longest = policy == "longest_filename"
+        ranked = sorted(
+            members,
+            key=lambda m: (
+                -len(_filename(m)) if longest else len(_filename(m)),
+                -_size(m),
+                _identity(m),
+            ),
+        )
+        return ranked[0], f"{'longest' if longest else 'shortest'} filename"
 
     if policy == "largest":
         # Ties fall through to newest, then to identity.

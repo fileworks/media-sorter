@@ -329,8 +329,15 @@ class SortingService:
             )
         )
 
-        # Per-operation in-memory duplicate registry
+        # Per-operation in-memory duplicate registry.
         registry = DuplicateRegistry()
+        # A reviewed keeper is seeded as the content's first-seen path, so the
+        # ordinary "first seen wins" rule keeps it and every later copy of the
+        # same bytes becomes a duplicate. This is why a keeper chosen in Review
+        # survives a configured policy that would have chosen differently: there
+        # is one keeper mechanism, not two.
+        if frozen_plan is not None and frozen_plan.reviewed_keepers:
+            registry.exact.update(frozen_plan.reviewed_keepers)
 
         # Destination-aware / cross-run dedup: refresh the persistent
         # index of what already lives in the destination and load it as a
@@ -664,6 +671,9 @@ class SortingService:
                     companion_role=member.companion_role,
                     unit_primary_path=str(unit.primary),
                 )
+                if placement is None:
+                    companion["status"] = "excluded"
+                    continue
                 companion.update(
                     status="success",
                     content_sha256=_result_sha256(placement),
@@ -971,6 +981,11 @@ class SortingService:
                     unit_primary_path=unit_primary_path,
                     provenance=provenance,
                 )
+                if placement is None:
+                    # Excluded by Review: the file stays exactly where it is and
+                    # no later step in this iteration may act on it.
+                    record["status"] = "excluded"
+                    return record
                 dest = placement.destination_path
                 record["content_sha256"] = _result_sha256(placement)
                 record["commit_method"] = placement.commit_method
@@ -1146,8 +1161,11 @@ class SortingService:
         companion_role: CompanionRole | None = None,
         unit_primary_path: str | None = None,
         provenance: OutcomeProvenance | None = None,
-    ) -> TransferResult:
+    ) -> TransferResult | None:
         """Move media only through the authorized, journalled, verified executor.
+
+        ``None`` means Review excluded this source: nothing was touched, and the
+        caller must not record a placement for it.
 
         Without a run-scoped execution (a direct ``_process_file`` call, as tests
         make) the same verified transfer still runs; only the manifest and
@@ -1349,7 +1367,10 @@ class SortingService:
             root_id=root_identifier(source_root),
             relative_path=_relative_to(source, source_root),
         )
-        execution.outcomes[-1] = execution.outcomes[-1].model_copy(update={"code": "quarantined"})
+        if result is not None:
+            execution.outcomes[-1] = execution.outcomes[-1].model_copy(
+                update={"code": "quarantined"}
+            )
         del result
 
     @staticmethod

@@ -135,26 +135,38 @@ export type TransferMode = "copy" | "move";
 
 /**
  * How a duplicate group picks its keeper. Mirrors the backend's
- * `KeeperPolicyId`; the first five are the ones the UI offers as a default,
- * the rest are only reachable through a specific decision.
+ * `KeeperPolicyId`. Not every member is selectable: `protected_reference` is
+ * automatic and always wins, and `preferred_root` depends on a root order the
+ * interface no longer lets anyone set.
  */
 export type KeeperPolicyId =
+  | "best_quality"
   | "newest"
   | "oldest"
   | "largest"
   | "smallest"
   | "highest_resolution"
+  | "longest_filename"
+  | "shortest_filename"
   | "preferred_root"
   | "protected_reference"
   | "manual";
 
-/** The keep rules the Configure and Review screens let a user choose between. */
+/**
+ * The keep rules a person may choose, in Configure as the default or in Review
+ * as a per-run override. Mirrors the backend's `SELECTABLE_KEEPER_POLICIES`;
+ * exported from here alone so the two surfaces cannot offer different sets.
+ */
 export const SELECTABLE_KEEPER_POLICIES = [
+  "best_quality",
   "newest",
   "oldest",
   "largest",
   "smallest",
   "highest_resolution",
+  "longest_filename",
+  "shortest_filename",
+  "manual",
 ] as const satisfies readonly KeeperPolicyId[];
 
 export interface RootIdentity {
@@ -1274,11 +1286,19 @@ export class MediaSorterApiClient {
 
   // ── Sorting ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Start a run.
+   *
+   * `excludedSources` and `reviewedKeepers` are Review's decisions for this run
+   * only. The server derives a new frozen plan from them and never edits the
+   * stored one, so running the same plan again is unaffected.
+   */
   async startSort(
     dryRun = false,
     idempotencyKey?: string,
     expectedConfigFingerprint?: string,
     planId?: string,
+    decisions: { excludedSources?: string[]; reviewedKeepers?: Record<string, string> } = {},
   ): Promise<string> {
     return this.startTask(
       "/api/sorting/start",
@@ -1286,6 +1306,8 @@ export class MediaSorterApiClient {
         dry_run: dryRun,
         expected_config_fingerprint: expectedConfigFingerprint,
         plan_id: planId,
+        excluded_sources: decisions.excludedSources ?? [],
+        reviewed_keepers: decisions.reviewedKeepers ?? {},
       },
       idempotencyKey,
     );
