@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   comparableSamples,
   confidenceTone,
-  formatBytesShort,
   isEstimate,
   modeDisclosure,
   projectedSize,
@@ -215,13 +214,5 @@ describe("spaceRequirement", () => {
 
     expect(requirement.quarantineLabel).toBe("2.9 MB");
     expect(requirement.note).toMatch(/not reclaimed/i);
-  });
-});
-
-describe("formatBytesShort", () => {
-  it("keeps small numbers readable and large ones short", () => {
-    expect(formatBytesShort(512)).toBe("512 B");
-    expect(formatBytesShort(1536)).toBe("1.5 KB");
-    expect(formatBytesShort(5 * 1024 * 1024 * 1024)).toBe("5 GB");
   });
 });

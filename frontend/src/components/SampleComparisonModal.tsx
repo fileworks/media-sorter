@@ -12,7 +12,8 @@ import { createPortal } from "react-dom";
 
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useI18n } from "@/i18n/I18nContext";
-import { formatBytesShort, samplePresentation } from "@/lib/optimizationProjection";
+import { formatBytesShort } from "@/lib/formatters";
+import { samplePresentation } from "@/lib/optimizationProjection";
 import { getBasename } from "@/lib/pathUtils";
 import { api } from "@/services/api";
 import type { OptimizationContract, SampleEncode } from "@/services/api";

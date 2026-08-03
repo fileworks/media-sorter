@@ -10,8 +10,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { formatBytesShort } from "@/lib/optimizationProjection";
-import { redactRoot } from "@/lib/operationHistory";
+import { formatBytesShort } from "@/lib/formatters";
+import { redactRoot } from "@/lib/pathUtils";
 import { api } from "@/services/api";
 import type { CleanupImpact, QuarantineRecord } from "@/services/api";
 import { useI18n } from "@/i18n/I18nContext";

@@ -57,18 +57,6 @@ export function boundHistory(entries: HistoryEntry[], limit = HISTORY_LIMIT): Hi
     .slice(0, limit);
 }
 
-/**
- * Show enough of a root to recognise it, not enough to identify a person.
- *
- * The last two segments answer "which library was this?" while leaving the home
- * directory and user name out of the picture.
- */
-export function redactRoot(root: string): string {
-  const parts = root.split(/[\\/]+/).filter(Boolean);
-  if (parts.length <= 2) return root;
-  return `…/${parts.slice(-2).join("/")}`;
-}
-
 export interface HistorySummary {
   headline: string;
   /** The counts worth reading, already dropped when zero. */

@@ -16,7 +16,7 @@ import { StateView } from "@/components/StateView";
 import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useI18n } from "@/i18n/I18nContext";
 import { openSingle, type ModalState } from "@/lib/mediaModal";
-import { formatBytesShort } from "@/lib/optimizationProjection";
+import { formatBytesShort } from "@/lib/formatters";
 import { getBasename } from "@/lib/pathUtils";
 import {
   availableActions,

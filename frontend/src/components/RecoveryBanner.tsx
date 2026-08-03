@@ -8,7 +8,7 @@
  */
 
 import { buildRecoveryPlan, type RecoveryOperation } from "@/lib/startupRecovery";
-import { redactRoot } from "@/lib/operationHistory";
+import { redactRoot } from "@/lib/pathUtils";
 import { severityClass } from "@/lib/statusPresentation";
 
 interface RecoveryBannerProps {

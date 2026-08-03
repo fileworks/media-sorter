@@ -14,7 +14,7 @@ import { StatusMessage } from "@/components/StatusMessage";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
-import { formatBytesShort } from "@/lib/optimizationProjection";
+import { formatBytesShort } from "@/lib/formatters";
 import {
   centerBadge,
   centerState,

@@ -7,6 +7,7 @@
  * words as moving a file.
  */
 
+import { formatBytesShort } from "@/lib/formatters";
 import type { ItemProjection, OptimizationProjection, SampleEncode } from "@/services/api";
 
 export type ConfidenceTone = "measured" | "estimated" | "unknown";
@@ -18,19 +19,6 @@ export interface ProjectedSize {
   isRange: boolean;
   /** Why there is no number, when there is no number. */
   reason: string | null;
-}
-
-/** Bytes → a short label. Kept local so this module stays dependency-free. */
-export function formatBytesShort(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = Math.abs(bytes);
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  const rounded = value >= 100 || unit === 0 ? Math.round(value) : Number(value.toFixed(1));
-  return `${bytes < 0 ? "-" : ""}${rounded} ${units[unit]}`;
 }
 
 /**

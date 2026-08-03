@@ -11,10 +11,10 @@ import { useMemo, useState } from "react";
 
 import { SampleComparisonModal } from "@/components/SampleComparisonModal";
 import { useI18n } from "@/i18n/I18nContext";
+import { formatBytesShort } from "@/lib/formatters";
 import {
   comparableSamples,
   confidenceTone,
-  formatBytesShort,
   isEstimate,
   modeDisclosure,
   projectedSize,

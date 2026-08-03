@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StateView } from "@/components/StateView";
 import { useI18n } from "@/i18n/I18nContext";
-import { formatBytesShort } from "@/lib/optimizationProjection";
+import { formatBytesShort } from "@/lib/formatters";
 import { api } from "@/services/api";
 import type { CatalogFreshness } from "@/services/api";
 

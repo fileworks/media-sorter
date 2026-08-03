@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   boundHistory,
   filterHistory,
-  redactRoot,
   summarizeEntry,
   totalBytes,
   type HistoryEntry,
@@ -57,17 +56,6 @@ describe("boundHistory", () => {
     ];
 
     expect(boundHistory(entries, 2).map((e) => e.operation_id)).toEqual(["new", "middle"]);
-  });
-});
-
-describe("redactRoot", () => {
-  it("keeps enough to recognise the library and drops the user's name", () => {
-    expect(redactRoot("/Users/someone/Pictures/Library")).toBe("…/Pictures/Library");
-    expect(redactRoot("D:\\Photos\\2019")).toBe("…/Photos/2019");
-  });
-
-  it("leaves a short root alone rather than redacting it to nothing", () => {
-    expect(redactRoot("/Volumes")).toBe("/Volumes");
   });
 });
 
