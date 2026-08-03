@@ -103,3 +103,34 @@ def test_allowed_origin_carries_a_single_origin_header(client: TestClient) -> No
     )
 
     assert response.headers.get_list("access-control-allow-origin") == [ALLOWED_ORIGIN]
+
+
+def test_an_unknown_route_returns_404_readably_with_cors_headers(client: TestClient) -> None:
+    """The one status the middleware tests never covered.
+
+    A 404 is what the interface gets from a typo in a path or from a route that
+    has been removed, and it travels the same middleware stack as the other
+    four. Without the CORS header it would arrive as ``TypeError: Failed to
+    fetch`` — the same opaque failure the whole change exists to remove.
+
+    A 404 raised as an ``HTTPException`` carries FastAPI's ``{"detail": …}``
+    rather than the ``{error, code, details}`` envelope, so it has no stable
+    code. That is deliberate and the interface handles it: ``errorUtils.ts``
+    reads ``data.error ?? data.detail``, so the message is displayed either way.
+    What matters here is that the body is readable and the header is present.
+    """
+    response = client.get("/api/no-such-route", headers={"Origin": ALLOWED_ORIGIN})
+
+    assert response.status_code == 404
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    assert isinstance(response.json().get("detail"), str)
+
+
+def test_a_known_route_with_an_unknown_id_returns_404_readably(client: TestClient) -> None:
+    """The shape a real 404 arrives in: a route that exists, an id that does not."""
+    response = client.get("/api/operations/no-such-operation", headers={"Origin": ALLOWED_ORIGIN})
+
+    assert response.status_code == 404
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    body = response.json()
+    assert isinstance(body.get("error") or body.get("detail"), str)

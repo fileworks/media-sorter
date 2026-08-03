@@ -829,6 +829,67 @@ class TestBurstStacks:
         assert quarantined == {"frame-2", "frame-3"}
 
 
+class TestTwoPreviewCyclesThroughTheRoutes:
+    """Preview, act, preview again, act again — through the HTTP routes.
+
+    The unit tests around `_ensure_groups` pin the generation logic. This pins
+    the thing a person actually checks by hand: that the second cycle works.
+    Before the lifecycle fix, the first scan's group ids survived every later
+    scan, so every per-group route answered 404 for the rest of the process's
+    life and the workbench looked permanently broken after one run.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate_plan_cache(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        review_routes._PLANS.clear()
+        monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path)
+
+    @staticmethod
+    def _cycle(monkeypatch: pytest.MonkeyPatch, generation: int, group_id: str) -> None:
+        """Stand in for a scan: a new catalog generation with its own groups."""
+        built = group(member("a"), member("b"), group_id=group_id)
+        monkeypatch.setattr(review_routes, "_live_generation", lambda _c: generation)
+        monkeypatch.setattr(review_routes, "_current_groups", lambda _c: [built])
+
+    def _act(self, client: TestClient, group_id: str) -> None:
+        quarantine = client.post(
+            "/api/review/quarantine-all-except",
+            json={"group_id": group_id, "keep_member_ids": ["a"]},
+        )
+        assert quarantine.status_code == 200, quarantine.text
+
+        policy = client.post(
+            "/api/review/policy/preview",
+            json={"scope": "selected_groups", "group_ids": [group_id], "policy_id": "largest"},
+        )
+        assert policy.status_code == 200, policy.text
+
+    def test_acting_on_a_group_succeeds_in_both_cycles(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._cycle(monkeypatch, generation=1, group_id="first-run")
+        self._act(client, "first-run")
+
+        self._cycle(monkeypatch, generation=2, group_id="second-run")
+        self._act(client, "second-run")
+
+    def test_a_group_from_the_previous_cycle_is_refused_readably(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """404, not 500. The id is gone; saying so is the correct answer."""
+        self._cycle(monkeypatch, generation=1, group_id="first-run")
+        self._act(client, "first-run")
+        self._cycle(monkeypatch, generation=2, group_id="second-run")
+
+        stale = client.post(
+            "/api/review/quarantine-all-except",
+            json={"group_id": "first-run", "keep_member_ids": ["a"]},
+        )
+
+        assert stale.status_code == 404
+        assert isinstance(stale.json().get("detail"), str)
+
+
 class TestPolicyPreviewFailures:
     def test_an_unknown_group_id_returns_409_and_never_500(self, client: TestClient) -> None:
         response = client.post(
