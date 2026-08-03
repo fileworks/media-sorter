@@ -98,6 +98,7 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     irreversible: false,
     recommended: true,
     fields: (current) => ({
+      run_mode: "organize",
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: true,
@@ -122,6 +123,7 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     consequenceKey: "recipes.cleanSweep.consequence",
     irreversible: true,
     fields: (current) => ({
+      run_mode: "organize",
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: false,
@@ -145,6 +147,7 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     consequenceKey: "recipes.archiveConvert.consequence",
     irreversible: true,
     fields: (current) => ({
+      run_mode: "organize",
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: true,
@@ -163,6 +166,29 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
   },
   {
     // Everything off. Not a shortcut — a clean slate to build a recipe on.
+    // Use case (c): the input tree is already organised the way its owner
+    // wants it. They want the duplicates gone and nothing else touched, which
+    // is why this is a run mode and not a sort with everything switched off.
+    id: "find_duplicates_only",
+    labelKey: "recipes.findDuplicatesOnly.label",
+    descriptionKey: "recipes.findDuplicatesOnly.description",
+    consequenceKey: "recipes.findDuplicatesOnly.consequence",
+    irreversible: false,
+    fields: (current) => ({
+      run_mode: "deduplicate_only" as const,
+      sort: true,
+      remove_duplicates: true,
+      duplicate_exact_enabled: true,
+      duplicate_perceptual_enabled: true,
+      junk_filter_enabled: false,
+      convert_images: false,
+      convert_videos: false,
+      repair_enabled: false,
+      preservation_profile: organizeOnly(current),
+      optimization_profile: disabledOptimization(current),
+    }),
+  },
+  {
     id: "scratch",
     labelKey: "recipes.scratch.label",
     descriptionKey: "recipes.scratch.description",
@@ -240,6 +266,7 @@ export function activeRecipeId(current: Config, recipes: readonly ConfigRecipe[]
 
 /** The exact fields a "save as recipe" snapshot captures. */
 export const RECIPE_SETTING_KEYS = [
+  "run_mode",
   "sort",
   "sort_criteria",
   "copy_instead_of_move",
@@ -277,6 +304,7 @@ export type RecipeSettingKey = (typeof RECIPE_SETTING_KEYS)[number];
  */
 export function captureRecipeSettings(config: Config): SavedRecipe["settings"] {
   return {
+    run_mode: config.run_mode,
     sort: config.sort,
     sort_criteria: config.sort_criteria,
     copy_instead_of_move: config.copy_instead_of_move,

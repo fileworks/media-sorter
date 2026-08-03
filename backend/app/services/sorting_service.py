@@ -299,6 +299,10 @@ class SortingService:
             "incomplete_units": 0,
             "operation_id": None,
             "review_only": len(units) if not config.sort else 0,
+            # Mode-appropriate names: in deduplicate_only the interface must not
+            # say "sorted" about files that never moved.
+            "run_mode": config.run_mode,
+            "kept_in_place": 0,
         }
 
         if not config.sort:
@@ -475,6 +479,8 @@ class SortingService:
             status = record["status"]
             if status == "success":
                 stats["sorted"] += 1
+            elif status == "kept_in_place":
+                stats["kept_in_place"] += 1
             elif status == "duplicate":
                 stats["duplicates"] += 1
             elif status == "future_date":
@@ -923,6 +929,15 @@ class SortingService:
             if config.camera_subfolder_enabled:
                 raw_camera = self._extraction.extract_camera_model(file_path)
                 record["camera_model"] = raw_camera
+
+            if config.run_mode == "deduplicate_only":
+                # This file is not a duplicate and not junk — those paths return
+                # before here — so in this mode it does not move at all. No
+                # copy, no move, no journal entry: the input tree is left byte
+                # for byte as it was found.
+                record["status"] = "kept_in_place"
+                record["dest_path"] = None
+                return record
 
             # Build destination
             initial_dest, planned_final = self._plan_dest(

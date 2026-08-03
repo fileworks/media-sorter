@@ -17,6 +17,7 @@ export interface Config {
   library_profile: LibraryProfile;
   preservation_profile: PreservationProfile;
   optimization_profile: OptimizationProfile;
+  run_mode: RunMode;
   sort: boolean;
   sort_criteria: string[];
   recursive_scan: boolean;
@@ -97,6 +98,7 @@ export interface Config {
  * libraries. Mirrors `backend/app/core/recipes.py`.
  */
 export interface RecipeSettings {
+  run_mode: RunMode;
   sort: boolean;
   sort_criteria: string[];
   copy_instead_of_move: boolean;
@@ -168,6 +170,16 @@ export const SELECTABLE_KEEPER_POLICIES = [
   "shortest_filename",
   "manual",
 ] as const satisfies readonly KeeperPolicyId[];
+
+/**
+ * What a run is for.
+ *
+ * `organize` places every file into the destination structure. In
+ * `deduplicate_only` nothing but duplicates and junk moves: the input tree is
+ * left exactly as it was found, and the destination is used only for the review
+ * folders.
+ */
+export type RunMode = "organize" | "deduplicate_only";
 
 export interface RootIdentity {
   schema_version: 1;

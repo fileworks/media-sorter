@@ -47,6 +47,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "language",
             "source_directory",
             "target_directory",
+            "run_mode",
             "sort",
             "sort_criteria",
             "copy_instead_of_move",

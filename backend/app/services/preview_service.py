@@ -51,6 +51,20 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+#: Statuses that are relocated into a review folder rather than left in place.
+#: In `deduplicate_only` these are the only files that move at all.
+_QUARANTINE_STATUSES = frozenset(
+    {
+        "duplicate",
+        "already_in_destination",
+        "junk",
+        "unknown_date",
+        "future_date",
+        "corrupted",
+        "failed",
+    }
+)
+
 
 class PreviewOutcomeStore:
     """Disk-backed inspector records; reads are bounded by the API request cap."""
@@ -680,6 +694,13 @@ class PreviewService:
 
         if not config.sort:
             status = "review_only"
+            dest = None
+
+        if config.run_mode == "deduplicate_only" and status not in _QUARANTINE_STATUSES:
+            # Nothing that is not a duplicate or junk moves at all. A null
+            # destination is the whole promise of this mode: the input tree is
+            # left exactly as it was found.
+            status = "keep_in_place"
             dest = None
 
         item: dict[str, Any] = {

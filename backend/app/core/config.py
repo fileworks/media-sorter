@@ -61,6 +61,14 @@ class Config:
     saved_recipes: list[SavedRecipe] = field(default_factory=list)
 
     # Sorting
+    #: What a run is for. "organize" places every file into the destination
+    #: structure. "deduplicate_only" leaves everything where it is and moves
+    #: only duplicates and junk into the review folders — the fourth use case,
+    #: which `sort=False` could never express because it meant "transfer
+    #: nothing" rather than "dedupe in place".
+    run_mode: Literal["organize", "deduplicate_only"] = "organize"
+    #: Always True. Kept because the preview and sort pipelines read it, but it
+    #: is no longer a user-facing choice: `run_mode` is.
     sort: bool = True
     sort_criteria: list[str] = field(default_factory=lambda: ["year"])
     # When True, recreate the source subfolder structure under each date folder

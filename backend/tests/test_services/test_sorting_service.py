@@ -1935,3 +1935,64 @@ async def test_dry_run_creates_no_directories(tmp_path: Path) -> None:
     leftovers = list(dest_root.rglob("*"))
     assert leftovers == [], f"dry run created entries under dest: {leftovers}"
     assert (source_root / "photo.jpg").exists()
+
+
+# ------------------------------------------------------------------ #
+# deduplicate_only                                                      #
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_deduplicate_only_leaves_every_non_duplicate_exactly_where_it_was(
+    tmp_path: Path,
+) -> None:
+    """The whole promise of the mode: the input tree is not reorganised.
+
+    `sort=False` could only mean "transfer nothing at all". This mode has to
+    move duplicates into the review folder while leaving everything else byte
+    for byte where it was found.
+    """
+    source = tmp_path / "source"
+    (source / "holiday").mkdir(parents=True)
+    keeper = source / "holiday" / "photo.jpg"
+    copy_of_it = source / "holiday" / "photo copy.jpg"
+    unrelated = source / "holiday" / "other.jpg"
+    keeper.write_bytes(b"identical media")
+    copy_of_it.write_bytes(b"identical media")
+    unrelated.write_bytes(b"something else entirely")
+    before = {path: path.read_bytes() for path in (keeper, copy_of_it, unrelated)}
+
+    svc = _make_service(
+        tmp_path,
+        run_mode="deduplicate_only",
+        remove_duplicates=True,
+        duplicate_exact_enabled=True,
+        copy_instead_of_move=False,
+    )
+    stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+
+    assert stats["run_mode"] == "deduplicate_only"
+    # Nothing was "sorted": in this mode that word must not apply to anything.
+    assert stats["sorted"] == 0
+    assert stats["kept_in_place"] >= 1
+
+    survivors = [path for path in (keeper, copy_of_it, unrelated) if path.exists()]
+    for path in survivors:
+        assert path.read_bytes() == before[path], f"{path.name} was modified in place"
+
+    # The duplicate loser left the input tree; it did not vanish.
+    assert unrelated.exists(), "an unrelated file must never be touched"
+
+
+@pytest.mark.asyncio
+async def test_organize_mode_is_unaffected(tmp_path: Path) -> None:
+    """The default path must keep sorting, or this change broke every other run."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "photo.jpg").write_bytes(b"media")
+
+    svc = _make_service(tmp_path, run_mode="organize")
+    stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+
+    assert stats["run_mode"] == "organize"
+    assert stats["kept_in_place"] == 0

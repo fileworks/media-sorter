@@ -54,7 +54,7 @@ const base = {
   },
 } as Config;
 
-const [SAFE_SORT, CLEAN_SWEEP, ARCHIVE_CONVERT, SCRATCH] = CONFIG_RECIPES;
+const [SAFE_SORT, CLEAN_SWEEP, ARCHIVE_CONVERT, FIND_DUPLICATES_ONLY, SCRATCH] = CONFIG_RECIPES;
 
 describe("built-in configuration recipes", () => {
   it("pins every default a recipe relies on", () => {
@@ -74,15 +74,39 @@ describe("built-in configuration recipes", () => {
     });
   });
 
-  it("offers the four cards the Sources screen draws, in order", () => {
+  it("offers the five cards the recipe grid draws, in order", () => {
     expect(CONFIG_RECIPES.map((recipe) => recipe.id)).toEqual([
       "safe_sort",
       "clean_sweep",
       "archive_convert",
+      "find_duplicates_only",
       "scratch",
     ]);
     expect(SAFE_SORT.recommended).toBe(true);
     expect(SCRATCH.outline).toBe(true);
+  });
+
+  it("reaches the deduplicate-only run mode, which no other recipe can", () => {
+    const patch = applyRecipe(base, FIND_DUPLICATES_ONLY);
+
+    expect(patch.run_mode).toBe("deduplicate_only");
+    expect(patch.remove_duplicates).toBe(true);
+    // Junk filtering and conversion are off: this run is only about duplicates.
+    expect(patch.junk_filter_enabled).toBe(false);
+    expect(patch.convert_images).toBe(false);
+    expect(FIND_DUPLICATES_ONLY.irreversible).toBe(false);
+  });
+
+  it("shows as selected once its settings are in force", () => {
+    const applied = { ...base, ...applyRecipe(base, FIND_DUPLICATES_ONLY) } as Config;
+
+    expect(activeRecipeId(applied, CONFIG_RECIPES)).toBe("find_duplicates_only");
+  });
+
+  it("keeps every other recipe organising", () => {
+    for (const recipe of [SAFE_SORT, CLEAN_SWEEP, ARCHIVE_CONVERT]) {
+      expect(applyRecipe(base, recipe).run_mode, recipe.id).toBe("organize");
+    }
   });
 
   it("keeps Safe Sort genuinely reversible", () => {

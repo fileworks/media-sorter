@@ -1,4 +1,15 @@
 export const en = {
+  "recipes.findDuplicatesOnly.label": "Find duplicates only",
+  "recipes.findDuplicatesOnly.description":
+    "Keep your folders exactly as they are and move only duplicates into a review folder.",
+  "recipes.findDuplicatesOnly.consequence":
+    "Nothing is reorganised. Duplicate copies move to _duplicates/ in the destination; everything else stays where it is.",
+  "config.runMode": "Run mode",
+  "config.runMode.help": "What this run is for.",
+  "config.runMode.organize": "Organise into folders",
+  "config.runMode.deduplicate_only": "Only remove duplicates (keep my structure)",
+  "config.runMode.deduplicateNote":
+    "Everything that is not a duplicate stays exactly where it is. The destination is used only for the review folders.",
   "config.keeper.best_quality": "Keep the best quality",
   "config.keeper.best_quality.short": "Keep best",
   "config.keeper.longest_filename": "Keep the longest filename",
@@ -1431,6 +1442,17 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const de: Record<MessageKey, string> = {
+  "recipes.findDuplicatesOnly.label": "Nur Duplikate finden",
+  "recipes.findDuplicatesOnly.description":
+    "Ordnerstruktur bleibt unverändert; nur Duplikate wandern in einen Prüfordner.",
+  "recipes.findDuplicatesOnly.consequence":
+    "Nichts wird umsortiert. Doppelte Kopien wandern nach _duplicates/ im Zielordner, alles andere bleibt liegen.",
+  "config.runMode": "Modus",
+  "config.runMode.help": "Wofür dieser Durchlauf gedacht ist.",
+  "config.runMode.organize": "In Ordner einsortieren",
+  "config.runMode.deduplicate_only": "Nur Duplikate entfernen (Struktur behalten)",
+  "config.runMode.deduplicateNote":
+    "Alles, was kein Duplikat ist, bleibt genau dort liegen. Der Zielordner wird nur für die Prüfordner verwendet.",
   "config.keeper.best_quality": "Beste Qualität behalten",
   "config.keeper.best_quality.short": "Beste behalten",
   "config.keeper.longest_filename": "Längsten Dateinamen behalten",

@@ -64,6 +64,27 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
       subtitle={t("config.group.sort.description")}
     >
       <SettingRow
+        id="setting-run-mode"
+        label={t("config.runMode")}
+        description={
+          config.run_mode === "deduplicate_only"
+            ? t("config.runMode.deduplicateNote")
+            : t("config.runMode.help")
+        }
+      >
+        <Segmented
+          name="run-mode"
+          label={t("config.runMode")}
+          value={config.run_mode}
+          options={[
+            { value: "organize", label: t("config.runMode.organize") },
+            { value: "deduplicate_only", label: t("config.runMode.deduplicate_only") },
+          ]}
+          onChange={(mode) => updateConfig({ run_mode: mode as Config["run_mode"] })}
+        />
+      </SettingRow>
+
+      <SettingRow
         id="setting-transfer"
         label={t("config.copyMove")}
         description={transferDescription}
