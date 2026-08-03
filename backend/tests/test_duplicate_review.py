@@ -489,7 +489,9 @@ class TestBulkScopes:
 
         assert impact.matched_groups == 1
         assert impact.skipped_groups == 1
-        assert "similar groups are excluded" in impact.skipped_reasons[0]
+        assert impact.skipped_reasons[0] == (
+            "sim: a similar group is not resolved by an exact-match policy"
+        )
 
     def test_a_changed_scope_invalidates_the_preview(self) -> None:
         plan = self._many(2)
@@ -713,6 +715,118 @@ class TestGenerationLifecycle:
 
         assert second is not first
         assert second.known_groups == {}
+
+
+class TestBurstStacks:
+    """A burst is a third kind of stack, not a second concept.
+
+    ``/api/review/bursts/*`` still exists and is unreferenced. What matters here
+    is that a burst reaching Review through ``/api/review/groups`` resolves
+    through exactly the same decide and policy routes as an exact or a similar
+    one — otherwise the surface would render a stack whose buttons all 404.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate_plan_cache(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        review_routes._PLANS.clear()
+        monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path)
+
+    @staticmethod
+    def _serve(monkeypatch: pytest.MonkeyPatch, burst: DuplicateGroup) -> None:
+        monkeypatch.setattr(review_routes, "_live_generation", lambda _container: 1)
+        monkeypatch.setattr(review_routes, "_current_groups", lambda _container: [burst])
+
+    @staticmethod
+    def _burst() -> DuplicateGroup:
+        return group(
+            member("frame-1", distance=0, confidence="medium"),
+            member("frame-2", distance=2, confidence="medium", sha256="b" * 64),
+            member("frame-3", distance=3, confidence="medium", sha256="c" * 64),
+            kind="burst",
+            group_id="burst_stack",
+        )
+
+    def test_the_route_offers_burst_as_a_third_kind(self, client: TestClient) -> None:
+        response = client.get("/api/review/groups", params={"kind": "burst"})
+
+        assert response.status_code == 200
+        assert response.json()["kind"] == "burst"
+
+    def test_an_unknown_kind_is_still_refused(self, client: TestClient) -> None:
+        assert client.get("/api/review/groups", params={"kind": "sideways"}).status_code == 422
+
+    def test_a_burst_member_can_be_decided(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, self._burst())
+
+        response = client.post(
+            "/api/review/decide",
+            json={"group_id": "burst_stack", "member_id": "frame-2", "action": "quarantine"},
+        )
+
+        assert response.status_code == 200
+
+    def test_a_bulk_exact_policy_reaches_a_burst_and_declines_it_by_name(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A burst is not bulk-resolved, for the reason a similar group is not.
+
+        A visual match is not proof of identity, so a perceptual stack waits for
+        a person or for the explicitly consented high-confidence rule. What
+        changed is that the refusal now names the kind: it used to tell a burst
+        it was a "similar group".
+        """
+        self._serve(monkeypatch, self._burst())
+
+        preview = client.post(
+            "/api/review/policy/preview",
+            json={
+                "scope": "selected_groups",
+                "group_ids": ["burst_stack"],
+                "policy_id": "largest",
+            },
+        )
+
+        assert preview.status_code == 200
+        assert preview.json()["matched_groups"] == 0
+        assert preview.json()["skipped_reasons"] == [
+            "burst_stack: a burst group is not resolved by an exact-match policy"
+        ]
+
+    def test_an_unrecognised_scope_is_refused_readably_rather_than_500(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, self._burst())
+
+        response = client.post(
+            "/api/review/policy/preview",
+            json={"scope": "everything", "policy_id": "largest"},
+        )
+
+        assert response.status_code == 422
+
+    def test_the_keeper_a_burst_review_chose_reaches_the_run(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._serve(monkeypatch, self._burst())
+        client.post(
+            "/api/review/decide",
+            json={"group_id": "burst_stack", "member_id": "frame-1", "action": "keep"},
+        )
+        client.post(
+            "/api/review/quarantine-all-except",
+            json={"group_id": "burst_stack", "keep_member_ids": ["frame-1"]},
+        )
+
+        plan = review_routes._plan("default", catalog_generation=1)
+        actions = executable_members(plan.snapshot(acknowledge_source_mutations=True))
+
+        # The kept frame is never quarantined; every other frame is.
+        quarantined = {
+            outcome.member_id for _group, outcome in actions if outcome.kind == "quarantine"
+        }
+        assert quarantined == {"frame-2", "frame-3"}
 
 
 class TestPolicyPreviewFailures:

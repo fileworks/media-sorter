@@ -249,7 +249,15 @@ class ReviewPlan:
 
         for group in candidates:
             if group.kind != "exact":
-                skipped.append(f"{group.group_id}: similar groups are excluded from exact policies")
+                # Perceptual stacks — similar and burst alike — are never bulk
+                # resolved: a visual match is not proof of identity, so each one
+                # waits for a person or for the explicitly consented
+                # high-confidence rule. Naming the kind keeps the reason true of
+                # a burst rather than calling every non-exact group "similar".
+                skipped.append(
+                    f"{group.group_id}: a {group.kind} group is not resolved by "
+                    "an exact-match policy"
+                )
                 continue
             mutable = group.mutable_members
             if len(mutable) < 2 and not group.has_protected_member:

@@ -149,7 +149,7 @@ export function toReviewRows(
       const isKeeper = member.member_id === keeperId;
       stackBySource.set(member.observed_path, {
         id: group.group_id,
-        kind: (group.kind as RowStack["kind"]) ?? "exact",
+        kind: group.kind,
         memberId: member.member_id,
         size: group.member_count,
         isKeeper,

@@ -8,7 +8,7 @@ import pytest
 
 from app.services.catalog import MediaCatalog, ObservedFile
 from app.services.catalog_duplicates import CatalogDuplicateIndex
-from app.services.duplicate_grouping import exact_groups, similar_groups
+from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 
 
 @pytest.fixture()
@@ -214,3 +214,128 @@ class TestSimilarGroups:
 
         assert group.anchor_member_id is not None
         assert any(member.member_id == group.anchor_member_id for member in group.members)
+
+
+class TestBurstGroups:
+    """A burst is a third kind of stack, in the same shape as the other two."""
+
+    @staticmethod
+    def _frame(
+        catalog: MediaCatalog,
+        name: str,
+        *,
+        second: int,
+        signature: str,
+        camera: str = "Pixel 9 Pro",
+        sha256: str | None = None,
+    ):
+        return add(
+            catalog,
+            "input",
+            name,
+            sha256=sha256 or f"{name:0<64}"[:64],
+            signature=signature,
+            facts={
+                "kind": "image",
+                "captured_at": f"2025-07-14T18:32:{second:02d}",
+                "camera_model": camera,
+                "width": 4032,
+                "height": 3024,
+                "duration_seconds": None,
+            },
+        )
+
+    def _burst(self, catalog: MediaCatalog, **overrides):
+        options = {
+            "time_window_seconds": 3.0,
+            "max_perceptual_distance": 4,
+            **overrides,
+        }
+        return list(burst_groups(catalog, CatalogDuplicateIndex(catalog), **options))
+
+    def test_frames_seconds_apart_from_one_camera_form_one_stack(
+        self, catalog: MediaCatalog
+    ) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01")
+        self._frame(catalog, "c.jpg", second=2, signature="ff00ff00ff00ff03")
+
+        [group] = self._burst(catalog)
+
+        assert group.kind == "burst"
+        assert group.member_count == 3
+        assert group.anchor_member_id is not None
+        assert "3 frames within 3s" in group.evidence_summary
+        assert "Pixel 9 Pro" in group.evidence_summary
+
+    def test_it_is_the_same_shape_as_an_exact_group(self, catalog: MediaCatalog) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01")
+
+        [group] = self._burst(catalog)
+        payload = group.model_dump(mode="json")
+
+        # The Review surface renders stacks by `kind` alone, so anything a
+        # burst omits here is a field its stack header would render blank.
+        assert set(payload) >= {
+            "group_id",
+            "kind",
+            "member_count",
+            "total_bytes",
+            "members",
+            "evidence_summary",
+        }
+        assert all(member["member_id"] for member in payload["members"])
+
+    def test_a_gap_wider_than_the_window_ends_the_burst(self, catalog: MediaCatalog) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01")
+        self._frame(catalog, "c.jpg", second=40, signature="ff00ff00ff00ff01")
+
+        [group] = self._burst(catalog)
+
+        assert group.member_count == 2
+
+    def test_a_different_camera_ends_the_burst(self, catalog: MediaCatalog) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01", camera="Canon R6")
+
+        assert self._burst(catalog) == []
+
+    def test_frames_that_do_not_look_alike_are_not_a_burst(self, catalog: MediaCatalog) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="0000000000000000")
+        self._frame(catalog, "b.jpg", second=1, signature="ffffffffffffffff")
+
+        assert self._burst(catalog) == []
+
+    def test_byte_identical_frames_belong_to_the_exact_group_instead(
+        self, catalog: MediaCatalog
+    ) -> None:
+        shared = "d" * 64
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00", sha256=shared)
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff00", sha256=shared)
+
+        assert self._burst(catalog) == []
+        assert len(list(exact_groups(catalog, CatalogDuplicateIndex(catalog)))) == 1
+
+    def test_a_file_with_no_capture_time_cannot_be_in_a_burst(self, catalog: MediaCatalog) -> None:
+        add(catalog, "input", "a.jpg", sha256="e" * 64, signature="ff00ff00ff00ff00")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01")
+
+        assert self._burst(catalog) == []
+
+    def test_camera_identity_can_be_waived(self, catalog: MediaCatalog) -> None:
+        self._frame(catalog, "a.jpg", second=0, signature="ff00ff00ff00ff00", camera="")
+        self._frame(catalog, "b.jpg", second=1, signature="ff00ff00ff00ff01", camera="")
+
+        assert self._burst(catalog, require_camera_identity=True) == []
+        assert self._burst(catalog, require_camera_identity=False)[0].member_count == 2
+
+    def test_a_limit_stops_producing_early(self, catalog: MediaCatalog) -> None:
+        # Three pairs, a minute apart, so the runs cannot merge into one.
+        for pair in range(3):
+            self._frame(catalog, f"{pair}a.jpg", second=pair * 20, signature="ff00ff00ff00ff00")
+            self._frame(catalog, f"{pair}b.jpg", second=pair * 20 + 1, signature="ff00ff00ff00ff01")
+
+        assert len(self._burst(catalog)) == 3
+        assert len(self._burst(catalog, limit=2)) == 2

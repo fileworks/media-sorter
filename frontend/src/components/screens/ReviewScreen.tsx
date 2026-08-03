@@ -72,7 +72,7 @@ export function ReviewScreen({
     stackId: string;
   } | null>(null);
 
-  const groups = useReviewGroups();
+  const groups = useReviewGroups(plans, { bursts: config.burst_detection_enabled });
   const surface = useReviewSurface(result, groups.groups, plans, config.duplicate_keeper_policy);
 
   // Execute must acknowledge the counts that will actually happen, so the

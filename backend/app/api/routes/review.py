@@ -17,14 +17,14 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config_fingerprint import config_fingerprint
-from app.core.duplicate_plans import BulkImpact, DecisionAction
+from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction
 from app.core.library_profiles import CatalogPlacement
 from app.core.paths import resolve_app_paths
 from app.services.catalog import MediaCatalog
 from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_location import open_catalog
 from app.services.catalog_views import CursorError, ViewQuery, aggregate, query_page
-from app.services.duplicate_grouping import exact_groups, similar_groups
+from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.keeper_policies import (
     HighConfidenceRule,
     PolicySettings,
@@ -46,6 +46,11 @@ from app.services.review_plan import (
 )
 
 router = APIRouter()
+
+#: The perceptual distance the listing endpoint defaults to. The plan registers
+#: similar groups at the same distance, so a stack a user can see is a stack the
+#: plan has heard of.
+DEFAULT_SIMILAR_DISTANCE = 2
 
 #: Plans live for the life of the process and are persisted on every edit, so a
 #: crash costs nothing a reload cannot restore.
@@ -145,21 +150,55 @@ async def review_outcomes(
 @router.get("/review/groups", response_model=GroupPage)
 async def list_groups(
     container: ContainerDep,
-    kind: str = Query(default="exact", pattern="^(exact|similar)$"),
+    config: ConfigDep,
+    kind: str = Query(default="exact", pattern="^(exact|similar|burst)$"),
     limit: int = Query(default=50, ge=1, le=500),
-    max_distance: int = Query(default=2, ge=0, le=16),
+    max_distance: int = Query(default=DEFAULT_SIMILAR_DISTANCE, ge=0, le=16),
 ) -> GroupPage:
-    """A bounded page of groups; members come with them but the library does not."""
-    return await asyncio.to_thread(_list_groups, container, kind, limit, max_distance)
+    """A bounded page of groups; members come with them but the library does not.
+
+    Three kinds, one shape. A burst is not a second concept with its own
+    endpoints and its own decision vocabulary — it is a stack whose evidence
+    happens to include capture time and camera, and it resolves through the same
+    ``/review/decide`` and ``/review/policy/*`` routes as the other two.
+    """
+    return await asyncio.to_thread(_list_groups, container, config, kind, limit, max_distance)
 
 
-def _list_groups(container: Any, kind: str, limit: int, max_distance: int) -> GroupPage:
+def _list_groups(
+    container: Any,
+    config: Any,
+    kind: str,
+    limit: int,
+    max_distance: int,
+) -> GroupPage:
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
+        generation = catalog.current_generation()
         if kind == "exact":
-            produced = list(exact_groups(catalog, index, limit=limit))
+            produced = list(exact_groups(catalog, index, generation=generation, limit=limit))
+        elif kind == "burst":
+            produced = list(
+                burst_groups(
+                    catalog,
+                    index,
+                    time_window_seconds=config.burst_time_window_seconds,
+                    max_perceptual_distance=config.burst_perceptual_distance,
+                    require_camera_identity=config.burst_require_camera_identity,
+                    generation=generation,
+                    limit=limit,
+                )
+            )
         else:
-            produced = list(similar_groups(catalog, index, max_distance=max_distance, limit=limit))
+            produced = list(
+                similar_groups(
+                    catalog,
+                    index,
+                    max_distance=max_distance,
+                    generation=generation,
+                    limit=limit,
+                )
+            )
     return GroupPage(
         groups=[group.model_dump(mode="json") for group in produced],
         kind=kind,
@@ -235,7 +274,11 @@ class PolicyRequest(BaseModel):
     # does not care never has to restate the user's own preference.
     policy_id: str | None = None
     preferred_roots: list[str] = Field(default_factory=list)
-    scope: str = Field(default="selected_groups")
+    # Typed here rather than as a bare string: an unrecognised scope used to
+    # reach `BulkImpact`, whose own validator rejected it *after* the work had
+    # started, and the caller got a 500 with a traceback instead of a 422
+    # naming the four scopes that exist.
+    scope: BulkScopeId = "selected_groups"
     filter_key: str = ""
 
 
@@ -246,7 +289,7 @@ async def preview_policy(body: PolicyRequest, container: ContainerDep) -> dict[s
     await _ensure_groups(plan, container)
     try:
         impact = plan.preview_bulk(
-            body.scope,  # type: ignore[arg-type]
+            body.scope,
             group_ids=body.group_ids,
             filter_key=body.filter_key,
         )
@@ -469,9 +512,38 @@ def _live_generation(container: Any) -> int:
 
 
 def _current_groups(container: Any) -> list[Any]:
+    """Every stack Review can show, so every one of them can be decided.
+
+    All three kinds are registered, not only the exact ones. A plan that knows
+    a group is what makes ``/review/decide`` and the policy routes work on it;
+    a stack the surface renders but the plan has never heard of answers 404 to
+    every action taken on it.
+    """
+    config = container.config
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
-        return list(exact_groups(catalog, index, generation=catalog.current_generation()))
+        generation = catalog.current_generation()
+        groups = list(exact_groups(catalog, index, generation=generation))
+        groups.extend(
+            similar_groups(
+                catalog,
+                index,
+                max_distance=DEFAULT_SIMILAR_DISTANCE,
+                generation=generation,
+            )
+        )
+        if getattr(config, "burst_detection_enabled", False):
+            groups.extend(
+                burst_groups(
+                    catalog,
+                    index,
+                    time_window_seconds=config.burst_time_window_seconds,
+                    max_perceptual_distance=config.burst_perceptual_distance,
+                    require_camera_identity=config.burst_require_camera_identity,
+                    generation=generation,
+                )
+            )
+        return groups
 
 
 async def _ensure_groups(plan: ReviewPlan, container: Any) -> None:

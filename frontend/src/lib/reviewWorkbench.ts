@@ -8,7 +8,8 @@
  * decides anything, it only draws what these functions already decided.
  */
 
-export type GroupKind = "exact" | "similar";
+/** Three kinds of stack, one shape. Mirrors the backend's `GroupKind`. */
+export type GroupKind = "exact" | "similar" | "burst";
 export type RootRole = "input" | "reference" | "destination";
 export type DecisionAction = "keep" | "quarantine" | "skip" | "replace_keeper" | "keep_additional";
 export type OutcomeKind =

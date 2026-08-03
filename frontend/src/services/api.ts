@@ -318,10 +318,11 @@ export interface CatalogDiagnostics {
 import type {
   BulkImpact as ReviewBulkImpact,
   DuplicateGroup as ReviewGroup,
+  GroupKind,
   GroupPlan as ReviewGroupPlan,
 } from "@/lib/reviewWorkbench";
 
-export type { ReviewGroup, ReviewGroupPlan };
+export type { GroupKind, ReviewGroup, ReviewGroupPlan };
 export type BulkImpactResponse = ReviewBulkImpact;
 
 export interface SimilarRulePreview {
@@ -1381,7 +1382,7 @@ export class MediaSorterApiClient {
   // ── Duplicate review ──────────────────────────────────────────────────────────
 
   async listReviewGroups(
-    kind: "exact" | "similar" = "exact",
+    kind: GroupKind = "exact",
     options: { limit?: number; maxDistance?: number } = {},
   ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
     await this.ensureReady();
