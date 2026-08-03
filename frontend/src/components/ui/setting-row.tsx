@@ -11,9 +11,17 @@
  */
 
 import { Fragment, useId, type ReactNode } from "react";
+import { FiRotateCcw } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { useSettingsDiff } from "@/context/settings-diff-context";
+import { useI18n } from "@/i18n/I18nContext";
+import { configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import { cn } from "@/lib/utils";
+import type { Config } from "@/types/api";
+
+/** The `Config` field a row edits, or the several it edits as one decision. */
+export type SettingField = keyof Config | readonly (keyof Config)[];
 
 interface SettingRowProps {
   label: ReactNode;
@@ -37,6 +45,76 @@ interface SettingRowProps {
    * otherwise crush the label column down to one word per line.
    */
   stacked?: boolean;
+  /**
+   * Which `Config` field(s) this row writes. Declaring it is what lets the row
+   * mark itself as changed from the default and offer a way back; a row that
+   * edits nothing — a stated guarantee, a read-only destination — declares none.
+   */
+  field?: SettingField;
+}
+
+/**
+ * "You changed this, and here is the way back."
+ *
+ * One control, not two: the marker is the revert. A dot that says a setting has
+ * moved but offers no way to move it back is a reproach rather than a tool, and
+ * a separate revert button beside a separate dot would double the visual noise
+ * on every row a user has touched. While the settings are locked by a running
+ * operation the marker stays — the fact is still true — but it stops being a
+ * button, because nothing may be written.
+ */
+function ChangedMarker({ field }: { field: SettingField }) {
+  const { t } = useI18n();
+  const diff = useSettingsDiff();
+  if (!diff) return null;
+
+  const fields: readonly (keyof Config)[] = Array.isArray(field)
+    ? field
+    : [field as keyof Config];
+  const changed = fields.filter((key) => diff.changed.has(key));
+  if (changed.length === 0) return null;
+
+  // With one field the row's own label already names it. Where the row writes
+  // several — "min and max size", "format and quality" — a bare value would not
+  // say which of them moved, so each is named even when only one has.
+  const defaultValue = changed
+    .map((key) =>
+      fields.length === 1
+        ? formatConfigValue(diff.defaults[key])
+        : `${configFieldLabel(key)}: ${formatConfigValue(diff.defaults[key])}`,
+    )
+    .join(" · ");
+
+  const dot = (
+    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+  );
+
+  if (diff.locked) {
+    return (
+      <Tooltip label={t("config.changed.default", { value: defaultValue })}>
+        <span className="inline-flex items-center" aria-label={t("config.changed.marker")}>
+          {dot}
+        </span>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip label={t("config.changed.revert", { value: defaultValue })}>
+      <button
+        type="button"
+        onClick={() => diff.revert(fields)}
+        aria-label={t("config.changed.revert", { value: defaultValue })}
+        className="group/revert inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-primary transition-colors hover:bg-tint-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {dot}
+        <FiRotateCcw
+          className="h-2.5 w-2.5 opacity-0 transition-opacity group-hover/revert:opacity-100 group-focus-visible/revert:opacity-100"
+          aria-hidden
+        />
+      </button>
+    </Tooltip>
+  );
 }
 
 export function SettingRow({
@@ -50,6 +128,7 @@ export function SettingRow({
   disabledReason,
   id,
   stacked = false,
+  field,
 }: SettingRowProps) {
   const Label = htmlFor ? "label" : "div";
   return (
@@ -66,16 +145,22 @@ export function SettingRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <Label
-          {...(htmlFor ? { htmlFor } : {})}
-          className={cn(
-            "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
-            htmlFor && !disabled && "cursor-pointer",
-          )}
-        >
-          {label}
-          {badge}
-        </Label>
+        {/* The marker sits beside the label rather than inside it: a `<label>`
+            forwards every click to its control, so a revert button nested in
+            one would also flip the toggle it is meant to put back. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Label
+            {...(htmlFor ? { htmlFor } : {})}
+            className={cn(
+              "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
+              htmlFor && !disabled && "cursor-pointer",
+            )}
+          >
+            {label}
+            {badge}
+          </Label>
+          {field !== undefined && <ChangedMarker field={field} />}
+        </div>
         {(disabled && disabledReason ? disabledReason : description) && (
           <p className="mt-0.5 text-xs leading-relaxed text-faint">
             {disabled && disabledReason ? disabledReason : description}
@@ -99,8 +184,17 @@ export function SettingRow({
  * above it — the example path, the example filename. Reading an example beats
  * reading a description of one.
  */
-export function SettingPreview({ children }: { children: ReactNode }) {
-  return <div className="border-b border-border bg-muted px-5 py-2.5 text-xs">{children}</div>;
+export function SettingPreview({ children, last = false }: { children: ReactNode; last?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "bg-muted px-5 py-2.5 text-xs",
+        last ? "rounded-b-xl" : "border-b border-border",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**

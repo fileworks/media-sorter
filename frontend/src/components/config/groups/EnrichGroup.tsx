@@ -72,6 +72,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
     >
       <SettingRow
         id="setting-conversion"
+        field={["convert_images", "image_format", "image_quality"]}
         label={t("config.conversion.images")}
         description={t("config.conversion.imagesHelp")}
         htmlFor="convert-images"
@@ -113,6 +114,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field={["convert_videos", "video_format", "video_quality"]}
         label={t("config.conversion.videos")}
         description={t("config.conversion.videosHelp")}
         htmlFor="convert-videos"
@@ -153,6 +155,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-ai"
+        field="ai_tagging_enabled"
         label={t("config.ai.enabled")}
         description={t("config.ai.explanation")}
         htmlFor="ai-enabled"
@@ -215,6 +218,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           )}
 
           <SettingRow
+            field="embed_tags_in_files"
             label={t("config.ai.embed")}
             description={t("config.ai.embedHelp")}
             htmlFor="ai-embed"
@@ -233,7 +237,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           <Disclosure summary={t("config.ai.advanced")}>
             {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
 
-            <SettingRow label={t("config.ai.provider")} htmlFor="ai-provider" stacked last>
+            <SettingRow
+              field="ai_tagging_provider"
+              label={t("config.ai.provider")}
+              htmlFor="ai-provider"
+              stacked
+              last
+            >
               <Select
                 id="ai-provider"
                 value={config.ai_tagging_provider}
@@ -252,6 +262,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
             {config.ai_tagging_provider === "azure_vision" && (
               <>
                 <SettingRow
+                  field="ai_tagging_endpoint"
                   label={t("config.ai.endpoint")}
                   htmlFor="ai-azure-endpoint"
                   stacked
@@ -265,7 +276,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     placeholder={t("config.ai.azureEndpointPlaceholder")}
                   />
                 </SettingRow>
-                <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-azure-key" stacked last>
+                <SettingRow
+                  field="ai_tagging_api_key"
+                  label={t("config.ai.apiKey")}
+                  htmlFor="ai-azure-key"
+                  stacked
+                  last
+                >
                   <BlurCommitInput
                     id="ai-azure-key"
                     type="password"
@@ -279,7 +296,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
             {config.ai_tagging_provider === "imagga" && (
               <>
-                <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-imagga-key" stacked last>
+                <SettingRow
+                  field="ai_tagging_api_key"
+                  label={t("config.ai.apiKey")}
+                  htmlFor="ai-imagga-key"
+                  stacked
+                  last
+                >
                   <BlurCommitInput
                     id="ai-imagga-key"
                     type="password"
@@ -289,6 +312,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                   />
                 </SettingRow>
                 <SettingRow
+                  field="ai_tagging_api_secret"
                   label={t("config.ai.apiSecret")}
                   htmlFor="ai-imagga-secret"
                   stacked
@@ -306,7 +330,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
             )}
 
             {config.ai_tagging_provider === "google_cloud_vision" && (
-              <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-google-key" stacked last>
+              <SettingRow
+                field="ai_tagging_api_key"
+                label={t("config.ai.apiKey")}
+                htmlFor="ai-google-key"
+                stacked
+                last
+              >
                 <BlurCommitInput
                   id="ai-google-key"
                   type="password"
@@ -319,6 +349,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
             {isLocalProvider && !localOff && (
               <SettingRow
+                field={["ai_tagging_labels", "ai_tagging_labels_provenance"]}
                 label={t("config.ai.labels")}
                 description={t("config.ai.labelsHelp")}
                 stacked
@@ -346,7 +377,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
             )}
 
             <div className="grid gap-3.5 sm:grid-cols-2">
-              <SettingRow label={t("config.ai.maxTags")} htmlFor="ai-max-tags" stacked last>
+              <SettingRow
+                field="ai_tagging_max_tags"
+                label={t("config.ai.maxTags")}
+                htmlFor="ai-max-tags"
+                stacked
+                last
+              >
                 <Input
                   id="ai-max-tags"
                   type="number"
@@ -358,7 +395,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                   }
                 />
               </SettingRow>
-              <SettingRow label={t("config.ai.confidence")} htmlFor="ai-confidence" stacked last>
+              <SettingRow
+                field="ai_tagging_confidence_threshold"
+                label={t("config.ai.confidence")}
+                htmlFor="ai-confidence"
+                stacked
+                last
+              >
                 <Input
                   id="ai-confidence"
                   type="number"
@@ -381,6 +424,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       )}
 
       <SettingRow
+        field="categorize_enabled"
         label={t("config.folder.categorize")}
         description={t("config.folder.categorizeHelp")}
         htmlFor="categorize-enabled"
@@ -399,6 +443,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       {config.categorize_enabled && !categorizeBlocked && (
         <Disclosure summary={t("config.folder.advanced")}>
           <SettingRow
+            field={["categorize_categories", "categorize_categories_provenance"]}
             label={t("config.folder.categories")}
             description={t("config.folder.categoriesHelp")}
             stacked
@@ -423,13 +468,24 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
               </button>
             )}
           </SettingRow>
-          <SettingRow label={t("config.folder.confident")} stacked last>
+          <SettingRow
+            field="categorize_confidence_threshold"
+            label={t("config.folder.confident")}
+            stacked
+            last
+          >
             <CategorizeConfidenceSlider
               value={config.categorize_confidence_threshold ?? 0.55}
               onChange={(value) => updateConfig({ categorize_confidence_threshold: value })}
             />
           </SettingRow>
-          <SettingRow label={t("config.folder.margin")} htmlFor="categorize-margin" stacked last>
+          <SettingRow
+            field="categorize_min_margin"
+            label={t("config.folder.margin")}
+            htmlFor="categorize-margin"
+            stacked
+            last
+          >
             <Input
               id="categorize-margin"
               type="number"
@@ -448,6 +504,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-rules"
+        field={["rules_enabled", "rule_set"]}
         label={t("rules.enable")}
         description={t("config.rules.help")}
         htmlFor="rules-enabled"
@@ -468,6 +525,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-maintenance"
+        field="override_metadata"
         label={t("config.other.fixDates")}
         description={t("config.other.fixDatesHelp")}
         htmlFor="override-metadata"
@@ -481,6 +539,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field="repair_enabled"
         label={t("config.other.repair")}
         description={t("config.other.repairHelp")}
         htmlFor="repair-enabled"
@@ -494,6 +553,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field={["thumbnail_cache_enabled", "thumbnail_cache_budget_bytes"]}
         label={t("config.thumbnailCache.label")}
         description={t("config.thumbnailCache.help")}
         htmlFor="thumbnail-cache-enabled"

@@ -8,6 +8,58 @@ export interface ResetRow {
   default: string;
 }
 
+/**
+ * One table: what each setting is now, and what it is about to become.
+ *
+ * Shared by every path that rewrites settings in bulk — reset all, reset a
+ * group, revert one row, and applying a recipe — because a raw list of field
+ * identifiers ("junk_filter_enabled") answers a question nobody asked. The
+ * values are run through the same formatters the settings themselves use.
+ */
+export function SettingChangeTable({
+  rows,
+  afterHeader,
+}: {
+  rows: ResetRow[];
+  /** Header of the third column. "Default" for a reset, "After" for a recipe. */
+  afterHeader?: string;
+}) {
+  const { t } = useI18n();
+
+  if (rows.length === 0) {
+    return <p className="text-xs text-muted-foreground">{t("config.reset.nothingToDo")}</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-xs">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground">
+            <th scope="col" className="py-1.5 pr-3 font-medium">
+              {t("config.reset.setting")}
+            </th>
+            <th scope="col" className="py-1.5 pr-3 font-medium">
+              {t("config.reset.current")}
+            </th>
+            <th scope="col" className="py-1.5 font-medium">
+              {afterHeader ?? t("config.reset.default")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.setting} className="border-b border-border last:border-0">
+              <td className="py-1.5 pr-3 text-foreground">{row.setting}</td>
+              <td className="py-1.5 pr-3 text-muted-foreground">{row.current}</td>
+              <td className="py-1.5 font-medium text-foreground">{row.default}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 interface ResetDialogProps {
   open: boolean;
   title: string;
@@ -21,10 +73,8 @@ interface ResetDialogProps {
  *
  * Reset used to write new values and say nothing about what they replaced, so
  * the only way to find out what a reset had done was to remember what had been
- * there. Every reset path — all settings, one group, one row, and the
- * irreversible-recipe confirmation — renders this same table, and the values
- * are formatted by the same helpers the settings themselves use, never as raw
- * identifiers.
+ * there. Every reset path — all settings, one group and one row — renders this
+ * same table.
  *
  * Settings that would not change are omitted; a reset with nothing to do opens
  * no dialog at all.
@@ -36,36 +86,7 @@ export function ResetDialog({ open, title, rows, onClose, onConfirm }: ResetDial
     <Modal open={open} onClose={onClose} title={title} size="md">
       <ModalHeader />
       <ModalBody>
-        {rows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t("config.reset.nothingToDo")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th scope="col" className="py-1.5 pr-3 font-medium">
-                    {t("config.reset.setting")}
-                  </th>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">
-                    {t("config.reset.current")}
-                  </th>
-                  <th scope="col" className="py-1.5 font-medium">
-                    {t("config.reset.default")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.setting} className="border-b border-border last:border-0">
-                    <td className="py-1.5 pr-3 text-foreground">{row.setting}</td>
-                    <td className="py-1.5 pr-3 text-muted-foreground">{row.current}</td>
-                    <td className="py-1.5 font-medium text-foreground">{row.default}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <SettingChangeTable rows={rows} />
       </ModalBody>
       <ModalFooter>
         <div className="flex w-full justify-end gap-2">

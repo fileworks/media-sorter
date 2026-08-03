@@ -82,6 +82,22 @@ export function formatConfigValue(value: unknown): string {
     if (value.length <= 3) return value.join(", ");
     return `${value.length} items`;
   }
+  // Four config fields are objects — the preservation, optimization and library
+  // profiles, and the rule set. `String(…)` renders every one of them as
+  // "[object Object]", which is worse than saying nothing. Each has one fact
+  // that is the whole point of it: a profile is its mode, a rule set is how
+  // many rules it holds.
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.mode === "string") return humanizeConfigKey(record.mode);
+    const tagRules = Array.isArray(record.tag_rules) ? record.tag_rules.length : null;
+    const routeRules = Array.isArray(record.route_rules) ? record.route_rules.length : null;
+    if (tagRules !== null || routeRules !== null) {
+      const total = (tagRules ?? 0) + (routeRules ?? 0);
+      return total === 0 ? "None" : `${total} rules`;
+    }
+    return "Custom";
+  }
   return String(value);
 }
 

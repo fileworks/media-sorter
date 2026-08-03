@@ -44,6 +44,7 @@ import { useSorting } from "@/hooks/useSorting";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useI18n, type Locale } from "@/i18n/I18nContext";
+import { sampleFiles } from "@/lib/configSummary";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes, formatDuration } from "@/lib/formatters";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
@@ -194,6 +195,14 @@ export default function MainPage() {
   // ── Configuration ──────────────────────────────────────────────────────────
 
   const planExists = analysis.result !== null || preview.result !== null;
+
+  // The Configure previews are drawn with the user's own files once a dry run
+  // has produced any. A scan reports totals but no filenames, so the dry run is
+  // the first moment real names exist.
+  const configureSamples = useMemo(
+    () => sampleFiles(preview.result?.items ?? []),
+    [preview.result?.items],
+  );
 
   const handleConfigSave = useCallback(
     (patch: Partial<Config>) => {
@@ -702,6 +711,7 @@ export default function MainPage() {
                 onApplyConfig={handleRecipeApply}
                 planExists={planExists}
                 onDeleteRecipe={(recipeId: string) => deleteRecipe.mutate(recipeId)}
+                samples={configureSamples}
               />
             );
           }

@@ -1,3 +1,4 @@
+import type { SampleFile } from "@/lib/configSummary";
 import type { Config } from "@/types/api";
 
 export const DEFAULT_AI_LABELS = [
@@ -195,4 +196,10 @@ export interface SectionProps {
   updateConfig: (patch: Partial<Config>) => void;
   /** Server validation errors keyed by config field → user-facing messages. */
   fieldErrors: ReadonlyMap<string, string[]>;
+  /**
+   * Files from the last dry run, so the folder and rename previews are drawn
+   * with the user's own filenames. Falls back to the invented pair before a run
+   * has produced any.
+   */
+  samples: readonly SampleFile[];
 }

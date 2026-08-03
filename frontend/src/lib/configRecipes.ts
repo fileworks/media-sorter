@@ -13,8 +13,6 @@
 import type { Config, SavedRecipe } from "@/types/api";
 import { diffConfig } from "@/lib/configDiff";
 
-export type BuiltInRecipeId = "safe_sort" | "clean_sweep" | "archive_convert" | "scratch";
-
 export interface ConfigRecipe {
   id: string;
   labelKey: string;
@@ -293,6 +291,41 @@ export const RECIPE_SETTING_KEYS = [
 ] as const satisfies readonly (keyof Config)[];
 
 export type RecipeSettingKey = (typeof RECIPE_SETTING_KEYS)[number];
+
+/**
+ * "Blank (defaults)" — every recipe-scoped setting back to what it shipped as.
+ *
+ * Not the same card as **From scratch**, which switches every optional stage
+ * *off*. The factory default has duplicate detection on and a date structure
+ * set; a user who has been experimenting and wants the product's own opinion
+ * back has, until now, had no card that gives it to them.
+ *
+ * Built from the backend's own defaults rather than a mirror in the frontend,
+ * which is why it is a function of them and not a constant: with no defaults
+ * available there is nothing honest to offer, and the caller omits the card.
+ */
+export function blankRecipe(defaults: Partial<Config>): ConfigRecipe {
+  return {
+    id: "blank_defaults",
+    labelKey: "recipes.blank.label",
+    descriptionKey: "recipes.blank.description",
+    consequenceKey: "recipes.blank.consequence",
+    irreversible: false,
+    outline: true,
+    fields: (current) => {
+      const patch: Partial<Config> = {};
+      for (const key of RECIPE_SETTING_KEYS) {
+        if (key in defaults) patch[key] = defaults[key] as never;
+      }
+      // The two profiles are not recipe settings, but every other recipe sets
+      // them, so leaving them alone would make "blank" the one card that can
+      // leave an explicit-mutation posture standing.
+      patch.preservation_profile = defaults.preservation_profile ?? organizeOnly(current);
+      patch.optimization_profile = defaults.optimization_profile ?? disabledOptimization(current);
+      return patch;
+    },
+  };
+}
 
 /**
  * Lift the recipe-relevant slice out of a configuration, ready to persist.

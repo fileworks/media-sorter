@@ -10,6 +10,7 @@
  */
 
 import { renderPattern } from "@/lib/renamePattern";
+import { REVIEW_FOLDER_NAMES } from "@/lib/reviewPlan";
 import type { Config } from "@/types/api";
 
 /** The date every example on the Configure screen is drawn against. */
@@ -61,13 +62,81 @@ export function folderStructureSummary(config: Config, t: Translate): string {
 }
 
 /**
- * The path one example photo would land at under the current settings.
+ * One file from the library, used to make the Configure previews concrete.
  *
- * A worked example is worth more than any amount of prose about folder
- * structure: it is the only form of the answer that cannot be misread.
+ * Drawn from the last dry run where there has been one, so a user reads their
+ * own filenames rather than an invented `IMG_4382.jpg` and has to trust that
+ * the invention behaves like their files do.
  */
-export function examplePath(config: Config, t: Translate, locale = "en"): string {
-  const segments: string[] = [t("config.example.destination")];
+export interface SampleFile {
+  /** Filename stem, without the extension. */
+  stem: string;
+  /** Extension including the dot, exactly as it is on disk — `.JPG`, not `.jpg`. */
+  extension: string;
+  date: Date | null;
+  kind: "IMG" | "VID";
+  /** True when this is the invented example rather than a real file. */
+  invented: boolean;
+}
+
+const IMAGE_EXTENSIONS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".heic",
+  ".heif",
+  ".gif",
+  ".webp",
+  ".tif",
+  ".tiff",
+  ".bmp",
+  ".dng",
+  ".raw",
+  ".cr2",
+  ".nef",
+  ".arw",
+]);
+
+/** The invented pair, used until a dry run has supplied real ones. */
+export const INVENTED_SAMPLES: readonly SampleFile[] = [
+  { stem: "IMG_4382", extension: ".JPG", date: EXAMPLE_MOMENT, kind: "IMG", invented: true },
+  { stem: "VID_0042", extension: ".mp4", date: EXAMPLE_MOMENT, kind: "VID", invented: true },
+];
+
+function splitName(path: string): { stem: string; extension: string } {
+  const base = path.replace(/\\/g, "/").split("/").pop() ?? path;
+  const dot = base.lastIndexOf(".");
+  return dot > 0
+    ? { stem: base.slice(0, dot), extension: base.slice(dot) }
+    : { stem: base, extension: "" };
+}
+
+/**
+ * Real files to draw the previews with, newest first, one video included where
+ * the run has one — the rename preview says something about `TYPE` only if it
+ * has both kinds to say it with.
+ */
+export function sampleFiles(sources: readonly { source: string; extracted_date: string | null }[]): SampleFile[] {
+  const files = sources.map((item) => {
+    const { stem, extension } = splitName(item.source);
+    const parsed = item.extracted_date ? new Date(item.extracted_date) : null;
+    return {
+      stem,
+      extension,
+      date: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+      kind: IMAGE_EXTENSIONS.has(extension.toLowerCase()) ? ("IMG" as const) : ("VID" as const),
+      invented: false,
+    };
+  });
+  const image = files.find((file) => file.kind === "IMG");
+  const video = files.find((file) => file.kind === "VID");
+  const picked = [image, video].filter((file): file is SampleFile => file !== undefined);
+  return picked.length > 0 ? picked : files.slice(0, 2);
+}
+
+/** The folder segments below the destination root, under the current settings. */
+export function exampleSegments(config: Config, t: Translate, locale = "en"): string[] {
+  const segments: string[] = [];
   if (config.sort) {
     const criteria = config.sort_criteria ?? ["year"];
     if (criteria.includes("year")) segments.push(String(EXAMPLE_MOMENT.getFullYear()));
@@ -80,13 +149,137 @@ export function examplePath(config: Config, t: Translate, locale = "en"): string
       segments.push(String(EXAMPLE_MOMENT.getDate()).padStart(2, "0"));
     }
   }
-  if (config.camera_subfolder_enabled) segments.push(t("config.example.camera"));
+  // Categorization and preserved source subfolders are mutually exclusive —
+  // `build_dest_dir` enforces that precedence — and the camera folder sits
+  // innermost, after whichever of the two applied.
   if (config.categorize_enabled) segments.push(t("config.example.category"));
+  else if (config.preserve_subfolders) segments.push(t("config.example.subfolder"));
+  if (config.camera_subfolder_enabled) segments.push(t("config.example.camera"));
+  return segments;
+}
 
-  const filename = config.rename
-    ? renderPattern(config.rename_pattern, EXAMPLE_MOMENT, "IMG_4382", ".jpg", "IMG")
-    : "IMG_4382.jpg";
-  return [...segments, filename].join(" / ");
+// Extensions already in each conversion target, and the extension each target
+// writes. Mirrors `backend/app/services/conversion_service.py`, which is the
+// only thing that decides whether a suffix changes.
+const IMAGE_FORMAT_EXTENSIONS: Record<Config["image_format"], readonly string[]> = {
+  jpeg: [".jpg", ".jpeg", ".jpe", ".jfif"],
+  png: [".png"],
+  webp: [".webp"],
+  tiff: [".tif", ".tiff"],
+};
+const IMAGE_FORMAT_SUFFIX: Record<Config["image_format"], string> = {
+  jpeg: ".jpg",
+  png: ".png",
+  webp: ".webp",
+  tiff: ".tif",
+};
+const VIDEO_FORMAT_SUFFIX: Record<Config["video_format"], string> = {
+  mp4: ".mp4",
+  mkv: ".mkv",
+  mov: ".mov",
+  webm: ".webm",
+  avi: ".avi",
+};
+
+/**
+ * The extension the run would leave a file with.
+ *
+ * Conversion is the only thing that rewrites an extension, and it writes a
+ * lowercase one — which is where a `.JPG` becomes a `.jpg`. A file that is
+ * *not* converted keeps its extension exactly as it is, uppercase and all;
+ * saying otherwise would promise a rename the product does not perform.
+ */
+export function predictedExtension(config: Config, sample: SampleFile): string {
+  const lower = sample.extension.toLowerCase();
+  if (sample.kind === "IMG" && config.convert_images) {
+    return IMAGE_FORMAT_EXTENSIONS[config.image_format].includes(lower)
+      ? sample.extension
+      : IMAGE_FORMAT_SUFFIX[config.image_format];
+  }
+  if (sample.kind === "VID" && config.convert_videos) {
+    return lower === VIDEO_FORMAT_SUFFIX[config.video_format]
+      ? sample.extension
+      : VIDEO_FORMAT_SUFFIX[config.video_format];
+  }
+  return sample.extension;
+}
+
+/** The filename a sample would carry after conversion and rename are applied. */
+export function exampleFilename(config: Config, sample: SampleFile): string {
+  const extension = predictedExtension(config, sample);
+  if (!config.rename) return `${sample.stem}${extension}`;
+  return renderPattern(
+    config.rename_pattern,
+    sample.date ?? EXAMPLE_MOMENT,
+    sample.stem,
+    extension,
+    sample.kind,
+  );
+}
+
+/**
+ * The review folders the current settings can actually produce.
+ *
+ * Two of them are switched on and off by a setting; the rest describe things
+ * that can happen to a *file* — no readable date, a date in the future, a read
+ * that fails — and so are always possible while the run is placing files at
+ * all. In `deduplicate_only` nothing is placed by date, so the date-related
+ * folders and "already in destination" cannot arise.
+ */
+export function possibleReviewFolders(config: Config): string[] {
+  const placing = config.run_mode !== "deduplicate_only";
+  return REVIEW_FOLDER_NAMES.filter((folder) => {
+    if (folder === "_duplicates") return config.remove_duplicates;
+    if (folder === "_junk") return config.junk_filter_enabled;
+    if (folder === "_unknown_dates" || folder === "_future_dates") return placing;
+    if (folder === "_already_in_destination") return placing;
+    return true; // _corrupted and _failed: a file can always defeat a read.
+  });
+}
+
+export interface FolderPreviewNode {
+  name: string;
+  kind: "folder" | "review" | "file";
+  children?: FolderPreviewNode[];
+}
+
+/**
+ * The shape of the destination the current settings would build.
+ *
+ * A worked example beats any amount of prose about folder structure, and a
+ * tree beats a single slash-separated line: the line could not show the review
+ * folders sitting *beside* the date hierarchy rather than inside it, which is
+ * the one thing about the layout that surprises people.
+ *
+ * Returns the children of the destination root; the root itself is the caller's
+ * to name.
+ */
+export function folderPreviewTree(
+  config: Config,
+  t: Translate,
+  locale: string,
+  samples: readonly SampleFile[],
+): FolderPreviewNode[] {
+  const review: FolderPreviewNode[] = possibleReviewFolders(config).map((name) => ({
+    name,
+    kind: "review",
+  }));
+
+  // Nothing is placed in this mode, so there is no hierarchy to draw — only
+  // the folders the run adds beside the library it leaves alone.
+  if (config.run_mode === "deduplicate_only") return review;
+
+  const files: FolderPreviewNode[] = samples.map((sample) => ({
+    name: exampleFilename(config, sample),
+    kind: "file",
+  }));
+
+  const nested = exampleSegments(config, t, locale).reduceRight<FolderPreviewNode[]>(
+    (children, name) => [{ name, kind: "folder", children }],
+    files,
+  );
+
+  return [...nested, ...review];
 }
 
 export function summariesFor(config: Config, t: Translate): Record<string, string> {

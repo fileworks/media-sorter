@@ -22,6 +22,7 @@ import { SECTION_DEFAULTS, type SectionId } from "@/components/config/constants"
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Tooltip } from "@/components/ui/tooltip";
+import { SettingsDiffContext, type SettingsDiffValue } from "@/context/settings-diff-context";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useConfigSections } from "@/hooks/useConfigSections";
@@ -30,7 +31,7 @@ import { useI18n } from "@/i18n/I18nContext";
 import { RecipeGrid } from "@/components/screens/RecipeGrid";
 import { ResetDialog, type ResetRow } from "@/components/config/ResetDialog";
 import { changedKeys, configFieldLabel, formatConfigValue } from "@/lib/configDiff";
-import { summariesFor } from "@/lib/configSummary";
+import { INVENTED_SAMPLES, summariesFor, type SampleFile } from "@/lib/configSummary";
 import { captureRecipeSettings } from "@/lib/configRecipes";
 import { cn } from "@/lib/utils";
 import type { Config, RecipeSettings, SavedRecipe } from "@/types/api";
@@ -47,6 +48,12 @@ interface ConfigureScreenProps {
   onDeleteRecipe: (recipeId: string) => void;
   /** A computed plan exists, so applying a recipe discards it. */
   planExists?: boolean;
+  /**
+   * Files from the last dry run. The folder and rename previews are drawn with
+   * these where there are any, so the examples are the user's own filenames
+   * rather than an invented pair they have to trust behaves like theirs.
+   */
+  samples?: readonly SampleFile[];
 }
 
 const GROUP_BODIES: Record<GroupId, typeof SortGroup> = {
@@ -74,6 +81,7 @@ export function ConfigureScreen({
   onApplyConfig,
   onDeleteRecipe,
   planExists = false,
+  samples,
 }: ConfigureScreenProps) {
   const { t } = useI18n();
   const { config, isLoading, error, fieldErrors, resetConfig } = useConfig();
@@ -152,6 +160,31 @@ export function ConfigureScreen({
       askToReset(t("config.reset.groupTitle", { group: groupLabel }), groupPatch(group));
     },
     [askToReset, groupPatch, t],
+  );
+
+  /**
+   * Put one row's fields back. The same dialog as reset-all and reset-group —
+   * a one-line table rather than a different, smaller confirmation, because
+   * "what would this change?" has one answer shape everywhere on this screen.
+   */
+  const revertFields = useCallback(
+    (fields: readonly (keyof Config)[]) => {
+      if (!defaults) return;
+      const patch: Partial<Config> = {};
+      for (const field of fields) {
+        if (field in defaults) patch[field] = defaults[field] as never;
+      }
+      askToReset(t("config.reset.rowTitle"), patch);
+    },
+    [askToReset, defaults, t],
+  );
+
+  const settingsDiff = useMemo<SettingsDiffValue | null>(
+    () =>
+      changed && defaults
+        ? { changed, defaults, revert: revertFields, locked: disabled }
+        : null,
+    [changed, defaults, revertFields, disabled],
   );
 
   // A server-side validation error can land on a field the user is not looking
@@ -406,20 +439,24 @@ export function ConfigureScreen({
               onDelete={onDeleteRecipe}
               planExists={planExists}
               disabled={disabled}
+              defaults={defaults}
             />
           )}
 
-          {CONFIG_GROUPS.map((group) => {
-            const Body = GROUP_BODIES[group.id];
-            return (
-              <Body
-                key={group.id}
-                config={config}
-                updateConfig={disabled ? () => {} : onSaveConfig}
-                fieldErrors={fieldErrors}
-              />
-            );
-          })}
+          <SettingsDiffContext.Provider value={settingsDiff}>
+            {CONFIG_GROUPS.map((group) => {
+              const Body = GROUP_BODIES[group.id];
+              return (
+                <Body
+                  key={group.id}
+                  config={config}
+                  updateConfig={disabled ? () => {} : onSaveConfig}
+                  fieldErrors={fieldErrors}
+                  samples={samples && samples.length > 0 ? samples : INVENTED_SAMPLES}
+                />
+              );
+            })}
+          </SettingsDiffContext.Provider>
         </div>
       </div>
 

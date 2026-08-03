@@ -7,17 +7,15 @@
  * is re-read and checksummed before it counts as done.
  */
 
-import { FiFolder } from "react-icons/fi";
-
 import { DISK_BYTES_OPTS } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
+import { FolderTreePreview } from "@/components/config/fields/FolderTreePreview";
 import { RenameBuilder } from "@/components/config/fields/RenameBuilder";
 import { Select, SelectItem } from "@/components/ui/select";
-import { Segmented, SettingGroup, SettingPreview, SettingRow } from "@/components/ui/setting-row";
+import { Segmented, SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useDiskSpace } from "@/hooks/useDiskSpace";
 import { useI18n } from "@/i18n/I18nContext";
-import { examplePath } from "@/lib/configSummary";
 import { formatBytes } from "@/lib/formatters";
 import type { Config } from "@/types/api";
 
@@ -34,8 +32,8 @@ function structureKey(criteria: string[]): string {
   return "year";
 }
 
-export function SortGroup({ config, updateConfig }: SectionProps) {
-  const { t, locale } = useI18n();
+export function SortGroup({ config, updateConfig, samples }: SectionProps) {
+  const { t } = useI18n();
   const { diskSpace } = useDiskSpace();
 
   const free = diskSpace?.destination_free_bytes ?? null;
@@ -65,6 +63,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
     >
       <SettingRow
         id="setting-run-mode"
+        field="run_mode"
         label={t("config.runMode")}
         description={
           config.run_mode === "deduplicate_only"
@@ -86,6 +85,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-transfer"
+        field="copy_instead_of_move"
         label={t("config.copyMove")}
         description={transferDescription}
       >
@@ -108,6 +108,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field="preservation_profile"
         label={t("config.transfer.timestamps")}
         description={t("config.transfer.timestampsHelp")}
         htmlFor="preserve-timestamps"
@@ -128,6 +129,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field="companion_handling"
         label={t("config.companions.label")}
         description={t("config.companions.help")}
         htmlFor="companion-handling"
@@ -148,6 +150,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-structure"
+        field={["sort", "sort_criteria"]}
         label={t("config.folder.structure")}
         description={t("config.folder.structureHelp")}
       >
@@ -176,15 +179,8 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
         </Select>
       </SettingRow>
 
-      <SettingPreview>
-        <span className="break-all font-mono text-muted-foreground">
-          <FiFolder className="mr-1.5 inline h-3 w-3 align-[-1px]" aria-hidden />
-          {examplePath(config, t, locale)}
-        </span>
-        <span className="ml-3 text-faint">{t("config.folder.fallbackNote")}</span>
-      </SettingPreview>
-
       <SettingRow
+        field="camera_subfolder_enabled"
         label={t("config.folder.camera")}
         description={t("config.folder.cameraHelp")}
         htmlFor="camera-subfolder"
@@ -198,6 +194,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field="preserve_subfolders"
         label={t("config.folder.preserve")}
         description={t("config.folder.preserveHelp")}
         htmlFor="preserve-subfolders"
@@ -215,10 +212,10 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-naming"
+        field={["rename", "rename_pattern"]}
         label={t("config.rename.enabled")}
         description={t("config.rename.help")}
         htmlFor="rename-files"
-        last={!config.rename}
       >
         <Toggle
           id="rename-files"
@@ -229,13 +226,23 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       {config.rename && (
-        <div className="px-5 py-3.5">
+        <div className="border-b border-border px-5 py-3.5">
           <RenameBuilder
-            configPattern={config.rename_pattern}
+            config={config}
+            samples={samples}
             onCommit={(value) => updateConfig({ rename_pattern: value })}
           />
         </div>
       )}
+
+      {/* Last, below every row that decides it: structure, camera, preserved
+          subfolders and rename all feed this, and a preview above the controls
+          it depends on is a preview of settings the reader has not reached. */}
+      <FolderTreePreview
+        config={config}
+        samples={samples}
+        invented={samples.every((sample) => sample.invented)}
+      />
     </SettingGroup>
   );
 }

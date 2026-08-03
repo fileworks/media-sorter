@@ -11,13 +11,16 @@
 import { useState } from "react";
 import { FiCheck, FiTrash2 } from "react-icons/fi";
 
+import { SettingChangeTable, type ResetRow } from "@/components/config/ResetDialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
+import { configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import {
   CONFIG_RECIPES,
   activeRecipeId,
   applyRecipe,
+  blankRecipe,
   recipeChanges,
   toConfigRecipe,
   type ConfigRecipe,
@@ -33,6 +36,12 @@ interface RecipeGridProps {
   disabled?: boolean;
   /** A computed plan exists, so applying any recipe discards it. */
   planExists?: boolean;
+  /**
+   * The factory defaults, which the **Blank** card restores. Absent while they
+   * are still loading — and then the card is not offered, rather than offered
+   * and doing nothing.
+   */
+  defaults?: Partial<Config>;
 }
 
 export function RecipeGrid({
@@ -42,11 +51,16 @@ export function RecipeGrid({
   onDelete,
   disabled = false,
   planExists = false,
+  defaults,
 }: RecipeGridProps) {
   const { t } = useI18n();
   const [pending, setPending] = useState<ConfigRecipe | null>(null);
 
-  const recipes: ConfigRecipe[] = [...CONFIG_RECIPES, ...savedRecipes.map(toConfigRecipe)];
+  const recipes: ConfigRecipe[] = [
+    ...CONFIG_RECIPES,
+    ...(defaults ? [blankRecipe(defaults)] : []),
+    ...savedRecipes.map(toConfigRecipe),
+  ];
   const selected = activeRecipeId(config, recipes);
 
   const commit = (recipe: ConfigRecipe) => {
@@ -56,6 +70,16 @@ export function RecipeGrid({
 
   // A custom recipe carries its name literally; a built-in carries a message key.
   const nameOf = (recipe: ConfigRecipe) => (recipe.custom ? recipe.labelKey : t(recipe.labelKey));
+
+  // The same before/after table the reset dialog shows, rather than a list of
+  // the field identifiers the recipe happens to be implemented in terms of.
+  const pendingRows: ResetRow[] = pending
+    ? recipeChanges(config, applyRecipe(config, pending)).map((change) => ({
+        setting: configFieldLabel(change.key),
+        current: formatConfigValue(change.before),
+        default: formatConfigValue(change.after),
+      }))
+    : [];
 
   return (
     <section aria-labelledby="recipe-title">
@@ -150,15 +174,9 @@ export function RecipeGrid({
           {planExists && (
             <p className="mt-1 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
           )}
-          <ul className="mt-2 grid gap-x-4 text-3xs text-muted-foreground sm:grid-cols-2">
-            {recipeChanges(config, applyRecipe(config, pending))
-              .slice(0, 8)
-              .map((change) => (
-                <li key={change.key}>
-                  <code className="font-mono">{change.key}</code>
-                </li>
-              ))}
-          </ul>
+          <div className="mt-2.5">
+            <SettingChangeTable rows={pendingRows} afterHeader={t("config.reset.after")} />
+          </div>
           <div className="mt-3 flex gap-2">
             <Button size="sm" onClick={() => commit(pending)}>
               {t("recipes.apply")}

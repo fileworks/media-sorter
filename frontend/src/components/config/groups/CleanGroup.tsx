@@ -39,6 +39,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
     >
       <SettingRow
         id="setting-duplicates"
+        field="remove_duplicates"
         label={t("config.duplicates.detect")}
         description={t("config.duplicates.detectHelp")}
         htmlFor="remove-duplicates"
@@ -54,6 +55,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       {config.remove_duplicates && (
         <>
           <SettingRow
+            field={["duplicate_exact_enabled", "duplicate_perceptual_enabled"]}
             label={t("config.duplicates.matching")}
             description={t("config.duplicates.matchingHelp")}
           >
@@ -76,6 +78,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
           {config.duplicate_perceptual_enabled && (
             <SettingRow
+              field="duplicate_perceptual_threshold"
               label={t("config.duplicates.threshold")}
               description={t("config.duplicates.thresholdHelp")}
             >
@@ -87,6 +90,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           )}
 
           <SettingRow
+            field="duplicate_keeper_policy"
             label={t("config.duplicates.keepRule")}
             description={t("config.duplicates.keepRuleHelp")}
             htmlFor="keeper-policy"
@@ -118,6 +122,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-junk"
+        field="junk_filter_enabled"
         label={t("config.filters.junk")}
         description={t("config.filters.junkHelp")}
         htmlFor="junk-filter"
@@ -133,6 +138,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       {config.junk_filter_enabled && (
         <>
           <SettingRow
+            field="junk_min_file_size_kb"
             label={t("config.filters.junkSize")}
             description={t("config.filters.junkSizeHelp")}
             htmlFor="junk-min-size"
@@ -152,6 +158,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           </SettingRow>
 
           <SettingRow
+            field="junk_min_image_dimension"
             label={t("config.filters.resolution")}
             description={t("config.filters.resolutionHelp")}
             htmlFor="junk-min-dimension"
@@ -174,6 +181,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
           <SettingRow
             stacked
+            field="junk_filename_patterns"
             label={t("config.filters.junkPatterns")}
             description={t("config.filters.junkPatternsHelp")}
           >
@@ -201,6 +209,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       )}
 
       <SettingRow
+        field="burst_detection_enabled"
         label={t("config.bursts.detect")}
         description={t("config.bursts.detectHelp")}
         htmlFor="detect-bursts"
@@ -214,7 +223,11 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       {config.burst_detection_enabled && (
-        <SettingRow label={t("config.bursts.tuning")} description={t("config.bursts.reviewFirst")}>
+        <SettingRow
+          field={["burst_time_window_seconds", "burst_perceptual_distance"]}
+          label={t("config.bursts.tuning")}
+          description={t("config.bursts.reviewFirst")}
+        >
           <Input
             type="number"
             min={0.1}
@@ -245,6 +258,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         id="setting-scan"
+        field="recursive_scan"
         label={t("config.filters.recursive")}
         description={t("config.filters.recursiveHelp")}
         htmlFor="recursive-scan"
@@ -258,6 +272,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field={["min_file_size_kb", "max_file_size_mb"]}
         label={t("config.filters.sizeRange")}
         description={t("config.filters.sizeRangeHelp")}
       >
@@ -292,6 +307,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
       <SettingRow
         stacked
+        field="exclude_patterns"
         label={t("config.filters.exclude")}
         description={t("config.filters.excludeHelp")}
         last

@@ -4,6 +4,7 @@ import {
   CONFIG_RECIPES,
   activeRecipeId,
   applyRecipe,
+  blankRecipe,
   captureRecipeSettings,
   matchesRecipe,
   recipeChanges,
@@ -184,5 +185,38 @@ describe("built-in configuration recipes", () => {
     expect(settings.copy_instead_of_move).toBe(base.copy_instead_of_move);
     expect(settings).not.toHaveProperty("source_directory");
     expect(settings).not.toHaveProperty("ai_tagging_api_key");
+  });
+});
+
+describe("blank (defaults)", () => {
+  const defaults = { ...base, sort: true, remove_duplicates: true, rename: false };
+
+  it("restores the shipped defaults rather than switching everything off", () => {
+    const experimented = { ...base, remove_duplicates: false, rename: true, sort: false } as Config;
+    const patch = applyRecipe(experimented, blankRecipe(defaults));
+
+    expect(patch.remove_duplicates).toBe(true);
+    expect(patch.sort).toBe(true);
+    expect(patch.rename).toBe(false);
+  });
+
+  it("is not the same card as From scratch, which turns duplicate detection off", () => {
+    const scratch = CONFIG_RECIPES.find((recipe) => recipe.id === "scratch");
+    expect(scratch).toBeDefined();
+    expect(applyRecipe(base, scratch!).remove_duplicates).toBe(false);
+    expect(applyRecipe(base, blankRecipe(defaults)).remove_duplicates).toBe(true);
+  });
+
+  it("writes only recipe-scoped fields, never a folder or a credential", () => {
+    const patch = applyRecipe(base, blankRecipe({ ...defaults, source_directory: "/elsewhere" }));
+
+    expect(patch).not.toHaveProperty("source_directory");
+    expect(patch).not.toHaveProperty("ai_tagging_api_key");
+  });
+
+  it("shows as selected once the configuration matches it again", () => {
+    const applied = { ...base, ...applyRecipe(base, blankRecipe(defaults)) };
+
+    expect(matchesRecipe(applied, blankRecipe(defaults))).toBe(true);
   });
 });
