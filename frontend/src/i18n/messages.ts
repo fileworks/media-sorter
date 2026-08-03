@@ -1,4 +1,12 @@
 export const en = {
+  "config.reset.nothingToDo": "Nothing here differs from the defaults.",
+  "config.reset.setting": "Setting",
+  "config.reset.current": "Now",
+  "config.reset.default": "Default",
+  "config.reset.confirm": "Reset {count} settings",
+  "config.reset.groupTitle": "Reset {group} to defaults",
+  "config.reset.allTitle": "Reset all settings to defaults",
+  "report.startNewRun": "Start a new run",
   "review.items": "Files in this plan",
   "review.showing": "Showing {visible} of {total} files",
   "review.selected": "{count} selected",
@@ -1461,6 +1469,14 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const de: Record<MessageKey, string> = {
+  "config.reset.nothingToDo": "Hier weicht nichts von den Standardwerten ab.",
+  "config.reset.setting": "Einstellung",
+  "config.reset.current": "Jetzt",
+  "config.reset.default": "Standard",
+  "config.reset.confirm": "{count} Einstellungen zurücksetzen",
+  "config.reset.groupTitle": "{group} auf Standardwerte zurücksetzen",
+  "config.reset.allTitle": "Alle Einstellungen auf Standardwerte zurücksetzen",
+  "report.startNewRun": "Neuen Durchlauf starten",
   "review.items": "Dateien in diesem Plan",
   "review.showing": "{visible} von {total} Dateien",
   "review.selected": "{count} ausgewählt",

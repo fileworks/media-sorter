@@ -25,7 +25,6 @@ import {
 } from "react-icons/fi";
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
-import { RecipeGrid } from "@/components/screens/RecipeGrid";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -43,7 +42,7 @@ import {
   type RootCard,
   type RootRole,
 } from "@/lib/sourcesStage";
-import type { AnalysisResult, Config, SavedRecipe } from "@/types/api";
+import type { AnalysisResult, Config } from "@/types/api";
 
 const ROLE_BADGE: Record<RootRole, string> = {
   input: "bg-tint-primary text-primary",
@@ -58,7 +57,6 @@ interface SourcesScreenProps {
   excludedForRun: string[];
   analysis: AnalysisResult | null;
   config: Config;
-  savedRecipes: SavedRecipe[];
   disabled?: boolean;
   onChange: (cards: RootCard[]) => void;
   onExcludeForRun: (excluded: string[]) => void;
@@ -66,10 +64,6 @@ interface SourcesScreenProps {
   onChangeFolder: (rootId: string) => void;
   onRemove: (rootId: string) => void;
   onRemap?: (rootId: string) => void;
-  onApplyConfig: (patch: Partial<Config>) => void;
-  /** A computed plan exists, so applying a recipe discards it. */
-  planExists?: boolean;
-  onDeleteRecipe: (recipeId: string) => void;
 }
 
 /** The two or three lines of figures under a card's path. */
@@ -302,7 +296,6 @@ export function SourcesScreen({
   excludedForRun,
   analysis,
   config,
-  savedRecipes,
   disabled = false,
   onChange,
   onExcludeForRun,
@@ -310,9 +303,6 @@ export function SourcesScreen({
   onChangeFolder,
   onRemove,
   onRemap,
-  onApplyConfig,
-  planExists = false,
-  onDeleteRecipe,
 }: SourcesScreenProps) {
   const { t, locale } = useI18n();
   const [pendingRole, setPendingRole] = useState<{ rootId: string; role: RootRole } | null>(null);
@@ -552,15 +542,6 @@ export function SourcesScreen({
           </div>
         )}
       </div>
-
-      <RecipeGrid
-        config={config}
-        savedRecipes={savedRecipes}
-        onApply={onApplyConfig}
-        planExists={planExists}
-        onDelete={onDeleteRecipe}
-        disabled={disabled}
-      />
     </div>
   );
 }

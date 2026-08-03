@@ -364,7 +364,13 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
 
   it("covers the configuration surface, rail and all three groups", async () => {
     const rendered = renderWithProviders(
-      <ConfigureScreen onSaveConfig={() => undefined} onSaveRecipe={async () => undefined} />,
+      <ConfigureScreen
+        onSaveConfig={() => undefined}
+        onSaveRecipe={async () => undefined}
+        savedRecipes={[]}
+        onApplyConfig={() => undefined}
+        onDeleteRecipe={() => undefined}
+      />,
       locale,
     );
 

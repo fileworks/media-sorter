@@ -27,11 +27,13 @@ import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useConfigSections } from "@/hooks/useConfigSections";
 import { useScrollSpy } from "@/hooks/useScrollSpy";
 import { useI18n } from "@/i18n/I18nContext";
-import { changedKeys } from "@/lib/configDiff";
+import { RecipeGrid } from "@/components/screens/RecipeGrid";
+import { ResetDialog, type ResetRow } from "@/components/config/ResetDialog";
+import { changedKeys, configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import { summariesFor } from "@/lib/configSummary";
 import { captureRecipeSettings } from "@/lib/configRecipes";
 import { cn } from "@/lib/utils";
-import type { Config, RecipeSettings } from "@/types/api";
+import type { Config, RecipeSettings, SavedRecipe } from "@/types/api";
 
 interface ConfigureScreenProps {
   /** Settings are locked while an operation is running. */
@@ -40,6 +42,11 @@ interface ConfigureScreenProps {
   onSaveRecipe: (name: string, settings: RecipeSettings) => Promise<void>;
   /** Bumped by the caller to remount the bodies after a discarded edit. */
   bodyKey?: number;
+  savedRecipes: SavedRecipe[];
+  onApplyConfig: (patch: Partial<Config>) => void;
+  onDeleteRecipe: (recipeId: string) => void;
+  /** A computed plan exists, so applying a recipe discards it. */
+  planExists?: boolean;
 }
 
 const GROUP_BODIES: Record<GroupId, typeof SortGroup> = {
@@ -63,6 +70,10 @@ export function ConfigureScreen({
   onSaveConfig,
   onSaveRecipe,
   bodyKey = 0,
+  savedRecipes,
+  onApplyConfig,
+  onDeleteRecipe,
+  planExists = false,
 }: ConfigureScreenProps) {
   const { t } = useI18n();
   const { config, isLoading, error, fieldErrors, resetConfig } = useConfig();
@@ -74,6 +85,11 @@ export function ConfigureScreen({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const summaries = useMemo(() => (config ? summariesFor(config, t) : {}), [config, t]);
+  const [pendingReset, setPendingReset] = useState<{
+    title: string;
+    rows: ResetRow[];
+    patch: Partial<Config>;
+  } | null>(null);
 
   // "Deviates from the factory default" is answered by the backend's own
   // defaults, never by a mirror in the frontend that would silently drift.
@@ -88,8 +104,8 @@ export function ConfigureScreen({
     [sectionMeta],
   );
 
-  const resetGroup = useCallback(
-    (group: GroupId) => {
+  const groupPatch = useCallback(
+    (group: GroupId): Partial<Config> => {
       const sections = CONFIG_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
       const patch: Partial<Config> = {};
       for (const section of sections) {
@@ -102,9 +118,40 @@ export function ConfigureScreen({
           Object.assign(patch, SECTION_DEFAULTS[section]);
         }
       }
-      onSaveConfig(patch);
+      return patch;
     },
-    [defaults, onSaveConfig, sectionFields],
+    [defaults, sectionFields],
+  );
+
+  /**
+   * A reset states what it would change before changing it.
+   *
+   * Only settings that would actually move are listed, and the values are run
+   * through the same formatters the settings use — never a raw identifier.
+   */
+  const askToReset = useCallback(
+    (title: string, patch: Partial<Config>) => {
+      if (!config) return;
+      const rows: ResetRow[] = (Object.keys(patch) as (keyof Config)[])
+        .filter((key) => JSON.stringify(config[key]) !== JSON.stringify(patch[key]))
+        .map((key) => ({
+          setting: configFieldLabel(key),
+          current: formatConfigValue(config[key]),
+          default: formatConfigValue(patch[key]),
+        }))
+        .sort((a, b) => a.setting.localeCompare(b.setting));
+      if (rows.length === 0) return;
+      setPendingReset({ title, rows, patch });
+    },
+    [config],
+  );
+
+  const resetGroup = useCallback(
+    (group: GroupId) => {
+      const groupLabel = t(`config.group.${group}.label`);
+      askToReset(t("config.reset.groupTitle", { group: groupLabel }), groupPatch(group));
+    },
+    [askToReset, groupPatch, t],
   );
 
   // A server-side validation error can land on a field the user is not looking
@@ -349,6 +396,19 @@ export function ConfigureScreen({
           className={cn("min-w-0 space-y-4 pb-[55dvh]", disabled && "select-none opacity-60")}
           inert={disabled}
         >
+          {config && (
+            // The recipes live here now, above the settings they write, rather
+            // than on Sources where they were nowhere near their effect.
+            <RecipeGrid
+              config={config}
+              savedRecipes={savedRecipes}
+              onApply={onApplyConfig}
+              onDelete={onDeleteRecipe}
+              planExists={planExists}
+              disabled={disabled}
+            />
+          )}
+
           {CONFIG_GROUPS.map((group) => {
             const Body = GROUP_BODIES[group.id];
             return (
@@ -362,6 +422,17 @@ export function ConfigureScreen({
           })}
         </div>
       </div>
+
+      <ResetDialog
+        open={pendingReset !== null}
+        title={pendingReset?.title ?? ""}
+        rows={pendingReset?.rows ?? []}
+        onClose={() => setPendingReset(null)}
+        onConfirm={() => {
+          if (pendingReset) onSaveConfig(pendingReset.patch);
+          setPendingReset(null);
+        }}
+      />
     </div>
   );
 }

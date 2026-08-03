@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useReportHistory } from "@/hooks/useReportHistory";
 import { useToast } from "@/context/toast-context";
 import { api } from "@/services/api";
@@ -59,22 +59,22 @@ function ClearHistoryButton() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const [clearing, setClearing] = useState(false);
 
-  const handleClear = async () => {
-    setClearing(true);
-    try {
-      await api.clearHistory();
+  // The last two direct API calls in the app. As mutations they get a pending
+  // state, an error surface and cache invalidation like everything else.
+  const clearHistory = useMutation({
+    mutationFn: () => api.clearHistory(),
+    onSuccess: async () => {
       // Invalidate all report-related queries so the list refreshes immediately
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast(t("history.cleared"), "success");
-    } catch {
-      toast(t("history.clearFailed"), "error");
-    } finally {
-      setClearing(false);
-      setConfirming(false);
-    }
-  };
+    },
+    onError: () => toast(t("history.clearFailed"), "error"),
+    onSettled: () => setConfirming(false),
+  });
+  const clearing = clearHistory.isPending;
+
+  const handleClear = () => clearHistory.mutate();
 
   if (confirming) {
     return (
@@ -125,7 +125,6 @@ export function HistoryPanel() {
   const { toast } = useToast();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
-  const [exportingId, setExportingId] = useState<string | null>(null);
   const [modalId, setModalId] = useState<string | null>(null);
 
   const { operations, total, isLoading } = useReportHistory(PAGE_SIZE, page * PAGE_SIZE);
@@ -140,19 +139,18 @@ export function HistoryPanel() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleExport = async (operationId: string) => {
-    setExportingId(operationId);
-    try {
+  // Exporting reads; it changes nothing, so it is not confirmed.
+  const exportReport = useMutation({
+    mutationFn: async (operationId: string) => {
       const blob = await api.exportReport(operationId, "csv");
       const filename = `mediasort_${operationId}_${new Date().toISOString().slice(0, 10)}.csv`;
       await triggerDownload(blob, filename);
-      toast(t("history.exported"), "success");
-    } catch {
-      toast(t("history.exportFailed"), "error");
-    } finally {
-      setExportingId(null);
-    }
-  };
+    },
+    onSuccess: () => toast(t("history.exported"), "success"),
+    onError: () => toast(t("history.exportFailed"), "error"),
+  });
+
+  const handleExport = (operationId: string) => exportReport.mutate(operationId);
 
   // ── Loading skeleton ────────────────────────────────────────────────────────
   if (isLoading) {
@@ -240,10 +238,12 @@ export function HistoryPanel() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={exportingId === op.id}
+                    disabled={exportReport.isPending && exportReport.variables === op.id}
                     onClick={() => void handleExport(op.id)}
                   >
-                    {exportingId === op.id ? "…" : t("history.export")}
+                    {exportReport.isPending && exportReport.variables === op.id
+                      ? "…"
+                      : t("history.export")}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setModalId(op.id)}>
                     {t("history.view")}

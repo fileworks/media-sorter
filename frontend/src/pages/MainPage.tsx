@@ -377,6 +377,28 @@ export default function MainPage() {
     if (cancellableOperation === "sort") await sorting.cancelSorting();
   };
 
+  /**
+   * Put the application back at Sources, ready for a second run.
+   *
+   * Clears everything scoped to the finished run — the report, the analysis,
+   * the preview and Review's decisions — and leaves configuration alone. A
+   * fresh run therefore requires a fresh preview, which is what the stage gates
+   * already enforce once the plan is gone.
+   */
+  const startNewRun = useCallback(() => {
+    sorting.clearReport();
+    analysis.clear();
+    preview.clear();
+    setExcludedForRun([]);
+    setRunDecisions({
+      excludedSources: [],
+      excludedTally: { transfers: 0, quarantine: 0, bytes: 0 },
+    });
+    setImpactAcknowledged(false);
+    setStage("sources");
+    setBodyKey((key) => key + 1);
+  }, [analysis, preview, sorting]);
+
   const startRun = useCallback(() => {
     void sorting.startSorting(
       false,
@@ -655,16 +677,12 @@ export default function MainPage() {
                 excludedForRun={excludedForRun}
                 analysis={analysis.result}
                 config={config}
-                savedRecipes={savedRecipes}
                 disabled={isAnyRunning}
                 onChange={handleRootsChange}
                 onExcludeForRun={setExcludedForRun}
                 onAddFolder={(role) => void requestFolder({ kind: "add", role })}
                 onChangeFolder={(rootId) => void requestFolder({ kind: "change", rootId })}
                 onRemove={removeFolder}
-                onApplyConfig={handleRecipeApply}
-                planExists={planExists}
-                onDeleteRecipe={(recipeId) => deleteRecipe.mutate(recipeId)}
               />
             ) : (
               <StateView variant="loading" layout="page" title={t("state.loading")} />
@@ -680,6 +698,10 @@ export default function MainPage() {
                 onSaveRecipe={async (name, settings) => {
                   await saveRecipe.mutateAsync({ name, settings });
                 }}
+                savedRecipes={savedRecipes}
+                onApplyConfig={handleRecipeApply}
+                planExists={planExists}
+                onDeleteRecipe={(recipeId: string) => deleteRecipe.mutate(recipeId)}
               />
             );
           }
@@ -735,7 +757,7 @@ export default function MainPage() {
               <Suspense
                 fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
               >
-                <FinishedRun report={sorting.report} />
+                <FinishedRun report={sorting.report} onStartNewRun={startNewRun} />
               </Suspense>
             );
           }
@@ -832,7 +854,13 @@ export default function MainPage() {
 }
 
 /** The run is over: the celebration, then the report it produced. */
-function FinishedRun({ report }: { report: OperationReport }) {
+function FinishedRun({
+  report,
+  onStartNewRun,
+}: {
+  report: OperationReport;
+  onStartNewRun: () => void;
+}) {
   const { t, locale } = useI18n();
   return (
     <div className="space-y-4">
@@ -854,6 +882,11 @@ function FinishedRun({ report }: { report: OperationReport }) {
         </p>
       </div>
       <ReportPanel report={report} />
+      {/* A finished run used to be a dead end: `clearReport()` existed and
+          nothing called it, so the only way to run again was to reload. */}
+      <div className="flex justify-center">
+        <Button onClick={onStartNewRun}>{t("report.startNewRun")}</Button>
+      </div>
     </div>
   );
 }
