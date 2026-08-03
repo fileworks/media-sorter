@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+import { api } from "@/services/api";
+
 type QueueEntry = {
   key: string;
   url: string;
@@ -93,7 +95,9 @@ export class ThumbnailRequestQueue {
   }
 }
 
-const queue = new ThumbnailRequestQueue();
+// The live queue authenticates; the class keeps a plain `fetch` default so the
+// unit tests can drive it with a stub.
+const queue = new ThumbnailRequestQueue(6, api.mediaFetch);
 const negativeUntil = new Map<string, number>();
 let listenersInstalled = false;
 let requestSequence = 0;
@@ -158,6 +162,61 @@ export function useQueuedThumbnail(
       if (created) URL.revokeObjectURL(created);
     };
   }, [elementRef, url]);
+
+  return { objectUrl, loading: state === "loading", errored: state === "error" };
+}
+
+/**
+ * One media URL as an object URL, fetched with the API capability attached.
+ *
+ * For the single large images — the preview hero, a difference map, the
+ * lightbox — which are always on screen when they exist and so need neither
+ * the viewport queue nor its prioritisation, but do need the header that an
+ * `<img src>` cannot send.
+ */
+export function useAuthorizedMedia(url: string | null): {
+  objectUrl: string | null;
+  loading: boolean;
+  errored: boolean;
+} {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+
+  useEffect(() => {
+    if (!url) {
+      setObjectUrl(null);
+      setState("error");
+      return;
+    }
+    let cancelled = false;
+    let created: string | null = null;
+    const controller = new AbortController();
+    setObjectUrl(null);
+    setState("loading");
+
+    void api
+      .mediaFetch(url, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`media HTTP ${response.status}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        created = URL.createObjectURL(blob);
+        setObjectUrl(created);
+        setState("loaded");
+      })
+      .catch((error: unknown) => {
+        if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
+        setState("error");
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [url]);
 
   return { objectUrl, loading: state === "loading", errored: state === "error" };
 }

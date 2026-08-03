@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
+import { useViewportBudget } from "@/hooks/useViewportBudget";
+import { Select, SelectItem } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { copyPath as copyPathToClipboard } from "@/lib/reveal";
 import type { PreviewItem } from "@/types/api";
 import { type FlatRow, buildFlatRows } from "@/lib/previewRows";
@@ -31,7 +34,9 @@ import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT = 36;
-const MAX_CONTAINER_HEIGHT = 520;
+/* The list fills the window rather than a fixed box: see `useViewportBudget`. */
+const LIST_CHROME = 320;
+const LIST_MIN_HEIGHT = 240;
 const EMPTY_HEIGHT = 96;
 
 export type ColWidths = { name: number; source: number; date: number };
@@ -382,9 +387,18 @@ const FileRow: FC<{
           : {})}
       >
         <span className="shrink-0" style={{ width: spacerW }} aria-hidden />
-        <span className={cn("w-4 shrink-0 text-center font-bold", iconColor)} title={statusTooltip}>
-          {icon}
-        </span>
+        <Tooltip label={statusTooltip}>
+          <span
+            tabIndex={0}
+            aria-label={statusTooltip}
+            className={cn(
+              "w-4 shrink-0 cursor-help text-center font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              iconColor,
+            )}
+          >
+            {icon}
+          </span>
+        </Tooltip>
         <div className="min-w-0 shrink-0 overflow-hidden" style={{ width: nameW }}>
           <MediaHoverCard
             path={item.source}
@@ -395,14 +409,18 @@ const FileRow: FC<{
             <span className="flex min-w-0 items-center gap-1">
               <span className="truncate text-foreground">{basename}</span>
               {(item.companions?.length ?? 0) > 0 && (
-                <span
-                  className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-3xs font-medium text-info"
-                  title={t("preview.unitMembers", {
+                <Tooltip
+                  label={t("preview.unitMembers", {
                     count: ((item.companions?.length ?? 0) + 1).toLocaleString(locale),
                   })}
                 >
-                  +{item.companions!.length}
-                </span>
+                  <span
+                    tabIndex={0}
+                    className="shrink-0 cursor-help rounded-full bg-info/10 px-1.5 py-0.5 text-3xs font-medium text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    +{item.companions!.length}
+                  </span>
+                </Tooltip>
               )}
             </span>
           </MediaHoverCard>
@@ -427,34 +445,42 @@ const FileRow: FC<{
           !isDuplicate &&
           item.status === "sort" &&
           (item.category ? (
-            <span
-              className="shrink-0 rounded-full bg-category/10 px-1.5 py-0.5 text-3xs font-medium text-category"
-              title={t("preview.category", { name: item.category })}
-            >
-              {item.category}
-            </span>
+            <Tooltip label={t("preview.category", { name: item.category })}>
+              <span
+                tabIndex={0}
+                className="shrink-0 cursor-help rounded-full bg-category/10 px-1.5 py-0.5 text-3xs font-medium text-category focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {item.category}
+              </span>
+            </Tooltip>
           ) : (
-            <span
-              className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-3xs font-medium text-muted-foreground"
-              title={t("preview.noConfidentCategory")}
-            >
-              _uncategorized
-            </span>
+            <Tooltip label={t("preview.noConfidentCategory")}>
+              <span
+                tabIndex={0}
+                className="shrink-0 cursor-help rounded-full bg-muted px-1.5 py-0.5 text-3xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                _uncategorized
+              </span>
+            </Tooltip>
           ))}
         {(item.status === "duplicate" || item.status === "already_in_destination") &&
           item.duplicate_type && (
-            <span
-              className="ml-2 shrink-0 rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info"
-              title={
+            <Tooltip
+              label={
                 item.duplicate_of
                   ? t("preview.duplicateOf", { path: item.duplicate_of })
-                  : undefined
+                  : t(`preview.${item.duplicate_type === "exact" ? "exact" : "legendDuplicate"}`)
               }
             >
-              {item.duplicate_type === "exact"
-                ? t("preview.exact")
-                : `~${item.duplicate_similarity ?? 0}%`}
-            </span>
+              <span
+                tabIndex={0}
+                className="ml-2 shrink-0 cursor-help rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {item.duplicate_type === "exact"
+                  ? t("preview.exact")
+                  : `~${item.duplicate_similarity ?? 0}%`}
+              </span>
+            </Tooltip>
           )}
         {item.status !== "duplicate" && (item.tags ?? []).length > 0 && (
           <div
@@ -811,10 +837,11 @@ export function PreviewList({
     () => buildFlatRows(items, expanded, sortCriteria, categorizeEnabled),
     [items, expanded, sortCriteria, categorizeEnabled],
   );
+  const maxHeight = useViewportBudget({ reserved: LIST_CHROME, min: LIST_MIN_HEIGHT });
   const windowing = useVirtualWindow({
     count: flatRows.length,
     estimateSize: ITEM_HEIGHT,
-    maxHeight: MAX_CONTAINER_HEIGHT,
+    maxHeight,
     emptyHeight: EMPTY_HEIGHT,
     overscan: 20,
     anchorKey: flatRows[0] ? getRowKey(flatRows[0], 0) : null,
@@ -877,28 +904,33 @@ export function PreviewList({
         <span className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("preview.sort")}
         </span>
-        <select
+        <Select
+          size="sm"
           value={sortBy}
-          onChange={(e) => onSortByChange(e.target.value)}
-          className="h-6 flex-none rounded border border-input bg-background px-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+          aria-label={t("preview.sort")}
+          onValueChange={onSortByChange}
         >
           {SORT_OPTIONS.map((key) => (
-            <option key={key} value={key}>
+            <SelectItem key={key} value={key}>
               {t(`preview.sort.${key}`)}
-            </option>
+            </SelectItem>
           ))}
-        </select>
-        <button
-          onClick={onSortDirToggle}
-          className="flex h-6 w-6 items-center justify-center rounded border border-input bg-background text-xs text-foreground transition-colors hover:bg-muted/70"
-          title={sortDir === "asc" ? t("preview.sortAscending") : t("preview.sortDescending")}
+        </Select>
+        <Tooltip
+          label={sortDir === "asc" ? t("preview.sortAscending") : t("preview.sortDescending")}
         >
-          {sortDir === "asc" ? (
-            <FiArrowUp className="h-3 w-3" />
-          ) : (
-            <FiArrowDown className="h-3 w-3" />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={onSortDirToggle}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-input bg-background text-foreground transition-colors hover:border-faint hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {sortDir === "asc" ? (
+              <FiArrowUp className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <FiArrowDown className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Sticky breadcrumb */}
@@ -914,7 +946,7 @@ export function PreviewList({
         ref={windowing.scrollRef}
         style={{
           height: windowing.containerHeight,
-          overflowY: windowing.totalSize > MAX_CONTAINER_HEIGHT ? "auto" : "hidden",
+          overflowY: windowing.totalSize > maxHeight ? "auto" : "hidden",
         }}
         onScroll={windowing.onScroll}
       >

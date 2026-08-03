@@ -31,6 +31,8 @@ import {
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RecipeGrid } from "@/components/screens/RecipeGrid";
+import { Select, SelectItem } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -251,21 +253,19 @@ function FolderCard({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <label className="inline-flex items-center">
-          <span className="sr-only">{t("sources.roleFor", { path: card.path })}</span>
-          <select
-            value={card.role}
-            disabled={disabled}
-            onChange={(event) => onRole(event.target.value as RootRole)}
-            className="cursor-pointer rounded-lg border border-border bg-transparent py-1.5 pl-2 pr-6 text-3xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          >
-            {ROLES.map((role) => (
-              <option key={role} value={role}>
-                {t(`sources.useAs.${role}`, undefined, `Use as ${ROLE_LABEL[role]}`)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          size="sm"
+          value={card.role}
+          disabled={disabled}
+          aria-label={t("sources.roleFor", { path: card.path })}
+          onValueChange={(value) => onRole(value as RootRole)}
+        >
+          {ROLES.map((role) => (
+            <SelectItem key={role} value={role}>
+              {t(`sources.useAs.${role}`, undefined, `Use as ${ROLE_LABEL[role]}`)}
+            </SelectItem>
+          ))}
+        </Select>
 
         <span className="flex-1" />
 
@@ -316,16 +316,16 @@ function IconButton({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-lg text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <Icon className="h-3.5 w-3.5" aria-hidden />
-    </button>
+    <Tooltip label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </Tooltip>
   );
 }
 

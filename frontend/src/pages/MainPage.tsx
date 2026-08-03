@@ -17,6 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiArrowLeft } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FolderPathDialog } from "@/components/FolderPathDialog";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { PreviewProgressCard } from "@/components/PreviewProgressCard";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
@@ -28,6 +29,7 @@ import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { ReviewScreen } from "@/components/screens/ReviewScreen";
+import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RunLog } from "@/components/screens/RunLog";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,7 @@ import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes, formatDuration } from "@/lib/formatters";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
 import { blockingConflicts, validateRoots } from "@/lib/sourcesStage";
-import type { StageState, View } from "@/lib/stageModel";
+import type { StageInputs, StageKey, StageState, View } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { api } from "@/services/api";
@@ -57,6 +59,9 @@ const HistoryPanel = lazy(() =>
 const ReportPanel = lazy(() =>
   import("@/components/ReportPanel").then((module) => ({ default: module.ReportPanel })),
 );
+
+/** What a folder request is for: a new root in a role, or an existing one. */
+type FolderTarget = { kind: "add"; role: RootRole } | { kind: "change"; rootId: string };
 
 /** The library profile's roots, presented as the cards the Sources screen draws. */
 function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: number): RootCard[] {
@@ -122,6 +127,7 @@ export default function MainPage() {
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
   const [stage, setStage] = useState<StageState["stage"]>("sources");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
+  const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
 
   const analysis = useAnalysis();
   const preview = usePreview();
@@ -213,31 +219,22 @@ export default function MainPage() {
     [config, handleConfigSave],
   );
 
-  /** Ask the OS for a folder. Outside Tauri there is no picker to ask. */
-  const pickFolder = useCallback(async (): Promise<string | null> => {
-    if (!isTauri) {
-      toast(t("sources.pickerUnavailable"), "warning");
-      return null;
-    }
-    try {
-      const { open } = await import("@tauri-apps/api/dialog");
-      const selected = await open({ directory: true, multiple: false });
-      return typeof selected === "string" ? selected : null;
-    } catch {
-      toast(t("sources.folderPickerFailed"), "error");
-      return null;
-    }
-  }, [t, toast]);
-
-  const addFolder = useCallback(
-    async (role: RootRole) => {
-      const path = await pickFolder();
-      if (!path) return;
+  /** Where a chosen path lands: appended as a new root, or replacing one. */
+  const applyFolder = useCallback(
+    (target: FolderTarget, path: string) => {
+      if (target.kind === "change") {
+        handleRootsChange(
+          cards.map((card) =>
+            card.rootId === target.rootId ? { ...card, path, volume: null } : card,
+          ),
+        );
+        return;
+      }
       handleRootsChange([
         ...cards,
         {
-          rootId: `${role}-${Date.now()}`,
-          role,
+          rootId: `${target.role}-${Date.now()}`,
+          role: target.role,
           path,
           displayName: null,
           priority: cards.length,
@@ -250,18 +247,28 @@ export default function MainPage() {
         },
       ]);
     },
-    [cards, handleRootsChange, pickFolder],
+    [cards, handleRootsChange],
   );
 
-  const changeFolder = useCallback(
-    async (rootId: string) => {
-      const path = await pickFolder();
-      if (!path) return;
-      handleRootsChange(
-        cards.map((card) => (card.rootId === rootId ? { ...card, path, volume: null } : card)),
-      );
+  /**
+   * Ask for a folder. The desktop shell has an OS picker; a browser does not, so
+   * it falls back to the typed-path dialog rather than to nothing at all.
+   */
+  const requestFolder = useCallback(
+    async (target: FolderTarget) => {
+      if (!isTauri) {
+        setFolderPrompt(target);
+        return;
+      }
+      try {
+        const { open } = await import("@tauri-apps/api/dialog");
+        const selected = await open({ directory: true, multiple: false });
+        if (typeof selected === "string") applyFolder(target, selected);
+      } catch {
+        toast(t("sources.folderPickerFailed"), "error");
+      }
     },
-    [cards, handleRootsChange, pickFolder],
+    [applyFolder, t, toast],
   );
 
   const removeFolder = useCallback(
@@ -300,6 +307,11 @@ export default function MainPage() {
    *
    * Splitting these into two buttons made the user responsible for knowing that
    * a dry run needs a fresh index. It does; that is our problem, not theirs.
+   *
+   * Both steps are awaited to *completion*, not to "started": the backend runs
+   * one operation at a time and rejects the second with a 409. Starting the dry
+   * run the moment the scan had been queued meant the button did nothing at all
+   * on a fast scan, silently, which is the worst version of that.
    */
   const buildPlan = useCallback(async (): Promise<boolean> => {
     if (recoveryBlock.blocked) {
@@ -312,13 +324,11 @@ export default function MainPage() {
     }
     if (!analysis.result) {
       preview.clear();
-      await analysis.runAnalysis();
-      // `runAnalysis` resolves once the task settles; a failure has already been
-      // surfaced through `analysis.error`, and pressing on would plan on nothing.
-      if (analysis.error) return false;
+      // A failure or cancellation is already surfaced through `analysis.error`;
+      // pressing on would plan on nothing.
+      if (!(await analysis.runAnalysis())) return false;
     }
-    await preview.generatePreview();
-    return preview.error === null;
+    return (await preview.generatePreview()) !== null;
   }, [analysis, isValid, preview, recoveryBlock, t, toast]);
 
   const cancellableOperation = analysis.loading
@@ -349,26 +359,35 @@ export default function MainPage() {
   const rootConflicts = useMemo(() => validateRoots(cards), [cards]);
   const rootBlocker = blockingConflicts(rootConflicts)[0];
 
-  const stageInputs = {
-    rootsReady: isValid && !rootBlocker,
-    rootsReason: rootBlocker
-      ? t(`sources.conflict.${rootBlocker.kind}`, rootBlocker.params, rootBlocker.message)
-      : isValid
-        ? null
-        : t("stage.gate.roots"),
-    scanned,
-    planned,
-    plannedReason: t("stage.gate.plan"),
-    blocked: recoveryBlock.blocked,
-    blockedReason: recoveryBlock.reason,
-  };
+  // Both objects are read by `StageShell` from an effect and a memo, so their
+  // identity is load-bearing: rebuilding them every render re-ran reconciliation
+  // on every render, which is a re-render loop, not a re-render.
+  const stageInputs = useMemo<StageInputs>(
+    () => ({
+      rootsReady: isValid && !rootBlocker,
+      rootsReason: rootBlocker
+        ? t(`sources.conflict.${rootBlocker.kind}`, rootBlocker.params, rootBlocker.message)
+        : isValid
+          ? null
+          : t("stage.gate.roots"),
+      scanned,
+      planned,
+      plannedReason: t("stage.gate.plan"),
+      blocked: recoveryBlock.blocked,
+      blockedReason: recoveryBlock.reason,
+    }),
+    [isValid, planned, recoveryBlock.blocked, recoveryBlock.reason, rootBlocker, scanned, t],
+  );
 
-  const stageKey = {
-    profileId: config?.library_profile.profile_id ?? "",
-    catalogGeneration: scanned ? 1 : 0,
-    planVersion: planned ? 1 : 0,
-    taskId: null,
-  };
+  const stageKey = useMemo<StageKey>(
+    () => ({
+      profileId: config?.library_profile.profile_id ?? "",
+      catalogGeneration: scanned ? 1 : 0,
+      planVersion: planned ? 1 : 0,
+      taskId: null,
+    }),
+    [config?.library_profile.profile_id, planned, scanned],
+  );
 
   const impact = preview.result?.impact;
   const preflightInput = {
@@ -439,6 +458,10 @@ export default function MainPage() {
     />
   );
 
+  const saveFailure = saveError
+    ? extractErrorMessage(saveError, t("config.saveFailedHelp"))
+    : null;
+
   const banners = (
     <>
       {recoveryOperations.map((operation) => (
@@ -465,12 +488,13 @@ export default function MainPage() {
           }
         />
       )}
-      {saveError && (
+      {saveFailure && (
         <StateView
           variant="error"
           compact
           title={t("config.saveFailed")}
-          detail={extractErrorMessage(saveError, t("config.saveFailedHelp"))}
+          detail={saveFailure.message}
+          code={saveFailure.code}
           onRetry={retrySave}
         />
       )}
@@ -496,7 +520,7 @@ export default function MainPage() {
         </div>
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mx-auto max-w-3xl">
-            <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
+            <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
               <HistoryPanel />
             </Suspense>
           </div>
@@ -582,14 +606,14 @@ export default function MainPage() {
                 disabled={isAnyRunning}
                 onChange={handleRootsChange}
                 onExcludeForRun={setExcludedForRun}
-                onAddFolder={(role) => void addFolder(role)}
-                onChangeFolder={(rootId) => void changeFolder(rootId)}
+                onAddFolder={(role) => void requestFolder({ kind: "add", role })}
+                onChangeFolder={(rootId) => void requestFolder({ kind: "change", rootId })}
                 onRemove={removeFolder}
                 onApplyConfig={handleConfigSave}
                 onDeleteRecipe={(recipeId) => deleteRecipe.mutate(recipeId)}
               />
             ) : (
-              <StateView variant="loading" title={t("state.loading")} />
+              <StateView variant="loading" layout="page" title={t("state.loading")} />
             );
           }
 
@@ -616,6 +640,7 @@ export default function MainPage() {
               return (
                 <StateView
                   variant="error"
+                  layout="page"
                   title={t("preview.failed")}
                   detail={preview.error}
                   onRetry={() => void preview.generatePreview()}
@@ -626,6 +651,7 @@ export default function MainPage() {
               return (
                 <StateView
                   variant="blocked"
+                  layout="page"
                   title={t("stage.review.planNeeded")}
                   detail={t("stage.gate.plan")}
                   action={
@@ -649,22 +675,28 @@ export default function MainPage() {
           }
 
           // Execute.
-          if (!config) return <StateView variant="loading" title={t("state.loading")} />;
+          if (!config) return <StateView variant="loading" layout="page" title={t("state.loading")} />;
           if (sorting.report) {
             return (
-              <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
+              <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
                 <FinishedRun report={sorting.report} />
               </Suspense>
             );
           }
           if (sorting.status === "idle") {
+            // The other three screens open with a heading; this one used to
+            // start at a card, which also left `<main>`'s `aria-labelledby`
+            // pointing at nothing on the one screen that decides to move files.
             return (
-              <ExecutePreflight
-                input={preflightInput}
-                onAcknowledge={setImpactAcknowledged}
-                onExecute={startRun}
-                busy={isSorting}
-              />
+              <div className="mx-auto max-w-2xl">
+                <ScreenHeader title={t("preflight.title")} subtitle={t("preflight.description")} />
+                <ExecutePreflight
+                  input={preflightInput}
+                  onAcknowledge={setImpactAcknowledged}
+                  onExecute={startRun}
+                  busy={isSorting}
+                />
+              </div>
             );
           }
           return (
@@ -683,6 +715,17 @@ export default function MainPage() {
           );
         }}
       </StageShell>
+
+      <FolderPathDialog
+        open={folderPrompt !== null}
+        initialPath={
+          folderPrompt?.kind === "change"
+            ? (cards.find((card) => card.rootId === folderPrompt.rootId)?.path ?? "")
+            : ""
+        }
+        onSubmit={(path) => folderPrompt && applyFolder(folderPrompt, path)}
+        onClose={() => setFolderPrompt(null)}
+      />
 
       <ConfirmDialog
         open={pendingConfigPatch !== null}

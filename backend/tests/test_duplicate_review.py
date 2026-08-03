@@ -11,7 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.routes import review as review_routes
 from app.core.duplicate_plans import (
     Decision,
     DuplicateGroup,
@@ -598,3 +600,132 @@ class TestPersistence:
         assert reloaded.plan_id == plan.plan_id
         assert reloaded.groups["g1"].keeper_member_id == "a"
         assert reloaded.known_groups["g1"].member_count == 2
+
+
+class TestGenerationLifecycle:
+    """A plan describes one catalog generation and must not outlive it.
+
+    Before this, ``_ensure_groups`` returned early whenever the plan held any
+    group at all, so the first scan's group ids survived every later scan and
+    every per-group route 404'd for the rest of the process's life.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate_plan_cache(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        review_routes._PLANS.clear()
+        monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path)
+
+    def _stub_catalog(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        generation: int,
+        groups: list[DuplicateGroup],
+    ) -> None:
+        monkeypatch.setattr(review_routes, "_live_generation", lambda _container: generation)
+        monkeypatch.setattr(review_routes, "_current_groups", lambda _container: groups)
+
+    async def test_a_new_generation_re_registers_groups(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = ReviewPlan(plan_id="default")
+        first = group(member("a"), member("b"), group_id="old-group")
+        self._stub_catalog(monkeypatch, generation=1, groups=[first])
+        await review_routes._ensure_groups(plan, object())
+        assert set(plan.known_groups) == {"old-group"}
+
+        second = group(member("c"), member("d"), group_id="new-group")
+        self._stub_catalog(monkeypatch, generation=2, groups=[second])
+        await review_routes._ensure_groups(plan, object())
+
+        assert set(plan.known_groups) == {"new-group"}
+        assert plan.catalog_generation == 2
+
+    async def test_decisions_about_vanished_groups_do_not_reach_a_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = ReviewPlan(plan_id="default")
+        self._stub_catalog(
+            monkeypatch, generation=1, groups=[group(member("a"), member("b"), group_id="gone")]
+        )
+        await review_routes._ensure_groups(plan, object())
+        plan.decide("gone", "a", "keep")
+        plan.decide("gone", "b", "quarantine")
+
+        self._stub_catalog(
+            monkeypatch, generation=2, groups=[group(member("c"), member("d"), group_id="stays")]
+        )
+        await review_routes._ensure_groups(plan, object())
+
+        assert "gone" not in plan.groups
+        assert plan.snapshot().groups == ()
+
+    async def test_the_same_generation_does_not_rebuild_the_groups(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = ReviewPlan(plan_id="default")
+        built = group(member("a"), member("b"))
+        self._stub_catalog(monkeypatch, generation=3, groups=[built])
+        await review_routes._ensure_groups(plan, object())
+
+        calls: list[object] = []
+
+        def _explode(container: object) -> list[DuplicateGroup]:
+            calls.append(container)
+            return [built]
+
+        monkeypatch.setattr(review_routes, "_current_groups", _explode)
+        await review_routes._ensure_groups(plan, object())
+
+        assert calls == []
+
+    def test_a_stored_plan_from_an_older_generation_is_discarded_on_load(
+        self, tmp_path: Path
+    ) -> None:
+        stale = ReviewPlan(plan_id="default", catalog_generation=1)
+        stale.register(group(member("a"), member("b"), group_id="old-group"))
+        stale.decide("old-group", "a", "keep")
+        stale.save(tmp_path)
+
+        loaded = review_routes._plan("default", catalog_generation=2)
+
+        assert loaded.known_groups == {}
+        assert loaded.groups == {}
+        assert loaded.catalog_generation == 2
+
+    def test_a_stored_plan_of_the_current_generation_is_kept(self, tmp_path: Path) -> None:
+        stored = ReviewPlan(plan_id="default", catalog_generation=7)
+        stored.register(group(member("a"), member("b"), group_id="live-group"))
+        stored.decide("live-group", "a", "keep")
+        stored.save(tmp_path)
+
+        loaded = review_routes._plan("default", catalog_generation=7)
+
+        assert set(loaded.known_groups) == {"live-group"}
+        assert loaded.groups["live-group"].keeper_member_id == "a"
+
+    def test_a_cached_plan_is_dropped_when_the_generation_moves(self, tmp_path: Path) -> None:
+        first = review_routes._plan("default", catalog_generation=1)
+        first.register(group(member("a"), member("b"), group_id="old-group"))
+
+        second = review_routes._plan("default", catalog_generation=2)
+
+        assert second is not first
+        assert second.known_groups == {}
+
+
+class TestPolicyPreviewFailures:
+    def test_an_unknown_group_id_returns_409_and_never_500(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/review/policy/preview",
+            json={
+                "plan_id": "unknown-group-test",
+                "scope": "selected_groups",
+                "group_ids": ["no-such-group"],
+            },
+        )
+
+        assert response.status_code == 409
+        # Its sibling routes raise HTTPException, so the body is FastAPI's
+        # ``detail`` shape rather than the MediaSortException envelope.
+        assert "no-such-group" in response.json()["detail"]

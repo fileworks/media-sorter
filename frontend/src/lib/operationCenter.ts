@@ -10,6 +10,7 @@
  * while anything is stale, unacknowledged, or short of space.
  */
 
+import { formatBytes } from "@/lib/formatters";
 import type { OperationOutcome } from "./statusPresentation";
 
 export interface OperationSummary {
@@ -179,10 +180,10 @@ export function preflight(input: PreflightInput): Preflight {
   }
   if (input.freeBytes !== null && input.freeBytes < input.requiredBytes) {
     blocking.push({
-      text: `Not enough free space: ${input.requiredBytes.toLocaleString()} bytes needed, ${input.freeBytes.toLocaleString()} available.`,
+      text: `Not enough free space: ${formatBytes(input.requiredBytes)} needed, ${formatBytes(input.freeBytes)} available.`,
       tone: "error",
       messageKey: "preflight.blocking.space",
-      params: { required: input.requiredBytes, available: input.freeBytes },
+      params: { required: formatBytes(input.requiredBytes), available: formatBytes(input.freeBytes) },
     });
   }
   const reversible: PreflightLine[] = [];
@@ -205,10 +206,10 @@ export function preflight(input: PreflightInput): Preflight {
   }
   if (input.quarantineCount > 0) {
     irreversible.push({
-      text: `${input.quarantineCount} file(s) will be relocated to quarantine (${input.quarantineBytes.toLocaleString()} bytes); they are never deleted, but this run does not restore them.`,
+      text: `${input.quarantineCount} file(s) will be relocated to quarantine (${formatBytes(input.quarantineBytes)}); they are never deleted, but this run does not restore them.`,
       tone: "warning",
       messageKey: "preflight.irreversible.quarantine",
-      params: { count: input.quarantineCount, bytes: input.quarantineBytes },
+      params: { count: input.quarantineCount, bytes: formatBytes(input.quarantineBytes) },
     });
   }
   if (input.conversionWithoutOriginals > 0) {

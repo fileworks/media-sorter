@@ -31,7 +31,7 @@ export function ExcludePatternTags({
       <input
         type="text"
         placeholder={t("config.input.addPattern")}
-        className="h-6 rounded-full border border-input bg-transparent px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        className="h-7 min-w-[8rem] rounded-full border border-input bg-background px-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === ",") {
             e.preventDefault();

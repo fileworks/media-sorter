@@ -11,7 +11,7 @@
  * invalidated before the user is somewhere else and has forgotten asking.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FiAlertTriangle } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -89,7 +89,11 @@ export function StageShell({
     });
   }, [stageKey]);
 
-  useEffect(() => onStateChange?.(state), [state, onStateChange]);
+  // Kept in a ref so an inline callback from the caller does not make "the state
+  // changed" fire on every render of the caller.
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+  useEffect(() => onStateChangeRef.current?.(state), [state]);
 
   const commitMove = useCallback(
     (stage: Stage, view?: View) => {
@@ -142,8 +146,14 @@ export function StageShell({
         onSelect={(stage) => requestMove(stage)}
       />
 
+      {/* `relative` is not decoration. `sr-only` is `position: absolute`, so
+          without a positioned ancestor every visually-hidden label and radio in
+          the screen below resolves against the viewport, escapes this scroll
+          container, and makes the *document* taller than the window — at which
+          point a `scrollIntoView` scrolls the title bar and stepper off the top
+          of the app. Anchoring them here keeps `<main>` the only scroller. */}
       <main
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto"
         style={{ scrollbarGutter: "stable" }}
         aria-labelledby="current-stage-heading"
       >

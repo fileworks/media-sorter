@@ -1163,6 +1163,25 @@ export class MediaSorterApiClient {
     await this.ready;
   }
 
+  /**
+   * `fetch` against the loopback API with the capability header attached.
+   *
+   * Every media endpoint needs it, and neither a bare `fetch` nor an `<img
+   * src>` carries it — which is why every thumbnail, hero image and difference
+   * map in the app was answered with 401 and drew a "cannot preview this file"
+   * placeholder instead. Images therefore go through here and are handed to the
+   * DOM as object URLs.
+   *
+   * Shaped as `typeof fetch` and bound, so it can be passed straight to
+   * anything that takes a fetcher.
+   */
+  readonly mediaFetch: typeof fetch = async (input, init) => {
+    await this.ensureReady();
+    const headers = new Headers(init?.headers);
+    if (this.capability) headers.set("X-MediaSorter-Capability", this.capability);
+    return fetch(input, { ...init, headers });
+  };
+
   /** Keep the global loader active until the caller observes a terminal task state. */
   beginOperation(): () => void {
     bumpLoader(1);

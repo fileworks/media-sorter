@@ -183,7 +183,23 @@ export function isStale(state: StageState, key: StageKey): boolean {
   );
 }
 
+/** Whether two keys describe the same world, field by field. */
+export function sameKey(a: StageKey, b: StageKey): boolean {
+  return (
+    a.profileId === b.profileId &&
+    a.catalogGeneration === b.catalogGeneration &&
+    a.planVersion === b.planVersion &&
+    a.taskId === b.taskId
+  );
+}
+
 export function reconcile(state: StageState, key: StageKey): Transition {
+  // Identity matters as much as the values: the shell reconciles from an effect,
+  // and handing back a fresh object for an unchanged key would set state on
+  // every render and spin the app in a re-render loop.
+  if (sameKey(state.key, key)) {
+    return { state, invalidated: [] };
+  }
   // The first live key hydrates the shell; it is not a profile change. Treating
   // the empty bootstrap key as stale used to throw a fresh launch straight
   // into Review even though no scan had happened.

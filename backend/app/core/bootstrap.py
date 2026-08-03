@@ -22,6 +22,7 @@ from app.core.api_security import (
 )
 from app.core.config import Config, ConfigLoader
 from app.core.database import DatabaseManager
+from app.core.error_envelope import ExceptionEnvelopeMiddleware
 from app.core.exceptions import MediaSortException
 from app.core.logging_config import capture_main_loop, get_logger, setup_logging
 from app.core.paths import resolve_app_paths
@@ -613,6 +614,18 @@ class AppFactory:
         # tauri://localhost  → macOS/Linux packaged builds.
         # https://tauri.localhost → Windows packaged builds (Tauri 1.5+).
         # http://tauri.localhost  → alternative Windows variant.
+        # Registration order is reversed at request time: the middleware added
+        # last is the outermost, so this builds
+        # security → CORS → envelope → routes.
+        #
+        # Task 1.1 asked for CORS outermost instead. That would hand preflight
+        # for a disallowed origin to CORSMiddleware, which answers 400, losing
+        # the exact-origin 403 that `test_preflight_requires_an_exact_origin`
+        # pins as the security contract. The readable-failure goal is met
+        # without it: the security middleware carries its own CORS headers on a
+        # rejection (task 1.2), and the envelope below sits inside CORS so an
+        # unhandled fault is decorated on the way out (task 1.3).
+        app.add_middleware(ExceptionEnvelopeMiddleware, logger=logger)
         app.add_middleware(
             CORSMiddleware,
             allow_origins=sorted(origins),

@@ -21,6 +21,7 @@ import { DuplicateComparison } from "@/components/DuplicateComparison";
 import { MediaPreviewModal } from "@/components/MediaPreviewModal";
 import { PreviewList } from "@/components/PreviewList";
 import { PreviewGrid } from "@/components/PreviewGrid";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getBasename } from "@/lib/pathUtils";
 import type { PreviewItem, PreviewResult } from "@/types/api";
@@ -471,7 +472,7 @@ export function PreviewPanel({
                         "flex items-center justify-between gap-1 rounded px-2 py-1 text-left text-xs font-medium transition-colors",
                         filter === key
                           ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                       onClick={() => setFilter(key)}
                       aria-pressed={filter === key}
@@ -480,8 +481,11 @@ export function PreviewPanel({
                       <span
                         className={cn(
                           "rounded-full px-1.5 py-0 text-3xs font-normal tabular-nums",
+                          // No wash behind the count on the selected row: 20%
+                          // white over the orange lightened it just far enough
+                          // to take the white figure under 4.5:1.
                           filter === key
-                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            ? "text-primary-foreground"
                             : "bg-muted text-muted-foreground",
                         )}
                       >
@@ -499,9 +503,9 @@ export function PreviewPanel({
                   <div className="flex flex-wrap gap-1">
                     {tagFilters.size > 0 && (
                       <button
-                        className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted/70"
+                        className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted"
                         onClick={() => setTagFilters(new Set())}
-                        title={t("preview.clearTags")}
+                        aria-label={t("preview.clearTags")}
                       >
                         {t("preview.clear")}
                       </button>
@@ -534,9 +538,9 @@ export function PreviewPanel({
                     <div className="flex flex-wrap gap-1">
                       {categoryFilters.size > 0 && (
                         <button
-                          className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted/70"
+                          className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground hover:bg-muted"
                           onClick={() => setCategoryFilters(new Set())}
-                          title={t("preview.clearCategories")}
+                          aria-label={t("preview.clearCategories")}
                         >
                           {t("preview.clear")}
                         </button>
@@ -552,7 +556,7 @@ export function PreviewPanel({
                                 ? "bg-muted-foreground/20 text-foreground"
                                 : "bg-category text-category-foreground"
                               : cat === "_uncategorized"
-                                ? "bg-muted text-muted-foreground hover:bg-muted/70"
+                                ? "bg-muted text-muted-foreground hover:bg-muted"
                                 : "bg-category/10 text-category hover:bg-category/20",
                           )}
                         >
@@ -571,7 +575,6 @@ export function PreviewPanel({
             aria-hidden
             className="hidden lg:flex w-2 shrink-0 cursor-col-resize select-none items-stretch justify-center group"
             onMouseDown={handleSidebarResizeStart}
-            title={t("preview.resizeSidebar")}
           >
             <div className="w-px bg-border group-hover:bg-primary/40 transition-colors" />
           </div>
@@ -640,12 +643,13 @@ export function PreviewPanel({
               {(stats.duplicate_unknown ?? 0) > 0 && (
                 <>
                   <span className="text-muted-foreground">·</span>
-                  <span
-                    className="text-warning"
-                    title="Video perceptual matching completes during the real sort."
-                  >
-                    {stats.duplicate_unknown!.toLocaleString()} pending duplicate check
-                  </span>
+                  <Tooltip label={t("preview.duplicatePendingHelp")}>
+                    <span tabIndex={0} className="cursor-help text-warning">
+                      {t("preview.duplicatePending", {
+                        count: stats.duplicate_unknown!.toLocaleString(locale),
+                      })}
+                    </span>
+                  </Tooltip>
                 </>
               )}
               {(stats.will_quarantine_junk ?? 0) > 0 && (
@@ -684,57 +688,57 @@ export function PreviewPanel({
                     <button
                       type="button"
                       onClick={expandAll}
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                      title={t("preview.expand")}
+                      className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <FiMaximize2 className="h-3 w-3" />
+                      <FiMaximize2 className="h-3 w-3" aria-hidden />
                       {t("preview.expand")}
                     </button>
                     <button
                       type="button"
                       onClick={collapseAll}
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                      title={t("preview.collapse")}
+                      className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <FiMinimize2 className="h-3 w-3" />
+                      <FiMinimize2 className="h-3 w-3" aria-hidden />
                       {t("preview.collapse")}
                     </button>
-                    <div className="mx-1 h-3.5 w-px bg-border" />
+                    <div className="mx-1 h-3.5 w-px bg-border" aria-hidden />
                   </>
                 )}
 
                 {/* View toggle */}
-                <div className="flex items-center rounded border border-border bg-background">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("list")}
-                    className={cn(
-                      "flex items-center justify-center h-6 w-6 rounded-l text-xs transition-colors",
-                      viewMode === "list"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted/70",
-                    )}
-                    title={t("preview.listView")}
-                    aria-label={t("preview.listView")}
-                    aria-pressed={viewMode === "list"}
-                  >
-                    <FiList className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("grid")}
-                    className={cn(
-                      "flex items-center justify-center h-6 w-6 rounded-r text-xs transition-colors",
-                      viewMode === "grid"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted/70",
-                    )}
-                    title={t("preview.gridView")}
-                    aria-label={t("preview.gridView")}
-                    aria-pressed={viewMode === "grid"}
-                  >
-                    <FiGrid className="h-3.5 w-3.5" />
-                  </button>
+                <div className="flex items-center overflow-hidden rounded-lg border border-border bg-background">
+                  <Tooltip label={t("preview.listView")}>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("list")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        viewMode === "list"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                      aria-pressed={viewMode === "list"}
+                    >
+                      <FiList className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </Tooltip>
+                  <Tooltip label={t("preview.gridView")}>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("grid")}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center border-l border-border transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        viewMode === "grid"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                      aria-pressed={viewMode === "grid"}
+                    >
+                      <FiGrid className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             </div>

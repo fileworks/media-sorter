@@ -48,14 +48,7 @@ function Tile({
       >
         {value}
       </span>
-      <span
-        className={cn(
-          "text-xs font-semibold",
-          tone === "warn" ? "text-foreground" : "text-foreground",
-        )}
-      >
-        {label}
-      </span>
+      <span className="text-xs font-semibold text-foreground">{label}</span>
       {detail && <span className="text-xs text-faint">{detail}</span>}
       {action && (
         <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-primary">
@@ -67,8 +60,8 @@ function Tile({
   );
 
   const shell = cn(
-    "flex min-w-0 flex-1 flex-col gap-0.5 rounded-xl border p-3.5 text-left",
-    tone === "warn" ? "border-warning bg-tint-warning" : "border-border bg-background",
+    "flex min-w-0 flex-col gap-0.5 rounded-xl border p-3.5 text-left",
+    tone === "warn" ? "border-warning bg-tint-warning" : "border-border bg-card",
   );
 
   if (!action) {
@@ -80,7 +73,7 @@ function Tile({
       onClick={action.onClick}
       className={cn(
         shell,
-        "transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "transition-colors hover:border-faint hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >
       {body}
@@ -95,7 +88,9 @@ export function PlanSummary({ totals, sizeLabel, rootCount, onOpen }: PlanSummar
 
   return (
     <section aria-label={t("review.summary")} className="space-y-3">
-      <div className="flex flex-wrap gap-3">
+      {/* A grid, not wrapped flex: the last tile of a wrapped row would stretch
+          to the full width and read as more important than the four above it. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Tile
           value={n(totals.scanned)}
           label={t("review.tile.scanned")}
@@ -143,16 +138,16 @@ export function PlanSummary({ totals, sizeLabel, rootCount, onOpen }: PlanSummar
             junk: n(totals.junk),
           })}
         >
-          <span className="bg-success" style={{ width: `${totals.share.ready}%` }} />
+          <span className="bg-decor-success" style={{ width: `${totals.share.ready}%` }} />
           <span className="bg-brand" style={{ width: `${totals.share.duplicates}%` }} />
-          <span className="bg-warning" style={{ width: `${totals.share.junk}%` }} />
+          <span className="bg-decor-warning" style={{ width: `${totals.share.junk}%` }} />
         </div>
         <ul className="flex shrink-0 gap-3.5 text-3xs text-faint">
           {(
             [
-              ["bg-success", t("review.legend.organized")],
+              ["bg-decor-success", t("review.legend.organized")],
               ["bg-brand", t("review.legend.duplicates")],
-              ["bg-warning", t("review.legend.junk")],
+              ["bg-decor-warning", t("review.legend.junk")],
             ] as const
           ).map(([colour, label]) => (
             <li key={label} className="flex items-center gap-1.5">

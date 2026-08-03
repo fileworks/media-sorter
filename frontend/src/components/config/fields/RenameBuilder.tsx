@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import {
   RENAME_TOKENS,
@@ -92,11 +93,9 @@ export function RenameBuilder({
 
       <div className="flex flex-wrap gap-1">
         {RENAME_TOKENS.map((token) => (
-          <button
+          <Tooltip
             key={token.token}
-            type="button"
-            onClick={() => insertToken(token.token)}
-            title={t(
+            label={t(
               "common.example",
               {
                 label: t(token.labelKey, {}, token.label),
@@ -104,10 +103,15 @@ export function RenameBuilder({
               },
               `${token.label} — e.g. ${token.example}`,
             )}
-            className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10"
           >
-            {token.token}
-          </button>
+            <button
+              type="button"
+              onClick={() => insertToken(token.token)}
+              className="rounded-md border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-foreground transition-colors hover:border-faint hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {token.token}
+            </button>
+          </Tooltip>
         ))}
       </div>
 

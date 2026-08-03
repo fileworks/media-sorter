@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getBasename } from "@/lib/pathUtils";
 import { api } from "@/services/api";
@@ -6,6 +7,7 @@ import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 import type { PreviewItem } from "@/types/api";
 import { FiFile, FiFilm } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
+import { useViewportBudget } from "@/hooks/useViewportBudget";
 import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 
 const VIDEO_EXTS = new Set([
@@ -22,7 +24,9 @@ const VIDEO_EXTS = new Set([
   ".m2ts",
 ]);
 
-const MAX_VIEWPORT = 560;
+/* Same budget as the list view, so switching views does not resize the page. */
+const GRID_CHROME = 320;
+const GRID_MIN_HEIGHT = 240;
 const GRID_MIN_COLUMN = 120;
 
 function isVideo(path: string): boolean {
@@ -94,84 +98,79 @@ function ThumbnailCard({
   const statusLabel = t(getStatusKey(item.status), {}, item.status);
 
   return (
-    <button
-      ref={cardRef}
-      type="button"
-      onClick={() => onOpen(item)}
-      className={cn(
-        "group relative flex flex-col overflow-hidden rounded-lg border border-border bg-card text-left transition-all",
-        "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        item.status === "duplicate" && "opacity-70",
-      )}
-      title={`${name} — ${statusLabel}`}
-    >
-      {/* Thumbnail area */}
-      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-muted/30">
-        {!errored ? (
-          <>
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
-              </div>
-            )}
-            <img
-              src={objectUrl ?? undefined}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className={cn(
-                "h-full w-full object-cover transition-opacity duration-200",
-                loaded ? "opacity-100" : "opacity-0",
+    <Tooltip label={`${name} — ${statusLabel}`}>
+      <button
+        ref={cardRef}
+        type="button"
+        onClick={() => onOpen(item)}
+        aria-label={t("preview.openFile", { name })}
+        className={cn(
+          "group relative flex flex-col overflow-hidden rounded-lg border border-border bg-card text-left transition-colors",
+          "hover:border-faint hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          item.status === "duplicate" && "opacity-70",
+        )}
+      >
+        {/* Thumbnail area */}
+        <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-muted/30">
+          {!errored ? (
+            <>
+              {loading && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
+                </div>
               )}
-            />
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-1 text-muted-foreground/50">
-            {video ? <FiFilm className="h-7 w-7" /> : <FiFile className="h-7 w-7" />}
-          </div>
-        )}
-
-        {/* Video badge */}
-        {video && loaded && (
-          <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-3xs font-medium text-white">
-            <FiFilm className="h-2.5 w-2.5" />
-            {t("preview.video")}
-          </span>
-        )}
-
-        {/* Status dot */}
-        <span
-          className={cn(
-            "absolute left-1.5 top-1.5 h-2 w-2 rounded-full ring-1 ring-background",
-            statusDot,
+              <img
+                src={objectUrl ?? undefined}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className={cn(
+                  "h-full w-full object-cover transition-opacity duration-200",
+                  loaded ? "opacity-100" : "opacity-0",
+                )}
+              />
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-1 text-muted-foreground/50">
+              {video ? <FiFilm className="h-7 w-7" /> : <FiFile className="h-7 w-7" />}
+            </div>
           )}
-          title={statusLabel}
-          aria-label={statusLabel}
-        />
-      </div>
 
-      {/* Caption */}
-      <div className="flex min-h-[3rem] flex-col justify-between p-1.5">
-        <p className="line-clamp-2 text-2xs font-medium leading-tight text-foreground" title={name}>
-          {name}
-        </p>
-        {categorizeEnabled && item.status === "sort" && (
+          {/* Video badge */}
+          {video && loaded && (
+            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-3xs font-medium text-white">
+              <FiFilm className="h-2.5 w-2.5" aria-hidden />
+              {t("preview.video")}
+            </span>
+          )}
+
+          {/* Status dot. The status is already in the card's tooltip; repeating
+              it here would announce the same fact twice. */}
           <span
+            aria-hidden
             className={cn(
-              "mt-1 self-start rounded-full px-1.5 py-px text-3xs font-medium leading-none",
-              item.category ? "bg-category/10 text-category" : "bg-muted text-muted-foreground",
+              "absolute left-1.5 top-1.5 h-2 w-2 rounded-full ring-1 ring-background",
+              statusDot,
             )}
-            title={
-              item.category
-                ? t("preview.category", { name: item.category })
-                : t("preview.uncategorizedLabel")
-            }
-          >
-            {item.category ?? "_uncategorized"}
-          </span>
-        )}
-      </div>
-    </button>
+          />
+        </div>
+
+        {/* Caption */}
+        <div className="flex min-h-[3rem] flex-col justify-between p-1.5">
+          <p className="line-clamp-2 text-2xs font-medium leading-tight text-foreground">{name}</p>
+          {categorizeEnabled && item.status === "sort" && (
+            <span
+              className={cn(
+                "mt-1 self-start truncate rounded-full px-1.5 py-px text-3xs font-medium leading-none",
+                item.category ? "bg-category/10 text-category" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {item.category ?? "_uncategorized"}
+            </span>
+          )}
+        </div>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -201,12 +200,13 @@ export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: Previe
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  const maxHeight = useViewportBudget({ reserved: GRID_CHROME, min: GRID_MIN_HEIGHT });
   const columns = Math.max(1, Math.floor(containerWidth / GRID_MIN_COLUMN));
   const totalRows = Math.ceil(items.length / columns);
   const rows = useVirtualWindow({
     count: totalRows,
     estimateSize: Math.max(GRID_MIN_COLUMN + 60, containerWidth / Math.max(columns, 1) + 60),
-    maxHeight: MAX_VIEWPORT,
+    maxHeight,
     overscan: 2,
   });
 
@@ -222,7 +222,7 @@ export function PreviewGrid({ items, categorizeEnabled = false, onOpen }: Previe
     <div
       ref={containerRef}
       className="overflow-y-auto"
-      style={{ maxHeight: MAX_VIEWPORT }}
+      style={{ maxHeight }}
       onScroll={rows.onScroll}
     >
       <div className="px-3" style={{ height: rows.totalSize, position: "relative" }}>

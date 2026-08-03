@@ -332,6 +332,8 @@ export const en = {
   "preview.unknownDate": "{count} unknown date",
   "preview.futureDate": "{count} future date",
   "preview.duplicate": "{count} duplicate",
+  "preview.duplicatePending": "{count} pending duplicate check",
+  "preview.duplicatePendingHelp": "Video perceptual matching finishes during the real run.",
   "preview.inDestination": "{count} already in destination",
   "preview.junk": "{count} junk",
   "preview.uncategorized": "{count} uncategorized",
@@ -367,6 +369,7 @@ export const en = {
     "Video perceptual duplicate check completes during the full sort",
   "preview.compareFile": "Compare duplicate {name}",
   "preview.openFile": "Open preview of {name}",
+  "preview.lightbox.unavailable": "This file cannot be previewed here.",
   "preview.category": "Category: {name}",
   "preview.noConfidentCategory": "No confident category → _uncategorized/",
   "preview.duplicateOf": "Duplicate of {path}",
@@ -847,7 +850,7 @@ export const en = {
     "{count} outcome(s) could not be frozen safely. Review the plan again before executing.",
   "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
   "preflight.blocking.space":
-    "Not enough free space: {required} bytes needed, {available} available.",
+    "Not enough free space: {required} needed, {available} available.",
   "preflight.reversible.copy":
     "{count} file(s) copied; the source remains available for re-running.",
   "preflight.reversible.skip": "{count} file(s) left exactly where they are.",
@@ -858,7 +861,7 @@ export const en = {
   "preflight.irreversible.move":
     "{count} source file(s) will be removed only after the destination is verified.",
   "preflight.irreversible.quarantine":
-    "{count} file(s) will be relocated to quarantine ({bytes} bytes); they are never deleted, but this run does not restore them.",
+    "{count} file(s) will be relocated to quarantine ({bytes}); they are never deleted, but this run does not restore them.",
   "preflight.irreversible.conversion":
     "{count} original file(s) will not be retained after conversion.",
   "preflight.irreversible.companions":
@@ -1215,6 +1218,10 @@ export const en = {
   "sources.roleChangeAnyway": "Change it anyway",
   "sources.excludedThisRun": "Skipped for this run.",
   "sources.pickerUnavailable": "Folder picking needs the desktop app — type the path instead.",
+  "sources.pathDialog.title": "Enter a folder path",
+  "sources.pathDialog.label": "Folder path",
+  "sources.pathDialog.placeholder": "/Users/you/Pictures",
+  "sources.pathDialog.help": "The native folder picker is only available in the desktop app. Paste or type an absolute path — the folders are checked when the run is previewed.",
   "sources.facts.inputTotals": "{count} files · {size}",
   "sources.facts.inputUnscanned": "Not scanned yet — counts appear after the preview.",
   "sources.facts.indexed": "{count} files indexed",
@@ -1251,6 +1258,7 @@ export const en = {
   "config.title": "Fine-tune the recipe",
   "config.subtitle": "Every setting has a safe default — skim through or dig in.",
   "config.rail.label": "Settings",
+  "config.rail.jumpTo": "Jump to a setting",
   "config.rail.resetGroup": "Reset this group to defaults",
   "config.rail.groupHasError": "A setting in this group needs attention",
   "config.rail.transfer": "Transfer",
@@ -1891,6 +1899,8 @@ export const de: Record<MessageKey, string> = {
   "preview.unknownDate": "{count} ohne Datum",
   "preview.futureDate": "{count} mit zukünftigem Datum",
   "preview.duplicate": "{count} Duplikate",
+  "preview.duplicatePending": "{count} Duplikatprüfung ausstehend",
+  "preview.duplicatePendingHelp": "Der perzeptuelle Videoabgleich wird erst beim echten Durchlauf abgeschlossen.",
   "preview.inDestination": "{count} bereits am Ziel",
   "preview.junk": "{count} Datenmüll",
   "preview.uncategorized": "{count} ohne Kategorie",
@@ -1925,6 +1935,7 @@ export const de: Record<MessageKey, string> = {
     "Die Prüfung auf visuelle Videoduplikate erfolgt beim vollständigen Sortieren",
   "preview.compareFile": "Duplikat {name} vergleichen",
   "preview.openFile": "Vorschau von {name} öffnen",
+  "preview.lightbox.unavailable": "Diese Datei lässt sich hier nicht anzeigen.",
   "preview.category": "Kategorie: {name}",
   "preview.noConfidentCategory": "Keine sichere Kategorie → _uncategorized/",
   "preview.duplicateOf": "Duplikat von {path}",
@@ -2418,7 +2429,7 @@ export const de: Record<MessageKey, string> = {
   "preflight.blocking.quarantine":
     "Die Quarantäne ist nicht beschreibbar; daher kann nichts sicher verschoben werden.",
   "preflight.blocking.space":
-    "Nicht genug freier Speicher: {required} Bytes benötigt, {available} verfügbar.",
+    "Nicht genug freier Speicher: {required} benötigt, {available} verfügbar.",
   "preflight.reversible.copy":
     "{count} Datei(en) werden kopiert; die Quelle bleibt für eine erneute Ausführung erhalten.",
   "preflight.reversible.skip": "{count} Datei(en) bleiben unverändert an ihrem Ort.",
@@ -2429,7 +2440,7 @@ export const de: Record<MessageKey, string> = {
   "preflight.irreversible.move":
     "{count} Quelldatei(en) werden erst nach Prüfung des Ziels entfernt.",
   "preflight.irreversible.quarantine":
-    "{count} Datei(en) werden in die Quarantäne verschoben ({bytes} Bytes); sie werden nie gelöscht, aber dieser Lauf stellt sie nicht wieder her.",
+    "{count} Datei(en) werden in die Quarantäne verschoben ({bytes}); sie werden nie gelöscht, aber dieser Lauf stellt sie nicht wieder her.",
   "preflight.irreversible.conversion":
     "{count} Originaldatei(en) werden nach der Konvertierung nicht aufbewahrt.",
   "preflight.irreversible.companions":
@@ -2799,6 +2810,10 @@ export const de: Record<MessageKey, string> = {
   "sources.roleChangeAnyway": "Trotzdem ändern",
   "sources.excludedThisRun": "Für diesen Durchlauf übersprungen.",
   "sources.pickerUnavailable": "Die Ordnerauswahl gibt es nur in der Desktop-App — bitte den Pfad eintippen.",
+  "sources.pathDialog.title": "Ordnerpfad eingeben",
+  "sources.pathDialog.label": "Ordnerpfad",
+  "sources.pathDialog.placeholder": "/Users/du/Bilder",
+  "sources.pathDialog.help": "Die native Ordnerauswahl gibt es nur in der Desktop-App. Absoluten Pfad einfügen oder eintippen — die Ordner werden bei der Berechnung geprüft.",
   "sources.facts.inputTotals": "{count} Dateien · {size}",
   "sources.facts.inputUnscanned": "Noch nicht gescannt — Zahlen erscheinen nach der Berechnung.",
   "sources.facts.indexed": "{count} Dateien indiziert",
@@ -2835,6 +2850,7 @@ export const de: Record<MessageKey, string> = {
   "config.title": "Rezept anpassen",
   "config.subtitle": "Jede Einstellung hat eine sichere Voreinstellung — überfliegen oder vertiefen.",
   "config.rail.label": "Einstellungen",
+  "config.rail.jumpTo": "Zu einer Einstellung springen",
   "config.rail.resetGroup": "Gruppe zurücksetzen",
   "config.rail.groupHasError": "Eine Einstellung in dieser Gruppe braucht Aufmerksamkeit",
   "config.rail.transfer": "Übertragung",

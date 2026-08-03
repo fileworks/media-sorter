@@ -10,15 +10,18 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
 }
 
+// One hover per variant, and `focus-visible` rather than `focus` throughout:
+// a `focus` ring fires on a mouse click too, which is why a pressed button here
+// used to keep a ring that no other control in the app draws.
 const variantClasses: Record<Variant, string> = {
   default:
-    "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-ring disabled:bg-primary/50",
+    "bg-primary text-primary-foreground shadow-card hover:bg-primary-hover focus-visible:ring-ring disabled:bg-primary/50",
   destructive:
-    "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive disabled:bg-destructive/50",
+    "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive disabled:bg-destructive/50",
   ghost:
-    "bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-ring disabled:text-muted-foreground",
+    "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring disabled:text-faint",
   outline:
-    "bg-background border border-input text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-ring disabled:text-muted-foreground",
+    "border border-border bg-background text-foreground hover:bg-muted focus-visible:ring-ring disabled:text-muted-foreground",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -42,7 +45,7 @@ export function Button({
       disabled={disabled}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-lg font-medium [&>svg]:shrink-0",
-        "transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background",
+        "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "active:scale-[0.98] active:transition-none",
         "disabled:cursor-not-allowed disabled:active:scale-100",
         variantClasses[variant],

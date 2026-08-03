@@ -239,6 +239,20 @@ class MediaCatalog:
             )
         return int(cursor.lastrowid or 0)
 
+    def current_generation(self) -> int:
+        """The newest completed generation across every root, or 0 if none is.
+
+        One scalar for "what the catalog currently says", so a review plan can
+        tell that the results it holds were computed against an older catalog.
+        Only complete generations count, for the same reason freshness does:
+        a cancelled scan describes a library nobody has finished looking at.
+        """
+        row = self._connection.execute(
+            "SELECT MAX(generation_id) AS generation FROM scan_generations "
+            "WHERE outcome = 'complete'"
+        ).fetchone()
+        return 0 if row is None or row["generation"] is None else int(row["generation"])
+
     def finish_generation(self, generation_id: int, outcome: GenerationOutcome) -> None:
         """Close a generation and, only if it completed, mark what it never saw.
 

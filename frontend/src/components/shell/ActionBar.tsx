@@ -35,54 +35,67 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
   const reason = primary?.disabled ? (primary.disabledReason ?? null) : null;
 
   return (
-    <footer className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {tone === "note" && (
-          <FiCheck className="h-4 w-4 shrink-0 text-success" aria-hidden />
-        )}
-        <p className="min-w-0 flex-1 text-xs text-muted-foreground">{message}</p>
+    <footer className="shrink-0 border-t border-border bg-card px-4 py-2.5 sm:px-6 sm:py-3">
+      {/* One row once there is room for one. On a narrow window the sentence
+          takes its own line and the actions stay together on the next, rather
+          than the primary action wrapping away from Back. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <p className="flex min-w-0 flex-1 items-start gap-2 text-2xs leading-relaxed text-muted-foreground sm:text-xs">
+          {tone === "note" && (
+            <FiCheck className="mt-px h-3.5 w-3.5 shrink-0 text-success sm:h-4 sm:w-4" aria-hidden />
+          )}
+          <span className="min-w-0">{message}</span>
+        </p>
 
-        {children}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {children}
 
-        {back && (
-          <button
-            type="button"
-            onClick={back.onClick}
-            disabled={back.disabled}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors",
-              "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-          >
-            <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            {back.label}
-          </button>
-        )}
+          {reason && (
+            <span id="action-bar-reason" className="text-2xs text-faint">
+              {reason}
+            </span>
+          )}
 
-        {primary && (
-          <div className="flex items-center gap-2">
-            {reason && (
-              <span id="action-bar-reason" className="text-2xs text-faint">
-                {reason}
-              </span>
-            )}
+          {back && (
+            <button
+              type="button"
+              onClick={back.onClick}
+              disabled={back.disabled}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors",
+                "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
+              {back.label}
+            </button>
+          )}
+
+          {primary && (
             <button
               type="button"
               onClick={primary.onClick}
               disabled={primary.disabled || primary.busy}
               aria-describedby={reason ? "action-bar-reason" : undefined}
+              aria-busy={primary.busy || undefined}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-card transition-opacity",
-                "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                "inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-card transition-colors",
+                "hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
                 "disabled:cursor-not-allowed disabled:opacity-45",
               )}
             >
+              {primary.busy && (
+                <span
+                  aria-hidden
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground"
+                />
+              )}
               {primary.label}
-              <FiArrowRight className="h-3.5 w-3.5" aria-hidden />
+              {!primary.busy && <FiArrowRight className="h-3.5 w-3.5" aria-hidden />}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </footer>
   );

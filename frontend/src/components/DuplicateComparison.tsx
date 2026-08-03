@@ -1,5 +1,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { MediaImage } from "@/components/ui/media-image";
+import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
+import { Segmented } from "@/components/ui/setting-row";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { PathActions } from "@/components/MediaPreviewModal";
 import { cn } from "@/lib/utils";
@@ -7,15 +10,18 @@ import { api } from "@/services/api";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useMediaInfo, formatResolution } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
 import type { MediaInfo, PreviewItem } from "@/types/api";
-import { FiX, FiAward, FiZoomIn, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiAward, FiZoomIn, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ViewMode = "side-by-side" | "diff" | "slider";
+
+/** The prev/next control, identical here and in the media preview. */
+const NAV_BUTTON =
+  "rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30";
 
 interface DetailRow {
   label: string;
@@ -167,20 +173,13 @@ function ClickableThumb({
 }) {
   const { t } = useI18n();
   return (
-    <button
-      type="button"
-      className={cn(
-        "group relative block w-full overflow-hidden rounded-lg border border-border bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        className,
-      )}
-      onClick={onEnlarge}
-      aria-label={t("duplicate.viewEnlarged")}
-    >
-      <Thumbnail path={path} maxPx={640} className="h-44 w-full" />
-      <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-all group-hover:bg-black/25">
-        <FiZoomIn className="h-6 w-6 text-white opacity-0 drop-shadow transition-opacity group-hover:opacity-100" />
-      </span>
-    </button>
+    <Thumbnail
+      path={path}
+      maxPx={640}
+      onOpen={onEnlarge}
+      openLabel={t("duplicate.viewEnlarged")}
+      className={cn("h-44 w-full rounded-lg border border-border bg-muted/40", className)}
+    />
   );
 }
 
@@ -199,9 +198,6 @@ function ImageComparisonSlider({
 }) {
   const { t } = useI18n();
   const [sliderPos, setSliderPos] = useState(50);
-  const [origLoaded, setOrigLoaded] = useState(false);
-  const [dupLoaded, setDupLoaded] = useState(false);
-  const imagesReady = origLoaded && dupLoaded;
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
@@ -266,23 +262,11 @@ function ImageComparisonSlider({
         aria-valuenow={Math.round(sliderPos)}
         aria-label={t("duplicate.sliderLabel")}
       >
-        {/* Loading spinner — shown until both images are ready */}
-        {!imagesReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/60">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
-          </div>
-        )}
-
         {/* Duplicate image — full width background */}
-        <img
+        <MediaImage
           src={api.thumbnailUrl(duplicatePath, 900)}
           alt={t("duplicate.duplicate")}
-          draggable={false}
-          onLoad={() => setDupLoaded(true)}
-          className={cn(
-            "pointer-events-none absolute inset-0 h-full w-full select-none object-contain transition-opacity duration-200",
-            imagesReady ? "opacity-100" : "opacity-0",
-          )}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
         />
 
         {/* Original image — clipped to the left portion */}
@@ -291,12 +275,10 @@ function ImageComparisonSlider({
           style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
           aria-hidden
         >
-          <img
+          <MediaImage
             src={api.thumbnailUrl(originalPath, 900)}
             alt={t("duplicate.original")}
-            draggable={false}
-            onLoad={() => setOrigLoaded(true)}
-            className="h-full w-full select-none object-contain"
+            className="absolute inset-0 h-full w-full select-none object-contain"
           />
         </div>
 
@@ -343,7 +325,7 @@ function ImageComparisonSlider({
         <button
           type="button"
           onClick={onEnlargeOriginal}
-          className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <FiZoomIn className="h-3 w-3" />
           {t("duplicate.viewOriginal")}
@@ -351,7 +333,7 @@ function ImageComparisonSlider({
         <button
           type="button"
           onClick={onEnlargeDuplicate}
-          className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <FiZoomIn className="h-3 w-3" />
           {t("duplicate.viewDuplicate")}
@@ -359,61 +341,6 @@ function ImageComparisonSlider({
       </div>
       <p className="text-center text-2xs text-muted-foreground">{t("duplicate.sliderHelp")}</p>
     </div>
-  );
-}
-
-// ── Enlarged image overlay ─────────────────────────────────────────────────────
-
-function EnlargedOverlay({ url, onClose }: { url: string; onClose: () => void }) {
-  const { t } = useI18n();
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 backdrop-blur-md cursor-zoom-out p-6"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("duplicate.enlarged")}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-4 top-4 rounded-full bg-white/15 p-2 text-white transition-colors hover:bg-white/30"
-        aria-label={t("duplicate.closeEnlarged")}
-      >
-        <FiX className="h-5 w-5" />
-      </button>
-      {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
-        </div>
-      )}
-      {/* Subtle panel so the image never floats on raw black when it doesn't fill the space */}
-      <div
-        className="relative flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-xl bg-white/5 shadow-2xl ring-1 ring-white/10"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <img
-          src={url}
-          alt={t("duplicate.enlargedAlt")}
-          onLoad={() => setLoaded(true)}
-          className={cn(
-            "max-h-[88vh] max-w-[88vw] cursor-default object-contain transition-opacity duration-200",
-            loaded ? "opacity-100" : "opacity-0",
-          )}
-        />
-      </div>
-    </div>,
-    document.body,
   );
 }
 
@@ -437,10 +364,7 @@ export function DuplicateComparison({
   const [item, setItem] = useState(initialItem);
   const [viewMode, setViewMode] = useState<ViewMode>("side-by-side");
   const [diffBroken, setDiffBroken] = useState(false);
-  const [diffLoading, setDiffLoading] = useState(false);
   const [enlargedUrl, setEnlargedUrl] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, true);
 
   // Sync when the parent opens a different duplicate
   useEffect(() => {
@@ -477,19 +401,17 @@ export function DuplicateComparison({
     }
   }, [dupIdx, duplicateItems]);
 
+  // Escape belongs to the dialog shell; only the arrow keys are ours, and only
+  // while the enlarged overlay is not the thing on top.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !enlargedUrl) onClose();
-      if (e.key === "ArrowLeft" && !enlargedUrl) goPrev();
-      if (e.key === "ArrowRight" && !enlargedUrl) goNext();
+      if (enlargedUrl) return;
+      if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "ArrowRight") goNext();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, enlargedUrl, goPrev, goNext]);
-
-  useEffect(() => {
-    if (viewMode === "diff") setDiffLoading(true);
-  }, [viewMode]);
+  }, [enlargedUrl, goPrev, goNext]);
 
   const isExact = item.duplicate_type === "exact";
   const similarityLabel = isExact
@@ -519,91 +441,56 @@ export function DuplicateComparison({
     ...(canDiff ? [{ key: "diff" as ViewMode, label: t("duplicate.diff") }] : []),
   ];
 
-  return createPortal(
+  return (
     <>
-      <div
-        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4"
-        onClick={onClose}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("duplicate.dialog")}
-      >
-        <div
-          ref={panelRef}
-          tabIndex={-1}
-          className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl outline-none"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("duplicate.compare")}</h2>
-            <div className="flex items-center gap-2">
-              {/* View mode toggle */}
+      <Modal open onClose={onClose} title={t("duplicate.compare")} size="lg">
+        <ModalHeader
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
               {viewOptions.length > 1 && (
-                <div className="flex overflow-hidden rounded-md border border-border text-xs">
-                  {viewOptions.map(({ key, label }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setViewMode(key)}
-                      className={cn(
-                        "px-2.5 py-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        viewMode === key
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <Segmented
+                  name="duplicate-compare-mode"
+                  label={t("duplicate.compare")}
+                  value={viewMode}
+                  options={viewOptions.map(({ key, label }) => ({ value: key, label }))}
+                  onChange={setViewMode}
+                />
               )}
 
-              {/* Duplicate navigation */}
               {duplicateItems.length > 1 && (
                 <>
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="text-xs tabular-nums text-muted-foreground">
                     {dupIdx + 1} / {duplicateItems.length}
                   </span>
                   <button
                     type="button"
                     onClick={goPrev}
                     disabled={!hasPrev}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                    className={NAV_BUTTON}
                     aria-label={t("duplicate.previous")}
                   >
-                    <FiChevronLeft className="h-4 w-4" />
+                    <FiChevronLeft className="h-4 w-4" aria-hidden />
                   </button>
                   <button
                     type="button"
                     onClick={goNext}
                     disabled={!hasNext}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                    className={NAV_BUTTON}
                     aria-label={t("duplicate.next")}
                   >
-                    <FiChevronRight className="h-4 w-4" />
+                    <FiChevronRight className="h-4 w-4" aria-hidden />
                   </button>
                 </>
               )}
-
-              {/* Similarity badge — always blue */}
-              <span className="rounded-full bg-info/15 px-3 py-1 text-xs font-semibold text-info">
-                {similarityLabel}
-              </span>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label={t("duplicate.close")}
-              >
-                <FiX className="h-4 w-4" />
-              </button>
             </div>
-          </div>
+          }
+        >
+          <span className="rounded-full bg-info/15 px-2.5 py-0.5 text-2xs font-semibold text-info">
+            {similarityLabel}
+          </span>
+        </ModalHeader>
 
-          {/* Body */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+        <ModalBody className="px-0 py-0">
             {/* ── Side by side ── */}
             {viewMode === "side-by-side" && (
               <div className="space-y-4 px-5 py-5">
@@ -724,50 +611,40 @@ export function DuplicateComparison({
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("duplicate.diffTitle")}
                 </p>
-                {diffLoading && (
-                  <div className="flex h-40 items-center justify-center">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  </div>
-                )}
                 <button
                   type="button"
-                  className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="relative block w-full cursor-zoom-in rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setEnlargedUrl(api.diffUrl(original, item.source, 1400))}
                   aria-label={t("duplicate.viewDiff")}
                 >
-                  <img
+                  <MediaImage
                     src={api.diffUrl(original, item.source, 768)}
                     alt={t("duplicate.diffAlt")}
-                    loading="lazy"
-                    decoding="async"
-                    onLoad={() => setDiffLoading(false)}
-                    onError={() => {
-                      setDiffBroken(true);
-                      setViewMode("side-by-side");
-                      setDiffLoading(false);
-                    }}
-                    className={cn(
-                      "mx-auto max-h-[50vh] w-full cursor-zoom-in rounded-lg border border-border bg-black object-contain transition-opacity hover:opacity-90",
-                      diffLoading && "invisible h-0",
-                    )}
+                    className="mx-auto max-h-[50dvh] w-full rounded-lg border border-border object-contain"
+                    fallback={
+                      <p className="py-10 text-center text-xs text-muted-foreground">
+                        {t("duplicate.diffHelp")}
+                      </p>
+                    }
                   />
                 </button>
-                {!diffLoading && (
-                  <p className="text-2xs text-muted-foreground">{t("duplicate.diffHelp")}</p>
-                )}
+                <p className="text-2xs text-muted-foreground">{t("duplicate.diffHelp")}</p>
               </div>
             )}
-          </div>
+        </ModalBody>
 
-          {/* Footer */}
-          <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
-            {footerHint}
-          </div>
-        </div>
-      </div>
+        <ModalFooter>
+          <span className="mr-auto text-xs text-muted-foreground">{footerHint}</span>
+        </ModalFooter>
+      </Modal>
 
-      {enlargedUrl && <EnlargedOverlay url={enlargedUrl} onClose={() => setEnlargedUrl(null)} />}
-    </>,
-    document.body,
+      {enlargedUrl && (
+        <ImageLightbox
+          src={enlargedUrl}
+          title={getBasename(item.source)}
+          onClose={() => setEnlargedUrl(null)}
+        />
+      )}
+    </>
   );
 }

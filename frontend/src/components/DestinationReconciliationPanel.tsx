@@ -3,6 +3,7 @@ import { MediaPreviewModal } from "@/components/MediaPreviewModal";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
+import { Select, SelectItem } from "@/components/ui/select";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { api, type ReconciliationPlan, type ReconciliationReport } from "@/services/api";
@@ -41,7 +42,7 @@ export function DestinationReconciliationPanel({ items = [] }: { items?: Preview
       setPageCursors([null]);
       setPageIndex(0);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("reconcile.failed")));
+      setError(extractErrorMessage(cause, t("reconcile.failed")).message);
     } finally {
       setRunning(false);
     }
@@ -54,7 +55,7 @@ export function DestinationReconciliationPanel({ items = [] }: { items?: Preview
       setPlanResult(await api.planReconciliation(report, selected, confirmedProbable));
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("reconcile.planFailed")));
+      setError(extractErrorMessage(cause, t("reconcile.planFailed")).message);
     }
   };
 
@@ -67,7 +68,7 @@ export function DestinationReconciliationPanel({ items = [] }: { items?: Preview
       setPlanResult(null);
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("reconcile.executeFailed")));
+      setError(extractErrorMessage(cause, t("reconcile.executeFailed")).message);
     }
   };
 
@@ -98,7 +99,7 @@ export function DestinationReconciliationPanel({ items = [] }: { items?: Preview
       setPageCursors(cursors);
       setPageIndex(nextIndex);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("reconcile.failed")));
+      setError(extractErrorMessage(cause, t("reconcile.failed")).message);
     } finally {
       setRunning(false);
     }
@@ -135,24 +136,24 @@ export function DestinationReconciliationPanel({ items = [] }: { items?: Preview
               </p>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            {t("reconcile.filter")}
-            <select
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span id="reconcile-filter-label">{t("reconcile.filter")}</span>
+            <Select
+              size="sm"
               value={filter}
-              onChange={(event) => {
-                const nextFilter = event.target.value;
+              aria-labelledby="reconcile-filter-label"
+              onValueChange={(nextFilter) => {
                 setFilter(nextFilter);
                 void loadPage(null, nextFilter, 0, [null]);
               }}
-              className="rounded border border-border bg-background px-2 py-1 text-foreground"
             >
               {["all", "missing", "misplaced", "extra", "matched", "unknown"].map((value) => (
-                <option key={value} value={value}>
+                <SelectItem key={value} value={value}>
                   {t(`reconcile.class.${value}`)}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-          </label>
+            </Select>
+          </div>
           <ul className="space-y-2">
             {visible.map((finding) => {
               const explainedItem = finding.input_path

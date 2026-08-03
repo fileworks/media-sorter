@@ -10,8 +10,9 @@
  * needs explaining, it is explained where it is read.
  */
 
-import { useId, type ReactNode } from "react";
+import { Fragment, useId, type ReactNode } from "react";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface SettingRowProps {
@@ -30,6 +31,12 @@ interface SettingRowProps {
   disabledReason?: string | null;
   /** Anchor target so the rail can jump to this row. */
   id?: string;
+  /**
+   * Put the control on its own line under the label, full width. For controls
+   * that grow with their content — a tag list, a pattern editor — which would
+   * otherwise crush the label column down to one word per line.
+   */
+  stacked?: boolean;
 }
 
 export function SettingRow({
@@ -42,17 +49,20 @@ export function SettingRow({
   disabled = false,
   disabledReason,
   id,
+  stacked = false,
 }: SettingRowProps) {
   const Label = htmlFor ? "label" : "div";
   return (
     <div
       id={id}
       className={cn(
-        "flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:gap-5",
+        "flex flex-col gap-3 px-5 py-3.5",
+        !stacked && "sm:flex-row sm:items-center sm:gap-5",
         !last && "border-b border-border",
         disabled && "opacity-60",
-        // The rail scrolls a row into view; leave it clear of the sticky header.
-        id && "scroll-mt-24",
+        // The rail scrolls a row into view; leave it clear of the sticky group
+        // header, and no further — `useScrollSpy`'s offset is matched to this.
+        id && "scroll-mt-[4.5rem]",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -72,7 +82,14 @@ export function SettingRow({
           </p>
         )}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2.5">{children}</div>
+      <div
+        className={cn(
+          "flex min-w-0 flex-wrap items-center gap-2.5",
+          stacked ? "w-full" : "sm:shrink-0",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -92,6 +109,12 @@ export function SettingPreview({ children }: { children: ReactNode }) {
  * One numbered group of settings. The ordinal is not decoration: Sort → Clean →
  * Enrich is the order the work actually happens in, and numbering it is what
  * makes the sequence legible at a glance.
+ *
+ * The header sticks to the top of the page while its rows are being read, so
+ * "which group is this setting in?" never needs a scroll back up. That is also
+ * why the card cannot clip its overflow: `overflow: hidden` makes the section
+ * its own scroll container, and a sticky child of a box that never scrolls
+ * never sticks. The corners are rounded on the header instead.
  */
 export function SettingGroup({
   ordinal,
@@ -111,9 +134,9 @@ export function SettingGroup({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn("overflow-hidden rounded-xl border border-border bg-card", id && "scroll-mt-20")}
+      className={cn("rounded-xl border border-border bg-card", id && "scroll-mt-4")}
     >
-      <header className="flex flex-wrap items-baseline gap-2.5 border-b border-border px-5 py-3.5">
+      <header className="sticky top-0 z-10 flex flex-wrap items-baseline gap-2.5 rounded-t-xl border-b border-border bg-card px-5 py-3.5">
         <span className="font-mono text-xs font-bold text-primary">{ordinal}</span>
         <h2 id={headingId} className="text-sm font-bold tracking-tight text-foreground">
           {title}
@@ -165,12 +188,10 @@ export function Segmented<T extends string>({
       <legend className="sr-only">{label}</legend>
       {options.map((option, index) => {
         const active = option.value === value;
-        return (
+        const control = (
           <label
-            key={option.value}
-            title={option.title}
             className={cn(
-              "cursor-pointer px-3.5 py-1.5 text-xs transition-colors",
+              "cursor-pointer whitespace-nowrap px-3.5 py-1.5 text-xs transition-colors",
               index > 0 && "border-l border-border",
               active
                 ? "bg-primary font-semibold text-primary-foreground"
@@ -190,6 +211,13 @@ export function Segmented<T extends string>({
             />
             {option.label}
           </label>
+        );
+        return option.title ? (
+          <Tooltip key={option.value} label={option.title}>
+            {control}
+          </Tooltip>
+        ) : (
+          <Fragment key={option.value}>{control}</Fragment>
         );
       })}
     </fieldset>

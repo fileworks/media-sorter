@@ -71,7 +71,7 @@ export function OperationCenter({
         type="button"
         onClick={() => setExpanded((open) => !open)}
         aria-expanded={expanded}
-        className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-accent"
+        className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted"
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <FiActivity className="h-3.5 w-3.5" aria-hidden />
@@ -184,20 +184,13 @@ export function ExecutePreflight({
 
   return (
     <section
-      className="space-y-5 rounded-2xl border border-border/80 bg-card p-5 shadow-sm"
-      aria-labelledby="execute-preflight-title"
+      className="space-y-5 rounded-2xl border border-border bg-card p-5 shadow-card"
+      aria-label={t("preflight.title")}
     >
-      <header>
-        <h2 id="execute-preflight-title" className="text-base font-semibold text-foreground">
-          {t("preflight.title")}
-        </h2>
-        <p className="text-xs text-muted-foreground">{t("preflight.description")}</p>
-      </header>
-
       <section className="rounded-xl bg-muted/60 p-4" aria-labelledby="rerunnable-effects">
-        <h3 id="rerunnable-effects" className="text-sm font-medium text-foreground">
+        <h2 id="rerunnable-effects" className="text-sm font-semibold text-foreground">
           {t("preflight.reversible.title")}
-        </h3>
+        </h2>
         <ul className="mt-1 space-y-1">
           {result.reversible.map((line) => (
             <li
@@ -216,9 +209,9 @@ export function ExecutePreflight({
         aria-live="assertive"
         aria-atomic="true"
       >
-        <h3 id="irreversible-effects" className="text-sm font-medium text-warning">
+        <h2 id="irreversible-effects" className="text-sm font-semibold text-warning">
           {t("preflight.irreversible.title")}
-        </h3>
+        </h2>
         <ul className="mt-1 space-y-1">
           {result.irreversible.map((line) => (
             <li

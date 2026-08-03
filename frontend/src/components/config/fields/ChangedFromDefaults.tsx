@@ -57,8 +57,8 @@ export function ChangedFromDefaults({
           <button
             type="button"
             onClick={onResetAll}
-            className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-            title={t("common.resetSectionTitle")}
+            className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("common.resetSectionTitle")}
           >
             <FiRotateCcw className="h-3 w-3" />
             {resetLabel ?? t("common.resetAll")}

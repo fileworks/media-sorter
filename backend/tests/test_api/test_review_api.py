@@ -35,7 +35,11 @@ def _member(member_id: str, *, role: str = "input", size: int = 100) -> GroupMem
 def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ReviewPlan:
     """A plan with one group, wired in so the routes do not need a real catalog."""
     monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path / "plans")
-    plan = ReviewPlan(plan_id="test-plan", transfer_mode="copy")
+    # The routes now resolve a plan against the live catalog generation, and the
+    # catalog is shared for the session. Pin the generation to the seeded one so
+    # this fixture keeps its promise of not needing a real catalog.
+    monkeypatch.setattr(review_routes, "_live_generation", lambda _container: 1)
+    plan = ReviewPlan(plan_id="test-plan", transfer_mode="copy", catalog_generation=1)
     plan.register(
         DuplicateGroup(
             group_id="g1",

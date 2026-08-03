@@ -13,13 +13,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FiSearch } from "react-icons/fi";
 
 import { CompareIcon, ReferenceLockIcon } from "@/components/icons";
 import { StateView } from "@/components/StateView";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { Select, SelectItem } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/setting-row";
 import { Thumbnail } from "@/components/ui/thumbnail";
+import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
 import { getBasename } from "@/lib/pathUtils";
@@ -54,11 +57,13 @@ function MemberCard({
   member,
   isKeeper,
   locale,
+  onOpen,
   t,
 }: {
   member: GroupMember;
   isKeeper: boolean;
   locale: string;
+  onOpen: () => void;
   t: (key: string, params?: Record<string, string | number>, fallback?: string) => string;
 }) {
   const isReference = member.role === "reference";
@@ -70,17 +75,20 @@ function MemberCard({
           ? "border-[1.5px] border-dashed border-success"
           : isKeeper
             ? "border-2 border-success"
-            : "border border-border opacity-75",
+            : // "Set aside" is said by the badge and the plain border; dimming
+              // the whole card said it a third time and dropped its text under
+              // 4.5:1 while doing so. Only the picture recedes.
+              "border border-border [&_img]:opacity-70",
       )}
     >
       <span
         className={cn(
           "absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-bold",
-          isReference
-            ? "bg-success text-white"
-            : isKeeper
-              ? "bg-success text-white"
-              : "bg-muted text-muted-foreground",
+          // The tint/ink pair every other badge in the app uses. A solid green
+          // with white on it reads at 3:1 against the lighter dark-mode green.
+          isReference || isKeeper
+            ? "bg-tint-success text-success"
+            : "bg-muted text-muted-foreground",
         )}
       >
         {isReference && <ReferenceLockIcon className="h-2.5 w-2.5" />}
@@ -91,7 +99,12 @@ function MemberCard({
             : t("review.badge.setAside")}
       </span>
 
-      <Thumbnail path={member.observed_path} className="h-[6.5rem] w-full" />
+      <Thumbnail
+        path={member.observed_path}
+        className="h-[6.5rem] w-full"
+        onOpen={onOpen}
+        openLabel={t("preview.openFile", { name: getBasename(member.relative_path) })}
+      />
 
       <div className="bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
         <p className={cn("truncate", isKeeper && "font-semibold text-foreground")}>
@@ -117,24 +130,13 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
   const [plans, setPlans] = useState<Record<string, GroupPlan>>({});
   const [impact, setImpact] = useState<BulkImpact | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<GroupMember | null>(null);
 
   // The configured default is the starting point, not a lock: picking a rule
   // here is explicitly a per-run override that never edits the recipe.
   useEffect(() => setPolicy(defaultPolicy), [defaultPolicy]);
 
-  const exact = useQuery({
-    queryKey: ["review", "groups", "exact"],
-    queryFn: () => api.listReviewGroups("exact", { limit: 200 }),
-  });
-  const similar = useQuery({
-    queryKey: ["review", "groups", "similar"],
-    queryFn: () => api.listReviewGroups("similar", { limit: 200 }),
-  });
-
-  const groups = useMemo(
-    () => [...(exact.data?.groups ?? []), ...(similar.data?.groups ?? [])] as DuplicateGroup[],
-    [exact.data, similar.data],
-  );
+  const { groups, isLoading: loading, isError: failed, refetch } = useReviewGroups(plans);
   const generation = groups[0]?.catalog_generation ?? 0;
   const scopeKey = filterKey(
     { kind: "all", state: "all", search, minBytes: 0, withReferencesOnly: false },
@@ -237,8 +239,6 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
     [queryClient, scopeKey, t],
   );
 
-  const loading = exact.isLoading || similar.isLoading;
-  const failed = exact.isError || similar.isError;
   const busy = decide.isPending || applyBulk.isPending || keepAll.isPending;
 
   const SCOPES: { id: Scope; label: string }[] = [
@@ -274,36 +274,39 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
         </label>
       </div>
 
-      {/* The rule bar. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-card px-4 py-3">
-        <span className="text-xs font-semibold text-foreground">{t("review.keepRule")}</span>
-        <label className="inline-flex items-center">
-          <span className="sr-only">{t("review.keepRule")}</span>
-          <select
-            value={policy}
-            onChange={(event) => setPolicy(event.target.value as KeeperPolicyId)}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {SELECTABLE_KEEPER_POLICIES.map((option) => (
-              <option key={option} value={option}>
-                {t(`config.keeper.${option}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={unresolvedCount === 0 || previewBulk.isPending || busy}
-          onClick={() => previewBulk.mutate()}
-          className="rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {t("review.applyToUnresolved", { count: unresolvedCount })}
-        </button>
-        <span className="text-xs text-faint">{t("review.keepRuleNote")}</span>
+      {/* The rule bar: the rule and its action on one line, the note under it,
+          the scope filter on the right once the window is wide enough to hold
+          both — otherwise it wraps to its own line instead of squeezing the
+          action button to nothing. */}
+      <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-card px-4 py-3 lg:flex-row lg:items-start">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-foreground">{t("review.keepRule")}</span>
+            <Select
+              size="sm"
+              value={policy}
+              aria-label={t("review.keepRule")}
+              onValueChange={(value) => setPolicy(value as KeeperPolicyId)}
+            >
+              {SELECTABLE_KEEPER_POLICIES.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`config.keeper.${option}`)}
+                </SelectItem>
+              ))}
+            </Select>
+            <button
+              type="button"
+              disabled={unresolvedCount === 0 || previewBulk.isPending || busy}
+              onClick={() => previewBulk.mutate()}
+              className="rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t("review.applyToUnresolved", { count: unresolvedCount })}
+            </button>
+          </div>
+          <p className="text-xs text-faint">{t("review.keepRuleNote")}</p>
+        </div>
 
-        <span className="flex-1" />
-
-        <ul className="flex flex-wrap gap-1">
+        <ul className="flex shrink-0 flex-wrap gap-1">
           {SCOPES.map((entry) => (
             <li key={entry.id}>
               <button
@@ -377,10 +380,7 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
         <StateView
           variant="error"
           title={t("review.loadFailed")}
-          onRetry={() => {
-            void exact.refetch();
-            void similar.refetch();
-          }}
+          onRetry={refetch}
         />
       ) : visible.length === 0 ? (
         <StateView variant="empty" title={t("review.empty")} detail={t("review.emptyHelp")} />
@@ -443,28 +443,24 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
                       >
                         {t("review.notDuplicates")}
                       </button>
-                      <label className="inline-flex items-center">
-                        <span className="sr-only">
-                          {t("review.groupKeepRule", { name: group.group_id })}
-                        </span>
-                        <select
-                          defaultValue=""
-                          disabled={busy}
-                          onChange={(event) => {
-                            if (!event.target.value) return;
-                            setGroupPolicy(group, event.target.value as KeeperPolicyId);
-                            event.target.value = "";
-                          }}
-                          className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                        >
-                          <option value="">{t("review.chooseKeeper")}</option>
-                          {SELECTABLE_KEEPER_POLICIES.map((option) => (
-                            <option key={option} value={option}>
-                              {t(`config.keeper.${option}`)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <Select
+                        size="sm"
+                        value=""
+                        disabled={busy}
+                        aria-label={t("review.groupKeepRule", { name: group.group_id })}
+                        onValueChange={(value) => {
+                          // The control is a menu, not a stored choice: it fires
+                          // an action and snaps back to its prompt.
+                          if (value) setGroupPolicy(group, value as KeeperPolicyId);
+                        }}
+                      >
+                        <SelectItem value="">{t("review.chooseKeeper")}</SelectItem>
+                        {SELECTABLE_KEEPER_POLICIES.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {t(`config.keeper.${option}`)}
+                          </SelectItem>
+                        ))}
+                      </Select>
                     </>
                   )}
                 </div>
@@ -476,6 +472,7 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
                       member={member}
                       isKeeper={member.member_id === keeperId}
                       locale={locale}
+                      onOpen={() => setLightbox(member)}
                       t={t}
                     />
                   ))}
@@ -616,6 +613,14 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
             })}
           </table>
         </div>
+      )}
+
+      {lightbox && (
+        <ImageLightbox
+          src={api.thumbnailUrl(lightbox.observed_path, 1600)}
+          title={getBasename(lightbox.relative_path)}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );

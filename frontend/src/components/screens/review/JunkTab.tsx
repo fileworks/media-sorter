@@ -7,8 +7,9 @@
  * not. Each group links to the filter that produced it.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { MediaPreviewModal } from "@/components/MediaPreviewModal";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -24,6 +25,7 @@ const PREVIEW_LIMIT = 12;
 
 export function JunkTab({ items, onOpenSetting }: JunkTabProps) {
   const { t, locale } = useI18n();
+  const [preview, setPreview] = useState<PreviewItem | null>(null);
 
   const junk = useMemo(() => items.filter((item) => item.status === "junk"), [items]);
 
@@ -76,9 +78,16 @@ export function JunkTab({ items, onOpenSetting }: JunkTabProps) {
             {group.slice(0, PREVIEW_LIMIT).map((item) => (
               <li
                 key={item.source}
-                className="overflow-hidden rounded-lg border border-border opacity-80"
+                // Only the picture recedes: dimming the tile took its caption
+                // below 4.5:1, and "this is junk" is already said by the tab.
+                className="overflow-hidden rounded-lg border border-border transition-colors hover:border-faint [&_img]:opacity-75 [&_img]:hover:opacity-100"
               >
-                <Thumbnail path={item.source} className="h-20 w-full" />
+                <Thumbnail
+                  path={item.source}
+                  className="h-20 w-full"
+                  onOpen={() => setPreview(item)}
+                  openLabel={t("preview.openFile", { name: getBasename(item.source) })}
+                />
                 <div className="px-2 py-1.5">
                   <p className="truncate font-mono text-3xs text-foreground" title={item.source}>
                     {getBasename(item.source)}
@@ -100,6 +109,10 @@ export function JunkTab({ items, onOpenSetting }: JunkTabProps) {
           )}
         </section>
       ))}
+
+      {preview && (
+        <MediaPreviewModal item={preview} items={junk} onClose={() => setPreview(null)} />
+      )}
     </div>
   );
 }

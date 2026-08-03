@@ -12,6 +12,7 @@ import { useState } from "react";
 import { FiCheck, FiTrash2 } from "react-icons/fi";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import {
   CONFIG_RECIPES,
@@ -118,15 +119,15 @@ export function RecipeGrid({
               </button>
 
               {recipe.custom && !disabled && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(recipe.id)}
-                  title={t("recipes.delete", { name: nameOf(recipe) })}
-                  aria-label={t("recipes.delete", { name: nameOf(recipe) })}
-                  className="absolute right-2 top-2 rounded-md p-1.5 text-faint transition-colors hover:bg-muted hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <FiTrash2 className="h-3.5 w-3.5" aria-hidden />
-                </button>
+                <Tooltip label={t("recipes.delete", { name: nameOf(recipe) })}>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(recipe.id)}
+                    className="absolute right-2 top-2 rounded-lg p-1.5 text-faint transition-colors hover:bg-muted hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <FiTrash2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </Tooltip>
               )}
             </li>
           );

@@ -44,40 +44,40 @@
         align-items: center;
         justify-content: center;
         gap: 1rem;
-        background: #f6f3ee;
-        color: #2a251f;
+        background: #fbfaf9;
+        color: #221e1c;
         font-family: "Geist Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         z-index: 9999;
       }
       html.dark #app-splash {
-        background: #181512;
-        color: #f0ebe4;
+        background: #141619;
+        color: #ebedf0;
       }
       /* The product mark, so the first frame already says which app this is.
          Colours are literal because no stylesheet has loaded yet. */
       .app-splash__mark {
-        --mark-ink: #2a251f;
-        --mark-frame: #efeae2;
-        --mark-edge: #e2dcd1;
-        --mark-arrow: #e8582a;
+        --mark-ink: #221e1c;
+        --mark-frame: #ffffff;
+        --mark-edge: #e6e3e0;
+        --mark-arrow: #f55f14;
       }
       html.dark .app-splash__mark {
-        --mark-ink: #f0ebe4;
-        --mark-frame: #2b2620;
-        --mark-edge: #38322a;
-        --mark-arrow: #ff6a3d;
+        --mark-ink: #ebedf0;
+        --mark-frame: #1c1e22;
+        --mark-edge: #33363d;
+        --mark-arrow: #fa722e;
       }
       .app-splash__spinner {
         width: 28px;
         height: 28px;
         border-radius: 50%;
-        border: 3px solid #e2dcd1;
-        border-top-color: #e8582a;
+        border: 3px solid #e6e3e0;
+        border-top-color: #f55f14;
         animation: app-splash-spin 0.8s linear infinite;
       }
       html.dark .app-splash__spinner {
-        border-color: #38322a;
-        border-top-color: #ff6a3d;
+        border-color: #33363d;
+        border-top-color: #fa722e;
       }
       .app-splash__title {
         font-size: 1.05rem;

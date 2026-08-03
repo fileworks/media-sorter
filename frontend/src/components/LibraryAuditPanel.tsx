@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
+import { Select, SelectItem } from "@/components/ui/select";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { api, type AuditActionPlan, type AuditReport } from "@/services/api";
@@ -49,7 +50,7 @@ export function LibraryAuditPanel({ root }: LibraryAuditPanelProps) {
       setAcknowledged(false);
       setCompleted(null);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("audit.failed")));
+      setError(extractErrorMessage(cause, t("audit.failed")).message);
     } finally {
       setRunning(false);
     }
@@ -62,7 +63,7 @@ export function LibraryAuditPanel({ root }: LibraryAuditPanelProps) {
       setPlan(await api.planAuditFixes(report.audit_id, selected));
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("audit.planFailed")));
+      setError(extractErrorMessage(cause, t("audit.planFailed")).message);
     }
   };
 
@@ -75,7 +76,7 @@ export function LibraryAuditPanel({ root }: LibraryAuditPanelProps) {
       setPlan(null);
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("audit.executeFailed")));
+      setError(extractErrorMessage(cause, t("audit.executeFailed")).message);
     }
   };
 
@@ -102,28 +103,28 @@ export function LibraryAuditPanel({ root }: LibraryAuditPanelProps) {
         <p className="text-xs text-muted-foreground">{t("audit.readOnly")}</p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto]">
         <label className="space-y-1 text-xs text-muted-foreground">
           {t("audit.subtree")}
           <input
             value={subtree}
             onChange={(event) => setSubtree(event.target.value)}
             placeholder={t("audit.wholeLibrary")}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-foreground"
+            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-colors placeholder:text-faint hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
         <label className="space-y-1 text-xs text-muted-foreground">
           {t("audit.sample")}
-          <select
-            value={sample}
-            onChange={(event) => setSample(Number(event.target.value))}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-foreground"
+          <Select
+            className="w-full"
+            value={String(sample)}
+            onValueChange={(value) => setSample(Number(value))}
           >
-            <option value={1}>{t("audit.sample.full")}</option>
-            <option value={0.25}>25%</option>
-            <option value={0.1}>10%</option>
-            <option value={0.01}>1%</option>
-          </select>
+            <SelectItem value="1">{t("audit.sample.full")}</SelectItem>
+            <SelectItem value="0.25">25%</SelectItem>
+            <SelectItem value="0.1">10%</SelectItem>
+            <SelectItem value="0.01">1%</SelectItem>
+          </Select>
         </label>
         <Button className="self-end" disabled={running} onClick={() => void run()}>
           {running ? t("audit.running") : t("audit.run")}

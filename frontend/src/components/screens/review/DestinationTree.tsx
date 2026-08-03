@@ -194,7 +194,7 @@ export function DestinationTree({ root, selectedPath, onSelect }: DestinationTre
       </label>
 
       {filtered && filtered.count > 0 ? (
-        <ul className="max-h-[26rem] overflow-y-auto">
+        <ul className="max-h-[min(26rem,45dvh)] overflow-y-auto">
           <Row
             node={filtered}
             depth={0}

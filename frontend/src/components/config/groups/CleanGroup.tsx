@@ -178,6 +178,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           </SettingRow>
 
           <SettingRow
+            stacked
             label={t("config.filters.junkPatterns")}
             description={t("config.filters.junkPatternsHelp")}
           >
@@ -278,7 +279,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           onChange={(event) =>
             updateConfig({ min_file_size_kb: clampFileSize(event.target.value) })
           }
-          className="w-28"
+          className="w-36"
         />
         <span className="text-xs text-faint">{t("config.unit.kb")}</span>
         <span className="text-xs text-faint">—</span>
@@ -292,12 +293,13 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           onChange={(event) =>
             updateConfig({ max_file_size_mb: clampFileSize(event.target.value) })
           }
-          className="w-28"
+          className="w-36"
         />
         <span className="text-xs text-faint">{t("config.unit.mb")}</span>
       </SettingRow>
 
       <SettingRow
+        stacked
         label={t("config.filters.exclude")}
         description={t("config.filters.excludeHelp")}
         last

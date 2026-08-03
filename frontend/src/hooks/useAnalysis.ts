@@ -11,7 +11,8 @@ export interface UseAnalysisReturn {
   result: AnalysisResult | null;
   loading: boolean;
   error: string | null;
-  runAnalysis: () => Promise<void>;
+  /** Resolves with the scan when it finishes, or null if it failed or was cancelled. */
+  runAnalysis: () => Promise<AnalysisResult | null>;
   cancelAnalysis: () => Promise<void>;
   clear: () => void;
 }
@@ -27,6 +28,16 @@ export function useAnalysis(): UseAnalysisReturn {
   const handledRef = useRef(false);
   const releaseLoaderRef = useRef<(() => void) | null>(null);
   const lastEventSequenceRef = useRef(0);
+  // `runAnalysis` starts a background task and returns; completion arrives
+  // later, by polling. Callers that need to do something *after* the scan —
+  // the dry run does, and the backend rejects a second operation while one is
+  // running — get this promise instead of a resolved one.
+  const settleRef = useRef<((result: AnalysisResult | null) => void) | null>(null);
+
+  const settle = useCallback((value: AnalysisResult | null) => {
+    settleRef.current?.(value);
+    settleRef.current = null;
+  }, []);
 
   const releaseLoader = useCallback(() => {
     releaseLoaderRef.current?.();
@@ -53,29 +64,40 @@ export function useAnalysis(): UseAnalysisReturn {
       releaseLoader();
       if (status.result) setResult(status.result);
       else setError(t("analysis.noResult"));
+      settle(status.result ?? null);
     } else if (status.status === "failed") {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
       setError(userFacingError(status.failure?.message ?? status.error ?? t("analysis.failed")));
+      settle(null);
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
+      settle(null);
     }
-  }, [status, releaseLoader, t]);
+  }, [status, releaseLoader, settle, t]);
 
   useEffect(() => {
     if (!statusError || handledRef.current) return;
     handledRef.current = true;
     setLoading(false);
     releaseLoader();
-    setError(extractErrorMessage(statusError, t("analysis.statusFailed")));
-  }, [statusError, releaseLoader, t]);
+    setError(extractErrorMessage(statusError, t("analysis.statusFailed")).message);
+    settle(null);
+  }, [statusError, releaseLoader, settle, t]);
 
-  useEffect(() => releaseLoader, [releaseLoader]);
+  useEffect(
+    () => () => {
+      releaseLoader();
+      settle(null);
+    },
+    [releaseLoader, settle],
+  );
 
-  const runAnalysis = useCallback(async () => {
+  const runAnalysis = useCallback(async (): Promise<AnalysisResult | null> => {
+    settle(null);
     setTaskId(null);
     void queryClient.removeQueries({ queryKey: ["analysis"] });
     setResult(null);
@@ -85,15 +107,20 @@ export function useAnalysis(): UseAnalysisReturn {
     releaseLoader();
     releaseLoaderRef.current = api.beginOperation();
     setLoading(true);
+    const settled = new Promise<AnalysisResult | null>((resolve) => {
+      settleRef.current = resolve;
+    });
     try {
       setTaskId(await api.startAnalysis());
     } catch (startError) {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(extractErrorMessage(startError, t("analysis.failed")));
+      setError(extractErrorMessage(startError, t("analysis.failed")).message);
+      settle(null);
     }
-  }, [queryClient, releaseLoader, t]);
+    return settled;
+  }, [queryClient, releaseLoader, settle, t]);
 
   const clear = useCallback(() => {
     setTaskId(null);
@@ -103,15 +130,16 @@ export function useAnalysis(): UseAnalysisReturn {
     handledRef.current = false;
     lastEventSequenceRef.current = 0;
     releaseLoader();
+    settle(null);
     void queryClient.removeQueries({ queryKey: ["analysis"] });
-  }, [queryClient, releaseLoader]);
+  }, [queryClient, releaseLoader, settle]);
 
   const cancelAnalysis = useCallback(async () => {
     if (!taskId) return;
     try {
       await api.cancelAnalysis(taskId);
     } catch (cancelError) {
-      setError(extractErrorMessage(cancelError, t("analysis.cancelFailed")));
+      setError(extractErrorMessage(cancelError, t("analysis.cancelFailed")).message);
     }
   }, [taskId, t]);
 

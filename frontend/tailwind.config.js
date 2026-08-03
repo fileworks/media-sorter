@@ -18,6 +18,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -41,9 +42,13 @@ export default {
         // Third text level, one step quieter than muted-foreground: counts,
         // units, row meta. Still AA against every surface it is used on.
         faint: "hsl(var(--faint))",
-        // The design's undimmed orange. Decoration only — rules, bars, dots,
-        // selected borders. Text and text-bearing fills use `primary`.
+        // The undimmed accents. Decoration only — rules, bars, dots, selected
+        // borders. Text and text-bearing fills use primary/success/warning.
         brand: "hsl(var(--brand))",
+        decor: {
+          success: "hsl(var(--decor-success))",
+          warning: "hsl(var(--decor-warning))",
+        },
         // Soft status washes for badges and callouts.
         tint: {
           primary: "hsl(var(--tint-primary))",

@@ -12,6 +12,7 @@
 
 import { FiCheck } from "react-icons/fi";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 import { STAGE_LABELS, stageIndex, type Stage, type StageReadiness } from "@/lib/stageModel";
@@ -40,44 +41,47 @@ export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
           return (
             <li key={entry.stage} className="flex items-center gap-1">
               {index > 0 && <span className="mr-1 h-px w-5 bg-border sm:w-6" aria-hidden />}
-              <button
-                type="button"
-                disabled={!reachable}
-                aria-current={active ? "step" : undefined}
-                title={readiness.reason ?? t(`stage.${entry.stage}.description`)}
-                onClick={() => onSelect(entry.stage)}
-                className={cn(
-                  "flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  active && "bg-tint-primary",
-                  !active && reachable && "hover:bg-muted",
-                  !reachable && "cursor-not-allowed",
-                )}
-              >
-                <span
+              <Tooltip label={readiness.reason ?? t(`stage.${entry.stage}.description`)}>
+                <button
+                  type="button"
+                  disabled={!reachable}
+                  aria-current={active ? "step" : undefined}
+                  aria-label={t(`stage.${entry.stage}.label`)}
+                  onClick={() => onSelect(entry.stage)}
                   className={cn(
-                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-3xs font-bold",
-                    active && "bg-primary text-primary-foreground",
-                    complete && !active && "bg-tint-success text-success",
-                    !active && !complete && "border border-border text-faint",
-                  )}
-                  aria-hidden
-                >
-                  {complete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
-                </span>
-                <span
-                  className={cn(
-                    "whitespace-nowrap text-xs",
-                    active
-                      ? "font-semibold text-primary"
-                      : complete
-                        ? "text-muted-foreground"
-                        : "text-faint",
+                    "flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active && "bg-tint-primary",
+                    !active && reachable && "hover:bg-muted",
+                    !reachable && "cursor-not-allowed",
                   )}
                 >
-                  {t(`stage.${entry.stage}.label`)}
-                </span>
-              </button>
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-3xs font-bold",
+                      active && "bg-primary text-primary-foreground",
+                      complete && !active && "bg-tint-success text-success",
+                      !active && !complete && "border border-border text-faint",
+                    )}
+                    aria-hidden
+                  >
+                    {complete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
+                  </span>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "whitespace-nowrap text-xs",
+                      active
+                        ? "font-semibold text-primary"
+                        : complete
+                          ? "text-muted-foreground"
+                          : "text-faint",
+                    )}
+                  >
+                    {t(`stage.${entry.stage}.label`)}
+                  </span>
+                </button>
+              </Tooltip>
             </li>
           );
         })}

@@ -20,6 +20,7 @@ import { WarningsTab } from "@/components/screens/review/WarningsTab";
 import { CompareModal } from "@/components/screens/review/CompareModal";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
+import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
 import {
@@ -80,12 +81,19 @@ export function ReviewScreen({
     plan: GroupPlan | undefined;
   } | null>(null);
 
+  // The duplicate figures come from the workbench's own catalog query, not from
+  // the dry run's skip count, so the tile, the tab badge and the tab agree.
+  const { tally: duplicateTally } = useReviewGroups();
+
   const warnings = useMemo(() => planWarnings(result), [result]);
   const totals = useMemo(
-    () => planTotals(result, warningTotal(warnings)),
-    [result, warnings],
+    () => planTotals(result, warningTotal(warnings), duplicateTally),
+    [duplicateTally, result, warnings],
   );
-  const counts = useMemo(() => tabCounts(result, warnings), [result, warnings]);
+  const counts = useMemo(
+    () => tabCounts(result, warnings, duplicateTally),
+    [duplicateTally, result, warnings],
+  );
   const tree = useMemo(
     () =>
       destinationTree(result.items, destinationRootName(config), {
@@ -222,7 +230,7 @@ export function ReviewScreen({
             </ul>
           </nav>
 
-          <Suspense fallback={<StateView variant="loading" title={t("state.loading")} />}>
+          <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
             {view === "duplicates" && (
               <DuplicatesTab
                 defaultPolicy={config.duplicate_keeper_policy}

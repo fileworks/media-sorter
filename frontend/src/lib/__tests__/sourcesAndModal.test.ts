@@ -495,11 +495,17 @@ describe("execute preflight", () => {
     expect(result.blocking[0].text).toMatch(/changed since you reviewed/i);
   });
 
-  it("blocks on insufficient space and says both numbers", () => {
+  it("blocks on insufficient space and says both sizes in human units", () => {
     const result = preflight({ ...base, freeBytes: 1, requiredBytes: 5_000 });
 
     expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/5,000 bytes needed, 1 available/);
+    // Sizes are formatted, not raw byte counts: "5,000 bytes" is a number to
+    // decode, "4.9 KB" is a number to read.
+    expect(result.blocking[0].text).toMatch(/4\.9 KB needed, 1 B available/);
+    expect(result.blocking[0].params).toMatchObject({
+      required: "4.9 KB",
+      available: "1 B",
+    });
   });
 
   it("blocks on an unwritable quarantine", () => {

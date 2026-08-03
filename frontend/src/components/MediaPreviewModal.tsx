@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useEffect, useState } from "react";
+import { MediaImage } from "@/components/ui/media-image";
+import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { copyPath, revealPath } from "@/lib/reveal";
@@ -10,51 +10,24 @@ import { getBasename } from "@/lib/pathUtils";
 import { useMediaInfo, formatResolution } from "@/hooks/useMediaInfo";
 import type { PreviewItem } from "@/types/api";
 import { useI18n } from "@/i18n/I18nContext";
-import {
-  FiX,
-  FiCopy,
-  FiCheck,
-  FiFolder,
-  FiChevronLeft,
-  FiChevronRight,
-  FiFile,
-} from "react-icons/fi";
+import { FiCopy, FiCheck, FiFolder, FiChevronLeft, FiChevronRight, FiFile } from "react-icons/fi";
 
 /**
- * Hero image in the preview modal. Displayed on a pure-dark background for
- * maximum contrast. A spinner shows while loading; a placeholder on error.
+ * Hero image in the preview modal. A spinner shows while it loads; anything the
+ * backend cannot render (a video, an unreadable file) falls back to an icon.
  */
 function ModalImage({ path, maxPx = 2048 }: { path: string; maxPx?: number }) {
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
-
-  if (errored) {
-    return (
-      <div className="flex min-h-[160px] w-full items-center justify-center text-white/30">
-        <FiFile className="h-12 w-12" />
-      </div>
-    );
-  }
-
   return (
-    <div className="relative flex w-full min-h-[160px] items-center justify-center overflow-hidden">
-      {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
-        </div>
-      )}
-      <img
+    <div className="relative flex min-h-[160px] w-full items-center justify-center overflow-hidden">
+      <MediaImage
         src={api.thumbnailUrl(path, maxPx)}
         alt=""
-        loading="lazy"
-        decoding="async"
-        onLoad={() => setLoaded(true)}
-        onError={() => setErrored(true)}
-        className={cn(
-          "block max-w-full rounded-sm object-contain transition-opacity duration-300",
-          loaded ? "opacity-100" : "opacity-0",
-        )}
-        style={{ maxHeight: "58vh", width: "auto" }}
+        className="block max-h-[58dvh] w-auto max-w-full rounded-sm object-contain"
+        fallback={
+          <div className="flex min-h-[160px] w-full items-center justify-center text-muted-foreground/40">
+            <FiFile className="h-12 w-12" aria-hidden />
+          </div>
+        }
       />
     </div>
   );
@@ -79,7 +52,7 @@ export function PathActions({ path, compact = false }: { path: string; compact?:
   };
 
   const btn =
-    "inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
     <div className={cn("space-y-1.5", compact && "space-y-1")}>
@@ -185,8 +158,6 @@ function getStatusColor(status: PreviewItem["status"]): string {
 export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewModalProps) {
   const { t, locale } = useI18n();
   const [current, setCurrent] = useState(item);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, true);
 
   // When the initiating item changes from outside (new file clicked), sync.
   useEffect(() => {
@@ -205,9 +176,9 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
     if (hasNext) setCurrent(items[idx + 1]);
   };
 
+  // Escape is the shell's job; only the arrow keys are this dialog's own.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
       if (e.key === "ArrowLeft") goPrev();
       if (e.key === "ArrowRight") goNext();
     };
@@ -215,7 +186,7 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
     return () => window.removeEventListener("keydown", onKey);
     // goPrev/goNext are recreated each render but are cheap closures
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, idx, hasPrev, hasNext]);
+  }, [idx, hasPrev, hasNext]);
 
   const name = getBasename(current.source);
   const { data: info } = useMediaInfo(current.source);
@@ -233,107 +204,81 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
   const tags = current.tags ?? [];
   const category = current.category ?? null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("preview.dialogLabel", { name })}
-    >
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl outline-none ring-1 ring-border/60"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <h2 className="min-w-0 truncate text-sm font-semibold text-foreground" title={name}>
-              {name}
-            </h2>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-2xs font-medium bg-muted",
-                getStatusColor(current.status),
-              )}
-            >
-              {t(getStatusKey(current.status), {}, current.status)}
-            </span>
-          </div>
+  const navButton =
+    "rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30";
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            {showNav && (
-              <span className="mr-1 text-xs text-muted-foreground tabular-nums">
+  return (
+    <Modal open onClose={onClose} title={name} size="lg">
+      <ModalHeader
+        actions={
+          showNav && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="text-xs tabular-nums text-muted-foreground">
                 {idx + 1} / {items.length}
               </span>
-            )}
-            {showNav && (
-              <>
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  disabled={!hasPrev}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={t("preview.previousFile")}
-                >
-                  <FiChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={goNext}
-                  disabled={!hasNext}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={t("preview.nextFile")}
-                >
-                  <FiChevronRight className="h-4 w-4" />
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={t("preview.close")}
-            >
-              <FiX className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Image area — subtle neutral background, nav arrows overlaid */}
-        <div className="relative flex min-h-[200px] items-center justify-center bg-muted/40 px-12 py-5 overflow-hidden">
-          {showNav && (
-            <button
-              type="button"
-              onClick={goPrev}
-              disabled={!hasPrev}
-              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label={t("preview.previousFile")}
-            >
-              <FiChevronLeft className="h-5 w-5" />
-            </button>
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={!hasPrev}
+                className={navButton}
+                aria-label={t("preview.previousFile")}
+              >
+                <FiChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!hasNext}
+                className={navButton}
+                aria-label={t("preview.nextFile")}
+              >
+                <FiChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )
+        }
+      >
+        <span
+          className={cn(
+            "shrink-0 rounded-full bg-muted px-2 py-0.5 text-2xs font-medium",
+            getStatusColor(current.status),
           )}
+        >
+          {t(getStatusKey(current.status), {}, current.status)}
+        </span>
+      </ModalHeader>
 
-          {/* key forces remount (resets loading state) on navigation */}
-          <ModalImage key={current.source} path={current.source} />
+      {/* Image area — subtle neutral background, nav arrows overlaid */}
+      <div className="relative flex min-h-[180px] shrink-0 items-center justify-center overflow-hidden bg-muted/40 px-12 py-5">
+        {showNav && (
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={!hasPrev}
+            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-20"
+            aria-label={t("preview.previousFile")}
+          >
+            <FiChevronLeft className="h-5 w-5" aria-hidden />
+          </button>
+        )}
 
-          {showNav && (
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={!hasNext}
-              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-20 disabled:cursor-not-allowed"
-              aria-label={t("preview.nextFile")}
-            >
-              <FiChevronRight className="h-5 w-5" />
-            </button>
-          )}
-        </div>
+        {/* key forces remount (resets loading state) on navigation */}
+        <ModalImage key={current.source} path={current.source} />
 
-        {/* Info section */}
-        <div className="min-h-0 overflow-y-auto px-5 py-4 space-y-4">
+        {showNav && (
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={!hasNext}
+            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-background/80 p-2 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-20"
+            aria-label={t("preview.nextFile")}
+          >
+            <FiChevronRight className="h-5 w-5" aria-hidden />
+          </button>
+        )}
+      </div>
+
+      <ModalBody className="space-y-4">
           {/* Metadata grid */}
           <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-4">
             {meta.map((m) => (
@@ -586,16 +531,14 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
               </p>
             </div>
           )}
-        </div>
+      </ModalBody>
 
-        {/* Footer: keyboard hint */}
-        {showNav && (
-          <p className="border-t border-border px-5 py-2 text-2xs text-muted-foreground">
-            {t("preview.navigationHelp")}
-          </p>
-        )}
-      </div>
-    </div>,
-    document.body,
+      {/* Footer: keyboard hint */}
+      {showNav && (
+        <p className="shrink-0 border-t border-border px-5 py-2 text-2xs text-muted-foreground">
+          {t("preview.navigationHelp")}
+        </p>
+      )}
+    </Modal>
   );
 }

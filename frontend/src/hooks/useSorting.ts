@@ -223,7 +223,7 @@ export function useSorting() {
 
   useEffect(() => {
     if (!progressError || uiStatus === "failed") return;
-    const message = extractErrorMessage(progressError, t("sort.statusFailed"));
+    const message = extractErrorMessage(progressError, t("sort.statusFailed")).message;
     setUiStatus("failed");
     setError(message);
     releaseLoader();
@@ -256,7 +256,7 @@ export function useSorting() {
         setUiStatus("running");
       } catch (err) {
         releaseLoader();
-        const msg = extractErrorMessage(err, t("sort.startFailed"));
+        const msg = extractErrorMessage(err, t("sort.startFailed")).message;
         setUiStatus("failed");
         setError(msg);
         toast(msg, "error");
@@ -281,7 +281,7 @@ export function useSorting() {
       await api.cancelSort(taskId);
       toast(t("sort.cancelRequested"), "info");
     } catch (err) {
-      const msg = extractErrorMessage(err, t("sort.cancelFailed"));
+      const msg = extractErrorMessage(err, t("sort.cancelFailed")).message;
       setError(msg);
       toast(msg, "error");
     }

@@ -13,6 +13,8 @@ import type { ReactNode } from "react";
 import { FiClock, FiMoon, FiSun } from "react-icons/fi";
 
 import { AppMark } from "@/components/icons";
+import { Select, SelectItem } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, type Locale } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 
@@ -80,59 +82,63 @@ export function TitleBar({
 
         {children}
 
-        <span
-          className="hidden items-center gap-2 rounded-full border border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground md:inline-flex"
-          role="status"
-          title={
-            backend === "ready" && version
-              ? t("backend.connected", { version })
-              : backendLabel
+        <Tooltip
+          label={
+            backend === "ready" && version ? t("backend.connected", { version }) : backendLabel
           }
         >
-          <span className={cn("h-2 w-2 rounded-full", BACKEND_DOT[backend])} aria-hidden />
-          {backendLabel}
-        </span>
-
-        <label className="inline-flex items-center">
-          <span className="sr-only">{t("config.language.label")}</span>
-          <select
-            value={locale}
-            onChange={(event) => onLocaleChange(event.target.value as Locale)}
-            className="cursor-pointer rounded-full border border-border bg-transparent py-1 pl-2.5 pr-6 text-2xs font-semibold uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <span
+            tabIndex={0}
+            role="status"
+            aria-label={backendLabel}
+            className="hidden shrink-0 items-center gap-2 rounded-full border border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
           >
-            <option value="en">EN</option>
-            <option value="de">DE</option>
-          </select>
-        </label>
+            <span className={cn("h-2 w-2 rounded-full", BACKEND_DOT[backend])} aria-hidden />
+            {backendLabel}
+          </span>
+        </Tooltip>
 
-        <button
-          type="button"
-          onClick={onOpenHistory}
-          title={t("app.history")}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Select
+          size="sm"
+          value={locale}
+          aria-label={t("config.language.label")}
+          onValueChange={(value) => onLocaleChange(value as Locale)}
+          className="w-[4.75rem] shrink-0"
         >
-          <FiClock className="h-3.5 w-3.5" aria-hidden />
-          <span className="hidden sm:inline">{t("app.history")}</span>
-          {historyCount > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-3xs font-semibold text-foreground">
-              {historyCount}
-            </span>
-          )}
-        </button>
+          <SelectItem value="en">EN</SelectItem>
+          <SelectItem value="de">DE</SelectItem>
+        </Select>
 
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          title={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-          aria-label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {theme === "dark" ? (
-            <FiSun className="h-4 w-4" aria-hidden />
-          ) : (
-            <FiMoon className="h-4 w-4" aria-hidden />
-          )}
-        </button>
+        <Tooltip label={t("app.history")}>
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            aria-label={t("app.history")}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <FiClock className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">{t("app.history")}</span>
+            {historyCount > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-3xs font-semibold text-foreground">
+                {historyCount}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+
+        <Tooltip label={t(theme === "dark" ? "app.switchLight" : "app.switchDark")}>
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {theme === "dark" ? (
+              <FiSun className="h-4 w-4" aria-hidden />
+            ) : (
+              <FiMoon className="h-4 w-4" aria-hidden />
+            )}
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

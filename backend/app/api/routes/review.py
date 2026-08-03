@@ -56,15 +56,43 @@ def _plans_directory() -> Path:
     return resolve_app_paths().data_dir / PLANS_DIRECTORY_NAME
 
 
-def _plan(plan_id: str, *, transfer_mode: str = "copy") -> ReviewPlan:
+def _plan(
+    plan_id: str,
+    *,
+    transfer_mode: str = "copy",
+    catalog_generation: int | None = None,
+) -> ReviewPlan:
+    """The plan for this id, discarded if it describes an older catalog.
+
+    A plan holds group ids that only mean anything against the generation they
+    were computed from. Carrying them past a rescan is what made every
+    per-group route 404 for the rest of the process's life, and what let a
+    stored ``default.json`` outlive the catalog it described.
+    """
     plan = _PLANS.get(plan_id)
     if plan is not None:
-        return plan
-    path = _plans_directory() / f"{plan_id}.json"
-    plan = ReviewPlan.load(path) if path.is_file() else ReviewPlan(plan_id=plan_id)
+        if catalog_generation is None or plan.catalog_generation == catalog_generation:
+            return plan
+        del _PLANS[plan_id]
+    if plan is None:
+        path = _plans_directory() / f"{plan_id}.json"
+        plan = ReviewPlan.load(path) if path.is_file() else ReviewPlan(plan_id=plan_id)
+    if catalog_generation is not None and plan.catalog_generation != catalog_generation:
+        plan = ReviewPlan(plan_id=plan_id, catalog_generation=catalog_generation)
     plan.transfer_mode = transfer_mode  # type: ignore[assignment]
     _PLANS[plan_id] = plan
     return plan
+
+
+async def _active_plan(
+    plan_id: str,
+    container: Any,
+    *,
+    transfer_mode: str = "copy",
+) -> ReviewPlan:
+    """Resolve a plan against the catalog generation that is live right now."""
+    generation = await asyncio.to_thread(_live_generation, container)
+    return _plan(plan_id, transfer_mode=transfer_mode, catalog_generation=generation)
 
 
 def _catalog(container: Any) -> MediaCatalog:
@@ -154,7 +182,7 @@ class DecisionRequest(BaseModel):
 @router.post("/review/decide")
 async def decide(body: DecisionRequest, container: ContainerDep) -> dict[str, Any]:
     """Record one decision. A reference member is refused here, not later."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_group(plan, container, body.group_id)
     try:
         result = plan.decide(body.group_id, body.member_id, body.action, reason=body.reason)
@@ -174,7 +202,7 @@ class AllExceptRequest(BaseModel):
 
 @router.post("/review/quarantine-all-except")
 async def quarantine_all_except(body: AllExceptRequest, container: ContainerDep) -> dict[str, Any]:
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_group(plan, container, body.group_id)
     try:
         result = plan.quarantine_all_except(body.group_id, body.keep_member_ids)
@@ -190,8 +218,8 @@ class UndoRequest(BaseModel):
 
 
 @router.post("/review/undo")
-async def undo(body: UndoRequest) -> dict[str, Any]:
-    plan = _plan(body.plan_id)
+async def undo(body: UndoRequest, container: ContainerDep) -> dict[str, Any]:
+    plan = await _active_plan(body.plan_id, container)
     try:
         result = plan.undo_last(body.group_id)
     except PlanError as exc:
@@ -214,13 +242,16 @@ class PolicyRequest(BaseModel):
 @router.post("/review/policy/preview", response_model=dict)
 async def preview_policy(body: PolicyRequest, container: ContainerDep) -> dict[str, Any]:
     """What a bulk policy would touch, frozen against the current scope."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_groups(plan, container)
-    impact = plan.preview_bulk(
-        body.scope,  # type: ignore[arg-type]
-        group_ids=body.group_ids,
-        filter_key=body.filter_key,
-    )
+    try:
+        impact = plan.preview_bulk(
+            body.scope,  # type: ignore[arg-type]
+            group_ids=body.group_ids,
+            filter_key=body.filter_key,
+        )
+    except PlanError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return impact.model_dump(mode="json")
 
 
@@ -231,7 +262,7 @@ class ApplyPolicyRequest(PolicyRequest):
 @router.post("/review/policy/apply")
 async def apply_policy_route(body: ApplyPolicyRequest, container: ContainerDep) -> dict[str, Any]:
     """Apply a previewed policy, refusing a scope that moved since the preview."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_groups(plan, container)
     settings = PolicySettings(
         policy_id=_policy_id(body, container),  # type: ignore[arg-type]
@@ -326,7 +357,7 @@ class SnapshotRequest(BaseModel):
 @router.post("/review/snapshot")
 async def snapshot(body: SnapshotRequest, container: ContainerDep) -> dict[str, Any]:
     """Freeze the reviewed plan, after re-checking it against the catalog."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     current = await asyncio.to_thread(_current_groups, container)
     stale = plan.mark_stale(plan.detect_drift(current))
     try:
@@ -432,17 +463,35 @@ def _policy_id(body: PolicyRequest, container: Any) -> str:
     return str(getattr(container.config, "duplicate_keeper_policy", None) or "newest")
 
 
+def _live_generation(container: Any) -> int:
+    with _catalog(container) as catalog:
+        return catalog.current_generation()
+
+
 def _current_groups(container: Any) -> list[Any]:
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
-        return list(exact_groups(catalog, index))
+        return list(exact_groups(catalog, index, generation=catalog.current_generation()))
 
 
 async def _ensure_groups(plan: ReviewPlan, container: Any) -> None:
-    if plan.known_groups:
+    """Hold the groups of the current generation, and only those.
+
+    The generation is a cheap lookup; rebuilding the groups is not, so the
+    expensive half runs only when the plan is empty or genuinely out of date.
+    """
+    generation = await asyncio.to_thread(_live_generation, container)
+    if plan.known_groups and plan.catalog_generation == generation:
         return
-    for group in await asyncio.to_thread(_current_groups, container):
+    groups = await asyncio.to_thread(_current_groups, container)
+    plan.known_groups = {}
+    plan.catalog_generation = generation
+    for group in groups:
         plan.register(group)
+    # Decisions about groups this generation no longer has are not recoverable
+    # and must not reach a snapshot.
+    for group_id in set(plan.groups) - set(plan.known_groups):
+        del plan.groups[group_id]
 
 
 async def _ensure_group(plan: ReviewPlan, container: Any, group_id: str) -> None:

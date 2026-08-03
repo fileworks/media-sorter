@@ -68,7 +68,9 @@ class LocalApiSecurityMiddleware:
         headers = _headers(scope)
         origin = headers.get("origin")
         if origin is not None and origin.rstrip("/") not in self.origins:
-            await self._reject(scope_type, send, status=403, reason="Origin not allowed")
+            await self._reject(
+                scope_type, send, status=403, reason="Origin not allowed", origin=origin
+            )
             return
 
         # Browsers cannot include the secret header in a preflight. Exact-origin
@@ -83,13 +85,39 @@ class LocalApiSecurityMiddleware:
             else _websocket_capability(headers)
         )
         if not secrets.compare_digest(supplied, self.capability):
-            await self._reject(scope_type, send, status=401, reason="Authentication required")
+            await self._reject(
+                scope_type, send, status=401, reason="Authentication required", origin=origin
+            )
             return
         await self.app(scope, receive, send)
 
-    @staticmethod
-    async def _reject(scope_type: str, send: Send, *, status: int, reason: str) -> None:
+    def _cors_headers(self, origin: str | None) -> list[tuple[bytes, bytes]]:
+        """Echo the origin only when it is one this middleware already trusts.
+
+        A rejection that advertised an untrusted origin would hand the caller the
+        very boundary the rejection exists to enforce, so a 403 for a disallowed
+        origin deliberately carries no CORS headers.
+        """
+        if origin is None or origin.rstrip("/") not in self.origins:
+            return []
+        return [
+            (b"access-control-allow-origin", origin.encode("latin-1")),
+            (b"access-control-allow-credentials", b"true"),
+            (b"vary", b"Origin"),
+        ]
+
+    async def _reject(
+        self,
+        scope_type: str,
+        send: Send,
+        *,
+        status: int,
+        reason: str,
+        origin: str | None,
+    ) -> None:
         if scope_type == "websocket":
+            # A close frame carries no headers, so CORS cannot be expressed here.
+            # Browsers do not apply CORS to the WebSocket handshake either.
             await send({"type": "websocket.close", "code": 1008, "reason": reason})
             return
         body = b'{"error":"Local API access denied","code":"LOCAL_API_ACCESS_DENIED"}'
@@ -101,6 +129,7 @@ class LocalApiSecurityMiddleware:
                     (b"content-type", b"application/json"),
                     (b"content-length", str(len(body)).encode("ascii")),
                     (b"cache-control", b"no-store"),
+                    *self._cors_headers(origin),
                 ],
             }
         )

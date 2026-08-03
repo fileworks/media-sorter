@@ -186,7 +186,7 @@ function StatsDashboard({
     <div className="rounded-xl border border-border bg-card">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/50"
+        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
       >
         <span>{t("report.statistics")}</span>
         <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
@@ -405,7 +405,7 @@ function FileTableSection({
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 tab === tabOption.id
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {t(`report.filter.${tabOption.id}`)}{" "}
@@ -480,7 +480,7 @@ function FileTableSection({
               </tr>
             ) : (
               pageFiles.map((f) => (
-                <tr key={f.id} className="transition-colors hover:bg-accent/30">
+                <tr key={f.id} className="transition-colors hover:bg-muted/40">
                   <td
                     className="max-w-[180px] truncate px-3 py-2 text-foreground"
                     title={f.source_path}

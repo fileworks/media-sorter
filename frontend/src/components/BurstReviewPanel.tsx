@@ -42,7 +42,7 @@ export function BurstReviewPanel({ root, items, enabled }: BurstReviewPanelProps
         ),
       );
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("bursts.failed")));
+      setError(extractErrorMessage(cause, t("bursts.failed")).message);
     } finally {
       setRunning(false);
     }
@@ -70,7 +70,7 @@ export function BurstReviewPanel({ root, items, enabled }: BurstReviewPanelProps
       setPending(response.impact.quarantine_count > 0 ? response : null);
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("bursts.decisionFailed")));
+      setError(extractErrorMessage(cause, t("bursts.decisionFailed")).message);
     }
   };
 
@@ -83,7 +83,7 @@ export function BurstReviewPanel({ root, items, enabled }: BurstReviewPanelProps
       setPending(null);
       setAcknowledged(false);
     } catch (cause) {
-      setError(extractErrorMessage(cause, t("bursts.executeFailed")));
+      setError(extractErrorMessage(cause, t("bursts.executeFailed")).message);
     }
   };
 

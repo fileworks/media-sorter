@@ -98,7 +98,7 @@ export function useCatalogView(query: CatalogViewQuery): CatalogView {
         setError(null);
       })
       .catch((cause: unknown) => {
-        setError(extractErrorMessage(cause, "The list could not be loaded."));
+        setError(extractErrorMessage(cause, "The list could not be loaded.").message);
       })
       .finally(() => {
         inFlight.current = false;

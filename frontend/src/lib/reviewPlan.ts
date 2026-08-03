@@ -23,13 +23,36 @@ export interface PlanTotals {
   share: { ready: number; duplicates: number; junk: number };
 }
 
-export function planTotals(result: PreviewResult, warningCount: number): PlanTotals {
+/** What the duplicate workbench itself found, when it has loaded. */
+export interface DuplicateTally {
+  /** Files in a duplicate group, across every group. */
+  files: number;
+  resolved: number;
+  unresolved: number;
+}
+
+export function planTotals(
+  result: PreviewResult,
+  warningCount: number,
+  // The dry run counts the copies it would *skip*; the workbench counts the
+  // groups it found in the catalog, which is not the same number and, on a
+  // library already in its destination, is often 0 against a screen full of
+  // groups. The tile has to agree with the tab it links to, so the workbench
+  // wins whenever it has an answer.
+  duplicateTally?: DuplicateTally | null,
+): PlanTotals {
   const stats = result.stats;
   const scanned = stats.total;
-  const duplicates = stats.will_skip_duplicate + (stats.duplicate_unknown ?? 0);
+  const planDuplicates = stats.will_skip_duplicate + (stats.duplicate_unknown ?? 0);
+  const duplicates = duplicateTally ? duplicateTally.files : planDuplicates;
+  const unresolved = duplicateTally
+    ? duplicateTally.unresolved
+    : result.impact.unresolved_count;
+  const resolved = duplicateTally
+    ? duplicateTally.resolved
+    : Math.max(0, planDuplicates - unresolved);
   const junk = stats.will_quarantine_junk;
   const ready = stats.will_sort;
-  const unresolved = result.impact.unresolved_count;
 
   const pct = (value: number) => (scanned > 0 ? (value / scanned) * 100 : 0);
 
@@ -37,7 +60,7 @@ export function planTotals(result: PreviewResult, warningCount: number): PlanTot
     scanned,
     ready,
     duplicates,
-    duplicatesResolved: Math.max(0, duplicates - unresolved),
+    duplicatesResolved: resolved,
     duplicatesUnresolved: unresolved,
     junk,
     warnings: warningCount,
@@ -287,9 +310,16 @@ export interface TabCounts {
   warnings: number;
 }
 
-export function tabCounts(result: PreviewResult, warnings: PlanWarning[]): TabCounts {
+export function tabCounts(
+  result: PreviewResult,
+  warnings: PlanWarning[],
+  duplicateTally?: DuplicateTally | null,
+): TabCounts {
   return {
-    duplicates: result.stats.will_skip_duplicate + (result.stats.duplicate_unknown ?? 0),
+    // Same rule as `planTotals`: the badge and the tile must not disagree.
+    duplicates:
+      duplicateTally?.files ??
+      result.stats.will_skip_duplicate + (result.stats.duplicate_unknown ?? 0),
     junk: result.stats.will_quarantine_junk,
     changes: result.stats.will_sort,
     warnings: warningTotal(warnings),
