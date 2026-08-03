@@ -87,7 +87,7 @@ function ThumbnailCard({
 }) {
   const { t } = useI18n();
   const cardRef = useRef<HTMLButtonElement>(null);
-  const { objectUrl, loading, errored } = useQueuedThumbnail(
+  const { objectUrl, loading, waiting, errored } = useQueuedThumbnail(
     api.thumbnailUrl(item.source, 240),
     cardRef,
   );
@@ -119,6 +119,7 @@ function ThumbnailCard({
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
                 </div>
               )}
+              {waiting && <div className="absolute inset-0 bg-muted" aria-hidden />}
               <img
                 src={objectUrl ?? undefined}
                 alt=""

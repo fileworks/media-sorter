@@ -196,13 +196,27 @@ export interface TreeNode {
   isReview: boolean;
 }
 
-const REVIEW_FOLDERS = new Set([
+/**
+ * The folders a run may create for files a person has to look at.
+ *
+ * Defined once and exported, because this set was wrong in a way nothing
+ * caught: `_unknown_date` and `_future_date` were singular where the sort
+ * writes `_unknown_dates` and `_future_dates`, and `_corrupted` was missing
+ * entirely — so three of the folders the run actually produces were rendered
+ * as ordinary date folders. `reviewFolders.test.ts` now fails if this drifts
+ * from the backend's QUARANTINE_FOLDERS again.
+ */
+export const REVIEW_FOLDER_NAMES = [
   "_duplicates",
   "_junk",
-  "_unknown_date",
-  "_future_date",
+  "_unknown_dates",
+  "_future_dates",
+  "_corrupted",
   "_failed",
-]);
+  "_already_in_destination",
+] as const;
+
+const REVIEW_FOLDERS = new Set<string>(REVIEW_FOLDER_NAMES);
 
 /** Normalise separators and drop a trailing one, so prefixes compare cleanly. */
 function normalizePath(path: string): string {

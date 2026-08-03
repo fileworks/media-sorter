@@ -42,7 +42,7 @@ export function Thumbnail({
 }) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { objectUrl, loading, errored } = useQueuedThumbnail(
+  const { objectUrl, loading, waiting, errored } = useQueuedThumbnail(
     api.thumbnailUrl(path, maxPx),
     wrapperRef,
   );
@@ -58,6 +58,9 @@ export function Thumbnail({
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
         </div>
       )}
+      {/* Waiting is not loading: an off-screen tile must not animate, or a long
+          list spins in every direction at once. */}
+      {waiting && <div className="absolute inset-0 bg-muted" aria-hidden />}
       <img
         src={objectUrl ?? undefined}
         alt=""

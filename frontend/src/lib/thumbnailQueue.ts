@@ -124,13 +124,36 @@ function viewportPriority(element: HTMLElement | null): number {
   return Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2);
 }
 
+/**
+ * One thumbnail, fetched through the shared queue.
+ *
+ * `waiting` is the state a tile returns to when its request was aborted for
+ * leaving the viewport. It used to stay `loading` forever — the abort branch
+ * returned without touching state — so a tile scrolled past mid-request kept a
+ * spinner for the life of the screen and never asked again. A waiting tile is
+ * quiet, not animated, and re-enqueues the moment it comes back into view.
+ */
 export function useQueuedThumbnail(
   url: string,
   elementRef: RefObject<HTMLElement | null>,
-): { objectUrl: string | null; loading: boolean; errored: boolean } {
+): { objectUrl: string | null; loading: boolean; waiting: boolean; errored: boolean } {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  const [state, setState] = useState<"loading" | "waiting" | "loaded" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
   const requestId = useRef(0);
+
+  // A waiting tile is watching for its own re-entry. Nothing else re-triggers
+  // it, so without this the abort above would be permanent.
+  useEffect(() => {
+    if (state !== "waiting") return;
+    const element = elementRef.current;
+    if (element === null || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setAttempt((value) => value + 1);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [elementRef, state]);
 
   useEffect(() => {
     installListeners();
@@ -153,7 +176,12 @@ export function useQueuedThumbnail(
         setState("loaded");
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError") {
+          // Not a failure — the tile left the viewport before its turn. Park it
+          // so it stops animating and can be asked for again.
+          if (requestId.current === id) setState("waiting");
+          return;
+        }
         negativeUntil.set(url, Date.now() + 5_000);
         if (requestId.current === id) setState("error");
       });
@@ -161,9 +189,14 @@ export function useQueuedThumbnail(
       request.cancel();
       if (created) URL.revokeObjectURL(created);
     };
-  }, [elementRef, url]);
+  }, [attempt, elementRef, url]);
 
-  return { objectUrl, loading: state === "loading", errored: state === "error" };
+  return {
+    objectUrl,
+    loading: state === "loading",
+    waiting: state === "waiting",
+    errored: state === "error",
+  };
 }
 
 /**
