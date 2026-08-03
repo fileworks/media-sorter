@@ -67,6 +67,8 @@ interface SourcesScreenProps {
   onRemove: (rootId: string) => void;
   onRemap?: (rootId: string) => void;
   onApplyConfig: (patch: Partial<Config>) => void;
+  /** A computed plan exists, so applying a recipe discards it. */
+  planExists?: boolean;
   onDeleteRecipe: (recipeId: string) => void;
 }
 
@@ -197,18 +199,13 @@ function FolderCard({
 
       {ownConflict && (
         <p
-          className={cn(
-            "mt-2 text-xs",
-            ownConflict.blocking ? "text-error" : "text-warning",
-          )}
+          className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
           role={ownConflict.blocking ? "alert" : "status"}
         >
           {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
         </p>
       )}
-      {excluded && (
-        <p className="mt-2 text-xs text-warning">{t("sources.excludedThisRun")}</p>
-      )}
+      {excluded && <p className="mt-2 text-xs text-warning">{t("sources.excludedThisRun")}</p>}
 
       <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
         <button
@@ -229,7 +226,6 @@ function FolderCard({
             {t("sources.remove")}
           </button>
         )}
-
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -315,6 +311,7 @@ export function SourcesScreen({
   onRemove,
   onRemap,
   onApplyConfig,
+  planExists = false,
   onDeleteRecipe,
 }: SourcesScreenProps) {
   const { t, locale } = useI18n();
@@ -387,7 +384,10 @@ export function SourcesScreen({
           <section aria-labelledby="sources-inputs" className="min-w-0">
             <div className="mb-2.5 flex items-center gap-2">
               <span
-                className={cn("flex h-6 w-6 items-center justify-center rounded-lg", ROLE_BADGE.input)}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-lg",
+                  ROLE_BADGE.input,
+                )}
                 aria-hidden
               >
                 <FiFolder className="h-3.5 w-3.5" />
@@ -557,6 +557,7 @@ export function SourcesScreen({
         config={config}
         savedRecipes={savedRecipes}
         onApply={onApplyConfig}
+        planExists={planExists}
         onDelete={onDeleteRecipe}
         disabled={disabled}
       />

@@ -31,6 +31,8 @@ interface RecipeGridProps {
   onApply: (patch: Partial<Config>) => void;
   onDelete: (recipeId: string) => void;
   disabled?: boolean;
+  /** A computed plan exists, so applying any recipe discards it. */
+  planExists?: boolean;
 }
 
 export function RecipeGrid({
@@ -39,6 +41,7 @@ export function RecipeGrid({
   onApply,
   onDelete,
   disabled = false,
+  planExists = false,
 }: RecipeGridProps) {
   const { t } = useI18n();
   const [pending, setPending] = useState<ConfigRecipe | null>(null);
@@ -52,8 +55,7 @@ export function RecipeGrid({
   };
 
   // A custom recipe carries its name literally; a built-in carries a message key.
-  const nameOf = (recipe: ConfigRecipe) =>
-    recipe.custom ? recipe.labelKey : t(recipe.labelKey);
+  const nameOf = (recipe: ConfigRecipe) => (recipe.custom ? recipe.labelKey : t(recipe.labelKey));
 
   return (
     <section aria-labelledby="recipe-title">
@@ -71,7 +73,9 @@ export function RecipeGrid({
                 type="button"
                 disabled={disabled}
                 aria-pressed={active}
-                onClick={() => (recipe.irreversible ? setPending(recipe) : commit(recipe))}
+                onClick={() =>
+                  recipe.irreversible || planExists ? setPending(recipe) : commit(recipe)
+                }
                 className={cn(
                   "flex h-full w-full flex-col rounded-xl p-4 text-left transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -140,7 +144,12 @@ export function RecipeGrid({
           role="alert"
         >
           <p className="text-xs font-semibold text-warning">{nameOf(pending)}</p>
-          <p className="mt-1 text-xs text-foreground">{t(pending.consequenceKey)}</p>
+          {pending.irreversible && (
+            <p className="mt-1 text-xs text-foreground">{t(pending.consequenceKey)}</p>
+          )}
+          {planExists && (
+            <p className="mt-1 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
+          )}
           <ul className="mt-2 grid gap-x-4 text-3xs text-muted-foreground sm:grid-cols-2">
             {recipeChanges(config, applyRecipe(config, pending))
               .slice(0, 8)

@@ -279,258 +279,254 @@ export function MediaPreviewModal({ item, items = [], onClose }: MediaPreviewMod
       </div>
 
       <ModalBody className="space-y-4">
-          {/* Metadata grid */}
-          <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-4">
-            {meta.map((m) => (
-              <div key={m.label} className="min-w-0">
-                <dt className="text-2xs uppercase tracking-wide text-muted-foreground">
-                  {m.label}
-                </dt>
-                <dd className="truncate font-mono text-foreground" title={m.value}>
-                  {m.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          {/* AI / rule tags */}
-          {(tags.length > 0 || category) && (
-            <div className="space-y-2">
-              {tags.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t("preview.tags")}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {category && (
-                <div className="space-y-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t("preview.categoryLabel")}
-                  </p>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-category/10 px-2.5 py-0.5 text-2xs font-medium text-category">
-                    <FiFolder className="h-3 w-3 shrink-0" />
-                    {category}
-                  </span>
-                </div>
-              )}
+        {/* Metadata grid */}
+        <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-4">
+          {meta.map((m) => (
+            <div key={m.label} className="min-w-0">
+              <dt className="text-2xs uppercase tracking-wide text-muted-foreground">{m.label}</dt>
+              <dd className="truncate font-mono text-foreground" title={m.value}>
+                {m.value}
+              </dd>
             </div>
-          )}
+          ))}
+        </dl>
 
-          {(current.companions?.length ?? 0) > 0 && (
-            <div className="space-y-2">
-              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("preview.unitMembers", { count: current.companions!.length + 1 })}
-              </p>
-              <ul className="space-y-1.5">
-                {current.companions!.map((member) => (
-                  <li
-                    key={`${member.source}:${member.role}`}
-                    className="rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">
-                        {getBasename(member.source)}
-                      </span>
-                      <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-3xs text-info">
-                        {t(`preview.companionRole.${member.role}`)}
-                      </span>
-                    </div>
-                    {member.destination && (
-                      <p className="mt-1 break-all font-mono text-2xs text-muted-foreground">
-                        → {member.destination}
-                      </p>
-                    )}
-                    {member.warning && (
-                      <p className="mt-1 text-2xs text-warning">{member.warning}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {current.unit_warnings?.map((warning) => (
-                <p
-                  key={warning}
-                  className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning"
-                >
-                  {warning}
+        {/* AI / rule tags */}
+        {(tags.length > 0 || category) && (
+          <div className="space-y-2">
+            {tags.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("preview.tags")}
                 </p>
-              ))}
-            </div>
-          )}
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {category && (
+              <div className="space-y-1">
+                <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("preview.categoryLabel")}
+                </p>
+                <span className="inline-flex items-center gap-1 rounded-full bg-category/10 px-2.5 py-0.5 text-2xs font-medium text-category">
+                  <FiFolder className="h-3 w-3 shrink-0" />
+                  {category}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
-          <section
-            className="space-y-3 rounded-lg border border-border bg-muted/20 p-3"
-            aria-labelledby="outcome-explanation-title"
-          >
-            <h3
-              id="outcome-explanation-title"
-              className="text-xs font-semibold uppercase tracking-wide text-foreground"
-            >
-              {t("preview.explanation.title")}
-            </h3>
-            {!current.provenance ? (
-              <p role="status" className="text-xs text-muted-foreground">
-                {t("preview.explanation.unavailable")}
+        {(current.companions?.length ?? 0) > 0 && (
+          <div className="space-y-2">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("preview.unitMembers", { count: current.companions!.length + 1 })}
+            </p>
+            <ul className="space-y-1.5">
+              {current.companions!.map((member) => (
+                <li
+                  key={`${member.source}:${member.role}`}
+                  className="rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {getBasename(member.source)}
+                    </span>
+                    <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-3xs text-info">
+                      {t(`preview.companionRole.${member.role}`)}
+                    </span>
+                  </div>
+                  {member.destination && (
+                    <p className="mt-1 break-all font-mono text-2xs text-muted-foreground">
+                      → {member.destination}
+                    </p>
+                  )}
+                  {member.warning && <p className="mt-1 text-2xs text-warning">{member.warning}</p>}
+                </li>
+              ))}
+            </ul>
+            {current.unit_warnings?.map((warning) => (
+              <p
+                key={warning}
+                className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning"
+              >
+                {warning}
               </p>
-            ) : (
-              <>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-medium text-foreground">
-                    {t("preview.explanation.date")}
-                  </h4>
-                  <ul className="space-y-1 text-xs">
-                    {current.provenance.date.candidates.map((candidate, index) => (
-                      <li
-                        key={`${candidate.source}:${candidate.value ?? "none"}:${index}`}
-                        className={candidate.accepted ? "text-success" : "text-muted-foreground"}
-                      >
-                        <span className="font-medium">
-                          {formatMetadataSource(candidate.source, t)}
-                        </span>
-                        {": "}
-                        {candidate.value ?? "—"} —{" "}
-                        {candidate.accepted
-                          ? t("preview.explanation.selected")
-                          : t(
-                              `preview.explanation.reason.${candidate.rejection_reason}`,
-                              {},
-                              candidate.rejection_reason ?? "",
-                            )}
+            ))}
+          </div>
+        )}
+
+        <section
+          className="space-y-3 rounded-lg border border-border bg-muted/20 p-3"
+          aria-labelledby="outcome-explanation-title"
+        >
+          <h3
+            id="outcome-explanation-title"
+            className="text-xs font-semibold uppercase tracking-wide text-foreground"
+          >
+            {t("preview.explanation.title")}
+          </h3>
+          {!current.provenance ? (
+            <p role="status" className="text-xs text-muted-foreground">
+              {t("preview.explanation.unavailable")}
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-foreground">
+                  {t("preview.explanation.date")}
+                </h4>
+                <ul className="space-y-1 text-xs">
+                  {current.provenance.date.candidates.map((candidate, index) => (
+                    <li
+                      key={`${candidate.source}:${candidate.value ?? "none"}:${index}`}
+                      className={candidate.accepted ? "text-success" : "text-muted-foreground"}
+                    >
+                      <span className="font-medium">
+                        {formatMetadataSource(candidate.source, t)}
+                      </span>
+                      {": "}
+                      {candidate.value ?? "—"} —{" "}
+                      {candidate.accepted
+                        ? t("preview.explanation.selected")
+                        : t(
+                            `preview.explanation.reason.${candidate.rejection_reason}`,
+                            {},
+                            candidate.rejection_reason ?? "",
+                          )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-foreground">
+                  {t("preview.explanation.rulesCategory")}
+                </h4>
+                {current.provenance.rules.matched_tags.length === 0 &&
+                !current.provenance.rules.winning_route &&
+                !current.provenance.categorization.enabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("preview.explanation.noRules")}
+                  </p>
+                ) : (
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {current.provenance.rules.matched_tags.map((rule) => (
+                      <li key={`${rule.name}:${rule.saved_order}`}>
+                        {t("preview.explanation.tagRule", {
+                          name: rule.name,
+                          priority: rule.priority,
+                        })}
                       </li>
                     ))}
-                  </ul>
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-xs font-medium text-foreground">
-                    {t("preview.explanation.rulesCategory")}
-                  </h4>
-                  {current.provenance.rules.matched_tags.length === 0 &&
-                  !current.provenance.rules.winning_route &&
-                  !current.provenance.categorization.enabled ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("preview.explanation.noRules")}
-                    </p>
-                  ) : (
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      {current.provenance.rules.matched_tags.map((rule) => (
-                        <li key={`${rule.name}:${rule.saved_order}`}>
-                          {t("preview.explanation.tagRule", {
-                            name: rule.name,
-                            priority: rule.priority,
-                          })}
-                        </li>
-                      ))}
-                      {current.provenance.rules.winning_route && (
-                        <li>
-                          {t("preview.explanation.routeRule", {
-                            name: current.provenance.rules.winning_route.name,
-                            folder: current.provenance.rules.route_folder ?? "—",
-                            priority: current.provenance.rules.winning_route.priority,
-                          })}
-                        </li>
-                      )}
-                      {current.provenance.categorization.enabled && (
-                        <li>
-                          {t("preview.explanation.categoryConfidence", {
-                            label:
-                              current.provenance.categorization.label ??
-                              t("preview.uncategorizedLabel"),
-                            confidence: Math.round(
-                              (current.provenance.categorization.confidence ?? 0) * 100,
-                            ),
-                            threshold: Math.round(
-                              (current.provenance.categorization.threshold ?? 0) * 100,
-                            ),
-                          })}
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-xs font-medium text-foreground">
-                    {t("preview.explanation.duplicate")}
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    {t(
-                      `preview.explanation.duplicate.${current.provenance.duplicate.status}`,
-                      {},
-                      current.provenance.duplicate.status,
+                    {current.provenance.rules.winning_route && (
+                      <li>
+                        {t("preview.explanation.routeRule", {
+                          name: current.provenance.rules.winning_route.name,
+                          folder: current.provenance.rules.route_folder ?? "—",
+                          priority: current.provenance.rules.winning_route.priority,
+                        })}
+                      </li>
                     )}
-                    {current.provenance.duplicate.match_kind
-                      ? ` · ${current.provenance.duplicate.match_kind}`
-                      : ""}
-                    {current.provenance.duplicate.perceptual_distance !== null
-                      ? ` · ${t("preview.explanation.distance", {
-                          distance: current.provenance.duplicate.perceptual_distance,
-                        })}`
-                      : ""}
+                    {current.provenance.categorization.enabled && (
+                      <li>
+                        {t("preview.explanation.categoryConfidence", {
+                          label:
+                            current.provenance.categorization.label ??
+                            t("preview.uncategorizedLabel"),
+                          confidence: Math.round(
+                            (current.provenance.categorization.confidence ?? 0) * 100,
+                          ),
+                          threshold: Math.round(
+                            (current.provenance.categorization.threshold ?? 0) * 100,
+                          ),
+                        })}
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-foreground">
+                  {t("preview.explanation.duplicate")}
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    `preview.explanation.duplicate.${current.provenance.duplicate.status}`,
+                    {},
+                    current.provenance.duplicate.status,
+                  )}
+                  {current.provenance.duplicate.match_kind
+                    ? ` · ${current.provenance.duplicate.match_kind}`
+                    : ""}
+                  {current.provenance.duplicate.perceptual_distance !== null
+                    ? ` · ${t("preview.explanation.distance", {
+                        distance: current.provenance.duplicate.perceptual_distance,
+                      })}`
+                    : ""}
+                </p>
+                {current.provenance.duplicate.matched_path && (
+                  <p className="break-all font-mono text-2xs text-muted-foreground">
+                    {current.provenance.duplicate.matched_path}
                   </p>
-                  {current.provenance.duplicate.matched_path && (
-                    <p className="break-all font-mono text-2xs text-muted-foreground">
-                      {current.provenance.duplicate.matched_path}
-                    </p>
-                  )}
-                </div>
+                )}
+              </div>
 
-                <div className="space-y-1">
-                  <h4 className="text-xs font-medium text-foreground">
-                    {t("preview.explanation.path")}
-                  </h4>
-                  {current.provenance.path.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("preview.explanation.noDestination")}
-                    </p>
-                  ) : (
-                    <ol className="space-y-1 text-xs text-muted-foreground">
-                      {current.provenance.path.map((part, index) => (
-                        <li key={`${part.segment}:${part.decision}:${index}`}>
-                          <span className="font-mono text-foreground">{part.segment}</span>
-                          {" — "}
-                          {t(`preview.explanation.path.${part.decision}`, {}, part.detail)}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-foreground">
+                  {t("preview.explanation.path")}
+                </h4>
+                {current.provenance.path.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("preview.explanation.noDestination")}
+                  </p>
+                ) : (
+                  <ol className="space-y-1 text-xs text-muted-foreground">
+                    {current.provenance.path.map((part, index) => (
+                      <li key={`${part.segment}:${part.decision}:${index}`}>
+                        <span className="font-mono text-foreground">{part.segment}</span>
+                        {" — "}
+                        {t(`preview.explanation.path.${part.decision}`, {}, part.detail)}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </>
+          )}
+        </section>
 
-          {/* Source path */}
+        {/* Source path */}
+        <div className="space-y-1">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("preview.column.source")}
+          </p>
+          <PathActions path={current.source} />
+        </div>
+
+        {/* Destination path (if known) */}
+        {current.destination && (
           <div className="space-y-1">
             <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("preview.column.source")}
+              {t("preview.column.destination")}
             </p>
-            <PathActions path={current.source} />
+            <p
+              className="select-all break-all rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-xs text-foreground"
+              title={current.destination}
+            >
+              {current.destination}
+            </p>
           </div>
-
-          {/* Destination path (if known) */}
-          {current.destination && (
-            <div className="space-y-1">
-              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("preview.column.destination")}
-              </p>
-              <p
-                className="select-all break-all rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-xs text-foreground"
-                title={current.destination}
-              >
-                {current.destination}
-              </p>
-            </div>
-          )}
+        )}
       </ModalBody>
 
       {/* Footer: keyboard hint */}

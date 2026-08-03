@@ -59,7 +59,9 @@ export function WarningsTab({ warnings, onShowFiles, onOpenSetting }: WarningsTa
               key={warning.id}
               className={cn(
                 "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-card px-4 py-3",
-                warning.severity === "error" ? "border-l-[3px] border-l-error" : "border-l-[3px] border-l-warning",
+                warning.severity === "error"
+                  ? "border-l-[3px] border-l-error"
+                  : "border-l-[3px] border-l-warning",
               )}
             >
               <Icon

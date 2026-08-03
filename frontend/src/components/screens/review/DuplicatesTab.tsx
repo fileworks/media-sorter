@@ -165,9 +165,7 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
         if (scope === "resolved" && state !== "reviewed") return false;
         if (scope === "near" && group.kind !== "similar") return false;
         if (!needle) return true;
-        return group.members.some((member) =>
-          member.relative_path.toLowerCase().includes(needle),
-        );
+        return group.members.some((member) => member.relative_path.toLowerCase().includes(needle));
       }),
     [groups, needle, plans, scope],
   );
@@ -377,11 +375,7 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
       {loading ? (
         <StateView variant="loading" title={t("review.loading")} />
       ) : failed ? (
-        <StateView
-          variant="error"
-          title={t("review.loadFailed")}
-          onRetry={refetch}
-        />
+        <StateView variant="error" title={t("review.loadFailed")} onRetry={refetch} />
       ) : visible.length === 0 ? (
         <StateView variant="empty" title={t("review.empty")} detail={t("review.emptyHelp")} />
       ) : view === "cards" ? (
@@ -543,10 +537,7 @@ export function DuplicatesTab({ defaultPolicy, onCompare }: DuplicatesTabProps) 
                     return (
                       <tr
                         key={member.member_id}
-                        className={cn(
-                          "border-b border-border",
-                          isReference && "bg-tint-success",
-                        )}
+                        className={cn("border-b border-border", isReference && "bg-tint-success")}
                       >
                         <td className="px-4 py-2">
                           {isReference ? (

@@ -247,6 +247,17 @@ export function ExecutePreflight({
 
       <Button
         disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
+        // Every disabled control states its reason; this one is disabled for
+        // three different causes and used to explain none of them.
+        title={
+          busy
+            ? t("preflight.running")
+            : !result.canExecute
+              ? t("preflight.cannotExecute")
+              : !input.acknowledgedSourceMutations
+                ? t("preflight.needsAcknowledgement")
+                : undefined
+        }
         onClick={onExecute}
       >
         {busy ? t("preflight.running") : t("preflight.execute")}

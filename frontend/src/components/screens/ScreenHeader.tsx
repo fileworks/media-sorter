@@ -20,10 +20,7 @@ export function ScreenHeader({
   return (
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1
-          id="current-stage-heading"
-          className="text-lg font-bold tracking-tight text-foreground"
-        >
+        <h1 id="current-stage-heading" className="text-lg font-bold tracking-tight text-foreground">
           {title}
         </h1>
         {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}

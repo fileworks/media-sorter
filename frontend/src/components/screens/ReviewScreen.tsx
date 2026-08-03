@@ -3,11 +3,10 @@
  * is to make that reviewable rather than to make it reassuring.
  *
  * Layout: the figures across the top, the folder tree this would produce down
- * the left, and the work itself in tabs on the right. The four tabs the design
- * specifies are always present; the specialist workbenches this app also has —
- * burst review, destination reconciliation, library checks — appear as extra
- * tabs only when the run actually contains that kind of work, so the default
- * screen stays the design's four.
+ * the left, and the work itself in tabs on the right — the four the design
+ * specifies, always present. The specialist workbenches that used to appear as
+ * extra tabs (burst review, destination reconciliation, library checks) were
+ * removed with their panels; a run's work is now described in one vocabulary.
  */
 
 import { Suspense, lazy, useCallback, useMemo, useState } from "react";
@@ -200,7 +199,9 @@ export function ReviewScreen({
             </ul>
           </nav>
 
-          <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
+          <Suspense
+            fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
+          >
             {view === "duplicates" && (
               <DuplicatesTab
                 defaultPolicy={config.duplicate_keeper_policy}
@@ -216,9 +217,7 @@ export function ReviewScreen({
                   statusFilter
                     ? {
                         ...result,
-                        items: result.items.filter((item) =>
-                          statusFilter.includes(item.status),
-                        ),
+                        items: result.items.filter((item) => statusFilter.includes(item.status)),
                       }
                     : result
                 }
@@ -238,7 +237,6 @@ export function ReviewScreen({
                 onOpenSetting={onOpenSetting}
               />
             )}
-
           </Suspense>
         </div>
       </div>

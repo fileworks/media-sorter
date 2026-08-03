@@ -45,9 +45,7 @@ export function planTotals(
   const scanned = stats.total;
   const planDuplicates = stats.will_skip_duplicate + (stats.duplicate_unknown ?? 0);
   const duplicates = duplicateTally ? duplicateTally.files : planDuplicates;
-  const unresolved = duplicateTally
-    ? duplicateTally.unresolved
-    : result.impact.unresolved_count;
+  const unresolved = duplicateTally ? duplicateTally.unresolved : result.impact.unresolved_count;
   const resolved = duplicateTally
     ? duplicateTally.resolved
     : Math.max(0, planDuplicates - unresolved);
@@ -122,10 +120,7 @@ const STATUS_COUNT = (items: PreviewItem[], status: PreviewItem["status"]) =>
 export function planWarnings(result: PreviewResult): PlanWarning[] {
   const items = result.items;
   const collisions = nameCollisions(items);
-  const collisionFiles = [...collisions.values()].reduce(
-    (sum, group) => sum + group.length - 1,
-    0,
-  );
+  const collisionFiles = [...collisions.values()].reduce((sum, group) => sum + group.length - 1, 0);
   const fallbackDated = items.filter(
     (item) => item.status === "sort" && item.metadata_source === "filesystem",
   ).length;
@@ -201,7 +196,13 @@ export interface TreeNode {
   isReview: boolean;
 }
 
-const REVIEW_FOLDERS = new Set(["_duplicates", "_junk", "_unknown_date", "_future_date", "_failed"]);
+const REVIEW_FOLDERS = new Set([
+  "_duplicates",
+  "_junk",
+  "_unknown_date",
+  "_future_date",
+  "_failed",
+]);
 
 /** Normalise separators and drop a trailing one, so prefixes compare cleanly. */
 function normalizePath(path: string): string {

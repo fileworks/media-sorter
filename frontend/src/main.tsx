@@ -17,10 +17,11 @@ import { I18nProvider, storedLocale, translate } from "@/i18n/I18nContext";
  * worst possible moment. `matchMedia` is read directly for the same reason the
  * styles are inline.
  *
- * The action colour is #2563eb rather than #3b82f6: white on the lighter blue
- * measures 3.68:1, under the 4.5:1 WCAG AA floor. This one is 5.17:1. Same hue,
- * and the button is the only way out of a crash screen, so it is the last place
- * to leave text hard to read.
+ * The values are the startup splash's, so a crash lands on the same palette the
+ * application booted with rather than an off-brand blue. The action is the brand
+ * orange with the splash's ink on top: 5.2:1, over the 4.5:1 WCAG AA floor.
+ * White on that orange is 3.1:1 and fails, and the button is the only way out of
+ * a crash screen, so it is the last place to leave text hard to read.
  */
 function crashPalette() {
   const dark =
@@ -28,8 +29,20 @@ function crashPalette() {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { background: "#1a1614", heading: "#f2ede9", body: "#a8a09a", action: "#2563eb" }
-    : { background: "#fff", heading: "#1a1614", body: "#666", action: "#2563eb" };
+    ? {
+        background: "#141619",
+        heading: "#ebedf0",
+        body: "#a8a09a",
+        action: "#f55f14",
+        actionInk: "#221e1c",
+      }
+    : {
+        background: "#fbfaf9",
+        heading: "#221e1c",
+        body: "#666",
+        action: "#f55f14",
+        actionInk: "#221e1c",
+      };
 }
 
 class ErrorBoundary extends React.Component<
@@ -75,7 +88,7 @@ class ErrorBoundary extends React.Component<
                 padding: "0.5rem 1.25rem",
                 borderRadius: "0.375rem",
                 background: palette.action,
-                color: "#fff",
+                color: palette.actionInk,
                 border: "none",
                 cursor: "pointer",
                 fontSize: "0.875rem",

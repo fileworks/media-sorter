@@ -8,6 +8,7 @@
  */
 
 import { buildRecoveryPlan, type RecoveryOperation } from "@/lib/startupRecovery";
+import { Button } from "@/components/ui/button";
 import { redactRoot } from "@/lib/pathUtils";
 import { severityClass } from "@/lib/statusPresentation";
 
@@ -52,20 +53,20 @@ export function RecoveryBanner({ operation, onDecide, onOpenReport }: RecoveryBa
               </div>
               {onDecide && (
                 <div className="flex gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => onDecide(artifact.action_id, "keep")}
-                    className="rounded-lg border border-border px-3 py-1 text-xs hover:border-primary"
                   >
                     Keep
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => onDecide(artifact.action_id, "discard")}
-                    className="rounded-lg border border-border px-3 py-1 text-xs hover:border-error"
                   >
                     Discard
-                  </button>
+                  </Button>
                 </div>
               )}
             </li>

@@ -136,13 +136,17 @@ export function previousStage(stage: Stage): Stage | null {
 export function goTo(current: StageState, stage: Stage, view?: View): Transition {
   const invalidated: string[] = [];
   const backwards = ORDER.indexOf(stage) < ORDER.indexOf(current.stage);
-  const reviewExists = ORDER.indexOf(current.stage) >= ORDER.indexOf("review");
+  // Standing in Review is not the same as having computed a plan. Reporting a
+  // loss that cannot happen is what made the back-navigation dialog appear when
+  // there was nothing to discard, and a dialog people always dismiss is one
+  // they will dismiss on the day it matters.
+  const planExists = current.key.planVersion > 0;
 
-  if (backwards && current.stage !== "sources") {
-    if (stage === "sources" && reviewExists) {
+  if (backwards && current.stage !== "sources" && planExists) {
+    if (stage === "sources") {
       invalidated.push("Changing folders makes the current review stale.");
     }
-    if (stage === "configure" && reviewExists) {
+    if (stage === "configure") {
       invalidated.push("Changing settings makes the current review stale.");
     }
     if (current.stage === "execute") {
@@ -236,7 +240,11 @@ export interface StageLabel {
 
 export const STAGE_LABELS: StageLabel[] = [
   { stage: "sources", label: "Sources", description: "Which folders, and what each one is for" },
-  { stage: "configure", label: "Configure", description: "How files travel, land, and get cleaned" },
+  {
+    stage: "configure",
+    label: "Configure",
+    description: "How files travel, land, and get cleaned",
+  },
   { stage: "review", label: "Review", description: "What would change, before anything does" },
   { stage: "execute", label: "Execute", description: "Perform the reviewed plan" },
 ];

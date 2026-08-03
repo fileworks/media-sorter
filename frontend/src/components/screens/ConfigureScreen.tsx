@@ -73,10 +73,7 @@ export function ConfigureScreen({
   const [recipeName, setRecipeName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const summaries = useMemo(
-    () => (config ? summariesFor(config, t) : {}),
-    [config, t],
-  );
+  const summaries = useMemo(() => (config ? summariesFor(config, t) : {}), [config, t]);
 
   // "Deviates from the factory default" is answered by the backend's own
   // defaults, never by a mirror in the frontend that would silently drift.
@@ -98,7 +95,8 @@ export function ConfigureScreen({
       for (const section of sections) {
         if (defaults) {
           for (const field of sectionFields(section)) {
-            if (field in defaults) patch[field as keyof Config] = defaults[field as keyof Config] as never;
+            if (field in defaults)
+              patch[field as keyof Config] = defaults[field as keyof Config] as never;
           }
         } else {
           Object.assign(patch, SECTION_DEFAULTS[section]);
@@ -225,9 +223,7 @@ export function ConfigureScreen({
             {CONFIG_GROUPS.map((group) => (
               <div key={group.id}>
                 <div className="flex items-baseline gap-2 px-2.5 pb-1 pt-3">
-                  <span className="font-mono text-3xs font-bold text-primary">
-                    {group.ordinal}
-                  </span>
+                  <span className="font-mono text-3xs font-bold text-primary">{group.ordinal}</span>
                   <span
                     className={cn(
                       "text-3xs font-bold uppercase tracking-[0.1em]",
@@ -280,9 +276,7 @@ export function ConfigureScreen({
                           >
                             {t(entry.labelKey)}
                           </span>
-                          <span className="truncate text-xs text-faint">
-                            {summaries[entry.id]}
-                          </span>
+                          <span className="truncate text-xs text-faint">{summaries[entry.id]}</span>
                         </button>
                       </li>
                     );
@@ -352,10 +346,7 @@ export function ConfigureScreen({
             so the rail could never mark them as the one being read. */}
         <div
           key={bodyKey}
-          className={cn(
-            "min-w-0 space-y-4 pb-[55dvh]",
-            disabled && "select-none opacity-60",
-          )}
+          className={cn("min-w-0 space-y-4 pb-[55dvh]", disabled && "select-none opacity-60")}
           inert={disabled}
         >
           {CONFIG_GROUPS.map((group) => {

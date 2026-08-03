@@ -170,10 +170,7 @@ export default function MainPage() {
   const planned = preview.result !== null && preview.error === null;
   const isSorting = sorting.status === "running" || sorting.status === "pending";
   const isAnyRunning = analysis.loading || preview.loading || isSorting;
-  const recoveryOperations = useMemo(
-    () => diagnostics?.recovery_operations ?? [],
-    [diagnostics],
-  );
+  const recoveryOperations = useMemo(() => diagnostics?.recovery_operations ?? [], [diagnostics]);
   const recoveryBlock = startBlock(recoveryOperations);
 
   const configuredCards = useMemo(
@@ -190,6 +187,8 @@ export default function MainPage() {
 
   // ── Configuration ──────────────────────────────────────────────────────────
 
+  const planExists = analysis.result !== null || preview.result !== null;
+
   const handleConfigSave = useCallback(
     (patch: Partial<Config>) => {
       // Changing settings after a plan exists invalidates it, so the change is
@@ -201,6 +200,21 @@ export default function MainPage() {
       updateConfig(patch);
     },
     [analysis.result, preview.result, updateConfig],
+  );
+
+  /**
+   * Applying a recipe has already been confirmed in the recipe panel's own
+   * footer, which states the same consequence. Routing it through
+   * `handleConfigSave` would raise the generic modal on top of that and ask
+   * twice for one decision.
+   */
+  const handleRecipeApply = useCallback(
+    (patch: Partial<Config>) => {
+      updateConfig(patch);
+      analysis.clear();
+      preview.clear();
+    },
+    [analysis, preview, updateConfig],
   );
 
   const handleRootsChange = useCallback(
@@ -358,11 +372,7 @@ export default function MainPage() {
   };
 
   const startRun = useCallback(() => {
-    void sorting.startSorting(
-      false,
-      preview.result?.config_fingerprint,
-      preview.result?.plan_id,
-    );
+    void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id);
   }, [preview.result, sorting]);
 
   // ── Stage wiring ───────────────────────────────────────────────────────────
@@ -441,7 +451,13 @@ export default function MainPage() {
   }, [pendingSettingAnchor, stage]);
 
   const backendState: BackendState =
-    health?.status === "ok" ? "ready" : healthError ? "lost" : healthLoading ? "connecting" : "connecting";
+    health?.status === "ok"
+      ? "ready"
+      : healthError
+        ? "lost"
+        : healthLoading
+          ? "connecting"
+          : "connecting";
 
   const titleBar = (
     <TitleBar
@@ -469,9 +485,7 @@ export default function MainPage() {
     />
   );
 
-  const saveFailure = saveError
-    ? extractErrorMessage(saveError, t("config.saveFailedHelp"))
-    : null;
+  const saveFailure = saveError ? extractErrorMessage(saveError, t("config.saveFailedHelp")) : null;
 
   const banners = (
     <>
@@ -531,7 +545,9 @@ export default function MainPage() {
         </div>
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mx-auto max-w-3xl">
-            <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
+            <Suspense
+              fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
+            >
               <HistoryPanel />
             </Suspense>
           </div>
@@ -586,7 +602,13 @@ export default function MainPage() {
                     void buildPlan().then((ok) => ok && nav.go("review"));
                   },
                   disabled: !stageInputs.rootsReady || isAnyRunning,
-                  disabledReason: stageInputs.rootsReason,
+                  // A button disabled because something is already running has
+                  // to say so; `rootsReason` is null in exactly that case.
+                  disabledReason: stageInputs.rootsReady
+                    ? isAnyRunning
+                      ? t("footer.busy")
+                      : null
+                    : stageInputs.rootsReason,
                 }}
               />
             );
@@ -620,7 +642,8 @@ export default function MainPage() {
                 onAddFolder={(role) => void requestFolder({ kind: "add", role })}
                 onChangeFolder={(rootId) => void requestFolder({ kind: "change", rootId })}
                 onRemove={removeFolder}
-                onApplyConfig={handleConfigSave}
+                onApplyConfig={handleRecipeApply}
+                planExists={planExists}
                 onDeleteRecipe={(recipeId) => deleteRecipe.mutate(recipeId)}
               />
             ) : (
@@ -643,9 +666,7 @@ export default function MainPage() {
 
           if (state.stage === "review") {
             if (preview.loading) {
-              return (
-                <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />
-              );
+              return <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />;
             }
             if (preview.error) {
               return (
@@ -686,10 +707,13 @@ export default function MainPage() {
           }
 
           // Execute.
-          if (!config) return <StateView variant="loading" layout="page" title={t("state.loading")} />;
+          if (!config)
+            return <StateView variant="loading" layout="page" title={t("state.loading")} />;
           if (sorting.report) {
             return (
-              <Suspense fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}>
+              <Suspense
+                fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
+              >
                 <FinishedRun report={sorting.report} />
               </Suspense>
             );

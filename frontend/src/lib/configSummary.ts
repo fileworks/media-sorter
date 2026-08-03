@@ -92,14 +92,10 @@ export function examplePath(config: Config, t: Translate, locale = "en"): string
 export function summariesFor(config: Config, t: Translate): Record<string, string> {
   const conversions: string[] = [];
   if (config.convert_images) {
-    conversions.push(
-      t("config.summary.toFormat", { format: config.image_format.toUpperCase() }),
-    );
+    conversions.push(t("config.summary.toFormat", { format: config.image_format.toUpperCase() }));
   }
   if (config.convert_videos) {
-    conversions.push(
-      t("config.summary.toFormat", { format: config.video_format.toUpperCase() }),
-    );
+    conversions.push(t("config.summary.toFormat", { format: config.video_format.toUpperCase() }));
   }
 
   const ruleCount =
@@ -117,9 +113,7 @@ export function summariesFor(config: Config, t: Translate): Record<string, strin
 
     "setting-structure": folderStructureSummary(config, t),
 
-    "setting-naming": config.rename
-      ? t("config.summary.renameOn")
-      : t("config.summary.renameOff"),
+    "setting-naming": config.rename ? t("config.summary.renameOn") : t("config.summary.renameOff"),
 
     "setting-duplicates": !config.remove_duplicates
       ? t("config.summary.off")

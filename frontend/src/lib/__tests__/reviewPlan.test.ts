@@ -67,9 +67,13 @@ function result(
 describe("plan totals", () => {
   it("splits the scan into bands that describe the same population", () => {
     const totals = planTotals(
-      result([], { total: 1000, will_sort: 900, will_skip_duplicate: 80, will_quarantine_junk: 20 }, {
-        unresolved_count: 30,
-      }),
+      result(
+        [],
+        { total: 1000, will_sort: 900, will_skip_duplicate: 80, will_quarantine_junk: 20 },
+        {
+          unresolved_count: 30,
+        },
+      ),
       4,
     );
 

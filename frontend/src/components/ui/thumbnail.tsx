@@ -42,7 +42,10 @@ export function Thumbnail({
 }) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { objectUrl, loading, errored } = useQueuedThumbnail(api.thumbnailUrl(path, maxPx), wrapperRef);
+  const { objectUrl, loading, errored } = useQueuedThumbnail(
+    api.thumbnailUrl(path, maxPx),
+    wrapperRef,
+  );
 
   const body: ReactNode = errored ? (
     <div className="flex h-full w-full items-center justify-center bg-muted" aria-hidden>

@@ -183,7 +183,10 @@ export function preflight(input: PreflightInput): Preflight {
       text: `Not enough free space: ${formatBytes(input.requiredBytes)} needed, ${formatBytes(input.freeBytes)} available.`,
       tone: "error",
       messageKey: "preflight.blocking.space",
-      params: { required: formatBytes(input.requiredBytes), available: formatBytes(input.freeBytes) },
+      params: {
+        required: formatBytes(input.requiredBytes),
+        available: formatBytes(input.freeBytes),
+      },
     });
   }
   const reversible: PreflightLine[] = [];

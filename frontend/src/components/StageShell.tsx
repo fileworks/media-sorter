@@ -166,10 +166,7 @@ export function StageShell({
                   className="flex items-start gap-3 rounded-xl border border-warning/40 bg-tint-warning p-3 text-xs"
                   role="status"
                 >
-                  <FiAlertTriangle
-                    className="mt-0.5 h-4 w-4 shrink-0 text-warning"
-                    aria-hidden
-                  />
+                  <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
                   <ul className="min-w-0 flex-1 space-y-1 text-foreground">
                     {invalidated.map((line) => (
                       <li key={line}>{invalidationText(line)}</li>

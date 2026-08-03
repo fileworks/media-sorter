@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Toggle } from "@/components/ui/toggle";
-import { FormRow } from "@/components/ui/form-row";
+import { SettingRow } from "@/components/ui/setting-row";
 import { useI18n } from "@/i18n/I18nContext";
 import type {
   Config,
@@ -329,13 +329,13 @@ export function RuleBuilderInline({
         <strong>{t("rules.title")}</strong> {t("rules.explanation")}
         <div className="mt-1 font-mono">{t("rules.example")}</div>
       </div>
-      <FormRow label={t("rules.enable")} htmlFor="rules-enabled" inline>
+      <SettingRow label={t("rules.enable")} htmlFor="rules-enabled" last>
         <Toggle
           id="rules-enabled"
           checked={config.rules_enabled}
           onChange={(rules_enabled) => updateConfig({ rules_enabled })}
         />
-      </FormRow>
+      </SettingRow>
       {config.rules_enabled && (
         <>
           {rules.length === 0 && <p className="text-sm text-muted-foreground">{t("rules.none")}</p>}
@@ -465,13 +465,13 @@ export function RuleBuilderInline({
                   />
                 </div>
               </div>
-              <FormRow label={t("rules.enabled")} htmlFor="rule-enabled" inline>
+              <SettingRow label={t("rules.enabled")} htmlFor="rule-enabled" last>
                 <Toggle
                   id="rule-enabled"
                   checked={form.enabled}
                   onChange={(enabled) => setForm({ ...form, enabled })}
                 />
-              </FormRow>
+              </SettingRow>
               <div className="flex gap-2">
                 <Button size="sm" onClick={submit}>
                   {form.editingId ? t("rules.save") : t("rules.add")}

@@ -14,6 +14,7 @@
  */
 
 import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import { FiCheck } from "react-icons/fi";
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
@@ -186,7 +187,9 @@ export function ExecuteScreen({
                       aria-hidden
                     >
                       {complete && <FiCheck className="h-2.5 w-2.5" />}
-                      {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      {active && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                      )}
                     </span>
                     {t(`execute.step.${entry.id}`)}
                   </span>
@@ -200,20 +203,24 @@ export function ExecuteScreen({
           )}
 
           {error && (
-            <p className="mt-4 rounded-lg border border-error/40 bg-tint-error px-3.5 py-2.5 text-xs text-error" role="alert">
+            <p
+              className="mt-4 rounded-lg border border-error/40 bg-tint-error px-3.5 py-2.5 text-xs text-error"
+              role="alert"
+            >
               {error}
             </p>
           )}
 
           <div className="mt-5 flex flex-wrap items-center gap-2.5">
             {!settled && (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onCancel}
-                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-error transition-colors hover:bg-tint-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="text-error hover:bg-tint-error"
               >
                 {t("execute.cancelRun")}
-              </button>
+              </Button>
             )}
             {(failed || cancelled) && (
               <button
@@ -252,9 +259,7 @@ export function ExecuteScreen({
             ))}
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-muted-foreground">{t("execute.stat.errors")}</dt>
-              <dd
-                className={cn("font-semibold", errorCount === 0 ? "text-success" : "text-error")}
-              >
+              <dd className={cn("font-semibold", errorCount === 0 ? "text-success" : "text-error")}>
                 {n(errorCount)}
               </dd>
             </div>

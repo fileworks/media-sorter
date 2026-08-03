@@ -8,9 +8,6 @@
  * asks for: a group at its defaults should be one line, not forty.
  */
 
-import type { ReactNode } from "react";
-import { FiChevronRight } from "react-icons/fi";
-
 import {
   DEFAULT_AI_LABELS,
   clampConfidence,
@@ -27,6 +24,7 @@ import { RuleBuilderInline } from "@/components/RuleBuilder";
 import { BlurCommitInput } from "@/components/ui/blur-commit-input";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Segmented, SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useAiModels } from "@/hooks/useAiModels";
@@ -34,49 +32,6 @@ import { useHardware } from "@/hooks/useHardware";
 import { useI18n } from "@/i18n/I18nContext";
 import { TIER_LABEL, effectiveTier, isLocalAiOff, machineTooWeak } from "@/lib/aiTier";
 import type { AiModelTier, Config } from "@/types/api";
-
-/** A row's deeper settings, closed until somebody wants them. */
-function Disclosure({ summary, children }: { summary: string; children: ReactNode }) {
-  return (
-    <details className="group border-b border-border">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-        <FiChevronRight
-          className="h-3.5 w-3.5 transition-transform group-open:rotate-90"
-          aria-hidden
-        />
-        {summary}
-      </summary>
-      <div className="space-y-3.5 border-t border-border bg-muted/40 px-5 py-4">{children}</div>
-    </details>
-  );
-}
-
-/** One labelled field inside a disclosure, where the row grid does not apply. */
-function Field({
-  label,
-  help,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  help?: string;
-  htmlFor?: string;
-  children: ReactNode;
-}) {
-  const Tag = htmlFor ? "label" : "div";
-  return (
-    <div>
-      <Tag
-        {...(htmlFor ? { htmlFor } : {})}
-        className="block text-xs font-semibold text-foreground"
-      >
-        {label}
-      </Tag>
-      {help && <p className="mb-1.5 mt-0.5 text-xs text-faint">{help}</p>}
-      <div className={help ? "" : "mt-1.5"}>{children}</div>
-    </div>
-  );
-}
 
 const AI_TIERS: Exclude<AiModelTier, "auto" | "off">[] = ["lite", "standard", "max"];
 
@@ -147,9 +102,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
               max={100}
               value={config.image_quality}
               aria-label={t("config.conversion.quality")}
-              onChange={(event) =>
-                updateConfig({ image_quality: Number(event.target.value) })
-              }
+              onChange={(event) => updateConfig({ image_quality: Number(event.target.value) })}
               className="w-32"
             />
             <span className="w-7 text-right font-mono text-xs text-foreground">
@@ -269,9 +222,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
             <Select
               id="ai-embed"
               value={config.embed_tags_in_files ? "embedded" : "sidecar"}
-              onValueChange={(value) =>
-                updateConfig({ embed_tags_in_files: value === "embedded" })
-              }
+              onValueChange={(value) => updateConfig({ embed_tags_in_files: value === "embedded" })}
               className="w-48"
             >
               <SelectItem value="sidecar">{t("config.ai.writeSidecar")}</SelectItem>
@@ -282,7 +233,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           <Disclosure summary={t("config.ai.advanced")}>
             {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
 
-            <Field label={t("config.ai.provider")} htmlFor="ai-provider">
+            <SettingRow label={t("config.ai.provider")} htmlFor="ai-provider" stacked last>
               <Select
                 id="ai-provider"
                 value={config.ai_tagging_provider}
@@ -296,11 +247,16 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                 <SelectItem value="imagga">{t("config.ai.imagga")}</SelectItem>
                 <SelectItem value="google_cloud_vision">{t("config.ai.google")}</SelectItem>
               </Select>
-            </Field>
+            </SettingRow>
 
             {config.ai_tagging_provider === "azure_vision" && (
               <>
-                <Field label={t("config.ai.endpoint")} htmlFor="ai-azure-endpoint">
+                <SettingRow
+                  label={t("config.ai.endpoint")}
+                  htmlFor="ai-azure-endpoint"
+                  stacked
+                  last
+                >
                   <BlurCommitInput
                     id="ai-azure-endpoint"
                     type="text"
@@ -308,8 +264,8 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     onCommit={(value) => updateConfig({ ai_tagging_endpoint: value })}
                     placeholder={t("config.ai.azureEndpointPlaceholder")}
                   />
-                </Field>
-                <Field label={t("config.ai.apiKey")} htmlFor="ai-azure-key">
+                </SettingRow>
+                <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-azure-key" stacked last>
                   <BlurCommitInput
                     id="ai-azure-key"
                     type="password"
@@ -317,13 +273,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
                     placeholder={t("config.ai.subscriptionKey")}
                   />
-                </Field>
+                </SettingRow>
               </>
             )}
 
             {config.ai_tagging_provider === "imagga" && (
               <>
-                <Field label={t("config.ai.apiKey")} htmlFor="ai-imagga-key">
+                <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-imagga-key" stacked last>
                   <BlurCommitInput
                     id="ai-imagga-key"
                     type="password"
@@ -331,8 +287,13 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
                     placeholder={t("config.ai.imaggaKeyPlaceholder")}
                   />
-                </Field>
-                <Field label={t("config.ai.apiSecret")} htmlFor="ai-imagga-secret">
+                </SettingRow>
+                <SettingRow
+                  label={t("config.ai.apiSecret")}
+                  htmlFor="ai-imagga-secret"
+                  stacked
+                  last
+                >
                   <BlurCommitInput
                     id="ai-imagga-secret"
                     type="password"
@@ -340,12 +301,12 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     onCommit={(value) => updateConfig({ ai_tagging_api_secret: value })}
                     placeholder={t("config.ai.imaggaSecretPlaceholder")}
                   />
-                </Field>
+                </SettingRow>
               </>
             )}
 
             {config.ai_tagging_provider === "google_cloud_vision" && (
-              <Field label={t("config.ai.apiKey")} htmlFor="ai-google-key">
+              <SettingRow label={t("config.ai.apiKey")} htmlFor="ai-google-key" stacked last>
                 <BlurCommitInput
                   id="ai-google-key"
                   type="password"
@@ -353,11 +314,16 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                   onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
                   placeholder={t("config.ai.googleKeyPlaceholder")}
                 />
-              </Field>
+              </SettingRow>
             )}
 
             {isLocalProvider && !localOff && (
-              <Field label={t("config.ai.labels")} help={t("config.ai.labelsHelp")}>
+              <SettingRow
+                label={t("config.ai.labels")}
+                description={t("config.ai.labelsHelp")}
+                stacked
+                last
+              >
                 <AiTagsInput
                   labels={labels}
                   onCommit={(next) =>
@@ -376,11 +342,11 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     {t("config.vocabulary.restore")}
                   </button>
                 )}
-              </Field>
+              </SettingRow>
             )}
 
             <div className="grid gap-3.5 sm:grid-cols-2">
-              <Field label={t("config.ai.maxTags")} htmlFor="ai-max-tags">
+              <SettingRow label={t("config.ai.maxTags")} htmlFor="ai-max-tags" stacked last>
                 <Input
                   id="ai-max-tags"
                   type="number"
@@ -391,8 +357,8 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     updateConfig({ ai_tagging_max_tags: clampMaxTags(event.target.value) })
                   }
                 />
-              </Field>
-              <Field label={t("config.ai.confidence")} htmlFor="ai-confidence">
+              </SettingRow>
+              <SettingRow label={t("config.ai.confidence")} htmlFor="ai-confidence" stacked last>
                 <Input
                   id="ai-confidence"
                   type="number"
@@ -406,7 +372,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                     })
                   }
                 />
-              </Field>
+              </SettingRow>
             </div>
 
             {isLocalProvider && resolvedTier !== "off" && <AiModelManager />}
@@ -432,7 +398,12 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
 
       {config.categorize_enabled && !categorizeBlocked && (
         <Disclosure summary={t("config.folder.advanced")}>
-          <Field label={t("config.folder.categories")} help={t("config.folder.categoriesHelp")}>
+          <SettingRow
+            label={t("config.folder.categories")}
+            description={t("config.folder.categoriesHelp")}
+            stacked
+            last
+          >
             <CategoryTagsInput
               categories={config.categorize_categories ?? []}
               onChange={(next) =>
@@ -451,14 +422,14 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
                 {t("config.vocabulary.restore")}
               </button>
             )}
-          </Field>
-          <Field label={t("config.folder.confident")}>
+          </SettingRow>
+          <SettingRow label={t("config.folder.confident")} stacked last>
             <CategorizeConfidenceSlider
               value={config.categorize_confidence_threshold ?? 0.55}
               onChange={(value) => updateConfig({ categorize_confidence_threshold: value })}
             />
-          </Field>
-          <Field label={t("config.folder.margin")} htmlFor="categorize-margin">
+          </SettingRow>
+          <SettingRow label={t("config.folder.margin")} htmlFor="categorize-margin" stacked last>
             <Input
               id="categorize-margin"
               type="number"
@@ -471,7 +442,7 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
               }
               className="max-w-[8rem]"
             />
-          </Field>
+          </SettingRow>
         </Disclosure>
       )}
 

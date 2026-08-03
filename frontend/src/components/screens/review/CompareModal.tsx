@@ -50,10 +50,20 @@ function FactRow({
   return (
     <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border px-5 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
       <span className="text-faint">{label}</span>
-      <span className={cn("break-words", winner === "a" ? "font-semibold text-success" : "text-foreground")}>
+      <span
+        className={cn(
+          "break-words",
+          winner === "a" ? "font-semibold text-success" : "text-foreground",
+        )}
+      >
         {left}
       </span>
-      <span className={cn("break-words", winner === "b" ? "font-semibold text-success" : "text-foreground")}>
+      <span
+        className={cn(
+          "break-words",
+          winner === "b" ? "font-semibold text-success" : "text-foreground",
+        )}
+      >
         {right}
       </span>
     </div>
@@ -79,14 +89,7 @@ function capturedAt(member: GroupMember): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-export function CompareModal({
-  a,
-  b,
-  keeperId,
-  onKeep,
-  onKeepBoth,
-  onClose,
-}: CompareModalProps) {
+export function CompareModal({ a, b, keeperId, onKeep, onKeepBoth, onClose }: CompareModalProps) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<Mode>("slide");
   const [split, setSplit] = useState(50);
@@ -143,10 +146,7 @@ export function CompareModal({
             {/* Clipping rather than resizing: both images stay laid out at the
                 full panel width, so the slider reveals the same pixels the
                 other side is showing instead of a differently-scaled copy. */}
-            <div
-              className="absolute inset-0"
-              style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
-            >
+            <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}>
               <Thumbnail
                 path={a.observed_path}
                 maxPx={800}
@@ -219,9 +219,7 @@ export function CompareModal({
       </ModalBody>
 
       <ModalFooter>
-        <span className="mr-auto min-w-0 text-xs text-faint">
-          {t("review.compare.scopeNote")}
-        </span>
+        <span className="mr-auto min-w-0 text-xs text-faint">{t("review.compare.scopeNote")}</span>
         <Button size="sm" variant="outline" onClick={onKeepBoth}>
           {t("review.compare.keepBoth")}
         </Button>

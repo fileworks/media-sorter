@@ -13,12 +13,7 @@ import { DISK_BYTES_OPTS } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
 import { RenameBuilder } from "@/components/config/fields/RenameBuilder";
 import { Select, SelectItem } from "@/components/ui/select";
-import {
-  Segmented,
-  SettingGroup,
-  SettingPreview,
-  SettingRow,
-} from "@/components/ui/setting-row";
+import { Segmented, SettingGroup, SettingPreview, SettingRow } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useDiskSpace } from "@/hooks/useDiskSpace";
 import { useI18n } from "@/i18n/I18nContext";
@@ -57,8 +52,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
           })
         : t("config.transfer.copyPlain")}
       <br />
-      <span className="text-foreground">{t("config.move")}</span>{" "}
-      {t("config.transfer.movePlain")}
+      <span className="text-foreground">{t("config.move")}</span> {t("config.transfer.movePlain")}
     </>
   );
 
@@ -86,10 +80,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
         />
       </SettingRow>
 
-      <SettingRow
-        label={t("config.transfer.verify")}
-        description={t("config.transfer.verifyHelp")}
-      >
+      <SettingRow label={t("config.transfer.verify")} description={t("config.transfer.verifyHelp")}>
         <span className="rounded-full bg-tint-success px-2.5 py-1 text-3xs font-semibold text-success">
           {t("config.transfer.alwaysOn")}
         </span>
@@ -190,9 +181,7 @@ export function SortGroup({ config, updateConfig }: SectionProps) {
         description={t("config.folder.preserveHelp")}
         htmlFor="preserve-subfolders"
         disabled={config.categorize_enabled}
-        disabledReason={
-          config.categorize_enabled ? t("config.folder.categorizeActive") : undefined
-        }
+        disabledReason={config.categorize_enabled ? t("config.folder.categorizeActive") : undefined}
       >
         <Toggle
           id="preserve-subfolders"

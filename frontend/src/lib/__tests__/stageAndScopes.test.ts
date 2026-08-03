@@ -30,9 +30,7 @@ describe("stage readiness", () => {
 
   it("lets Configure be entered as soon as the folders are usable", () => {
     expect(readiness("configure", { ...READY, planned: false }).canEnter).toBe(true);
-    expect(readiness("configure", { ...READY, rootsReady: false }).reason).toMatch(
-      /input folder/i,
-    );
+    expect(readiness("configure", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
   });
 
   it("blocks Review until the folders are chosen and a plan exists", () => {
@@ -63,7 +61,9 @@ describe("stage readiness", () => {
 });
 
 describe("stage transitions", () => {
-  const atExecute = { ...INITIAL_STATE, stage: "execute" as const };
+  // A plan actually exists; without one there is nothing to invalidate.
+  const planned = { ...INITIAL_STATE, key: { ...INITIAL_STATE.key, planVersion: 1 } };
+  const atExecute = { ...planned, stage: "execute" as const };
 
   it("says what going back to Sources invalidates", () => {
     const transition = goTo(atExecute, "sources");
@@ -74,9 +74,21 @@ describe("stage transitions", () => {
   });
 
   it("says that going back to Configure also makes the review stale", () => {
-    const transition = goTo({ ...INITIAL_STATE, stage: "review" as const }, "configure");
+    const transition = goTo({ ...planned, stage: "review" as const }, "configure");
 
     expect(transition.invalidated.join(" ")).toMatch(/changing settings/i);
+  });
+
+  it("invalidates nothing when no plan was ever computed", () => {
+    // Standing in Review is not the same as having a plan. This is what made
+    // the back-navigation dialog appear with nothing to discard.
+    const noPlan = { ...INITIAL_STATE, stage: "review" as const };
+
+    expect(goTo(noPlan, "configure").invalidated).toEqual([]);
+    expect(goTo(noPlan, "sources").invalidated).toEqual([]);
+    expect(goTo({ ...INITIAL_STATE, stage: "execute" as const }, "sources").invalidated).toEqual(
+      [],
+    );
   });
 
   it("invalidates nothing when moving forward", () => {

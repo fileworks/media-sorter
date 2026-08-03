@@ -14,12 +14,7 @@ import { ExcludePatternTags } from "@/components/config/fields/ExcludePatternTag
 import { PerceptualSlider } from "@/components/config/fields/PerceptualSlider";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
-import {
-  MonoValue,
-  Segmented,
-  SettingGroup,
-  SettingRow,
-} from "@/components/ui/setting-row";
+import { MonoValue, Segmented, SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n/I18nContext";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
@@ -219,10 +214,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       {config.burst_detection_enabled && (
-        <SettingRow
-          label={t("config.bursts.tuning")}
-          description={t("config.bursts.reviewFirst")}
-        >
+        <SettingRow label={t("config.bursts.tuning")} description={t("config.bursts.reviewFirst")}>
           <Input
             type="number"
             min={0.1}

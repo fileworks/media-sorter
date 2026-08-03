@@ -129,7 +129,9 @@ export function Modal({
     <div
       className={cn(
         "fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-4",
-        "bg-foreground/50 backdrop-blur-[2px]",
+        // No blur: at 2px it reads as a rendering fault rather than depth. The
+        // scrim is deepened instead, which separates the panel just as well.
+        "bg-foreground/65",
       )}
       // Only a press that starts *and* ends on the backdrop dismisses: a drag
       // that begins inside the panel — selecting a path, dragging the compare
@@ -177,10 +179,7 @@ export function ModalHeader({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-5 py-3.5">
       <h2
         id={titleId}
-        className={cn(
-          "min-w-0 text-sm font-semibold text-foreground",
-          titleHidden && "sr-only",
-        )}
+        className={cn("min-w-0 text-sm font-semibold text-foreground", titleHidden && "sr-only")}
       >
         {title}
       </h2>
@@ -200,7 +199,9 @@ export function ModalHeader({
 }
 
 export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}>{children}</div>;
+  return (
+    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}>{children}</div>
+  );
 }
 
 export function ModalFooter({ children }: { children: ReactNode }) {

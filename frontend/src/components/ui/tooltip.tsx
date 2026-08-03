@@ -95,9 +95,7 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
 
   const named = Boolean(children.props["aria-label"] ?? children.props["aria-labelledby"]);
   const trigger =
-    named || typeof label !== "string"
-      ? children
-      : cloneElement(children, { "aria-label": label });
+    named || typeof label !== "string" ? children : cloneElement(children, { "aria-label": label });
 
   return (
     <>

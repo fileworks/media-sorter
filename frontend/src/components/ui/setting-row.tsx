@@ -100,9 +100,7 @@ export function SettingRow({
  * reading a description of one.
  */
 export function SettingPreview({ children }: { children: ReactNode }) {
-  return (
-    <div className="border-b border-border bg-muted px-5 py-2.5 text-xs">{children}</div>
-  );
+  return <div className="border-b border-border bg-muted px-5 py-2.5 text-xs">{children}</div>;
 }
 
 /**

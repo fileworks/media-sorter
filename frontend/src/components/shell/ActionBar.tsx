@@ -42,7 +42,10 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <p className="flex min-w-0 flex-1 items-start gap-2 text-2xs leading-relaxed text-muted-foreground sm:text-xs">
           {tone === "note" && (
-            <FiCheck className="mt-px h-3.5 w-3.5 shrink-0 text-success sm:h-4 sm:w-4" aria-hidden />
+            <FiCheck
+              className="mt-px h-3.5 w-3.5 shrink-0 text-success sm:h-4 sm:w-4"
+              aria-hidden
+            />
           )}
           <span className="min-w-0">{message}</span>
         </p>

@@ -491,146 +491,146 @@ export function DuplicateComparison({
         </ModalHeader>
 
         <ModalBody className="px-0 py-0">
-            {/* ── Side by side ── */}
-            {viewMode === "side-by-side" && (
-              <div className="space-y-4 px-5 py-5">
-                {/* Thumbnails + names */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-success">
-                      {t("duplicate.originalKept")}
-                    </p>
-                    <ClickableThumb
-                      path={original}
-                      onEnlarge={() => setEnlargedUrl(api.thumbnailUrl(original, 1400))}
-                    />
-                    <p className="truncate text-sm font-medium text-foreground" title={original}>
-                      {getBasename(original)}
-                    </p>
-                    {winnerReason ? (
-                      <div className="flex items-start gap-1.5 rounded-md border border-success/20 bg-success/10 px-2.5 py-1.5 text-2xs text-success">
-                        <FiAward className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>{winnerReason}</span>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t("duplicate.firstKept")}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-info">
-                      {t("duplicate.duplicate")}
-                    </p>
-                    <ClickableThumb
-                      path={item.source}
-                      onEnlarge={() => setEnlargedUrl(api.thumbnailUrl(item.source, 1400))}
-                    />
-                    <p className="truncate text-sm font-medium text-foreground" title={item.source}>
-                      {getBasename(item.source)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Aligned detail table */}
-                <AlignedDetailTable rows={detailRows} />
-
-                {/* Paths — Source then actions then Destination, for both sides */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Original (left / kept) */}
-                  <div className="space-y-1.5">
-                    <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {t("duplicate.source")}
-                    </p>
-                    <p
-                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
-                      title={original}
-                    >
-                      {original}
-                    </p>
-                    <PathActions path={original} compact />
-                    {originalDestination && (
-                      <>
-                        <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("duplicate.destination")}
-                        </p>
-                        <p
-                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
-                          title={originalDestination}
-                        >
-                          {originalDestination}
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Duplicate (right) */}
-                  <div className="space-y-1.5">
-                    <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {t("duplicate.source")}
-                    </p>
-                    <p
-                      className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
-                      title={item.source}
-                    >
-                      {item.source}
-                    </p>
-                    <PathActions path={item.source} compact />
-                    {item.destination && (
-                      <>
-                        <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("duplicate.destination")}
-                        </p>
-                        <p
-                          className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
-                          title={item.destination}
-                        >
-                          {item.destination}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── Slider ── */}
-            {viewMode === "slider" && canSlider && (
-              <div className="px-5 py-5">
-                <ImageComparisonSlider
-                  originalPath={original}
-                  duplicatePath={item.source}
-                  onEnlargeOriginal={() => setEnlargedUrl(api.thumbnailUrl(original, 1400))}
-                  onEnlargeDuplicate={() => setEnlargedUrl(api.thumbnailUrl(item.source, 1400))}
-                />
-              </div>
-            )}
-
-            {/* ── Diff heatmap ── */}
-            {viewMode === "diff" && canDiff && (
-              <div className="space-y-3 px-5 py-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t("duplicate.diffTitle")}
-                </p>
-                <button
-                  type="button"
-                  className="relative block w-full cursor-zoom-in rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setEnlargedUrl(api.diffUrl(original, item.source, 1400))}
-                  aria-label={t("duplicate.viewDiff")}
-                >
-                  <MediaImage
-                    src={api.diffUrl(original, item.source, 768)}
-                    alt={t("duplicate.diffAlt")}
-                    className="mx-auto max-h-[50dvh] w-full rounded-lg border border-border object-contain"
-                    fallback={
-                      <p className="py-10 text-center text-xs text-muted-foreground">
-                        {t("duplicate.diffHelp")}
-                      </p>
-                    }
+          {/* ── Side by side ── */}
+          {viewMode === "side-by-side" && (
+            <div className="space-y-4 px-5 py-5">
+              {/* Thumbnails + names */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-success">
+                    {t("duplicate.originalKept")}
+                  </p>
+                  <ClickableThumb
+                    path={original}
+                    onEnlarge={() => setEnlargedUrl(api.thumbnailUrl(original, 1400))}
                   />
-                </button>
-                <p className="text-2xs text-muted-foreground">{t("duplicate.diffHelp")}</p>
+                  <p className="truncate text-sm font-medium text-foreground" title={original}>
+                    {getBasename(original)}
+                  </p>
+                  {winnerReason ? (
+                    <div className="flex items-start gap-1.5 rounded-md border border-success/20 bg-success/10 px-2.5 py-1.5 text-2xs text-success">
+                      <FiAward className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span>{winnerReason}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t("duplicate.firstKept")}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-info">
+                    {t("duplicate.duplicate")}
+                  </p>
+                  <ClickableThumb
+                    path={item.source}
+                    onEnlarge={() => setEnlargedUrl(api.thumbnailUrl(item.source, 1400))}
+                  />
+                  <p className="truncate text-sm font-medium text-foreground" title={item.source}>
+                    {getBasename(item.source)}
+                  </p>
+                </div>
               </div>
-            )}
+
+              {/* Aligned detail table */}
+              <AlignedDetailTable rows={detailRows} />
+
+              {/* Paths — Source then actions then Destination, for both sides */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Original (left / kept) */}
+                <div className="space-y-1.5">
+                  <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("duplicate.source")}
+                  </p>
+                  <p
+                    className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
+                    title={original}
+                  >
+                    {original}
+                  </p>
+                  <PathActions path={original} compact />
+                  {originalDestination && (
+                    <>
+                      <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t("duplicate.destination")}
+                      </p>
+                      <p
+                        className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
+                        title={originalDestination}
+                      >
+                        {originalDestination}
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Duplicate (right) */}
+                <div className="space-y-1.5">
+                  <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("duplicate.source")}
+                  </p>
+                  <p
+                    className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-foreground"
+                    title={item.source}
+                  >
+                    {item.source}
+                  </p>
+                  <PathActions path={item.source} compact />
+                  {item.destination && (
+                    <>
+                      <p className="pt-1 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t("duplicate.destination")}
+                      </p>
+                      <p
+                        className="select-all break-all rounded border border-border bg-muted/40 px-1.5 py-1 font-mono text-3xs text-muted-foreground"
+                        title={item.destination}
+                      >
+                        {item.destination}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Slider ── */}
+          {viewMode === "slider" && canSlider && (
+            <div className="px-5 py-5">
+              <ImageComparisonSlider
+                originalPath={original}
+                duplicatePath={item.source}
+                onEnlargeOriginal={() => setEnlargedUrl(api.thumbnailUrl(original, 1400))}
+                onEnlargeDuplicate={() => setEnlargedUrl(api.thumbnailUrl(item.source, 1400))}
+              />
+            </div>
+          )}
+
+          {/* ── Diff heatmap ── */}
+          {viewMode === "diff" && canDiff && (
+            <div className="space-y-3 px-5 py-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("duplicate.diffTitle")}
+              </p>
+              <button
+                type="button"
+                className="relative block w-full cursor-zoom-in rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setEnlargedUrl(api.diffUrl(original, item.source, 1400))}
+                aria-label={t("duplicate.viewDiff")}
+              >
+                <MediaImage
+                  src={api.diffUrl(original, item.source, 768)}
+                  alt={t("duplicate.diffAlt")}
+                  className="mx-auto max-h-[50dvh] w-full rounded-lg border border-border object-contain"
+                  fallback={
+                    <p className="py-10 text-center text-xs text-muted-foreground">
+                      {t("duplicate.diffHelp")}
+                    </p>
+                  }
+                />
+              </button>
+              <p className="text-2xs text-muted-foreground">{t("duplicate.diffHelp")}</p>
+            </div>
+          )}
         </ModalBody>
 
         <ModalFooter>

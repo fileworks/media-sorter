@@ -56,7 +56,8 @@ function literalKeyReferences(): Set<string> {
   const keys = new Set<string>();
   for (const [, source] of PRODUCT_SOURCES) {
     for (const match of source.matchAll(/\bt\(\s*"([^"]+)"/g)) keys.add(match[1]);
-    for (const match of source.matchAll(/\btranslate\(\s*[^,()]+,\s*"([^"]+)"/g)) keys.add(match[1]);
+    for (const match of source.matchAll(/\btranslate\(\s*[^,()]+,\s*"([^"]+)"/g))
+      keys.add(match[1]);
   }
   return keys;
 }

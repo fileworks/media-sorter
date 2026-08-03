@@ -38,14 +38,7 @@ export function AppMark({
       {...props}
     >
       {title && <title>{title}</title>}
-      <rect
-        x="1.5"
-        y="1.5"
-        width="45"
-        height="45"
-        rx="12"
-        className="fill-muted stroke-border"
-      />
+      <rect x="1.5" y="1.5" width="45" height="45" rx="12" className="fill-muted stroke-border" />
       <path
         d="M10 36V20a2 2 0 012-2h7l3 3h14a2 2 0 012 2v13a2 2 0 01-2 2H12a2 2 0 01-2-2z"
         className="stroke-foreground"

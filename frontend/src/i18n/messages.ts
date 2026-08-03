@@ -1,4 +1,8 @@
 export const en = {
+  "preflight.cannotExecute": "This plan cannot be executed as it stands.",
+  "preflight.needsAcknowledgement": "Acknowledge what this run changes first.",
+  "footer.busy": "Wait for the current operation to finish.",
+  "recipes.discardsPlan": "The computed plan for this run is discarded; a new one will be taken.",
   "sources.inputFolders": "Input folders",
   "sources.baseline": "Baseline",
   "sources.baselineHelp": "Compared against, never written to",
@@ -823,8 +827,7 @@ export const en = {
   "preflight.blocking.unplanned":
     "{count} outcome(s) could not be frozen safely. Review the plan again before executing.",
   "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
-  "preflight.blocking.space":
-    "Not enough free space: {required} needed, {available} available.",
+  "preflight.blocking.space": "Not enough free space: {required} needed, {available} available.",
   "preflight.reversible.copy":
     "{count} file(s) copied; the source remains available for re-running.",
   "preflight.reversible.skip": "{count} file(s) left exactly where they are.",
@@ -1034,12 +1037,14 @@ export const en = {
   "stage.configure.description": "How files travel, land, and get cleaned",
   "stage.invalidated.settings": "Changing settings makes the current review stale.",
   "stage.gate.plan": "Preview the changes first — nothing has been calculated yet.",
-  "footer.sources": "Nothing changes until you confirm in step 4. Copy mode never touches your originals; Move relocates them only after each file verifies.",
+  "footer.sources":
+    "Nothing changes until you confirm in step 4. Copy mode never touches your originals; Move relocates them only after each file verifies.",
   "footer.toConfigure": "Continue to Configure",
   "footer.estimate": "Estimated: {files} files organized · {duration} · {size}",
   "footer.estimateUnknown": "The estimate appears once the folders have been scanned.",
   "footer.preview": "Preview changes",
-  "footer.review": "Duplicates and junk are moved into _duplicates/ and _junk/ inside the destination. Nothing is deleted.",
+  "footer.review":
+    "Duplicates and junk are moved into _duplicates/ and _junk/ inside the destination. Nothing is deleted.",
   "footer.toExecute": "Continue to Execute",
   "sources.optional": "optional",
   "sources.change": "Change…",
@@ -1056,7 +1061,8 @@ export const en = {
   "sources.pathDialog.title": "Enter a folder path",
   "sources.pathDialog.label": "Folder path",
   "sources.pathDialog.placeholder": "/Users/you/Pictures",
-  "sources.pathDialog.help": "The native folder picker is only available in the desktop app. Paste or type an absolute path — the folders are checked when the run is previewed.",
+  "sources.pathDialog.help":
+    "The native folder picker is only available in the desktop app. Paste or type an absolute path — the folders are checked when the run is previewed.",
   "sources.facts.inputTotals": "{count} files · {size}",
   "sources.facts.inputUnscanned": "Not scanned yet — counts appear after the preview.",
   "sources.facts.indexed": "{count} files indexed",
@@ -1070,14 +1076,19 @@ export const en = {
   "sources.facts.destinationUnscanned": "Free space appears after the folders are scanned.",
   "recipes.recommended": "Recommended",
   "recipes.safeSort.label": "Safe Sort",
-  "recipes.safeSort.description": "Copy into date folders. Duplicates set aside, never deleted. Originals untouched.",
+  "recipes.safeSort.description":
+    "Copy into date folders. Duplicates set aside, never deleted. Originals untouched.",
   "recipes.safeSort.consequence": "Nothing in your input folder is moved or rewritten.",
   "recipes.cleanSweep.label": "Clean Sweep",
-  "recipes.cleanSweep.description": "Move files out of the mess. Duplicates and junk parked in review folders.",
-  "recipes.cleanSweep.consequence": "Originals leave the input folder — after each file has been verified.",
+  "recipes.cleanSweep.description":
+    "Move files out of the mess. Duplicates and junk parked in review folders.",
+  "recipes.cleanSweep.consequence":
+    "Originals leave the input folder — after each file has been verified.",
   "recipes.archiveConvert.label": "Archive & Convert",
-  "recipes.archiveConvert.description": "Copy, convert HEIC to JPEG, and re-encode large videos for long-term storage.",
-  "recipes.archiveConvert.consequence": "This rewrites image and video files. Originals are retained until the copy verifies.",
+  "recipes.archiveConvert.description":
+    "Copy, convert HEIC to JPEG, and re-encode large videos for long-term storage.",
+  "recipes.archiveConvert.consequence":
+    "This rewrites image and video files. Originals are retained until the copy verifies.",
   "recipes.scratch.label": "Start from scratch",
   "recipes.scratch.description": "All options off. Build your own and save it as a recipe.",
   "recipes.scratch.consequence": "Turns everything off, including duplicate detection.",
@@ -1112,11 +1123,14 @@ export const en = {
   "config.group.clean.description": "duplicates and junk — nothing is ever deleted",
   "config.group.enrich.label": "Enrich",
   "config.group.enrich.description": "optional — convert and tag while sorting",
-  "config.transfer.copyNeeds": "keeps originals untouched · needs about {needed} at the destination ({free} free)",
+  "config.transfer.copyNeeds":
+    "keeps originals untouched · needs about {needed} at the destination ({free} free)",
   "config.transfer.copyPlain": "keeps your originals exactly where they are.",
-  "config.transfer.movePlain": "frees the input folder — originals leave only after each file verifies.",
+  "config.transfer.movePlain":
+    "frees the input folder — originals leave only after each file verifies.",
   "config.transfer.verify": "Verify after transfer",
-  "config.transfer.verifyHelp": "Every file is re-read and its checksum compared before it counts as done.",
+  "config.transfer.verifyHelp":
+    "Every file is re-read and its checksum compared before it counts as done.",
   "config.transfer.alwaysOn": "Always on",
   "config.transfer.timestamps": "Preserve original timestamps",
   "config.transfer.timestampsHelp": "Created and modified dates carry over to the copy.",
@@ -1125,7 +1139,8 @@ export const en = {
   "config.folder.fallbackNote": "no date in metadata → uses the file's modified date",
   "config.folder.cameraHelp": "One subfolder per camera model, under the date folder.",
   "config.folder.preserveHelp": "Recreate the source subfolder structure under each date folder.",
-  "config.folder.categorizeHelp": "Route each file into a topic folder, decided offline on this computer.",
+  "config.folder.categorizeHelp":
+    "Route each file into a topic folder, decided offline on this computer.",
   "config.folder.categoriesHelp": "The topics files may be routed into.",
   "config.example.destination": "Sorted",
   "config.example.camera": "Pixel 9 Pro",
@@ -1139,16 +1154,21 @@ export const en = {
   "config.companions.keep": "Keep with the photo",
   "config.companions.leave": "Leave in place",
   "config.companions.ignore": "Ignore",
-  "config.duplicates.detectHelp": "Find copies of the same photo or video and set the lesser ones aside.",
+  "config.duplicates.detectHelp":
+    "Find copies of the same photo or video and set the lesser ones aside.",
   "config.duplicates.matching": "Duplicate detection",
-  "config.duplicates.matchingHelp": "Exact matches by content hash · near-duplicates (re-saves, crops, exports) are flagged for review, never auto-resolved.",
+  "config.duplicates.matchingHelp":
+    "Exact matches by content hash · near-duplicates (re-saves, crops, exports) are flagged for review, never auto-resolved.",
   "config.duplicates.exactOnly": "Exact only",
   "config.duplicates.exactAndNear": "Exact + near",
-  "config.duplicates.thresholdHelp": "How similar two images must be before they count as near-duplicates.",
+  "config.duplicates.thresholdHelp":
+    "How similar two images must be before they count as near-duplicates.",
   "config.duplicates.keepRule": "Default keep rule",
-  "config.duplicates.keepRuleHelp": "Only a default — override any group, or all of them, in Review.",
+  "config.duplicates.keepRuleHelp":
+    "Only a default — override any group, or all of them, in Review.",
   "config.duplicates.setAside": "Set-aside location",
-  "config.duplicates.setAsideHelp": "Losing copies are moved to _duplicates/ inside the destination. Nothing is deleted.",
+  "config.duplicates.setAsideHelp":
+    "Losing copies are moved to _duplicates/ inside the destination. Nothing is deleted.",
   "config.keeper.newest": "Keep the newest",
   "config.keeper.oldest": "Keep the oldest",
   "config.keeper.largest": "Keep the largest",
@@ -1159,13 +1179,15 @@ export const en = {
   "config.keeper.largest.short": "Keep largest",
   "config.keeper.smallest.short": "Keep smallest",
   "config.keeper.highest_resolution.short": "Keep highest res",
-  "config.filters.junkHelp": "Screenshots, thumbnails and tiny files are moved to _junk/ inside the destination. Nothing is deleted.",
+  "config.filters.junkHelp":
+    "Screenshots, thumbnails and tiny files are moved to _junk/ inside the destination. Nothing is deleted.",
   "config.filters.junkSizeHelp": "Anything smaller than this counts as junk.",
   "config.filters.resolutionHelp": "Images with a shorter edge below this count as junk.",
   "config.filters.junkPatternsHelp": "Filenames matching these patterns count as junk.",
   "config.filters.junkLocation": "Junk location",
   "config.filters.junkLocationHelp": "Where junk is parked inside the destination.",
-  "config.filters.recursiveHelp": "Read every subfolder of each input folder, not just the top level.",
+  "config.filters.recursiveHelp":
+    "Read every subfolder of each input folder, not just the top level.",
   "config.filters.sizeRange": "File size range",
   "config.filters.sizeRangeHelp": "Files outside this range are not read at all.",
   "config.filters.excludeHelp": "Folders and filenames matching these patterns are skipped.",
@@ -1180,7 +1202,8 @@ export const en = {
   "config.quality.high": "Best",
   "config.ai.offlineBadge": "runs fully offline",
   "config.ai.advanced": "Provider, vocabulary and thresholds",
-  "config.ai.embedHelp": "Sidecar files leave your images byte-identical; embedding writes into them.",
+  "config.ai.embedHelp":
+    "Sidecar files leave your images byte-identical; embedding writes into them.",
   "config.ai.writeSidecar": "XMP sidecar files",
   "config.ai.writeEmbedded": "Into the image files",
   "config.ai.labelsHelp": "The words the local model scores each photo against.",
@@ -1191,9 +1214,11 @@ export const en = {
   "config.ai.tierCost.lite": "0.6 GB · fastest",
   "config.ai.tierCost.standard": "1.4 GB · a good middle",
   "config.ai.tierCost.max": "3.2 GB · slowest, most accurate",
-  "config.rules.help": "Tag and route files automatically by extension, size, resolution or filename.",
+  "config.rules.help":
+    "Tag and route files automatically by extension, size, resolution or filename.",
   "config.rules.edit": "Edit rules",
-  "config.other.fixDatesHelp": "Rewrite a file's date metadata when the sanity check says it is wrong.",
+  "config.other.fixDatesHelp":
+    "Rewrite a file's date metadata when the sanity check says it is wrong.",
   "config.other.repairHelp": "Attempt to repair files that fail to open.",
   "config.unit.kb": "KB",
   "config.unit.mb": "MB",
@@ -1264,7 +1289,8 @@ export const en = {
   "review.scope.resolved": "Resolved {count}",
   "review.bulk.headline": "{groups} groups, {files} files would be affected",
   "review.bulk.detail": "{size} would move to the review folder — nothing is deleted.",
-  "review.bulk.sourceMutations": "{count} of them are in your input folders, which Copy mode would otherwise leave untouched.",
+  "review.bulk.sourceMutations":
+    "{count} of them are in your input folders, which Copy mode would otherwise leave untouched.",
   "review.bulk.confirm": "Apply the rule",
   "review.bulkPreviewFailed": "The bulk preview could not be calculated.",
   "review.bulkApplyFailed": "The rule could not be applied — the results may have changed.",
@@ -1275,7 +1301,8 @@ export const en = {
   "review.kindBadge.similar": "near-duplicate — worth a look",
   "review.alreadyInLibrary": "already in your library",
   "review.referenceWins": "nothing to choose — your library copy always wins",
-  "review.referenceExplain": "Reference files can never be moved, renamed or set aside — MediaSorter only reads them to spot what you already have.",
+  "review.referenceExplain":
+    "Reference files can never be moved, renamed or set aside — MediaSorter only reads them to spot what you already have.",
   "review.compare": "Compare",
   "review.notDuplicates": "Not duplicates — keep all",
   "review.badge.keep": "KEEP",
@@ -1306,7 +1333,8 @@ export const en = {
   "review.compare.sideA": "A {state}",
   "review.compare.sideB": "B {state}",
   "review.compare.diffAlt": "Difference between {a} and {b}",
-  "review.compare.diffUnavailable": "A difference image can only be made for two readable still images of the same size.",
+  "review.compare.diffUnavailable":
+    "A difference image can only be made for two readable still images of the same size.",
   "review.compare.keepA": "Keep A",
   "review.compare.keepB": "Keep B",
   "review.compare.keepBoth": "Keep both — not duplicates",
@@ -1321,29 +1349,38 @@ export const en = {
   "review.junk.reason.junk_dimension": "Too low resolution",
   "review.junk.reason.junk_pattern": "Filename pattern",
   "review.junk.reason.other": "Other",
-  "review.warnings.intro": "Each of these already has a safe default — run as-is, or change the setting behind it.",
+  "review.warnings.intro":
+    "Each of these already has a safe default — run as-is, or change the setting behind it.",
   "review.warnings.showFiles": "Show files",
   "review.warnings.changeSetting": "Change setting",
   "review.warnings.none": "Nothing needs a second look.",
-  "review.warnings.noneHelp": "Every file has a readable date, a unique destination and opened cleanly.",
+  "review.warnings.noneHelp":
+    "Every file has a readable date, a unique destination and opened cleanly.",
   "review.warning.unreadable.title": "{count} unreadable files",
   "review.warning.unreadable.outcome": "Could not be opened — skipped, and listed in the report.",
   "review.warning.name_collision.title": "{count} name collisions",
-  "review.warning.name_collision.outcome": "Two files map to the same destination name — the later one gets a numeric suffix.",
+  "review.warning.name_collision.outcome":
+    "Two files map to the same destination name — the later one gets a numeric suffix.",
   "review.warning.no_date.title": "{count} without any date",
-  "review.warning.no_date.outcome": "No capture, filename or filesystem date could be read — set aside rather than filed under a guess.",
+  "review.warning.no_date.outcome":
+    "No capture, filename or filesystem date could be read — set aside rather than filed under a guess.",
   "review.warning.fallback_date.title": "{count} dated by the file",
-  "review.warning.fallback_date.outcome": "No capture date in the metadata, so the file's modified date decides the folder.",
+  "review.warning.fallback_date.outcome":
+    "No capture date in the metadata, so the file's modified date decides the folder.",
   "review.warning.suspicious_date.title": "{count} implausible dates",
-  "review.warning.suspicious_date.outcome": "The date looks wrong — a reset camera clock, usually. Set aside for a decision.",
+  "review.warning.suspicious_date.outcome":
+    "The date looks wrong — a reset camera clock, usually. Set aside for a decision.",
   "review.warning.future_date.title": "{count} dated in the future",
-  "review.warning.future_date.outcome": "Set aside rather than filed under a year that has not happened.",
+  "review.warning.future_date.outcome":
+    "Set aside rather than filed under a year that has not happened.",
   "review.warning.deferred_duplicate.title": "{count} duplicate checks deferred",
-  "review.warning.deferred_duplicate.outcome": "These videos are compared during the run itself, not in the dry run.",
+  "review.warning.deferred_duplicate.outcome":
+    "These videos are compared during the run itself, not in the dry run.",
   "execute.title": "Organizing your library",
   "execute.titleDone": "The run is finished",
   "execute.confirmedCopy": "Confirmed: copy {files} files, verifying every one.",
-  "execute.confirmedMove": "Confirmed: move {files} files, verifying every one before the original leaves.",
+  "execute.confirmedMove":
+    "Confirmed: move {files} files, verifying every one before the original leaves.",
   "execute.phase.check": "Checking",
   "execute.phase.scan": "Scanning",
   "execute.phase.duplicates": "Finding duplicates",
@@ -1370,7 +1407,8 @@ export const en = {
   "execute.stat.collisions": "Name collisions auto-suffixed",
   "execute.stat.skipped": "Already in the destination",
   "execute.stat.errors": "Errors",
-  "execute.reportNote": "When this finishes, a full report is saved and the run appears in History.",
+  "execute.reportNote":
+    "When this finishes, a full report is saved and the run appears in History.",
   "execute.log": "Log",
   "execute.logHelp": "verbose details, updated live",
   "execute.logEmpty": "Nothing logged yet.",
@@ -1385,6 +1423,11 @@ export const en = {
 export type MessageKey = keyof typeof en;
 
 export const de: Record<MessageKey, string> = {
+  "preflight.cannotExecute": "Der Plan kann so nicht ausgeführt werden.",
+  "preflight.needsAcknowledgement": "Bestätige zuerst, was dieser Durchlauf verändert.",
+  "footer.busy": "Warte, bis der laufende Vorgang abgeschlossen ist.",
+  "recipes.discardsPlan":
+    "Der berechnete Plan für diesen Durchlauf wird verworfen; ein neuer wird erstellt.",
   "sources.inputFolders": "Eingabeordner",
   "sources.baseline": "Referenz",
   "sources.baselineHelp": "Wird nur verglichen, nie verändert",
@@ -1749,7 +1792,8 @@ export const de: Record<MessageKey, string> = {
   "preview.futureDate": "{count} mit zukünftigem Datum",
   "preview.duplicate": "{count} Duplikate",
   "preview.duplicatePending": "{count} Duplikatprüfung ausstehend",
-  "preview.duplicatePendingHelp": "Der perzeptuelle Videoabgleich wird erst beim echten Durchlauf abgeschlossen.",
+  "preview.duplicatePendingHelp":
+    "Der perzeptuelle Videoabgleich wird erst beim echten Durchlauf abgeschlossen.",
   "preview.inDestination": "{count} bereits am Ziel",
   "preview.junk": "{count} Datenmüll",
   "preview.uncategorized": "{count} ohne Kategorie",
@@ -2456,12 +2500,14 @@ export const de: Record<MessageKey, string> = {
   "stage.configure.description": "Wie Dateien übertragen, abgelegt und bereinigt werden",
   "stage.invalidated.settings": "Geänderte Einstellungen machen die aktuelle Prüfung ungültig.",
   "stage.gate.plan": "Erst die Änderungen berechnen — es wurde noch nichts geprüft.",
-  "footer.sources": "Bis zur Bestätigung in Schritt 4 ändert sich nichts. Der Kopiermodus lässt Originale unangetastet; Verschieben bewegt sie erst nach erfolgreicher Prüfung.",
+  "footer.sources":
+    "Bis zur Bestätigung in Schritt 4 ändert sich nichts. Der Kopiermodus lässt Originale unangetastet; Verschieben bewegt sie erst nach erfolgreicher Prüfung.",
   "footer.toConfigure": "Weiter zu Einstellen",
   "footer.estimate": "Geschätzt: {files} Dateien sortiert · {duration} · {size}",
   "footer.estimateUnknown": "Die Schätzung erscheint, sobald die Ordner gescannt wurden.",
   "footer.preview": "Änderungen berechnen",
-  "footer.review": "Duplikate und Ausschuss werden nach _duplicates/ und _junk/ im Zielordner verschoben. Nichts wird gelöscht.",
+  "footer.review":
+    "Duplikate und Ausschuss werden nach _duplicates/ und _junk/ im Zielordner verschoben. Nichts wird gelöscht.",
   "footer.toExecute": "Weiter zu Ausführen",
   "sources.optional": "optional",
   "sources.change": "Ändern…",
@@ -2474,11 +2520,13 @@ export const de: Record<MessageKey, string> = {
   "sources.useAs.destination": "Als Ziel verwenden",
   "sources.roleChangeAnyway": "Trotzdem ändern",
   "sources.excludedThisRun": "Für diesen Durchlauf übersprungen.",
-  "sources.pickerUnavailable": "Die Ordnerauswahl gibt es nur in der Desktop-App — bitte den Pfad eintippen.",
+  "sources.pickerUnavailable":
+    "Die Ordnerauswahl gibt es nur in der Desktop-App — bitte den Pfad eintippen.",
   "sources.pathDialog.title": "Ordnerpfad eingeben",
   "sources.pathDialog.label": "Ordnerpfad",
   "sources.pathDialog.placeholder": "/Users/du/Bilder",
-  "sources.pathDialog.help": "Die native Ordnerauswahl gibt es nur in der Desktop-App. Absoluten Pfad einfügen oder eintippen — die Ordner werden bei der Berechnung geprüft.",
+  "sources.pathDialog.help":
+    "Die native Ordnerauswahl gibt es nur in der Desktop-App. Absoluten Pfad einfügen oder eintippen — die Ordner werden bei der Berechnung geprüft.",
   "sources.facts.inputTotals": "{count} Dateien · {size}",
   "sources.facts.inputUnscanned": "Noch nicht gescannt — Zahlen erscheinen nach der Berechnung.",
   "sources.facts.indexed": "{count} Dateien indiziert",
@@ -2492,19 +2540,26 @@ export const de: Record<MessageKey, string> = {
   "sources.facts.destinationUnscanned": "Der freie Speicherplatz erscheint nach dem Scan.",
   "recipes.recommended": "Empfohlen",
   "recipes.safeSort.label": "Sicher sortieren",
-  "recipes.safeSort.description": "In Datumsordner kopieren. Duplikate werden beiseitegelegt, nie gelöscht. Originale bleiben unangetastet.",
+  "recipes.safeSort.description":
+    "In Datumsordner kopieren. Duplikate werden beiseitegelegt, nie gelöscht. Originale bleiben unangetastet.",
   "recipes.safeSort.consequence": "Im Quellordner wird nichts verschoben oder verändert.",
   "recipes.cleanSweep.label": "Gründlich aufräumen",
-  "recipes.cleanSweep.description": "Dateien aus dem Durcheinander herausholen. Duplikate und Ausschuss landen in Prüfordnern.",
-  "recipes.cleanSweep.consequence": "Originale verlassen den Quellordner — erst nach erfolgreicher Prüfung jeder Datei.",
+  "recipes.cleanSweep.description":
+    "Dateien aus dem Durcheinander herausholen. Duplikate und Ausschuss landen in Prüfordnern.",
+  "recipes.cleanSweep.consequence":
+    "Originale verlassen den Quellordner — erst nach erfolgreicher Prüfung jeder Datei.",
   "recipes.archiveConvert.label": "Archivieren & umwandeln",
-  "recipes.archiveConvert.description": "Kopieren, HEIC in JPEG umwandeln und große Videos für die Langzeitablage neu kodieren.",
-  "recipes.archiveConvert.consequence": "Dies schreibt Bild- und Videodateien neu. Originale bleiben erhalten, bis die Kopie geprüft ist.",
+  "recipes.archiveConvert.description":
+    "Kopieren, HEIC in JPEG umwandeln und große Videos für die Langzeitablage neu kodieren.",
+  "recipes.archiveConvert.consequence":
+    "Dies schreibt Bild- und Videodateien neu. Originale bleiben erhalten, bis die Kopie geprüft ist.",
   "recipes.scratch.label": "Von Grund auf",
-  "recipes.scratch.description": "Alle Optionen aus. Eigene Einstellungen bauen und als Rezept speichern.",
+  "recipes.scratch.description":
+    "Alle Optionen aus. Eigene Einstellungen bauen und als Rezept speichern.",
   "recipes.scratch.consequence": "Schaltet alles ab, auch die Duplikaterkennung.",
   "recipes.custom.description": "Deine eigenen gespeicherten Einstellungen.",
-  "recipes.custom.consequence": "Wendet genau die Einstellungen an, die unter diesem Namen gespeichert wurden.",
+  "recipes.custom.consequence":
+    "Wendet genau die Einstellungen an, die unter diesem Namen gespeichert wurden.",
   "recipes.saveAs": "Als Rezept speichern…",
   "recipes.nameLabel": "Name des Rezepts",
   "recipes.namePlaceholder": "Diesem Rezept einen Namen geben",
@@ -2513,7 +2568,8 @@ export const de: Record<MessageKey, string> = {
   "recipes.delete": "„{name}“ löschen",
   "recipes.deleteFailed": "Das Rezept konnte nicht gelöscht werden.",
   "config.title": "Rezept anpassen",
-  "config.subtitle": "Jede Einstellung hat eine sichere Voreinstellung — überfliegen oder vertiefen.",
+  "config.subtitle":
+    "Jede Einstellung hat eine sichere Voreinstellung — überfliegen oder vertiefen.",
   "config.rail.label": "Einstellungen",
   "config.rail.jumpTo": "Zu einer Einstellung springen",
   "config.rail.resetGroup": "Gruppe zurücksetzen",
@@ -2534,20 +2590,26 @@ export const de: Record<MessageKey, string> = {
   "config.group.clean.description": "Duplikate und Ausschuss — nichts wird je gelöscht",
   "config.group.enrich.label": "Anreichern",
   "config.group.enrich.description": "optional — beim Sortieren umwandeln und verschlagworten",
-  "config.transfer.copyNeeds": "lässt Originale unangetastet · benötigt etwa {needed} am Ziel ({free} frei)",
+  "config.transfer.copyNeeds":
+    "lässt Originale unangetastet · benötigt etwa {needed} am Ziel ({free} frei)",
   "config.transfer.copyPlain": "lässt die Originale genau dort, wo sie sind.",
-  "config.transfer.movePlain": "leert den Quellordner — Originale verschwinden erst nach erfolgreicher Prüfung.",
+  "config.transfer.movePlain":
+    "leert den Quellordner — Originale verschwinden erst nach erfolgreicher Prüfung.",
   "config.transfer.verify": "Nach der Übertragung prüfen",
-  "config.transfer.verifyHelp": "Jede Datei wird erneut gelesen und ihre Prüfsumme verglichen, bevor sie als fertig gilt.",
+  "config.transfer.verifyHelp":
+    "Jede Datei wird erneut gelesen und ihre Prüfsumme verglichen, bevor sie als fertig gilt.",
   "config.transfer.alwaysOn": "Immer aktiv",
   "config.transfer.timestamps": "Ursprüngliche Zeitstempel behalten",
-  "config.transfer.timestampsHelp": "Erstellungs- und Änderungsdatum werden auf die Kopie übertragen.",
+  "config.transfer.timestampsHelp":
+    "Erstellungs- und Änderungsdatum werden auf die Kopie übertragen.",
   "config.folder.structure": "Ordnerstruktur",
   "config.folder.structureHelp": "Datumsordner innerhalb des Zielordners.",
   "config.folder.fallbackNote": "kein Datum in den Metadaten → nutzt das Änderungsdatum",
   "config.folder.cameraHelp": "Ein Unterordner pro Kameramodell, unterhalb des Datumsordners.",
-  "config.folder.preserveHelp": "Die Unterordnerstruktur der Quelle unter jedem Datumsordner nachbilden.",
-  "config.folder.categorizeHelp": "Jede Datei in einen Themenordner einsortieren, offline auf diesem Rechner entschieden.",
+  "config.folder.preserveHelp":
+    "Die Unterordnerstruktur der Quelle unter jedem Datumsordner nachbilden.",
+  "config.folder.categorizeHelp":
+    "Jede Datei in einen Themenordner einsortieren, offline auf diesem Rechner entschieden.",
   "config.folder.categoriesHelp": "Die Themen, in die Dateien einsortiert werden können.",
   "config.example.destination": "Sortiert",
   "config.example.camera": "Pixel 9 Pro",
@@ -2557,20 +2619,26 @@ export const de: Record<MessageKey, string> = {
   "config.criteria.day": "Tag",
   "config.rename.help": "IMG_4382.HEIC → 2025-07-14_1832_001.jpg · Endungen kleingeschrieben",
   "config.companions.label": "Begleitdateien",
-  "config.companions.help": "Sidecars, RAW-Geschwister und Bewegtbildteile, die zu einem Foto gehören.",
+  "config.companions.help":
+    "Sidecars, RAW-Geschwister und Bewegtbildteile, die zu einem Foto gehören.",
   "config.companions.keep": "Beim Foto behalten",
   "config.companions.leave": "An Ort und Stelle lassen",
   "config.companions.ignore": "Ignorieren",
-  "config.duplicates.detectHelp": "Kopien desselben Fotos oder Videos finden und die schlechteren beiseitelegen.",
+  "config.duplicates.detectHelp":
+    "Kopien desselben Fotos oder Videos finden und die schlechteren beiseitelegen.",
   "config.duplicates.matching": "Duplikaterkennung",
-  "config.duplicates.matchingHelp": "Exakte Treffer über den Inhalts-Hash · Fast-Duplikate (Neuspeicherungen, Zuschnitte, Exporte) werden zur Prüfung markiert, nie automatisch entschieden.",
+  "config.duplicates.matchingHelp":
+    "Exakte Treffer über den Inhalts-Hash · Fast-Duplikate (Neuspeicherungen, Zuschnitte, Exporte) werden zur Prüfung markiert, nie automatisch entschieden.",
   "config.duplicates.exactOnly": "Nur exakt",
   "config.duplicates.exactAndNear": "Exakt + ähnlich",
-  "config.duplicates.thresholdHelp": "Wie ähnlich zwei Bilder sein müssen, damit sie als Fast-Duplikate gelten.",
+  "config.duplicates.thresholdHelp":
+    "Wie ähnlich zwei Bilder sein müssen, damit sie als Fast-Duplikate gelten.",
   "config.duplicates.keepRule": "Standard-Behaltregel",
-  "config.duplicates.keepRuleHelp": "Nur eine Voreinstellung — in der Prüfung einzeln oder gesammelt änderbar.",
+  "config.duplicates.keepRuleHelp":
+    "Nur eine Voreinstellung — in der Prüfung einzeln oder gesammelt änderbar.",
   "config.duplicates.setAside": "Ablageort",
-  "config.duplicates.setAsideHelp": "Unterlegene Kopien werden nach _duplicates/ im Zielordner verschoben. Nichts wird gelöscht.",
+  "config.duplicates.setAsideHelp":
+    "Unterlegene Kopien werden nach _duplicates/ im Zielordner verschoben. Nichts wird gelöscht.",
   "config.keeper.newest": "Neueste behalten",
   "config.keeper.oldest": "Älteste behalten",
   "config.keeper.largest": "Größte behalten",
@@ -2581,16 +2649,20 @@ export const de: Record<MessageKey, string> = {
   "config.keeper.largest.short": "Größte",
   "config.keeper.smallest.short": "Kleinste",
   "config.keeper.highest_resolution.short": "Höchste Auflösung",
-  "config.filters.junkHelp": "Screenshots, Vorschaubilder und Winzdateien werden nach _junk/ im Zielordner verschoben. Nichts wird gelöscht.",
+  "config.filters.junkHelp":
+    "Screenshots, Vorschaubilder und Winzdateien werden nach _junk/ im Zielordner verschoben. Nichts wird gelöscht.",
   "config.filters.junkSizeHelp": "Alles darunter gilt als Ausschuss.",
   "config.filters.resolutionHelp": "Bilder mit kürzerer Kante darunter gelten als Ausschuss.",
-  "config.filters.junkPatternsHelp": "Dateinamen, die auf diese Muster passen, gelten als Ausschuss.",
+  "config.filters.junkPatternsHelp":
+    "Dateinamen, die auf diese Muster passen, gelten als Ausschuss.",
   "config.filters.junkLocation": "Ausschuss-Ablage",
   "config.filters.junkLocationHelp": "Wo Ausschuss im Zielordner abgelegt wird.",
-  "config.filters.recursiveHelp": "Alle Unterordner jedes Quellordners lesen, nicht nur die oberste Ebene.",
+  "config.filters.recursiveHelp":
+    "Alle Unterordner jedes Quellordners lesen, nicht nur die oberste Ebene.",
   "config.filters.sizeRange": "Dateigrößenbereich",
   "config.filters.sizeRangeHelp": "Dateien außerhalb dieses Bereichs werden gar nicht gelesen.",
-  "config.filters.excludeHelp": "Ordner und Dateinamen, die auf diese Muster passen, werden übersprungen.",
+  "config.filters.excludeHelp":
+    "Ordner und Dateinamen, die auf diese Muster passen, werden übersprungen.",
   "config.bursts.detectHelp": "Serienaufnahmen gruppieren, um die schärfste Aufnahme zu behalten.",
   "config.bursts.tuning": "Serienbild-Empfindlichkeit",
   "config.conversion.imagesHelp": "Kleinere, überall lesbare Kopien zum Teilen und Ansehen.",
@@ -2602,7 +2674,8 @@ export const de: Record<MessageKey, string> = {
   "config.quality.high": "Beste",
   "config.ai.offlineBadge": "läuft vollständig offline",
   "config.ai.advanced": "Anbieter, Vokabular und Schwellen",
-  "config.ai.embedHelp": "Sidecar-Dateien lassen Bilder Byte-für-Byte unverändert; Einbetten schreibt hinein.",
+  "config.ai.embedHelp":
+    "Sidecar-Dateien lassen Bilder Byte-für-Byte unverändert; Einbetten schreibt hinein.",
   "config.ai.writeSidecar": "XMP-Sidecar-Dateien",
   "config.ai.writeEmbedded": "In die Bilddateien",
   "config.ai.labelsHelp": "Die Begriffe, gegen die das lokale Modell jedes Foto bewertet.",
@@ -2613,9 +2686,11 @@ export const de: Record<MessageKey, string> = {
   "config.ai.tierCost.lite": "0,6 GB · am schnellsten",
   "config.ai.tierCost.standard": "1,4 GB · gute Mitte",
   "config.ai.tierCost.max": "3,2 GB · am langsamsten, am genauesten",
-  "config.rules.help": "Dateien automatisch nach Endung, Größe, Auflösung oder Name verschlagworten und einsortieren.",
+  "config.rules.help":
+    "Dateien automatisch nach Endung, Größe, Auflösung oder Name verschlagworten und einsortieren.",
   "config.rules.edit": "Regeln bearbeiten",
-  "config.other.fixDatesHelp": "Datums-Metadaten neu schreiben, wenn die Plausibilitätsprüfung sie als falsch erkennt.",
+  "config.other.fixDatesHelp":
+    "Datums-Metadaten neu schreiben, wenn die Plausibilitätsprüfung sie als falsch erkennt.",
   "config.other.repairHelp": "Versuchen, nicht lesbare Dateien zu reparieren.",
   "config.unit.kb": "KB",
   "config.unit.mb": "MB",
@@ -2676,7 +2751,8 @@ export const de: Record<MessageKey, string> = {
   "review.view.list": "Liste",
   "review.search": "Name, Schlagwort, Ordner suchen…",
   "review.keepRule": "Behaltregel",
-  "review.keepRuleNote": "Voreinstellung aus „Einstellen“ — eine Änderung hier ändert das Rezept nicht",
+  "review.keepRuleNote":
+    "Voreinstellung aus „Einstellen“ — eine Änderung hier ändert das Rezept nicht",
   "review.applyToUnresolved": "Auf {count} offene anwenden",
   "review.chooseKeeper": "Behalten wählen…",
   "review.groupKeepRule": "Behaltregel für diese Gruppe",
@@ -2686,10 +2762,12 @@ export const de: Record<MessageKey, string> = {
   "review.scope.resolved": "Entschieden {count}",
   "review.bulk.headline": "{groups} Gruppen, {files} Dateien wären betroffen",
   "review.bulk.detail": "{size} würden in den Prüfordner verschoben — nichts wird gelöscht.",
-  "review.bulk.sourceMutations": "{count} davon liegen in den Quellordnern, die der Kopiermodus sonst unangetastet lässt.",
+  "review.bulk.sourceMutations":
+    "{count} davon liegen in den Quellordnern, die der Kopiermodus sonst unangetastet lässt.",
   "review.bulk.confirm": "Regel anwenden",
   "review.bulkPreviewFailed": "Die Sammelvorschau konnte nicht berechnet werden.",
-  "review.bulkApplyFailed": "Die Regel konnte nicht angewendet werden — die Ergebnisse haben sich womöglich geändert.",
+  "review.bulkApplyFailed":
+    "Die Regel konnte nicht angewendet werden — die Ergebnisse haben sich womöglich geändert.",
   "review.decideFailed": "Diese Entscheidung konnte nicht gespeichert werden.",
   "review.loadFailed": "Duplikatgruppen konnten nicht geladen werden.",
   "review.copiesOf": "{count} Kopien · {name}",
@@ -2697,7 +2775,8 @@ export const de: Record<MessageKey, string> = {
   "review.kindBadge.similar": "Fast-Duplikat — einen Blick wert",
   "review.alreadyInLibrary": "bereits in deiner Bibliothek",
   "review.referenceWins": "nichts zu entscheiden — die Bibliothekskopie gewinnt immer",
-  "review.referenceExplain": "Referenzdateien werden nie verschoben, umbenannt oder beiseitegelegt — MediaSorter liest sie nur, um bereits Vorhandenes zu erkennen.",
+  "review.referenceExplain":
+    "Referenzdateien werden nie verschoben, umbenannt oder beiseitegelegt — MediaSorter liest sie nur, um bereits Vorhandenes zu erkennen.",
   "review.compare": "Vergleichen",
   "review.notDuplicates": "Keine Duplikate — alle behalten",
   "review.badge.keep": "BEHALTEN",
@@ -2728,7 +2807,8 @@ export const de: Record<MessageKey, string> = {
   "review.compare.sideA": "A {state}",
   "review.compare.sideB": "B {state}",
   "review.compare.diffAlt": "Unterschied zwischen {a} und {b}",
-  "review.compare.diffUnavailable": "Ein Differenzbild ist nur für zwei lesbare Standbilder gleicher Größe möglich.",
+  "review.compare.diffUnavailable":
+    "Ein Differenzbild ist nur für zwei lesbare Standbilder gleicher Größe möglich.",
   "review.compare.keepA": "A behalten",
   "review.compare.keepB": "B behalten",
   "review.compare.keepBoth": "Beide behalten — keine Duplikate",
@@ -2743,29 +2823,39 @@ export const de: Record<MessageKey, string> = {
   "review.junk.reason.junk_dimension": "Zu geringe Auflösung",
   "review.junk.reason.junk_pattern": "Dateinamensmuster",
   "review.junk.reason.other": "Sonstiges",
-  "review.warnings.intro": "Jeder Punkt hat bereits eine sichere Voreinstellung — so ausführen oder die Einstellung dahinter ändern.",
+  "review.warnings.intro":
+    "Jeder Punkt hat bereits eine sichere Voreinstellung — so ausführen oder die Einstellung dahinter ändern.",
   "review.warnings.showFiles": "Dateien zeigen",
   "review.warnings.changeSetting": "Einstellung ändern",
   "review.warnings.none": "Nichts, was einen zweiten Blick braucht.",
-  "review.warnings.noneHelp": "Jede Datei hat ein lesbares Datum, ein eindeutiges Ziel und ließ sich fehlerfrei öffnen.",
+  "review.warnings.noneHelp":
+    "Jede Datei hat ein lesbares Datum, ein eindeutiges Ziel und ließ sich fehlerfrei öffnen.",
   "review.warning.unreadable.title": "{count} nicht lesbare Dateien",
-  "review.warning.unreadable.outcome": "Konnten nicht geöffnet werden — übersprungen und im Bericht aufgeführt.",
+  "review.warning.unreadable.outcome":
+    "Konnten nicht geöffnet werden — übersprungen und im Bericht aufgeführt.",
   "review.warning.name_collision.title": "{count} Namenskollisionen",
-  "review.warning.name_collision.outcome": "Zwei Dateien führen zum selben Zielnamen — die spätere erhält ein Zahlensuffix.",
+  "review.warning.name_collision.outcome":
+    "Zwei Dateien führen zum selben Zielnamen — die spätere erhält ein Zahlensuffix.",
   "review.warning.no_date.title": "{count} ohne jedes Datum",
-  "review.warning.no_date.outcome": "Weder Aufnahme-, Dateiname- noch Dateisystemdatum lesbar — beiseitegelegt statt geraten einsortiert.",
+  "review.warning.no_date.outcome":
+    "Weder Aufnahme-, Dateiname- noch Dateisystemdatum lesbar — beiseitegelegt statt geraten einsortiert.",
   "review.warning.fallback_date.title": "{count} nach Dateidatum",
-  "review.warning.fallback_date.outcome": "Kein Aufnahmedatum in den Metadaten, daher entscheidet das Änderungsdatum über den Ordner.",
+  "review.warning.fallback_date.outcome":
+    "Kein Aufnahmedatum in den Metadaten, daher entscheidet das Änderungsdatum über den Ordner.",
   "review.warning.suspicious_date.title": "{count} unplausible Daten",
-  "review.warning.suspicious_date.outcome": "Das Datum wirkt falsch — meist eine zurückgesetzte Kamerauhr. Zur Entscheidung beiseitegelegt.",
+  "review.warning.suspicious_date.outcome":
+    "Das Datum wirkt falsch — meist eine zurückgesetzte Kamerauhr. Zur Entscheidung beiseitegelegt.",
   "review.warning.future_date.title": "{count} mit Datum in der Zukunft",
-  "review.warning.future_date.outcome": "Beiseitegelegt, statt unter einem noch nicht erreichten Jahr abzulegen.",
+  "review.warning.future_date.outcome":
+    "Beiseitegelegt, statt unter einem noch nicht erreichten Jahr abzulegen.",
   "review.warning.deferred_duplicate.title": "{count} aufgeschobene Duplikatprüfungen",
-  "review.warning.deferred_duplicate.outcome": "Diese Videos werden erst während des Durchlaufs verglichen, nicht im Probelauf.",
+  "review.warning.deferred_duplicate.outcome":
+    "Diese Videos werden erst während des Durchlaufs verglichen, nicht im Probelauf.",
   "execute.title": "Bibliothek wird sortiert",
   "execute.titleDone": "Der Durchlauf ist abgeschlossen",
   "execute.confirmedCopy": "Bestätigt: {files} Dateien kopieren, jede einzeln geprüft.",
-  "execute.confirmedMove": "Bestätigt: {files} Dateien verschieben, jede geprüft, bevor das Original weggeht.",
+  "execute.confirmedMove":
+    "Bestätigt: {files} Dateien verschieben, jede geprüft, bevor das Original weggeht.",
   "execute.phase.check": "Wird geprüft",
   "execute.phase.scan": "Wird gescannt",
   "execute.phase.duplicates": "Duplikate werden gesucht",
@@ -2777,14 +2867,17 @@ export const de: Record<MessageKey, string> = {
   "execute.step.scan": "Scannen",
   "execute.step.duplicates": "Duplikate",
   "execute.step.organize": "Kopieren & prüfen",
-  "execute.organizeIncludes": "Umwandlung und Verschlagwortung passieren Datei für Datei in diesem Schritt.",
+  "execute.organizeIncludes":
+    "Umwandlung und Verschlagwortung passieren Datei für Datei in diesem Schritt.",
   "execute.timeLeft": "noch etwa {duration}",
   "execute.counts": "{done} von {total} Dateien · {errors} Fehler",
   "execute.ofBytes": "{done} von {total}",
   "execute.cancelRun": "Durchlauf abbrechen",
   "execute.retry": "Erneut versuchen",
-  "execute.safeCopy": "Kopiermodus — Originale werden nie verändert. Jederzeit gefahrlos abbrechbar.",
-  "execute.safeMove": "Jedes Original verschwindet erst, wenn die Kopie geprüft ist. Jederzeit gefahrlos abbrechbar.",
+  "execute.safeCopy":
+    "Kopiermodus — Originale werden nie verändert. Jederzeit gefahrlos abbrechbar.",
+  "execute.safeMove":
+    "Jedes Original verschwindet erst, wenn die Kopie geprüft ist. Jederzeit gefahrlos abbrechbar.",
   "execute.soFar": "Bisher",
   "execute.stat.verified": "Dateien geprüft",
   "execute.stat.duplicates": "Duplikate beiseitegelegt",
@@ -2792,7 +2885,8 @@ export const de: Record<MessageKey, string> = {
   "execute.stat.collisions": "Namenskollisionen automatisch ergänzt",
   "execute.stat.skipped": "Bereits am Ziel",
   "execute.stat.errors": "Fehler",
-  "execute.reportNote": "Am Ende wird ein vollständiger Bericht gespeichert und der Durchlauf erscheint im Verlauf.",
+  "execute.reportNote":
+    "Am Ende wird ein vollständiger Bericht gespeichert und der Durchlauf erscheint im Verlauf.",
   "execute.log": "Protokoll",
   "execute.logHelp": "ausführliche Details, live aktualisiert",
   "execute.logEmpty": "Noch nichts protokolliert.",

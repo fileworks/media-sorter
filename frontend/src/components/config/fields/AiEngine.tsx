@@ -1,8 +1,7 @@
 import { FiCpu, FiAlertTriangle, FiZap } from "react-icons/fi";
-import { FormRow } from "@/components/ui/form-row";
+import { SettingRow } from "@/components/ui/setting-row";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
-import { HELP } from "@/components/config/help";
 import { cn } from "@/lib/utils";
 import type { AiModelTier, Config, HardwareInfo } from "@/types/api";
 import {
@@ -105,11 +104,10 @@ export function ModelTierSelect({
 
   return (
     <div className="space-y-3">
-      <FormRow
+      <SettingRow
         label={t("config.ai.model")}
+        description={t("help.aiModelTier")}
         htmlFor="ai-model-tier"
-        help={HELP.aiModelTier}
-        helpSide="right"
       >
         <Select
           id="ai-model-tier"
@@ -123,17 +121,22 @@ export function ModelTierSelect({
             </SelectItem>
           ))}
         </Select>
-      </FormRow>
+      </SettingRow>
 
       {/* GPU toggle only matters when an accelerator EP is actually present. */}
       {hardware.has_accelerator && eff !== "off" && (
-        <FormRow label={t("config.ai.gpu")} htmlFor="ai-allow-gpu" help={HELP.aiAllowGpu} inline>
+        <SettingRow
+          label={t("config.ai.gpu")}
+          description={t("help.aiAllowGpu")}
+          htmlFor="ai-allow-gpu"
+          last
+        >
           <Toggle
             id="ai-allow-gpu"
             checked={config.ai_allow_gpu ?? true}
             onChange={(v) => updateConfig({ ai_allow_gpu: v })}
           />
-        </FormRow>
+        </SettingRow>
       )}
 
       {eff !== "off" && <AiModelManager />}

@@ -53,7 +53,11 @@ export function MediaImage({ src, alt, className, fallback }: MediaImageProps) {
         src={objectUrl ?? undefined}
         alt={alt}
         decoding="async"
-        className={cn("transition-opacity duration-200", objectUrl ? "opacity-100" : "opacity-0", className)}
+        className={cn(
+          "transition-opacity duration-200",
+          objectUrl ? "opacity-100" : "opacity-0",
+          className,
+        )}
       />
     </>
   );

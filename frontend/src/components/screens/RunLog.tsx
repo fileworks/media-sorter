@@ -105,7 +105,10 @@ export function RunLog({ entries, running }: { entries: LogEntry[]; running: boo
                   {new Date(entry.timestamp).toLocaleTimeString(locale, { hour12: false })}
                 </span>
                 <span
-                  className={cn("w-8 shrink-0", LEVEL_CLASS[entry.level] ?? "text-muted-foreground")}
+                  className={cn(
+                    "w-8 shrink-0",
+                    LEVEL_CLASS[entry.level] ?? "text-muted-foreground",
+                  )}
                 >
                   {LEVEL_TAG[entry.level] ?? entry.level}
                 </span>

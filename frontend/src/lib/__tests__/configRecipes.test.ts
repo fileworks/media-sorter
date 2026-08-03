@@ -106,12 +106,8 @@ describe("built-in configuration recipes", () => {
   });
 
   it("only authorizes mutation for the recipe that rewrites files", () => {
-    expect(applyRecipe(base, ARCHIVE_CONVERT).preservation_profile?.mode).toBe(
-      "explicit_mutation",
-    );
-    expect(applyRecipe(base, ARCHIVE_CONVERT).optimization_profile?.mode).toBe(
-      "visually_lossless",
-    );
+    expect(applyRecipe(base, ARCHIVE_CONVERT).preservation_profile?.mode).toBe("explicit_mutation");
+    expect(applyRecipe(base, ARCHIVE_CONVERT).optimization_profile?.mode).toBe("visually_lossless");
     for (const recipe of [SAFE_SORT, CLEAN_SWEEP, SCRATCH]) {
       expect(applyRecipe(base, recipe).preservation_profile?.mode).toBe("organize_only");
       expect(applyRecipe(base, recipe).optimization_profile?.mode).toBe("disabled");

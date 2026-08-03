@@ -109,7 +109,10 @@ export function FolderBrowserDialog({
     <Modal open={open} onClose={onClose} title={t("folderBrowser.title")} size="lg">
       <ModalHeader />
       <ModalBody className="space-y-3">
-        <nav aria-label={t("folderBrowser.breadcrumb")} className="flex flex-wrap items-center gap-1">
+        <nav
+          aria-label={t("folderBrowser.breadcrumb")}
+          className="flex flex-wrap items-center gap-1"
+        >
           <button
             type="button"
             onClick={() => descend("")}
@@ -200,9 +203,7 @@ export function FolderBrowserDialog({
       </ModalBody>
       <ModalFooter>
         <div className="flex w-full items-center justify-between gap-3">
-          <p className="min-w-0 truncate text-xs text-muted-foreground">
-            {blockedReason ?? path}
-          </p>
+          <p className="min-w-0 truncate text-xs text-muted-foreground">{blockedReason ?? path}</p>
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" onClick={onClose}>
               {t("common.cancel")}

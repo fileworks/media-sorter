@@ -80,10 +80,9 @@ describe("rail summaries", () => {
       "On · offline",
     );
     expect(
-      summariesFor(
-        { ...BASE, ai_tagging_enabled: true, ai_tagging_provider: "imagga" },
-        t,
-      )["setting-ai"],
+      summariesFor({ ...BASE, ai_tagging_enabled: true, ai_tagging_provider: "imagga" }, t)[
+        "setting-ai"
+      ],
     ).toBe("On · cloud");
   });
 });
