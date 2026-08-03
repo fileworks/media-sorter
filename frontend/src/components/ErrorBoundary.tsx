@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { storedLocale, translate } from "@/i18n/I18nContext";
 
 interface ErrorBoundaryProps {
@@ -63,20 +64,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           )}
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={this.handleReset}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {translate(storedLocale(), "app.tryAgain")}
-          </button>
-          <button
-            type="button"
-            onClick={this.handleReload}
-            className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button onClick={this.handleReset}>{translate(storedLocale(), "app.tryAgain")}</Button>
+          <Button variant="outline" onClick={this.handleReload}>
             {translate(storedLocale(), "app.reloadApp")}
-          </button>
+          </Button>
         </div>
       </div>
     );

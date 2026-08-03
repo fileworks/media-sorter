@@ -182,6 +182,17 @@ export function ExecutePreflight({
   const lineText = (line: (typeof result.reversible)[number]) =>
     line.messageKey ? t(line.messageKey, line.params, line.text) : line.text;
 
+  // Three different causes disable Execute. The blocking list above already
+  // spells out the first; the other two are stated here or they are stated
+  // nowhere.
+  const executeBlockedBecause = busy
+    ? t("preflight.running")
+    : !result.canExecute
+      ? t("preflight.cannotExecute")
+      : !input.acknowledgedSourceMutations
+        ? t("preflight.needsAcknowledgement")
+        : null;
+
   return (
     <section
       className="space-y-5 rounded-2xl border border-border bg-card p-5 shadow-card"
@@ -245,23 +256,21 @@ export function ExecutePreflight({
           : t("preflight.acknowledge")}
       </label>
 
-      <Button
-        disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
-        // Every disabled control states its reason; this one is disabled for
-        // three different causes and used to explain none of them.
-        title={
-          busy
-            ? t("preflight.running")
-            : !result.canExecute
-              ? t("preflight.cannotExecute")
-              : !input.acknowledgedSourceMutations
-                ? t("preflight.needsAcknowledgement")
-                : undefined
-        }
-        onClick={onExecute}
-      >
-        {busy ? t("preflight.running") : t("preflight.execute")}
-      </Button>
+      {/* Every disabled control states its reason. This is a footer action, so
+          the reason is written beside it rather than hidden in a hover: a
+          native `title` never appears for a keyboard user and cannot be read at
+          all on a control that is disabled. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
+          onClick={onExecute}
+        >
+          {busy ? t("preflight.running") : t("preflight.execute")}
+        </Button>
+        {executeBlockedBecause !== null && (
+          <p className="text-xs text-muted-foreground">{executeBlockedBecause}</p>
+        )}
+      </div>
     </section>
   );
 }

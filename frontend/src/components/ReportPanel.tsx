@@ -3,6 +3,7 @@ import { FiLoader, FiSearch } from "react-icons/fi";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import { triggerDownload } from "@/lib/download";
 import { cn } from "@/lib/utils";
@@ -185,6 +186,7 @@ function StatsDashboard({
   return (
     <div className="rounded-xl border border-border bg-card">
       <button
+        type="button"
         onClick={onToggle}
         className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
       >
@@ -397,6 +399,7 @@ function FileTableSection({
           {FILTER_TABS.map((tabOption) => (
             <button
               key={tabOption.id}
+              type="button"
               onClick={() => {
                 setTab(tabOption.id);
                 setPage(0);
@@ -503,20 +506,26 @@ function FileTableSection({
                     <div className="flex items-center gap-1.5">
                       <StatusBadge status={f.status} />
                       {["duplicate", "already_in_destination"].includes(f.status) &&
-                        f.duplicate_type && (
-                          <span
-                            className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info"
-                            title={
-                              f.duplicate_of
-                                ? t("report.duplicateOf", { path: f.duplicate_of })
-                                : undefined
-                            }
-                          >
-                            {f.duplicate_type === "exact"
-                              ? "exact"
-                              : `~${f.duplicate_similarity ?? 0}%`}
-                          </span>
-                        )}
+                        f.duplicate_type &&
+                        (() => {
+                          const badge = (
+                            <span className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info">
+                              {f.duplicate_type === "exact"
+                                ? "exact"
+                                : `~${f.duplicate_similarity ?? 0}%`}
+                            </span>
+                          );
+                          // Which file this one duplicates is a fact, not a
+                          // truncation, so it goes in the app's tooltip rather
+                          // than a native `title` no keyboard user ever sees.
+                          return f.duplicate_of ? (
+                            <Tooltip label={t("report.duplicateOf", { path: f.duplicate_of })}>
+                              {badge}
+                            </Tooltip>
+                          ) : (
+                            badge
+                          );
+                        })()}
                     </div>
                   </td>
                   <td

@@ -223,13 +223,9 @@ export function ExecuteScreen({
               </Button>
             )}
             {(failed || cancelled) && (
-              <button
-                type="button"
-                onClick={onRetry}
-                className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <Button size="sm" onClick={onRetry}>
                 {t("execute.retry")}
-              </button>
+              </Button>
             )}
             <span className="text-xs text-muted-foreground">
               <FiCheck className="mr-1 inline h-3 w-3 align-[-1px] text-success" aria-hidden />

@@ -5,8 +5,15 @@ import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import axe from "axe-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import type { PreviewResult } from "@/types/api";
+import type { GroupMember } from "@/lib/reviewWorkbench";
 
+import { CompareModal } from "@/components/screens/review/CompareModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
+import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
+import { ResetDialog } from "@/components/config/ResetDialog";
+import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { ExecutePreflight } from "@/components/OperationCenter";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { RunLog } from "@/components/screens/RunLog";
@@ -111,6 +118,23 @@ function expectKeyboardReachable(container: HTMLElement): void {
   }
 }
 
+/**
+ * Both themes, for real: the palette is a `dark` class on the document root, so
+ * a component that hard-codes a colour instead of using a token renders
+ * identically in both and a component that branches on the theme renders twice.
+ * jsdom computes no colour, so axe's contrast rule stays off and the token
+ * palette is what carries that guarantee; what this sweep does catch is a
+ * theme-conditional branch that produces broken markup in one of the two.
+ */
+function useTheme(theme: "light" | "dark") {
+  beforeEach(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  });
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+  });
+}
+
 function renderWithProviders(element: ReactElement, locale: Locale) {
   const queryClient = new QueryClient({
     // Do not leave React Query's five-minute cache timer alive after the
@@ -168,6 +192,145 @@ const PLAN_TOTALS: PlanTotals = {
   warnings: 3,
   share: { ready: 90, duplicates: 8, junk: 2 },
 };
+
+/** A dry run with one ordinary file, one duplicate stack and one warning. */
+const PREVIEW_RESULT = {
+  config_fingerprint: "fp",
+  plan_id: "plan-1",
+  impact: {
+    actionable_groups: 2,
+    copy_count: 2,
+    move_count: 0,
+    quarantine_count: 1,
+    quarantine_bytes: 1_000,
+    skip_count: 0,
+    source_mutations: 0,
+    required_bytes: 3_000,
+    conversion_without_originals: 0,
+    companions_left_in_place: 0,
+    embedded_tag_count: 0,
+    unresolved_count: 0,
+  },
+  items: [
+    {
+      source: "/in/IMG_0001.jpg",
+      destination: "/out/2025/07/IMG_0001.jpg",
+      extracted_date: "2025-07-14",
+      metadata_source: "exif",
+      tags: [],
+      status: "sort",
+      file_size: 1_000,
+    },
+    {
+      source: "/in/IMG_0002.jpg",
+      destination: "/out/_duplicates/IMG_0002.jpg",
+      extracted_date: "2025-07-14",
+      metadata_source: "exif",
+      tags: [],
+      status: "duplicate",
+      file_size: 1_000,
+    },
+    {
+      source: "/in/broken.jpg",
+      destination: null,
+      extracted_date: null,
+      metadata_source: "none",
+      tags: [],
+      status: "unknown_date",
+      file_size: 1_000,
+    },
+  ],
+  stats: {
+    total: 3,
+    will_sort: 1,
+    will_fail: 0,
+    will_quarantine_unknown: 1,
+    will_quarantine_future: 0,
+    will_skip_duplicate: 1,
+    will_quarantine_junk: 0,
+    will_skip_already_in_destination: 0,
+    uncategorized: 0,
+  },
+} as unknown as PreviewResult;
+
+const COMPARE_MEMBER = (id: string, name: string) =>
+  ({
+    member_id: id,
+    root_id: "input-a",
+    role: "input" as const,
+    relative_path: name,
+    observed_path: `/in/${name}`,
+    facts: {
+      size_bytes: 1_000,
+      modified_at: { known: true, value: 1 },
+      captured_at: { known: true, value: "2025-07-14T10:00:00" },
+      width: { known: true, value: 4032 },
+      height: { known: true, value: 3024 },
+      duration_seconds: { known: false, value: null },
+      codec: { known: false, value: null },
+      media_kind: "image",
+    },
+    evidence: { confidence: "high" as const },
+  }) as unknown as GroupMember;
+
+/**
+ * Every dialog the application can open, so axe sees each one rather than only
+ * the screens that open them. A dialog is where the focus trap, the labelling
+ * and the escape route all live, which makes it the part most worth checking.
+ */
+const DIALOG_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
+  [
+    "confirmation",
+    () => (
+      <ConfirmDialog
+        open
+        title="Go back?"
+        description="The computed plan will be discarded."
+        confirmLabel="Go back"
+        cancelLabel="Cancel"
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    ),
+  ],
+  [
+    "reset",
+    () => (
+      <ResetDialog
+        open
+        title="Reset Sort to defaults"
+        rows={[{ setting: "Copy instead of move", current: "On", default: "Off" }]}
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    ),
+  ],
+  [
+    "folder browser",
+    () => (
+      <FolderBrowserDialog
+        open
+        initialPath="/"
+        requireWritable={false}
+        onSelect={() => undefined}
+        onClose={() => undefined}
+      />
+    ),
+  ],
+  [
+    "compare",
+    () => (
+      <CompareModal
+        a={COMPARE_MEMBER("m1", "a.jpg")}
+        b={COMPARE_MEMBER("m2", "b.jpg")}
+        keeperId="m1"
+        onKeep={() => undefined}
+        onKeepBoth={() => undefined}
+        onClose={() => undefined}
+      />
+    ),
+  ],
+];
 
 const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   ["Sources", () => <SourcesScreen {...SOURCES_PROPS} />],
@@ -265,6 +428,66 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
     ),
   ],
 ];
+
+describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
+  useTheme(theme);
+
+  describe.each(["en", "de"] as const)("every dialog in %s", (locale) => {
+    it.each(DIALOG_CASES)("%s has no automated violations", async (_name, makeDialog) => {
+      const rendered = renderWithProviders(makeDialog(), locale);
+      // A dialog is portalled to the body, so the render container is empty and
+      // the sweep has to look at the document.
+      await expectNoViolations(document.body);
+      rendered.unmount();
+    });
+  });
+
+  it("covers the Review surface, the one screen every dialog is opened from", async () => {
+    const rendered = renderWithProviders(
+      <ReviewScreen
+        result={PREVIEW_RESULT}
+        config={ACCESSIBILITY_CONFIG}
+        view="overview"
+        onSelectView={() => undefined}
+        onOpenSetting={() => undefined}
+        onRerunPreview={() => undefined}
+      />,
+      "en",
+    );
+
+    await within(rendered.container).findByRole("group", {
+      name: translate("en", "review.items"),
+    });
+    await expectNoViolations(rendered.container);
+  });
+
+  it("gives every screen at most one primary action", async () => {
+    // The primary is the one thing a screen exists for. Two of them is two
+    // answers to "what do I do here", which is none.
+    for (const makeScreen of [
+      () => <SourcesScreen {...SOURCES_PROPS} />,
+      () => (
+        <ReviewScreen
+          result={PREVIEW_RESULT}
+          config={ACCESSIBILITY_CONFIG}
+          view="overview"
+          onSelectView={() => undefined}
+          onOpenSetting={() => undefined}
+          onRerunPreview={() => undefined}
+        />
+      ),
+    ]) {
+      const rendered = renderWithProviders(makeScreen(), "en");
+      const primaries = [...rendered.container.querySelectorAll("button")].filter((button) =>
+        /(^|\s)bg-primary(\s|$)/.test(button.className),
+      );
+      expect(primaries.map((button) => button.textContent)).toHaveLength(
+        primaries.length > 1 ? 1 : primaries.length,
+      );
+      rendered.unmount();
+    }
+  });
+});
 
 describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
   it("offers exactly one way to add a folder per empty section", () => {

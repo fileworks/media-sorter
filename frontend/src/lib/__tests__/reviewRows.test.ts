@@ -198,11 +198,7 @@ describe("groupIntoStacks — excluding the keeper", () => {
   const three = stack({
     member_count: 3,
     anchor_member_id: "m1",
-    members: [
-      member("m1", "/in/a.jpg"),
-      member("m2", "/in/b.jpg"),
-      member("m3", "/in/c.jpg"),
-    ],
+    members: [member("m1", "/in/a.jpg"), member("m2", "/in/b.jpg"), member("m3", "/in/c.jpg")],
   } as Partial<DuplicateGroup>);
   const plan = result(
     item({ source: "/in/a.jpg", destination: "/out/a.jpg", status: "duplicate" }),

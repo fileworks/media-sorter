@@ -21,6 +21,7 @@ import { CONFIG_GROUPS, CONFIG_RAIL, type GroupId } from "@/components/config/gr
 import { SECTION_DEFAULTS, type SectionId } from "@/components/config/constants";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SettingsDiffContext, type SettingsDiffValue } from "@/context/settings-diff-context";
 import { useConfig } from "@/hooks/useConfig";
@@ -383,21 +384,17 @@ export function ConfigureScreen({
                   </label>
                   {saveError && <p className="text-xs text-error">{saveError}</p>}
                   <div className="flex gap-1.5">
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      className="flex-1"
                       onClick={() => void submitRecipe()}
                       disabled={!recipeName.trim()}
-                      className="flex-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                     >
                       {t("common.save")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNaming(false)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                    >
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setNaming(false)}>
                       {t("common.cancel")}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (

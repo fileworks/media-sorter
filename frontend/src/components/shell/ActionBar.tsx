@@ -12,7 +12,7 @@
 import type { ReactNode } from "react";
 import { FiArrowLeft, FiArrowRight, FiCheck } from "react-icons/fi";
 
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface ActionBarProps {
   /** `note` reads as a promise (green check); `estimate` reads as a figure. */
@@ -60,33 +60,24 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
           )}
 
           {back && (
-            <button
-              type="button"
-              onClick={back.onClick}
-              disabled={back.disabled}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors",
-                "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
-            >
+            <Button variant="outline" size="sm" onClick={back.onClick} disabled={back.disabled}>
               <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
               {back.label}
-            </button>
+            </Button>
           )}
 
+          {/* The one primary action on the screen, in the one shape a primary
+              has. This used to repaint the `default` variant by hand, which is
+              a fifth definition of it that drifts the first time the palette
+              moves. */}
           {primary && (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              className="px-5 font-semibold"
               onClick={primary.onClick}
               disabled={primary.disabled || primary.busy}
               aria-describedby={reason ? "action-bar-reason" : undefined}
               aria-busy={primary.busy || undefined}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-card transition-colors",
-                "hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-                "disabled:cursor-not-allowed disabled:opacity-45",
-              )}
             >
               {primary.busy && (
                 <span
@@ -96,7 +87,7 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
               )}
               {primary.label}
               {!primary.busy && <FiArrowRight className="h-3.5 w-3.5" aria-hidden />}
-            </button>
+            </Button>
           )}
         </div>
       </div>

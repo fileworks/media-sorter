@@ -83,6 +83,7 @@ class ErrorBoundary extends React.Component<
               {this.state.error.message}
             </p>
             <button
+              type="button"
               onClick={() => window.location.reload()}
               style={{
                 padding: "0.5rem 1.25rem",

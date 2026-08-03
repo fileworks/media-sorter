@@ -107,6 +107,20 @@ export const en = {
   "config.runMode.deduplicate_only": "Only remove duplicates (keep my structure)",
   "config.runMode.deduplicateNote":
     "Everything that is not a duplicate stays exactly where it is. The destination is used only for the review folders.",
+  "config.keeper.best_quality.help":
+    "Compares resolution, then file size, then capture date, and keeps whichever copy wins on the most of them.",
+  "config.keeper.newest.help": "Keeps the copy with the most recent capture date.",
+  "config.keeper.oldest.help":
+    "Keeps the copy with the earliest capture date — usually the original.",
+  "config.keeper.largest.help": "Keeps the largest file, which is usually the least compressed.",
+  "config.keeper.smallest.help":
+    "Keeps the smallest file. Saves space; may keep a re-compressed copy.",
+  "config.keeper.highest_resolution.help": "Keeps the copy with the most pixels.",
+  "config.keeper.longest_filename.help":
+    "Keeps the longest filename, which usually carries the most detail.",
+  "config.keeper.shortest_filename.help":
+    "Keeps the shortest filename — often the one without a \u201ccopy\u201d suffix.",
+  "config.keeper.manual.help": "Chooses nothing. Every set waits for you in Review.",
   "config.keeper.best_quality": "Keep the best quality",
   "config.keeper.best_quality.short": "Keep best",
   "config.keeper.longest_filename": "Keep the longest filename",
@@ -1615,6 +1629,20 @@ export const de: Record<MessageKey, string> = {
   "config.runMode.deduplicate_only": "Nur Duplikate entfernen (Struktur behalten)",
   "config.runMode.deduplicateNote":
     "Alles, was kein Duplikat ist, bleibt genau dort liegen. Der Zielordner wird nur für die Prüfordner verwendet.",
+  "config.keeper.best_quality.help":
+    "Vergleicht Auflösung, dann Dateigröße, dann Aufnahmedatum und behält die Kopie, die am häufigsten gewinnt.",
+  "config.keeper.newest.help": "Behält die Kopie mit dem jüngsten Aufnahmedatum.",
+  "config.keeper.oldest.help":
+    "Behält die Kopie mit dem ältesten Aufnahmedatum — meist das Original.",
+  "config.keeper.largest.help": "Behält die größte Datei, meist die am wenigsten komprimierte.",
+  "config.keeper.smallest.help":
+    "Behält die kleinste Datei. Spart Platz; kann eine neu komprimierte Kopie behalten.",
+  "config.keeper.highest_resolution.help": "Behält die Kopie mit den meisten Bildpunkten.",
+  "config.keeper.longest_filename.help":
+    "Behält den längsten Dateinamen, der meist die meisten Angaben enthält.",
+  "config.keeper.shortest_filename.help":
+    "Behält den kürzesten Dateinamen — oft den ohne „Kopie“-Zusatz.",
+  "config.keeper.manual.help": "Wählt nichts aus. Jeder Satz wartet in der Prüfung auf dich.",
   "config.keeper.best_quality": "Beste Qualität behalten",
   "config.keeper.best_quality.short": "Beste behalten",
   "config.keeper.longest_filename": "Längsten Dateinamen behalten",

@@ -89,10 +89,19 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
             </SettingRow>
           )}
 
+          {/* Each rule explains itself under the row. A native `<option>`
+              cannot carry a tooltip that a keyboard or screen-reader user
+              would ever reach, so the explanation follows the selection
+              instead of hiding behind nine of them. */}
           <SettingRow
             field="duplicate_keeper_policy"
             label={t("config.duplicates.keepRule")}
-            description={t("config.duplicates.keepRuleHelp")}
+            description={
+              <>
+                {t(`config.keeper.${config.duplicate_keeper_policy}.help`)}{" "}
+                <span className="text-muted-foreground">{t("config.duplicates.keepRuleHelp")}</span>
+              </>
+            }
             htmlFor="keeper-policy"
           >
             <Select

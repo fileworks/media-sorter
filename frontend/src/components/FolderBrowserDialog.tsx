@@ -208,9 +208,11 @@ export function FolderBrowserDialog({
             <Button variant="outline" onClick={onClose}>
               {t("common.cancel")}
             </Button>
+            {/* The reason is printed beside this button, not hidden in a hover:
+                a native `title` never reaches a keyboard user and does not
+                appear at all on a disabled control. */}
             <Button
               disabled={!canUse}
-              title={canUse ? undefined : blockedReason}
               onClick={() => {
                 onSelect(path);
                 onClose();
