@@ -56,7 +56,7 @@ jobs:
 
       - name: Type-check — mypy
         working-directory: backend
-        run: python -m mypy app
+        run: python -m mypy
 
       - name: Run tests with coverage
         working-directory: backend
@@ -125,7 +125,7 @@ jobs:
         run: pip install -e ".[${{ matrix.extras }}]"
       - name: Type-check the shipped import graph
         working-directory: backend
-        run: python -m mypy app
+        run: python -m mypy
 
   archive-security:
     name: Archive security — ${{ matrix.os }} / Python ${{ matrix.python }}

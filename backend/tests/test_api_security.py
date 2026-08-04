@@ -38,7 +38,7 @@ def _envelope(response) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     payload = response.json()
     assert "error" in payload, payload
     assert "code" in payload, payload
-    return payload
+    return payload  # type: ignore[no-any-return]  # the wrapped original is untyped
 
 
 def test_missing_capability_returns_401_with_cors_headers(client: TestClient) -> None:

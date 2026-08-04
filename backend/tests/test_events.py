@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -170,7 +171,8 @@ def test_nested_credentials_are_redacted_too() -> None:
     )
 
     assert _SECRET not in str(event.context)
-    assert event.context["settings"]["api_key"] == REDACTED  # type: ignore[index]
+    settings = cast("dict[str, Any]", event.context["settings"])
+    assert settings["api_key"] == REDACTED
 
 
 def test_paths_and_filenames_are_tokenized_not_published(tmp_path: Path) -> None:

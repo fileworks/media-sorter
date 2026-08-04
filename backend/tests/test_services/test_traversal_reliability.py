@@ -97,7 +97,7 @@ def test_cancellation_during_directory_iteration_is_observed(tmp_path: Path) -> 
     token = CancellationToken()
     real_iterdir = Path.iterdir
 
-    def cancelling_iterdir(path: Path) -> None:
+    def cancelling_iterdir(path: Path) -> Iterator[Path]:
         for index, entry in enumerate(real_iterdir(path)):
             if index == 3:
                 token.set()

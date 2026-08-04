@@ -2,6 +2,7 @@
 
 import io
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -20,7 +21,7 @@ def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
     return TestClient(app)
 
 
-def _write_jpeg(path) -> None:
+def _write_jpeg(path: Any) -> None:
     Image.new("RGB", (320, 240), (200, 120, 40)).save(path, format="JPEG")
 
 

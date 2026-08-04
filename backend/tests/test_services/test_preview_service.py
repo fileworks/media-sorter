@@ -7,11 +7,13 @@ import threading
 import time
 from datetime import date
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 
 from app.core.config import Config
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.extraction_service import DateExtractionService, ExtractionResult
 from app.services.filesystem_service import FileSystemService
 from app.services.preview_service import PreviewService
@@ -402,7 +404,7 @@ async def test_preview_item_and_path_carry_category(tmp_path: Path) -> None:
 
     cfg = _make_config(source, target, remove_duplicates=False, categorize_enabled=True)
     svc = _make_preview_service(cfg)
-    svc._classifier = _FakePreviewClassifier("nature")
+    svc._classifier = cast("CategoryClassifierService", _FakePreviewClassifier("nature"))
 
     with patch.object(
         svc._extraction,
@@ -427,7 +429,9 @@ async def test_preview_counts_uncategorized(tmp_path: Path) -> None:
 
     cfg = _make_config(source, target, remove_duplicates=False, categorize_enabled=True)
     svc = _make_preview_service(cfg)
-    svc._classifier = _FakePreviewClassifier(None)  # below confidence bar
+    svc._classifier = cast(
+        "CategoryClassifierService", _FakePreviewClassifier(None)
+    )  # below confidence bar
 
     with patch.object(
         svc._extraction,
@@ -653,7 +657,7 @@ async def test_per_file_worker_observes_cancellation_and_finishes_in_flight_item
     worker_threads: list[int] = []
     main_thread = threading.get_ident()
 
-    def finish_current_item(*args, **kwargs) -> dict[str, object]:
+    def finish_current_item(*args: Any, **kwargs: Any) -> dict[str, object]:
         worker_threads.append(threading.get_ident())
         entered.set()
         while not task.cancel_token.is_set():

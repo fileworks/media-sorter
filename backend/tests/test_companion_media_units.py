@@ -532,7 +532,7 @@ def test_move_commits_primary_first_and_retains_a_failing_companion_source(
 def test_duplicate_evaluation_quarantines_a_whole_different_unit(tmp_path: Path) -> None:
     root = tmp_path / "source"
     root.mkdir()
-    paths = []
+    paths: list[Path] = []
     for stem in ("a", "b"):
         image = root / f"{stem}.jpg"
         sidecar = root / f"{stem}.xmp"
@@ -606,6 +606,7 @@ def test_manifest_actions_carry_unit_identity_and_primary_reference(tmp_path: Pa
 
     assert action.model_dump()["unit_id"] == "unit_123"
     assert action.companion_role == "edit_sidecar"
+    assert action.unit_primary_path is not None
     assert action.unit_primary_path.endswith("photo.jpg")
 
 

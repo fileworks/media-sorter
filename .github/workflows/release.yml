@@ -80,7 +80,7 @@ jobs:
 
       - name: Type-check — mypy
         working-directory: backend
-        run: python -m mypy app
+        run: python -m mypy
 
       - name: Run tests with coverage gate
         working-directory: backend

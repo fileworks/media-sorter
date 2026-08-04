@@ -118,7 +118,7 @@ def test_audit_fixture_matrix_classifies_unreadable_and_misplaced(
     def guarded_hash(path: Path) -> str:
         if path == unreadable:
             raise PermissionError("fixture permission refusal")
-        return original_hash(path)
+        return original_hash(path)  # type: ignore[no-any-return]  # the wrapped original is untyped
 
     monkeypatch.setattr("app.services.library_audit.stream_sha256", guarded_hash)
     config = Config(

@@ -110,7 +110,7 @@ class _Encoder:
             source_bytes=source_bytes,
             candidate_path=destination,
             candidate_bytes=destination.stat().st_size,
-            measurements=dict(self.measurements),
+            measurements=dict(self.measurements),  # type: ignore[arg-type]
         )
 
 

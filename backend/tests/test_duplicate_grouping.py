@@ -247,7 +247,7 @@ class TestBurstGroups:
             },
         )
 
-    def _burst(self, catalog: MediaCatalog, **overrides) -> list[Any]:
+    def _burst(self, catalog: MediaCatalog, **overrides: Any) -> list[Any]:
         options = {
             "time_window_seconds": 3.0,
             "max_perceptual_distance": 4,

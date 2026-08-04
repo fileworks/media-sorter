@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -174,7 +176,7 @@ def test_get_sorting_report_returns_result_when_completed(client: TestClient) ->
     get cancelled when the portal tears down), and the point here is the report
     endpoint's contract, not the sort itself.
     """
-    manager = client.app.state.container.task_manager
+    manager = cast("FastAPI", client.app).state.container.task_manager
     done = Task(id="report-completed", coroutine_name="run")
     done.status = "completed"
     done.result = {"files_sorted": 3, "operation_id": "op-123"}
@@ -188,7 +190,7 @@ def test_get_sorting_report_returns_result_when_completed(client: TestClient) ->
 def test_get_sorting_report_conflicts_when_not_completed(client: TestClient) -> None:
     """A still-running (or cancelled/failed) task has no report yet → 409, so the
     client can tell "not ready" apart from a genuinely empty completed report."""
-    manager = client.app.state.container.task_manager
+    manager = cast("FastAPI", client.app).state.container.task_manager
     running = Task(id="report-running", coroutine_name="run")
     running.status = "running"
     manager._tasks[running.id] = running

@@ -120,7 +120,7 @@ def test_name_collisions_are_tallied_as_they_happen(tmp_path: Path) -> None:
         _photo(source / f"original-{index}.jpg", seed=index)
 
     task = _RecordingTask()
-    stats = asyncio.run(_service(_config(tmp_path)).run(task, dry_run=False))
+    stats = asyncio.run(_service(_config(tmp_path)).run(cast("Task", task), dry_run=False))
 
     assert stats["sorted"] == 3
     # Three files, one name: the first keeps it, the other two are suffixed.
@@ -139,7 +139,7 @@ def test_a_run_without_collisions_reports_none(tmp_path: Path) -> None:
 
     task = _RecordingTask()
     # Original names are already unique, so nothing has to be suffixed.
-    asyncio.run(_service(_config(tmp_path, rename=False)).run(task, dry_run=False))
+    asyncio.run(_service(_config(tmp_path, rename=False)).run(cast("Task", task), dry_run=False))
 
     assert "name_collision" not in task.progress.outcomes
     assert _placed(task) == 3

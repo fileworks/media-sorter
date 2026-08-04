@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from app.core.config import Config
 
 
 @pytest.fixture(scope="module")
-def client() -> None:
+def client() -> Iterator[TestClient]:
     """Module-scoped TestClient used as context manager so the anyio portal (and its
     event loop) stays alive across requests, allowing asyncio background tasks to
     complete without being cancelled when the per-request portal closes."""
@@ -31,7 +32,7 @@ def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0
         assert resp.status_code == 200
         data = resp.json()
         if data["status"] not in ("pending", "running"):
-            return data
+            return data  # type: ignore[no-any-return]  # the wrapped original is untyped
         time.sleep(0.2)
     pytest.fail(f"Task {task_id} did not complete within {timeout}s")
 

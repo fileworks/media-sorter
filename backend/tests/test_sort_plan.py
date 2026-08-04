@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -173,7 +174,7 @@ def _unit_plan(tmp_path: Path) -> tuple[Config, Path, Path, Path, FrozenSortPlan
     return config, raw, jpeg, other, plan
 
 
-def _execution(tmp_path: Path, config: Config, plan) -> OperationExecution:
+def _execution(tmp_path: Path, config: Config, plan: Any) -> OperationExecution:
     return OperationExecution.start(
         operation_id="exclusions",
         state_root=tmp_path / "state",

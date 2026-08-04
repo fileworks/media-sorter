@@ -243,7 +243,9 @@ async def test_process_file_uncategorized_when_classifier_unsure(tmp_path: Path)
     PIL_Image = pytest.importorskip("PIL.Image")
 
     svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
-    svc._classifier = _FakeClassifier(None)  # below confidence bar
+    svc._classifier = cast(
+        "CategoryClassifierService", _FakeClassifier(None)
+    )  # below confidence bar
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
     source_root.mkdir(parents=True)
@@ -1380,7 +1382,7 @@ async def test_run_failed_file_does_not_abort_batch(tmp_path: Path) -> None:
 
     original_extract = svc._extraction.extract_detailed
 
-    def side_effect(path, **kw) -> Any:
+    def side_effect(path: Any, **kw: Any) -> Any:
         if path.name == "bad.jpg":
             raise RuntimeError("simulated extraction failure")
         return original_extract(path, **kw)

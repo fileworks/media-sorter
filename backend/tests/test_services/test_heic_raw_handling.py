@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import piexif
 import pillow_heif
 from PIL import Image
 
+from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
@@ -99,7 +100,7 @@ class TestHeic:
     def test_sorted_into_exif_date_folder(self, tmp_path: Path) -> None:
         _heic_with_exif(tmp_path / "source" / "IMG_0001.heic")
         svc = _service(tmp_path)
-        stats = asyncio.run(svc.run(_FakeTask()))
+        stats = asyncio.run(svc.run(cast("Task", _FakeTask())))
         assert stats["sorted"] == 1
         assert (tmp_path / "target" / "2022" / "08" / "15" / "IMG_0001.heic").is_file()
 
@@ -130,7 +131,7 @@ class TestRawDegradedPath:
     def test_placed_by_filename_date_despite_no_signature(self, tmp_path: Path) -> None:
         _fake_dng(tmp_path / "source" / "2023-05-10_shoot.dng")
         svc = _service(tmp_path)
-        stats = asyncio.run(svc.run(_FakeTask()))
+        stats = asyncio.run(svc.run(cast("Task", _FakeTask())))
         assert stats["sorted"] == 1
         assert stats["failed"] == 0
         assert (tmp_path / "target" / "2023" / "05" / "10" / "2023-05-10_shoot.dng").is_file()
@@ -141,6 +142,6 @@ class TestRawDegradedPath:
         (tmp_path / "source").mkdir(exist_ok=True)
         b.write_bytes(a.read_bytes())
         svc = _service(tmp_path)
-        stats = asyncio.run(svc.run(_FakeTask()))
+        stats = asyncio.run(svc.run(cast("Task", _FakeTask())))
         assert stats["sorted"] == 1
         assert stats["duplicates"] == 1  # byte-identical twin caught by SHA-256

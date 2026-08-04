@@ -45,7 +45,7 @@ def observed(
 
 
 def _scan(
-    catalog: MediaCatalog, root_id: str, files: list[ObservedFile], *, outcome="complete"
+    catalog: MediaCatalog, root_id: str, files: list[ObservedFile], *, outcome: Any = "complete"
 ) -> tuple[Any, Any]:
     generation = catalog.begin_generation(root_id)
     records = catalog.observe(root_id, generation, files)

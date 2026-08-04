@@ -831,7 +831,7 @@ def test_indexed_video_matching_agrees_with_failed_frames_and_color_checks() -> 
             None if number % 5 == 0 else (_hash256(rng.getrandbits(256)), None),
             (_hash256(rng.getrandbits(256)), (50.0, 60.0, 70.0)),
         ]
-        videos.append(_VideoSig(frames=frames, path=f"/{number}.mp4"))
+        videos.append(_VideoSig(frames=frames, path=f"/{number}.mp4"))  # type: ignore[arg-type]
     source = _VideoSig(frames=list(videos[12].frames), path="/source.mp4")
     registry = DuplicateRegistry(videos=videos)
     registry.build_perceptual_indexes()

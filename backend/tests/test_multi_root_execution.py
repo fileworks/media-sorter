@@ -179,6 +179,7 @@ def test_a_sibling_of_a_reference_root_is_not_protected(tmp_path: Path) -> None:
         relative_path="new.jpg",
     )
 
+    assert result is not None
     assert result.destination_path.read_bytes() == b"media"
 
 

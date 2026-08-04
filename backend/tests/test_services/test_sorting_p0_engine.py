@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 from PIL import Image
 
+from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
@@ -87,7 +88,7 @@ class _FakeTask:
 
 
 def _run(svc: SortingService, dry_run: bool = False) -> dict[str, Any]:
-    return asyncio.run(svc.run(_FakeTask(), dry_run=dry_run))
+    return asyncio.run(svc.run(cast("Task", _FakeTask()), dry_run=dry_run))
 
 
 # ------------------------------------------------------------------ #

@@ -36,7 +36,7 @@ def catalog(tmp_path: Path, library: Path) -> Iterator[MediaCatalog]:
         yield opened
 
 
-def _context(catalog: MediaCatalog, **kwargs) -> ValidatorContext:
+def _context(catalog: MediaCatalog, **kwargs: Any) -> ValidatorContext:
     return ValidatorContext(catalog=catalog, root_id="r1", generation=1, **kwargs)
 
 

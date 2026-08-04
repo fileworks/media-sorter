@@ -117,7 +117,7 @@ def run_contract(
             sampling_scope="whole file",
             warnings=attempt.warnings,
         )
-        results.append((fixture, evidence))
+        results.append((fixture, evidence))  # type: ignore[arg-type]
     return results
 
 

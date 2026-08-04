@@ -51,7 +51,7 @@ def test_cli_option_passes_capability_without_echoing_it() -> None:
 
 
 def test_start_retry_reuses_one_idempotency_key() -> None:
-    attempts: list[dict] = []
+    attempts: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         attempts.append(json.loads(request.content))

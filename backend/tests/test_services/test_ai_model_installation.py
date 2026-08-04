@@ -5,7 +5,7 @@ import io
 import json
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 from urllib.request import Request
 
 import pytest
@@ -59,7 +59,7 @@ def _pack(content: bytes = b"verified model") -> ModelPack:
 
 def _store(
     tmp_path: Path,
-    opener,
+    opener: Any,
     *,
     environment: dict[str, str] | None = None,
     content: bytes = b"verified model",

@@ -240,7 +240,7 @@ def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     real_hash = reconciliation_module.stream_sha256  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     calls = 0
 
-    def counted(path: Path) -> str:
+    def counted(path: Path) -> tuple[str, int]:
         nonlocal calls
         calls += 1
         return real_hash(path)

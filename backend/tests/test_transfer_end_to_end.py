@@ -196,7 +196,7 @@ def test_an_inaccessible_source_never_reports_success(
     def refuse(path: Path, mode: str = "r", *args: object, **kwargs: object) -> object:
         if path == media:
             raise OSError(errno.EACCES, "permission denied")
-        return real_open(path, mode, *args, **kwargs)
+        return real_open(path, mode, *args, **kwargs)  # type: ignore[call-overload]  # forwarding a caller's *args to an overloaded builtin
 
     monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_: False)
     monkeypatch.setattr(Path, "open", refuse)

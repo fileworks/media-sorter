@@ -60,7 +60,7 @@ def _add(
 
 
 def _brute_force(
-    index: CatalogDuplicateIndex, signature: str, max_distance: int, roles
+    index: CatalogDuplicateIndex, signature: str, max_distance: int, roles: Any
 ) -> list[Any]:
     """The answer the index must agree with, computed the slow, obvious way."""
     matches = []

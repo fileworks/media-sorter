@@ -6,6 +6,7 @@ import os
 import tempfile
 from collections.abc import Generator, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -41,10 +42,11 @@ os.environ.pop("MEDIASORT_DB_PATH", None)
 _test_client_init = TestClient.__init__
 
 
-def _authenticated_test_client_init(self: TestClient, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+def _authenticated_test_client_init(self: TestClient, *args: Any, **kwargs: Any) -> None:
     headers = dict(kwargs.pop("headers", {}) or {})
     headers.setdefault("X-MediaSorter-Capability", _TEST_API_CAPABILITY)
-    _test_client_init(self, *args, headers=headers, **kwargs)
+    # Forwarding a caller's *args to an overloaded __init__.
+    _test_client_init(self, *args, headers=headers, **kwargs)  # type: ignore[misc]
 
 
 TestClient.__init__ = _authenticated_test_client_init  # type: ignore[method-assign]
@@ -128,7 +130,7 @@ def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory) -> FastAP
 
 
 @pytest.fixture(scope="module")
-def client(app) -> TestClient:
+def client(app: Any) -> TestClient:
     """TestClient for API integration tests (module scope)."""
     return TestClient(app)
 
@@ -282,7 +284,7 @@ def db_with_operation(test_db: DatabaseManager) -> Iterator[tuple[str, DatabaseM
             ),
         )
 
-    return operation_id, test_db
+    yield operation_id, test_db
 
 
 @pytest.fixture()

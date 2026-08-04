@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import cast
 
 from app.services.thumbnail_cache import ThumbnailCache
 
@@ -64,7 +65,7 @@ def test_concurrent_writes_never_leave_cache_over_budget(tmp_path: Path) -> None
         list(pool.map(write, sources))
 
     diagnostics = cache.diagnostics()
-    assert diagnostics["size_bytes"] <= 220
+    assert cast("int", diagnostics["size_bytes"]) <= 220
     assert diagnostics["last_eviction"] is not None
 
 

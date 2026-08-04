@@ -123,7 +123,12 @@ class TestProjection:
         assert len(measured) == 1
         assert len(sampled) == 3
         assert measured[0].projected_low_bytes == measured[0].projected_high_bytes
-        assert all(item.projected_low_bytes < item.projected_high_bytes for item in sampled)
+        assert all(
+            item.projected_low_bytes is not None
+            and item.projected_high_bytes is not None
+            and item.projected_low_bytes < item.projected_high_bytes
+            for item in sampled
+        )
 
     def test_aggregate_reports_temporary_and_quarantine_space(self, tmp_path: Path) -> None:
         items = [
