@@ -605,7 +605,9 @@ export interface PreviewItem {
     | "junk"
     | "already_in_destination"
     | "duplicate_unknown"
-    | "review_only";
+    | "review_only"
+    /** `deduplicate_only` run mode: neither duplicate nor junk, so it stays put. */
+    | "keep_in_place";
   file_size?: number;
   /** Why the junk filter quarantined this file (junk status only). */
   quarantine_reason?: string | null;

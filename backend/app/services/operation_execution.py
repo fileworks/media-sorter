@@ -11,6 +11,7 @@ import hashlib
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,9 +23,11 @@ from app.core.integrity import (
     IntegrityReport,
     MutationActionKind,
     OperationOutcomeCode,
+    OutcomeCode,
     OutcomeCounts,
     PreservationProfile,
     SidecarEffect,
+    SourceSafetyState,
     utc_now,
 )
 from app.core.integrity_policy import MutationAuthorization
@@ -59,7 +62,7 @@ class OperationExecution:
     outcomes: list[ActionOutcome] = field(default_factory=list)
     bytes_read: int = 0
     bytes_written: int = 0
-    started_at: object = field(default_factory=utc_now)
+    started_at: datetime = field(default_factory=utc_now)
 
     @classmethod
     def start(
@@ -288,10 +291,10 @@ class OperationExecution:
                 source_safety="source_retained",
             )
 
-    def record(self, result: TransferResult, *, code: str | None = None) -> ActionOutcome:
+    def record(self, result: TransferResult, *, code: OutcomeCode | None = None) -> ActionOutcome:
         outcome = ActionOutcome(
             action_id=result.action_id,
-            code=_outcome_code(result) if code is None else code,  # type: ignore[arg-type]
+            code=_outcome_code(result) if code is None else code,
             source_safety=result.source_safety,
             source_path=str(result.source_path),
             result_path=str(result.destination_path),
@@ -314,15 +317,15 @@ class OperationExecution:
         *,
         action_id: str,
         source_path: Path,
-        code: str,
+        code: OutcomeCode,
         diagnostic_code: str | None,
-        source_safety: str = "source_retained",
+        source_safety: SourceSafetyState = "source_retained",
     ) -> None:
         self.outcomes.append(
             ActionOutcome(
                 action_id=action_id,
-                code=code,  # type: ignore[arg-type]
-                source_safety=source_safety,  # type: ignore[arg-type]
+                code=code,
+                source_safety=source_safety,
                 source_path=str(source_path),
                 diagnostic_code=diagnostic_code,
             )
@@ -338,7 +341,7 @@ class OperationExecution:
             operation_id=self.operation_id,
             manifest_id=self.operation_id,
             profile_id=self.preservation.profile_id,
-            started_at=self.started_at,  # type: ignore[arg-type]
+            started_at=self.started_at,
             finished_at=utc_now(),
             outcome=outcome,
             counts=self.counts(),
@@ -412,7 +415,7 @@ def _containing_root(candidate: Path, roots: Sequence[Path]) -> Path | None:
     return None
 
 
-def _outcome_code(result: TransferResult) -> str:
+def _outcome_code(result: TransferResult) -> OutcomeCode:
     return "success_with_metadata_limitation" if result.warnings else "verified_success"
 
 

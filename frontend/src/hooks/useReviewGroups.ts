@@ -1,12 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 
-import {
-  groupRow,
-  type DuplicateGroup,
-  type GroupKind,
-  type GroupPlan,
-} from "@/lib/reviewWorkbench";
+import { groupRow, type GroupKind, type GroupPlan } from "@/lib/reviewWorkbench";
 import type { DuplicateTally } from "@/lib/reviewPlan";
 import { api } from "@/services/api";
 
@@ -39,7 +34,7 @@ export function useReviewGroups(
       queryFn: () => api.listReviewGroups(kind, { limit: LIMIT }),
     })),
     combine: (results) => ({
-      groups: results.flatMap((result) => result.data?.groups ?? []) as DuplicateGroup[],
+      groups: results.flatMap((result) => result.data?.groups ?? []),
       isLoading: results.some((result) => result.isLoading),
       isError: results.some((result) => result.isError),
       refetch: () => {

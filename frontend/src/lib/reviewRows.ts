@@ -134,12 +134,13 @@ function statusOf(item: PreviewItem): RowStatus {
       return "already_there";
     case "failed":
       return "unreadable";
+    // `keep_in_place` is the deduplicate-only run mode, where a file that is
+    // neither duplicate nor junk does not move at all.
     case "review_only":
+    case "keep_in_place":
       return "keep_in_place";
     default:
-      // `keep_in_place` arrives from the deduplicate-only run mode, where a
-      // file that is neither duplicate nor junk does not move at all.
-      return (item.status as string) === "keep_in_place" ? "keep_in_place" : "organize";
+      return "organize";
   }
 }
 
