@@ -250,7 +250,13 @@ def build_frozen_sort_plan(
         config_fingerprint=config_fingerprint(config),
         actions=tuple(actions),
         impact=FrozenSortImpact(
-            actionable_groups=1 if actions else 0,
+            # A count of reviewed files the plan will act on, not a flag. The
+            # Execute preflight subtracts the exclusion tally from this and
+            # refuses to start at zero, so `1 if actions else 0` meant excluding
+            # a single file blocked a run of any size. Companions are not
+            # counted: an exclusion is expressed per reviewed file, and its unit
+            # follows it.
+            actionable_groups=sum(action.companion_role is None for action in actions),
             copy_count=copy_count,
             move_count=move_count,
             quarantine_count=len(quarantines),

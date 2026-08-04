@@ -332,3 +332,69 @@ def test_every_previewed_review_folder_placement_is_planned(tmp_path: Path, stat
         )
         is not None
     )
+
+
+def test_actionable_groups_counts_planned_files_not_merely_whether_any_exist(
+    tmp_path: Path,
+) -> None:
+    """The preflight subtracts exclusions from this, so it has to be a count.
+
+    It was `1 if actions else 0`. Execute reads
+    `actionable_groups - (excluded transfers + excluded quarantine)` and refuses
+    to start when that reaches zero, so excluding a single file blocked a run of
+    any size with "every file is excluded" — and unreadable and undated files
+    start excluded, so it fired on any real library.
+    """
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    items = []
+    for index in range(5):
+        source = source_dir / f"photo{index}.jpg"
+        source.write_bytes(b"media")
+        items.append(
+            {
+                "source": str(source),
+                "destination": str(tmp_path / "output" / "2024" / f"photo{index}.jpg"),
+                "status": "sort",
+                "file_size": source.stat().st_size,
+                "companions": [],
+            }
+        )
+    plan = build_frozen_sort_plan(items, _config(tmp_path))
+
+    assert plan.impact.actionable_groups == 5
+    # Excluding one still leaves four for the run to act on.
+    assert plan.impact.actionable_groups - 1 == 4
+
+
+def test_actionable_groups_counts_a_unit_once_not_once_per_companion(tmp_path: Path) -> None:
+    """Exclusions are counted per reviewed file, so companions must not inflate it."""
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    raw = source_dir / "shot.raw"
+    raw.write_bytes(b"raw")
+    jpeg = source_dir / "shot.jpg"
+    jpeg.write_bytes(b"jpeg")
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(jpeg),
+                "destination": str(tmp_path / "output" / "2024" / "shot.jpg"),
+                "status": "sort",
+                "file_size": jpeg.stat().st_size,
+                "unit_id": "unit-1",
+                "companions": [
+                    {
+                        "source": str(raw),
+                        "destination": str(tmp_path / "output" / "2024" / "shot.raw"),
+                        "role": "raw_sibling",
+                        "status": "attached",
+                    }
+                ],
+            }
+        ],
+        _config(tmp_path),
+    )
+
+    assert len(plan.actions) == 2
+    assert plan.impact.actionable_groups == 1
