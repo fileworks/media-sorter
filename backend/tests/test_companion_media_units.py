@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from time import monotonic
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -497,7 +498,7 @@ def test_move_commits_primary_first_and_retains_a_failing_companion_source(
     target = tmp_path / "target"
     original_move = service._fs.safe_move
 
-    def fail_companion(source: Path, destination: Path):
+    def fail_companion(source: Path, destination: Path) -> Any:
         if source.suffix.lower() == ".xmp":
             raise OSError("simulated companion verification failure")
         return original_move(source, destination)

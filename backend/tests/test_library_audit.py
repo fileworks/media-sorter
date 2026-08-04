@@ -115,7 +115,7 @@ def test_audit_fixture_matrix_classifies_unreadable_and_misplaced(
         fromlist=["stream_sha256"],
     ).stream_sha256
 
-    def guarded_hash(path: Path):
+    def guarded_hash(path: Path) -> str:
         if path == unreadable:
             raise PermissionError("fixture permission refusal")
         return original_hash(path)

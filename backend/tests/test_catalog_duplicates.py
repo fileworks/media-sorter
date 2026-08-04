@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -41,7 +42,7 @@ def _add(
     sha256: str | None = None,
     signature: str | None = None,
     size: int = 100,
-):
+) -> Any:
     generation = catalog.begin_generation(root_id)
     [record] = catalog.observe(
         root_id,
@@ -58,7 +59,9 @@ def _add(
     return record
 
 
-def _brute_force(index: CatalogDuplicateIndex, signature: str, max_distance: int, roles):
+def _brute_force(
+    index: CatalogDuplicateIndex, signature: str, max_distance: int, roles
+) -> list[Any]:
     """The answer the index must agree with, computed the slow, obvious way."""
     matches = []
     for row in index._scan_signatures("phash", roles):  # noqa: SLF001 - the reference implementation

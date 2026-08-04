@@ -40,12 +40,11 @@ def _checkpoint(**overrides: Any) -> DurableCheckpoint:
         "algorithm_versions": dict(ALGORITHMS),
     }
     fields.update(overrides)
-    # Overrides are arbitrary by design, so this call is dynamic.
-    return DurableCheckpoint(**fields)  # type: ignore[arg-type]
+    return DurableCheckpoint(**fields)
 
 
-def _compatibility(**overrides):
-    base = {
+def _compatibility(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
         "profile_id": "profile-1",
         "profile_schema_version": 1,
         "catalog_schema_version": CATALOG_SCHEMA_VERSION,

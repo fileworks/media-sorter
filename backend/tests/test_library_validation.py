@@ -11,7 +11,7 @@ from app.core.library_profiles import LibraryProfile, LibraryRoot
 from app.core.library_validation import validate_library_profile
 
 
-def _root(root_id: str, role: str, path: Path, **kwargs):
+def _root(root_id: str, role: str, path: Path, **kwargs) -> LibraryRoot:
     return LibraryRoot(root_id=root_id, role=role, path=str(path), **kwargs)
 
 

@@ -791,7 +791,7 @@ def test_keeper_selection_does_not_cross_talk_between_groups(
 # ------------------------------------------------------------------ #
 
 
-def _hash256(value: int):
+def _hash256(value: int) -> Any:
     import imagehash
 
     return imagehash.hex_to_hash(f"{value:064x}")

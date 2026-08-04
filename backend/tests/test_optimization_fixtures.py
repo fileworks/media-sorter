@@ -15,6 +15,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -93,7 +94,9 @@ def curated_fixtures(root: Path, contract: FormatContract) -> tuple[Fixture, ...
     return ()
 
 
-def run_contract(contract: FormatContract, fixtures: tuple[Fixture, ...], workspace: Path):
+def run_contract(
+    contract: FormatContract, fixtures: tuple[Fixture, ...], workspace: Path
+) -> list[Any]:
     """Encode every fixture and report what each one proved."""
     encoder = encoder_for(contract)
     results = []

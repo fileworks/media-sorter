@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from app.core.optimization_contracts import FormatContract
 from app.core.optimization_contracts import contract as load_contract
 from app.services.optimization_encoders import EncodeAttempt, PillowImageEncoder
 from app.services.optimization_preview import (
@@ -35,7 +36,7 @@ def _png(path: Path, *, size: tuple[int, int] = (64, 48), colour: int = 0) -> Pa
 class _StubEncoder:
     """An encoder with a fixed ratio, so projections can be asserted exactly."""
 
-    contract: object
+    contract: FormatContract
     ratio: float = 0.5
     fail: bool = False
     pixels_identical: bool = True

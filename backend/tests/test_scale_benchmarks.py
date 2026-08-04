@@ -160,7 +160,7 @@ class TestMemory:
         ]
         bind_calls = 0
 
-        def bind(*_args: object, **_kwargs: object):
+        def bind(*_args: object, **_kwargs: object) -> tuple[Any, list[Any]]:
             nonlocal bind_calls
             bind_calls += 1
             return units, []

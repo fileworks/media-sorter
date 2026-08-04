@@ -3,6 +3,7 @@
 import asyncio
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -137,7 +138,7 @@ class TestRefresh:
 
         real_iterdir = Path.iterdir
 
-        def partial_iterdir(path: Path):
+        def partial_iterdir(path: Path) -> Iterator[Path]:
             if path == bad_dir:
                 raise PermissionError("offline")
             return real_iterdir(path)
@@ -165,7 +166,7 @@ class TestRefresh:
         real_hash = service.compute_hash
         calls = 0
 
-        def cancelling_hash(*args, **kwargs):
+        def cancelling_hash(*args, **kwargs) -> str:
             nonlocal calls
             result = real_hash(*args, **kwargs)
             calls += 1
@@ -204,7 +205,7 @@ class TestRefresh:
         token = CancellationToken()
         real_hash = service.compute_hash
 
-        def cancel_after_hash(*args, **kwargs):
+        def cancel_after_hash(*args, **kwargs) -> str:
             digest = real_hash(*args, **kwargs)
             token.set()
             return digest
@@ -305,7 +306,7 @@ async def test_destination_index_worker_observes_cancellation_before_later_phase
     entered = threading.Event()
     real_hash = service.compute_hash
 
-    def waiting_hash(*args, **kwargs):
+    def waiting_hash(*args, **kwargs) -> str:
         entered.set()
         while not token.is_set():
             time.sleep(0.001)

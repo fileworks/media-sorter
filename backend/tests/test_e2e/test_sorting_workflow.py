@@ -14,7 +14,7 @@ from app.core.config import Config
 
 
 @pytest.fixture(scope="module")
-def client():
+def client() -> None:
     """Module-scoped TestClient used as context manager so the anyio portal (and its
     event loop) stays alive across requests, allowing asyncio background tasks to
     complete without being cancelled when the per-request portal closes."""

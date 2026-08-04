@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.bootstrap import AppFactory
@@ -110,7 +111,7 @@ def in_memory_db(tmp_path: Path) -> DatabaseManager:
 
 
 @pytest.fixture(scope="module")
-def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):
+def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory) -> FastAPI:
     """FastAPI application wired with the test config and an isolated test DB."""
     db_path = str(tmp_path_factory.mktemp("test_app_db") / "mediasort.db")
     prev = os.environ.get("MEDIASORT_DB_PATH")
@@ -212,7 +213,7 @@ def test_db(tmp_path: Path) -> Generator[DatabaseManager, None, None]:
 
 
 @pytest.fixture()
-def db_with_operation(test_db: DatabaseManager):
+def db_with_operation(test_db: DatabaseManager) -> Iterator[tuple[str, DatabaseManager]]:
     """DatabaseManager pre-populated with one operation and two file records."""
     operation_id = "test_op_001"
     with test_db._connect() as conn:

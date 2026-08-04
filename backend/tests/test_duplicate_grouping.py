@@ -31,7 +31,7 @@ def add(
     signature: str | None = None,
     size: int = 100,
     facts: dict[str, Any] | None = None,
-):
+) -> Any:
     generation = catalog.begin_generation(root_id)
     [record] = catalog.observe(
         root_id,
@@ -230,7 +230,7 @@ class TestBurstGroups:
         signature: str,
         camera: str = "Pixel 9 Pro",
         sha256: str | None = None,
-    ):
+    ) -> Any:
         return add(
             catalog,
             "input",
@@ -247,7 +247,7 @@ class TestBurstGroups:
             },
         )
 
-    def _burst(self, catalog: MediaCatalog, **overrides):
+    def _burst(self, catalog: MediaCatalog, **overrides) -> list[Any]:
         options = {
             "time_window_seconds": 3.0,
             "max_perceptual_distance": 4,

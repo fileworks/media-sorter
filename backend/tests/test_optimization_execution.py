@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -122,7 +123,7 @@ def _optimize(
     quarantine: QuarantineStore,
     tmp_path: Path,
     destination: Path | None = None,
-):
+) -> Any:
     return optimize_file(
         source,
         profile=profile,

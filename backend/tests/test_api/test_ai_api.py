@@ -10,7 +10,7 @@ from app.core.bootstrap import AppFactory
 
 
 @pytest.fixture
-def client():
+def client() -> TestClient:
     app = AppFactory.create()
     return TestClient(app)
 

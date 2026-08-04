@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -114,7 +115,7 @@ class TestReportSemantics:
         original = catalog.iter_files
 
         class SinglePass:
-            def __iter__(self):
+            def __iter__(self) -> Iterator[Any]:
                 yield from original("r1")
 
             def __len__(self) -> int:

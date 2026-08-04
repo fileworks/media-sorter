@@ -11,7 +11,7 @@ from app.services.report_service import ReportService
 
 
 @pytest.fixture()
-def report_service(db_with_operation: tuple[str, DatabaseManager]):
+def report_service(db_with_operation: tuple[str, DatabaseManager]) -> tuple[ReportService, str]:
     operation_id, test_db = db_with_operation
     return ReportService(db_manager=test_db), operation_id
 

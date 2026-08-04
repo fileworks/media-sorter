@@ -240,7 +240,7 @@ def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     real_hash = reconciliation_module.stream_sha256
     calls = 0
 
-    def counted(path: Path):
+    def counted(path: Path) -> str:
         nonlocal calls
         calls += 1
         return real_hash(path)

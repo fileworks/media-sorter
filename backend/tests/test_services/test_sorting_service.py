@@ -56,6 +56,15 @@ def _make_service(tmp_path: Path, **config_overrides: Any) -> SortingService:
     )
 
 
+def _fake_task() -> Task:
+    """The real `Task` surface a run touches, standing in for the manager's.
+
+    Cast once here rather than at every call: the double implements the parts
+    `SortingService.run` uses, and stating that nineteen times said nothing.
+    """
+    return cast("Task", _FakeTask())
+
+
 class _FakeTask:
     """Minimal task stand-in for SortingService.run()."""
 
@@ -82,7 +91,7 @@ async def test_review_only_configuration_plans_no_transfer_or_mutation(tmp_path:
         patch.object(svc._fs, "safe_move") as move,
         patch.object(svc, "_process_file") as process,
     ):
-        stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+        stats = await svc.run(_fake_task())
 
     assert stats["review_only"] == 1
     assert stats["sorted"] == 0
@@ -410,7 +419,7 @@ async def test_run_dry_run_returns_stats(tmp_path: Path) -> None:
         db_manager=None,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     result = await svc.run(task, dry_run=True)
 
     assert result["total"] == 2
@@ -795,7 +804,7 @@ async def test_run_counts_unknown_date_status(tmp_path: Path) -> None:
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=None, source="none"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["unknown_dates"] == 1
     assert stats["sorted"] == 0
@@ -837,7 +846,7 @@ async def test_run_counts_future_date_status(tmp_path: Path) -> None:
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=future, source="exif"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["future_dates"] == 1
     assert stats["sorted"] == 0
@@ -884,7 +893,7 @@ async def test_run_counts_duplicate_status(tmp_path: Path) -> None:
             return_value=DuplicateMatch(True, "exact", 100, "/orig"),
         ),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["duplicates"] == 1
     assert stats["sorted"] == 0
@@ -926,7 +935,7 @@ async def test_run_keeps_higher_resolution_duplicate_regardless_of_order(tmp_pat
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=date(2024, 1, 1), source="exif"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     assert stats["sorted"] == 1
     assert stats["duplicates"] == 1
@@ -1008,7 +1017,7 @@ async def test_run_counts_failed_status(tmp_path: Path) -> None:
     )
 
     with patch.object(svc._extraction, "extract_detailed", side_effect=RuntimeError("boom")):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["failed"] == 1
 
@@ -1049,7 +1058,7 @@ async def test_run_cancel_stops_processing(tmp_path: Path) -> None:
         db_manager=None,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     task.cancel_event.set()  # cancel immediately
     stats = await svc.run(task, dry_run=True)
 
@@ -1092,7 +1101,7 @@ async def test_run_persists_to_db(tmp_path: Path, in_memory_db: DatabaseManager)
         db_manager=in_memory_db,
     )
 
-    await svc.run(_FakeTask(), dry_run=False)
+    await svc.run(_fake_task(), dry_run=False)
 
     with in_memory_db._connect() as conn:
         count = conn.execute("SELECT COUNT(*) FROM operations").fetchone()[0]
@@ -1140,7 +1149,7 @@ async def test_run_cancelled_still_persists_partial_operation(
         db_manager=in_memory_db,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     task.cancel_event.set()  # cancelled before any file is processed
     stats = await svc.run(task, dry_run=False)
 
@@ -1250,7 +1259,7 @@ async def test_repair_enabled_false_skips_validation(tmp_path: Path) -> None:
     )
 
     with patch.object(svc._repair, "validate_file") as mock_validate:
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     # validate_file must never be called when repair_enabled=False
     mock_validate.assert_not_called()
@@ -1312,7 +1321,7 @@ async def test_repair_enabled_true_quarantines_unrepairable_file(tmp_path: Path)
         ),
         patch.object(svc._repair, "repair_file", return_value=False),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     assert stats["corrupted"] == 1
     assert stats["sorted"] == 0
@@ -1371,13 +1380,13 @@ async def test_run_failed_file_does_not_abort_batch(tmp_path: Path) -> None:
 
     original_extract = svc._extraction.extract_detailed
 
-    def side_effect(path, **kw):
+    def side_effect(path, **kw) -> Any:
         if path.name == "bad.jpg":
             raise RuntimeError("simulated extraction failure")
         return original_extract(path, **kw)
 
     with patch.object(svc._extraction, "extract_detailed", side_effect=side_effect):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     # All three files should have been processed (batch didn't abort)
     assert stats["total"] == 3
@@ -1425,7 +1434,7 @@ async def test_run_persists_non_null_config_hash(
         db_manager=in_memory_db,
     )
 
-    await svc.run(_FakeTask(), dry_run=False)
+    await svc.run(_fake_task(), dry_run=False)
 
     with in_memory_db._connect() as conn:
         row = conn.execute("SELECT config_hash FROM operations").fetchone()
@@ -1482,7 +1491,7 @@ async def test_run_skipped_count_reflects_excluded_media_files(tmp_path: Path) -
         db_manager=None,
     )
 
-    stats = await svc.run(_FakeTask(), dry_run=True)
+    stats = await svc.run(_fake_task(), dry_run=True)
 
     # The two tiny files are excluded → skipped == 2
     assert stats["skipped"] == 2
@@ -1934,7 +1943,7 @@ async def test_dry_run_creates_no_directories(tmp_path: Path) -> None:
     piexif.insert(piexif.dump(exif), str(img_path))
     (source_root / "nodate.bin.jpg").write_bytes(b"\xff\xd8\xff" + b"x" * 64)
 
-    task = _FakeTask()
+    task = _fake_task()
     stats = await svc.run(task, dry_run=True)
 
     assert stats["total"] == 2
@@ -1975,7 +1984,7 @@ async def test_deduplicate_only_leaves_every_non_duplicate_exactly_where_it_was(
         duplicate_exact_enabled=True,
         copy_instead_of_move=False,
     )
-    stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+    stats = await svc.run(_fake_task())
 
     assert stats["run_mode"] == "deduplicate_only"
     # Nothing was "sorted": in this mode that word must not apply to anything.
@@ -1998,7 +2007,7 @@ async def test_organize_mode_is_unaffected(tmp_path: Path) -> None:
     (source / "photo.jpg").write_bytes(b"media")
 
     svc = _make_service(tmp_path, run_mode="organize")
-    stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+    stats = await svc.run(_fake_task())
 
     assert stats["run_mode"] == "organize"
     assert stats["kept_in_place"] == 0

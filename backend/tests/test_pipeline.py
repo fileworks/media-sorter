@@ -51,9 +51,17 @@ class TestCeilings:
         assert ResourceCeilings(queue_depth=0).depth() >= 1
 
 
+def _slowly(value: int, seconds: float = 0.002) -> int:
+    """Identity with a delay — the tuple-index trick hid a `None` return."""
+    time.sleep(seconds)
+    return value
+
+
 class TestBoundedStage:
     def test_every_item_is_processed(self) -> None:
-        stage = BoundedStage("double", lambda value: value * 2, ceilings=ResourceCeilings())
+        stage: BoundedStage[int, int] = BoundedStage(
+            "double", lambda value: value * 2, ceilings=ResourceCeilings()
+        )
 
         results = sorted(stage.run(range(100)))
 
@@ -62,7 +70,9 @@ class TestBoundedStage:
 
     def test_the_queue_never_exceeds_its_declared_depth(self) -> None:
         ceilings = ResourceCeilings(queue_depth=4, io_workers=1)
-        stage = BoundedStage("slow", lambda value: (time.sleep(0.002), value)[1], ceilings=ceilings)
+        stage: BoundedStage[int, int] = BoundedStage(
+            "slow", lambda value: _slowly(value, 0.002), ceilings=ceilings
+        )
 
         list(stage.run(range(200)))
 
@@ -70,7 +80,9 @@ class TestBoundedStage:
 
     def test_a_slow_consumer_makes_the_producer_wait(self) -> None:
         ceilings = ResourceCeilings(queue_depth=2, io_workers=1)
-        stage = BoundedStage("slow", lambda value: (time.sleep(0.005), value)[1], ceilings=ceilings)
+        stage: BoundedStage[int, int] = BoundedStage(
+            "slow", lambda value: _slowly(value, 0.005), ceilings=ceilings
+        )
 
         list(stage.run(range(50)))
 
@@ -84,7 +96,9 @@ class TestBoundedStage:
             return value
 
         failures: list[int] = []
-        stage = BoundedStage("flaky", work, on_error=lambda item, _exc: failures.append(item))
+        stage: BoundedStage[int, int] = BoundedStage(
+            "flaky", work, on_error=lambda item, _exc: failures.append(item)
+        )
 
         results = sorted(stage.run(range(10)))
 
@@ -101,7 +115,7 @@ class TestBoundedStage:
             time.sleep(0.001)
             return value
 
-        stage = BoundedStage(
+        stage: BoundedStage[int, int] = BoundedStage(
             "cancellable",
             work,
             ceilings=ResourceCeilings(queue_depth=4, io_workers=2),
@@ -115,9 +129,9 @@ class TestBoundedStage:
         assert elapsed < 10  # it stopped, rather than draining the whole input
 
     def test_slow_items_are_counted_without_being_failures(self) -> None:
-        stage = BoundedStage(
+        stage: BoundedStage[int, int] = BoundedStage(
             "occasionally-slow",
-            lambda value: (time.sleep(2.01 if value == 0 else 0), value)[1],
+            lambda value: _slowly(value, 2.01 if value == 0 else 0),
             ceilings=ResourceCeilings(io_workers=1),
         )
 
@@ -127,7 +141,7 @@ class TestBoundedStage:
         assert stage.diagnostics.failed == 0
 
     def test_diagnostics_are_renderable_without_stopping_anything(self) -> None:
-        stage = BoundedStage("simple", lambda value: value)
+        stage: BoundedStage[int, int] = BoundedStage("simple", lambda value: value)
 
         list(stage.run(range(5)))
         snapshot = stage.diagnostics.snapshot()
@@ -161,7 +175,7 @@ class TestPipeline:
         pipeline = (
             Pipeline()
             .add(BoundedStage("fast", lambda value: value, ceilings=fast))
-            .add(BoundedStage("slow", lambda value: (time.sleep(0.004), value)[1], ceilings=slow))
+            .add(BoundedStage("slow", lambda value: _slowly(value, 0.004), ceilings=slow))
         )
 
         list(pipeline.run(range(60)))

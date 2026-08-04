@@ -11,6 +11,7 @@ from app.core.integrity_policy import authorize_config_mutations
 from app.core.sort_plan import (
     PLANNED_QUARANTINE_STATUSES,
     FrozenPlanGuard,
+    FrozenSortPlan,
     build_frozen_sort_plan,
 )
 from app.services.operation_execution import OperationExecution
@@ -24,7 +25,7 @@ def _config(tmp_path: Path) -> Config:
     )
 
 
-def _plan(tmp_path: Path):
+def _plan(tmp_path: Path) -> tuple[Config, Path, Path, FrozenSortPlan]:
     source = tmp_path / "input" / "photo.jpg"
     source.parent.mkdir()
     source.write_bytes(b"reviewed media")
@@ -130,7 +131,7 @@ def test_changed_final_destination_is_rejected_before_transfer(tmp_path: Path) -
 # --------------------------------------------------------------------------- #
 
 
-def _unit_plan(tmp_path: Path):
+def _unit_plan(tmp_path: Path) -> tuple[Config, Path, Path, Path, FrozenSortPlan]:
     """A RAW+JPEG unit plus an unrelated file, so unit expansion is observable."""
     inputs = tmp_path / "input"
     inputs.mkdir()
@@ -172,7 +173,7 @@ def _unit_plan(tmp_path: Path):
     return config, raw, jpeg, other, plan
 
 
-def _execution(tmp_path: Path, config: Config, plan):
+def _execution(tmp_path: Path, config: Config, plan) -> OperationExecution:
     return OperationExecution.start(
         operation_id="exclusions",
         state_root=tmp_path / "state",
@@ -285,7 +286,7 @@ def test_an_excluded_file_is_reported_as_excluded_not_failed(tmp_path: Path) -> 
 # --------------------------------------------------------------------------- #
 
 
-def _quarantine_plan(tmp_path: Path, status: str):
+def _quarantine_plan(tmp_path: Path, status: str) -> tuple[Path, Path, FrozenSortPlan]:
     """A preview item the *preview* sends to a review folder, frozen into a plan."""
     source = tmp_path / "input" / "photo.jpg"
     source.parent.mkdir()
@@ -515,7 +516,9 @@ def test_a_companion_that_vanished_before_freezing_does_not_break_the_plan(
 # --------------------------------------------------------------------------- #
 
 
-def _unit_and_loose_plan(tmp_path: Path, *, copy_mode: bool = True):
+def _unit_and_loose_plan(
+    tmp_path: Path, *, copy_mode: bool = True
+) -> tuple[Path, Path, Path, Path, FrozenSortPlan]:
     """A RAW+JPEG unit, a quarantined file, and a loose file."""
     source_dir = tmp_path / "input"
     source_dir.mkdir()

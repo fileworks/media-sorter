@@ -16,6 +16,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -183,7 +184,7 @@ class TestDiscoveryUnderTiers:
             assert catalog.hash_for(next(iter(catalog.iter_files("r1")))) == "a" * 64
 
 
-def _after_calls(limit: int):
+def _after_calls(limit: int) -> Any:
     state = {"count": 0}
 
     def cancel() -> bool:

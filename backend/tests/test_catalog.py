@@ -12,6 +12,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -43,7 +44,9 @@ def observed(
     )
 
 
-def _scan(catalog: MediaCatalog, root_id: str, files: list[ObservedFile], *, outcome="complete"):
+def _scan(
+    catalog: MediaCatalog, root_id: str, files: list[ObservedFile], *, outcome="complete"
+) -> tuple[Any, Any]:
     generation = catalog.begin_generation(root_id)
     records = catalog.observe(root_id, generation, files)
     catalog.finish_generation(generation, outcome)
