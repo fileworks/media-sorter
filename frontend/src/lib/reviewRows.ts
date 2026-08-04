@@ -28,37 +28,6 @@ export type RowStatus =
 
 export type RowFlag = "name_clash" | "duplicate_pending" | "unit_member";
 
-/** What the frozen plan holds for a row: a placement, a review folder, or nothing. */
-export type PlannedAction = "transfer" | "quarantine" | "none";
-
-/**
- * Preview statuses the backend freezes a *quarantine* action for.
- *
- * Mirrors `PLANNED_QUARANTINE_STATUSES` in `backend/app/core/sort_plan.py`;
- * `reviewStatuses.test.ts` reads the backend's list and pins the two together.
- */
-export const PLANNED_QUARANTINE_STATUSES: ReadonlySet<PreviewItem["status"]> = new Set([
-  "already_in_destination",
-  "duplicate",
-  "future_date",
-  "junk",
-  "suspicious_date",
-  "unknown_date",
-]);
-
-/**
- * The plan entry a preview status produces.
- *
- * `RowStatus` is the language of the screen and deliberately folds several of
- * these together — an undated file reads as "organize" because that is what the
- * user asked for. The preflight arithmetic needs the other question answered,
- * so it is answered here from the status the backend actually planned against.
- */
-export function plannedActionOf(status: PreviewItem["status"]): PlannedAction {
-  if (PLANNED_QUARANTINE_STATUSES.has(status)) return "quarantine";
-  return status === "sort" ? "transfer" : "none";
-}
-
 export interface RowStack {
   id: string;
   kind: "exact" | "similar" | "burst";
@@ -76,15 +45,6 @@ export interface ReviewRow {
   folder: string;
   destination: string | null;
   status: RowStatus;
-  /**
-   * What would have happened without the exclusion.
-   *
-   * `status` becomes `excluded`, which would otherwise lose the information the
-   * Execute preflight needs to subtract this file from the right total.
-   */
-  plannedStatus: RowStatus;
-  /** What the frozen plan holds for this row, for the Execute preflight's sums. */
-  plannedAction: PlannedAction;
   flags: RowFlag[];
   sizeBytes: number;
   width: number | null;
@@ -204,8 +164,6 @@ export function toReviewRows(
       folder: dirname(item.source),
       destination: item.destination,
       status: isExcluded ? "excluded" : baseline ? "baseline" : base,
-      plannedStatus: baseline ? "baseline" : base,
-      plannedAction: plannedActionOf(item.status),
       flags: flagsOf(item, nameCounts),
       sizeBytes: item.file_size ?? 0,
       width: null,
@@ -551,39 +509,4 @@ export function selectionActions(selected: ReviewRow[]): SelectionActions {
  */
 export function comparePair(selected: ReviewRow[]): [ReviewRow, ReviewRow] | null {
   return selected.length === 2 ? [selected[0], selected[1]] : null;
-}
-
-// ── Impact ───────────────────────────────────────────────────────────────────
-
-export interface ExcludedTally {
-  /** Files that would have been placed into the destination structure. */
-  transfers: number;
-  /** Files that would have been moved into a review folder. */
-  quarantine: number;
-  bytes: number;
-}
-
-/**
- * What the exclusions take off the plan.
- *
- * The Execute preflight states what is about to happen and asks for an
- * acknowledgement. Counting the whole plan there would ask somebody to
- * acknowledge moving files they had just excluded, so the figures are corrected
- * by this before they are shown.
- */
-export function excludedTally(rows: ReviewRow[]): ExcludedTally {
-  let transfers = 0;
-  let quarantine = 0;
-  let bytes = 0;
-  for (const row of rows) {
-    if (!row.excluded || row.plannedAction === "none") continue;
-    // Only what the plan actually holds an action for. A file the backend froze
-    // nothing for — unreadable, or already left in place — takes nothing off a
-    // total it was never in, and subtracting its bytes would understate the
-    // free space the run still needs.
-    bytes += row.sizeBytes;
-    if (row.plannedAction === "quarantine") quarantine += 1;
-    else transfers += 1;
-  }
-  return { transfers, quarantine, bytes };
 }

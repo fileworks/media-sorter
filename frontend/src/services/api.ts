@@ -771,25 +771,35 @@ export interface ReconciliationFinding {
   unit_member_fingerprints: Record<string, string>;
 }
 
+/**
+ * What a run will do, counted by the plan itself.
+ *
+ * Always fetched rather than derived: Execute used to subtract a
+ * per-reviewed-file tally from these action-level totals, and a companion is an
+ * action but not a reviewed file — so excluding a RAW+JPEG pair left the
+ * preflight promising a copy that would never happen.
+ */
+export interface PlanImpact {
+  actionable_groups: number;
+  copy_count: number;
+  move_count: number;
+  quarantine_count: number;
+  quarantine_bytes: number;
+  skip_count: number;
+  source_mutations: number;
+  required_bytes: number;
+  conversion_without_originals: number;
+  companions_left_in_place: number;
+  embedded_tag_count: number;
+  unresolved_count: number;
+}
+
 export interface PreviewResult {
   /** Identity of the exact configuration used to calculate these outcomes. */
   config_fingerprint: string;
   /** Identity of the immutable reviewed plan accepted by the executor. */
   plan_id: string;
-  impact: {
-    actionable_groups: number;
-    copy_count: number;
-    move_count: number;
-    quarantine_count: number;
-    quarantine_bytes: number;
-    skip_count: number;
-    source_mutations: number;
-    required_bytes: number;
-    conversion_without_originals: number;
-    companions_left_in_place: number;
-    embedded_tag_count: number;
-    unresolved_count: number;
-  };
+  impact: PlanImpact;
   items: PreviewItem[];
   stats: {
     total: number;
@@ -1371,20 +1381,23 @@ export class MediaSorterApiClient {
     return data as Blob;
   }
 
-  // ── Optimization ──────────────────────────────────────────────────────────────
-
-  /** Every declared contract with its status and whether its tool exists here. */
   /**
-   * Project what optimization would cost and save for the given files.
+   * What a run carrying these exclusions would actually do.
    *
-   * Nothing is mutated: the backend encodes a bounded sample into its own
-   * workspace. With `retainSamples` the candidates stay readable so the
-   * comparison modal has something real to show; without it the response is
-   * numbers only and says so via `estimate_only`.
+   * The plan is the only thing that knows — it holds the companion actions a
+   * reviewed file drags with it — so it is asked rather than second-guessed.
+   * Execute used to subtract a per-reviewed-file tally from the stored plan's
+   * action-level totals, which counted two different things.
    */
-  // ── Quarantine ────────────────────────────────────────────────────────────────
+  async planImpact(planId: string, excludedSources: string[]): Promise<PlanImpact> {
+    await this.ensureReady();
+    const { data } = await this.http.post<PlanImpact>("/api/sorting/impact", {
+      plan_id: planId,
+      excluded_sources: excludedSources,
+    });
+    return data;
+  }
 
-  /** Describe a restore fully before any byte moves. */
   // ── Duplicate review ──────────────────────────────────────────────────────────
 
   async listReviewGroups(

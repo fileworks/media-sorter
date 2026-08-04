@@ -196,3 +196,83 @@ def test_get_sorting_report_conflicts_when_not_completed(client: TestClient) -> 
     resp = client.get(f"/api/sorting/{running.id}/report")
     assert resp.status_code == 409
     assert resp.json()["code"] == "CONFLICT"
+
+
+# ------------------------------------------------------------------ #
+# POST /api/sorting/impact                                             #
+# ------------------------------------------------------------------ #
+
+
+def test_impact_describes_the_run_the_exclusions_leave(tmp_path: Path) -> None:
+    """Execute asks the plan what it will do, rather than deriving it.
+
+    Subtracting a per-reviewed-file tally from action-level totals counted two
+    different things, so an exclusion that took a whole media unit off the plan
+    left the preflight still promising part of it.
+    """
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    # Distinct colours: two identical images would be a duplicate, not a
+    # second sortable file.
+    for name, colour in (("2024-01-02-one.jpg", "navy"), ("2024-01-03-two.jpg", "olive")):
+        Image.new("RGB", (16, 16), colour).save(source / name)
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        plan_id = preview["plan_id"]
+        sortable = [item["source"] for item in preview["items"] if item["status"] == "sort"]
+
+        whole = local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": []})
+        one_off = local.post(
+            "/api/sorting/impact",
+            json={"plan_id": plan_id, "excluded_sources": sortable[:1]},
+        )
+        everything = local.post(
+            "/api/sorting/impact",
+            json={"plan_id": plan_id, "excluded_sources": sortable},
+        )
+        missing = local.post(
+            "/api/sorting/impact", json={"plan_id": "sortplan_missing", "excluded_sources": []}
+        )
+
+    assert whole.status_code == 200
+    assert whole.json()["actionable_groups"] == len(sortable)
+    assert one_off.json()["actionable_groups"] == len(sortable) - 1
+    assert one_off.json()["required_bytes"] < whole.json()["required_bytes"]
+    assert everything.json()["actionable_groups"] == 0
+    assert everything.json()["required_bytes"] == 0
+    assert missing.status_code == 409
+    assert missing.json()["details"]["reason"] == "missing_plan"
+
+
+def test_impact_never_mutates_the_stored_plan(tmp_path: Path) -> None:
+    """Asking what an exclusion would cost must not apply it."""
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-photo.jpg")
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        plan_id = preview["plan_id"]
+        sortable = [item["source"] for item in preview["items"] if item["status"] == "sort"]
+
+        local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": sortable})
+        after = local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": []})
+
+    assert after.json()["actionable_groups"] == len(sortable)

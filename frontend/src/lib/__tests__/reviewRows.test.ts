@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   applyFilters,
   comparePair,
-  excludedTally,
   expandExclusion,
   groupIntoStacks,
   isStack,
@@ -423,38 +422,6 @@ describe("comparePair", () => {
   it("refuses anything that is not exactly two", () => {
     expect(comparePair([rows[0]])).toBeNull();
     expect(comparePair(rows)).toBeNull();
-  });
-});
-
-describe("excludedTally", () => {
-  it("splits what the exclusions take off the plan by where it would have gone", () => {
-    const rows = toReviewRows(
-      result(
-        item({ source: "/in/a.jpg", file_size: 100 }),
-        item({ source: "/in/b.jpg", status: "junk", file_size: 200 }),
-        item({ source: "/in/c.jpg", file_size: 400 }),
-      ),
-      [],
-      {},
-      new Set(["/in/a.jpg", "/in/b.jpg"]),
-    );
-
-    // The Execute preflight subtracts these, so an excluded file cannot appear
-    // in "will be relocated to quarantine".
-    expect(excludedTally(rows)).toEqual({ transfers: 1, quarantine: 1, bytes: 300 });
-  });
-
-  it("counts nothing when nothing is excluded", () => {
-    const rows = toReviewRows(result(item()));
-
-    expect(excludedTally(rows)).toEqual({ transfers: 0, quarantine: 0, bytes: 0 });
-  });
-
-  it("remembers what an excluded file would have done", () => {
-    const rows = toReviewRows(result(item({ status: "junk" })), [], {}, new Set(["/in/photo.jpg"]));
-
-    expect(rows[0].status).toBe("excluded");
-    expect(rows[0].plannedStatus).toBe("junk");
   });
 });
 

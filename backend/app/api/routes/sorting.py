@@ -14,6 +14,7 @@ from app.api.schemas import (
 )
 from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
+from app.core.sort_plan import FrozenSortImpact
 
 router = APIRouter()
 
@@ -29,6 +30,32 @@ class StartSortRequest(TaskStartRequest):
     #: Content hash → the path Review chose to keep. Applied to the derived
     #: plan, so one run's overrides do not follow the stored plan around.
     reviewed_keepers: dict[str, str] = Field(default_factory=dict)
+
+
+class PlanImpactRequest(TaskStartRequest):
+    """The exclusions a run would carry, so its impact can be described."""
+
+    plan_id: str
+    excluded_sources: list[str] = Field(default_factory=list)
+
+
+@router.post("/sorting/impact", response_model=FrozenSortImpact)
+async def plan_impact(container: ContainerDep, body: PlanImpactRequest) -> FrozenSortImpact:
+    """What a run with these exclusions would actually do.
+
+    The Execute preflight used to derive this itself, by subtracting a
+    per-reviewed-file tally from the stored plan's action-level totals. The two
+    counted different things — a companion is an action but not a reviewed file
+    — so excluding a RAW+JPEG pair left the preflight promising a copy that
+    would never happen. The plan is the only thing that knows, so it answers.
+    """
+    plan = container.preview_service.frozen_plan(body.plan_id)
+    if plan is None:
+        raise ConflictError(
+            "The reviewed plan is no longer available; generate preview again.",
+            details={"reason": "missing_plan", "plan_id": body.plan_id},
+        )
+    return plan.with_exclusions(body.excluded_sources).impact
 
 
 @router.post("/sorting/start", response_model=TaskStartResponse)

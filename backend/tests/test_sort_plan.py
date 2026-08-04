@@ -508,3 +508,118 @@ def test_a_companion_that_vanished_before_freezing_does_not_break_the_plan(
 
     assert [action.source_path for action in plan.actions] == [str(jpeg)]
     assert plan.impact.actionable_groups == 1
+
+
+# --------------------------------------------------------------------------- #
+# Impact after exclusions                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def _unit_and_loose_plan(tmp_path: Path, *, copy_mode: bool = True):
+    """A RAW+JPEG unit, a quarantined file, and a loose file."""
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    jpeg = source_dir / "shot.jpg"
+    jpeg.write_bytes(b"j" * 100)
+    raw = source_dir / "shot.raw"
+    raw.write_bytes(b"r" * 900)
+    junk = source_dir / "thumb.png"
+    junk.write_bytes(b"t" * 10)
+    loose = source_dir / "other.jpg"
+    loose.write_bytes(b"o" * 50)
+    config = Config(
+        source_directory=str(source_dir),
+        target_directory=str(tmp_path / "output"),
+        copy_instead_of_move=copy_mode,
+    )
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(jpeg),
+                "destination": str(tmp_path / "output" / "2024" / "shot.jpg"),
+                "status": "sort",
+                "file_size": 100,
+                "unit_id": "u1",
+                "companions": [
+                    {
+                        "source": str(raw),
+                        "destination": str(tmp_path / "output" / "2024" / "shot.raw"),
+                        "role": "raw_sibling",
+                        "status": "attached",
+                    }
+                ],
+            },
+            {
+                "source": str(junk),
+                "destination": str(tmp_path / "output" / "_junk" / "thumb.png"),
+                "status": "junk",
+                "file_size": 10,
+                "companions": [],
+            },
+            {
+                "source": str(loose),
+                "destination": str(tmp_path / "output" / "2024" / "other.jpg"),
+                "status": "sort",
+                "file_size": 50,
+                "companions": [],
+            },
+        ],
+        config,
+    )
+    return jpeg, raw, junk, loose, plan
+
+
+def test_excluding_a_unit_takes_its_companion_out_of_the_impact(tmp_path: Path) -> None:
+    """The impact has to describe the run that will happen, companions included.
+
+    Review excludes a *reviewed file*; the plan expands that to the whole media
+    unit. The preflight then subtracted a per-file tally from action-level
+    totals, so excluding a RAW+JPEG pair took one file and the JPEG's bytes off
+    a total that held two files and both their bytes — it promised to copy one
+    file needing 900 bytes when it would copy nothing.
+    """
+    jpeg, _raw, _junk, _loose, plan = _unit_and_loose_plan(tmp_path)
+
+    assert plan.impact.copy_count == 3  # jpeg + raw + loose
+    # Quarantined copies consume destination space too, so the junk file counts.
+    assert plan.impact.required_bytes == 1060
+
+    derived = plan.with_exclusions([str(jpeg)])
+
+    assert derived.impact.copy_count == 1  # only the loose file survives
+    assert derived.impact.required_bytes == 60  # loose 50 + quarantined junk 10
+    assert derived.impact.quarantine_count == 1
+    assert derived.impact.actionable_groups == 2
+
+
+def test_impact_after_exclusions_always_matches_a_recount(tmp_path: Path) -> None:
+    """Every subset, recounted from the surviving actions themselves."""
+    jpeg, _raw, junk, loose, plan = _unit_and_loose_plan(tmp_path)
+    candidates = [str(jpeg), str(junk), str(loose)]
+
+    for mask in range(8):
+        excluded = [path for index, path in enumerate(candidates) if mask >> index & 1]
+        derived = plan.with_exclusions(excluded)
+        surviving = derived.live_actions
+        assert derived.impact.copy_count == sum(a.kind == "copy" for a in surviving), excluded
+        assert derived.impact.move_count == sum(a.kind == "move" for a in surviving), excluded
+        assert derived.impact.quarantine_count == sum(a.kind == "quarantine" for a in surviving), (
+            excluded
+        )
+        assert derived.impact.actionable_groups == sum(
+            a.companion_role is None for a in surviving
+        ), excluded
+        assert derived.impact.source_mutations == sum(
+            a.source_effect != "retained" for a in surviving
+        ), excluded
+
+
+def test_source_mutations_drop_with_the_files_that_were_excluded(tmp_path: Path) -> None:
+    """Move mode asks for an explicit acknowledgement; it must not overstate."""
+    jpeg, _raw, _junk, _loose, plan = _unit_and_loose_plan(tmp_path, copy_mode=False)
+
+    assert plan.impact.source_mutations == 4  # jpeg, raw, junk, loose
+
+    derived = plan.with_exclusions([str(jpeg)])
+
+    assert derived.impact.source_mutations == 2  # junk + loose

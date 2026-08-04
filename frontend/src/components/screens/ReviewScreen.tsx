@@ -27,13 +27,7 @@ import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes } from "@/lib/formatters";
 import { planTotals, planWarnings, warningTotal } from "@/lib/reviewPlan";
-import {
-  comparePair,
-  excludedTally,
-  selectionActions,
-  type ReviewRow,
-  type Stack,
-} from "@/lib/reviewRows";
+import { comparePair, selectionActions, type ReviewRow, type Stack } from "@/lib/reviewRows";
 import type { DuplicateGroup, GroupMember, GroupPlan } from "@/lib/reviewWorkbench";
 import type { View } from "@/lib/stageModel";
 import { api } from "@/services/api";
@@ -47,11 +41,7 @@ interface ReviewScreenProps {
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
   /** Run-scoped decisions, lifted so Execute can send them with the run. */
-  onDecisionsChange?: (decisions: {
-    excludedSources: string[];
-    /** What those exclusions take off the plan, for the Execute preflight. */
-    excludedTally: { transfers: number; quarantine: number; bytes: number };
-  }) => void;
+  onDecisionsChange?: (decisions: { excludedSources: string[] }) => void;
 }
 
 export function ReviewScreen({
@@ -75,13 +65,11 @@ export function ReviewScreen({
   const surface = useReviewSurface(result, groups.groups, plans, config.duplicate_keeper_policy);
 
   // Execute must acknowledge the counts that will actually happen, so the
-  // decisions leave this screen rather than living only inside it.
+  // decisions leave this screen rather than living only inside it. What they
+  // cost is asked of the plan there — this screen only says what was excluded.
   useEffect(() => {
-    onDecisionsChange?.({
-      excludedSources: [...surface.excluded],
-      excludedTally: excludedTally(surface.rows),
-    });
-  }, [onDecisionsChange, surface.excluded, surface.rows]);
+    onDecisionsChange?.({ excludedSources: [...surface.excluded] });
+  }, [onDecisionsChange, surface.excluded]);
 
   const invalidateGroups = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["review", "groups"] });

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -125,6 +125,24 @@ class FrozenSortPlan(BaseModel):
     #: touches them, and are not failures — the plan is unchanged, a derived
     #: copy of it simply declines to act on these.
     skipped_sources: frozenset[str] = frozenset()
+    #: Counters the item scan produced, which no exclusion can change: a file
+    #: the preview skipped stays skipped, and one it could not resolve stays
+    #: unresolved.
+    skip_count: int = 0
+    unresolved_count: int = 0
+    companions_left_in_place: int = 0
+    #: The three configuration answers the impact depends on, carried so a
+    #: derived plan can recompute its own impact without the Config.
+    copy_mode: bool = True
+    converts_media: bool = False
+    embeds_tags: bool = False
+
+    @property
+    def live_actions(self) -> tuple[FrozenSortAction, ...]:
+        """The actions this plan will actually perform, exclusions applied."""
+        return tuple(
+            action for action in self.actions if action.source_path not in self.skipped_sources
+        )
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
@@ -155,7 +173,66 @@ class FrozenSortPlan(BaseModel):
             if action.source_path in requested
             or (action.unit_id is not None and action.unit_id in units)
         }
-        return self.model_copy(update={"skipped_sources": frozenset(expanded)})
+        derived = self.model_copy(update={"skipped_sources": frozenset(expanded)})
+        # The impact has to describe the run that will happen. Leaving the
+        # original totals here is what made the Execute preflight subtract a
+        # per-reviewed-file tally from action-level counts: excluding a RAW+JPEG
+        # pair took one file and the JPEG's bytes off a total holding two files
+        # and both, so it promised a copy that would never happen.
+        return derived.model_copy(update={"impact": derived._impact()})
+
+    def _impact(self) -> FrozenSortImpact:
+        return build_impact(
+            self.live_actions,
+            skip_count=self.skip_count,
+            unresolved_count=self.unresolved_count,
+            companions_left_in_place=self.companions_left_in_place,
+            copy_mode=self.copy_mode,
+            converts_media=self.converts_media,
+            embeds_tags=self.embeds_tags,
+        )
+
+
+def build_impact(
+    actions: Sequence[FrozenSortAction],
+    *,
+    skip_count: int,
+    unresolved_count: int,
+    companions_left_in_place: int,
+    copy_mode: bool,
+    converts_media: bool,
+    embeds_tags: bool,
+) -> FrozenSortImpact:
+    """Describe exactly the given actions.
+
+    The one place these totals are produced, so a plan and the plan derived from
+    it by excluding sources cannot count differently.
+    """
+    quarantines = [action for action in actions if action.kind == "quarantine"]
+    sortable_primaries = sum(
+        action.disposition == "sort" and action.companion_role is None for action in actions
+    )
+    return FrozenSortImpact(
+        # A count of reviewed files the run will act on, not a flag. The Execute
+        # preflight refuses to start at zero, so `1 if actions else 0` meant
+        # excluding a single file blocked a run of any size. Companions are not
+        # counted: an exclusion is expressed per reviewed file, and its unit
+        # follows it.
+        actionable_groups=sum(action.companion_role is None for action in actions),
+        copy_count=sum(action.kind == "copy" for action in actions),
+        move_count=sum(action.kind == "move" for action in actions),
+        quarantine_count=len(quarantines),
+        quarantine_bytes=sum(action.expected_size_bytes for action in quarantines),
+        skip_count=skip_count,
+        source_mutations=sum(action.source_effect != "retained" for action in actions),
+        required_bytes=(sum(action.expected_size_bytes for action in actions) if copy_mode else 0),
+        conversion_without_originals=(
+            sortable_primaries if not copy_mode and converts_media else 0
+        ),
+        companions_left_in_place=companions_left_in_place,
+        embedded_tag_count=sortable_primaries if embeds_tags else 0,
+        unresolved_count=unresolved_count,
+    )
 
 
 def build_frozen_sort_plan(
@@ -249,46 +326,26 @@ def build_frozen_sort_plan(
                 )
             )
 
-    copy_count = sum(action.kind == "copy" for action in actions)
-    move_count = sum(action.kind == "move" for action in actions)
-    quarantines = [action for action in actions if action.kind == "quarantine"]
-    source_mutations = sum(action.source_effect != "retained" for action in actions)
-    sortable_primaries = sum(
-        action.disposition == "sort" and action.companion_role is None for action in actions
-    )
+    converts_media = config.convert_images or config.convert_videos
     return FrozenSortPlan(
         plan_id=f"sortplan_{uuid.uuid4().hex[:20]}",
         config_fingerprint=config_fingerprint(config),
         actions=tuple(actions),
-        impact=FrozenSortImpact(
-            # A count of reviewed files the plan will act on, not a flag. The
-            # Execute preflight subtracts the exclusion tally from this and
-            # refuses to start at zero, so `1 if actions else 0` meant excluding
-            # a single file blocked a run of any size. Companions are not
-            # counted: an exclusion is expressed per reviewed file, and its unit
-            # follows it.
-            actionable_groups=sum(action.companion_role is None for action in actions),
-            copy_count=copy_count,
-            move_count=move_count,
-            quarantine_count=len(quarantines),
-            quarantine_bytes=sum(action.expected_size_bytes for action in quarantines),
+        impact=build_impact(
+            actions,
             skip_count=skipped,
-            source_mutations=source_mutations,
-            required_bytes=(
-                sum(action.expected_size_bytes for action in actions)
-                if config.copy_instead_of_move
-                else 0
-            ),
-            conversion_without_originals=(
-                sortable_primaries
-                if not config.copy_instead_of_move
-                and (config.convert_images or config.convert_videos)
-                else 0
-            ),
-            companions_left_in_place=companions_left,
-            embedded_tag_count=sortable_primaries if config.embed_tags_in_files else 0,
             unresolved_count=unresolved,
+            companions_left_in_place=companions_left,
+            copy_mode=config.copy_instead_of_move,
+            converts_media=converts_media,
+            embeds_tags=config.embed_tags_in_files,
         ),
+        skip_count=skipped,
+        unresolved_count=unresolved,
+        companions_left_in_place=companions_left,
+        copy_mode=config.copy_instead_of_move,
+        converts_media=converts_media,
+        embeds_tags=config.embed_tags_in_files,
     )
 
 

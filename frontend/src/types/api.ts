@@ -35,6 +35,7 @@ export type {
   AiModelTaskStatus,
   SortingStatus,
   PreviewItem,
+  PlanImpact,
   PreviewResult,
   PreviewStatus,
   MediaInfo,

@@ -35,6 +35,7 @@ import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
+import { usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
 import { useLogs } from "@/hooks/useLogs";
@@ -130,12 +131,11 @@ export default function MainPage() {
   const [stage, setStage] = useState<StageState["stage"]>("sources");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
   const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
-  // What Review decided for this run. Lifted here so Execute sends it and the
-  // preflight can count the post-exclusion plan rather than the whole one.
-  const [runDecisions, setRunDecisions] = useState<{
-    excludedSources: string[];
-    excludedTally: { transfers: number; quarantine: number; bytes: number };
-  }>({ excludedSources: [], excludedTally: { transfers: 0, quarantine: 0, bytes: 0 } });
+  // What Review decided for this run. Lifted here so Execute sends it, and so
+  // the preflight can ask the plan what those decisions leave.
+  const [runDecisions, setRunDecisions] = useState<{ excludedSources: string[] }>({
+    excludedSources: [],
+  });
 
   const analysis = useAnalysis();
   const preview = usePreview();
@@ -399,10 +399,7 @@ export default function MainPage() {
     analysis.clear();
     preview.clear();
     setExcludedForRun([]);
-    setRunDecisions({
-      excludedSources: [],
-      excludedTally: { transfers: 0, quarantine: 0, bytes: 0 },
-    });
+    setRunDecisions({ excludedSources: [] });
     setImpactAcknowledged(false);
     setStage("sources");
     setBodyKey((key) => key + 1);
@@ -452,23 +449,23 @@ export default function MainPage() {
     [config?.library_profile.profile_id, planned, scanned],
   );
 
-  const impact = preview.result?.impact;
   // The preflight asks for an acknowledgement of what is about to happen, so it
-  // must describe the plan *after* Review's exclusions. Counting the whole plan
-  // would ask somebody to acknowledge moving files they had just excluded.
-  const excludedOff = runDecisions.excludedTally;
-  const withoutExcluded = (value: number, taken: number) => Math.max(0, value - taken);
-  const copying = config?.copy_instead_of_move ?? true;
+  // describes the plan *after* Review's exclusions. It is fetched, not derived:
+  // subtracting a per-reviewed-file tally from action-level totals counted two
+  // different things, because a companion is an action but not a reviewed file.
+  const runImpact = usePlanImpact(preview.result?.plan_id, runDecisions.excludedSources);
+  const impact = runImpact.data ?? preview.result?.impact;
+  const wholePlan = preview.result?.impact;
   const preflightInput = {
-    actionableGroups: withoutExcluded(
-      impact?.actionable_groups ?? 0,
-      excludedOff.transfers + excludedOff.quarantine,
+    actionableGroups: impact?.actionable_groups ?? 0,
+    excludedCount: Math.max(
+      0,
+      (wholePlan?.actionable_groups ?? 0) - (impact?.actionable_groups ?? 0),
     ),
-    excludedCount: excludedOff.transfers + excludedOff.quarantine,
-    quarantineCount: withoutExcluded(impact?.quarantine_count ?? 0, excludedOff.quarantine),
+    quarantineCount: impact?.quarantine_count ?? 0,
     quarantineBytes: impact?.quarantine_bytes ?? 0,
-    copyCount: withoutExcluded(impact?.copy_count ?? 0, copying ? excludedOff.transfers : 0),
-    moveCount: withoutExcluded(impact?.move_count ?? 0, copying ? 0 : excludedOff.transfers),
+    copyCount: impact?.copy_count ?? 0,
+    moveCount: impact?.move_count ?? 0,
     skipCount: impact?.skip_count ?? 0,
     referenceCount: 0,
     sourceMutations: impact?.source_mutations ?? 0,
@@ -477,7 +474,7 @@ export default function MainPage() {
     unresolvedGroups: impact?.unresolved_count ?? 0,
     unplannedCount: impact?.unresolved_count ?? 0,
     freeBytes: analysis.result?.disk_space.destination_free_bytes ?? null,
-    requiredBytes: withoutExcluded(impact?.required_bytes ?? 0, excludedOff.bytes),
+    requiredBytes: impact?.required_bytes ?? 0,
     quarantineWritable: true,
     conversionWithoutOriginals: impact?.conversion_without_originals ?? 0,
     companionsLeftInPlace: impact?.companions_left_in_place ?? 0,
