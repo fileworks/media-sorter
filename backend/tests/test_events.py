@@ -33,7 +33,7 @@ def _recorder(**kwargs: object) -> EventRecorder:
         task_id="task_test",
         plan_id="plan_test",
         profile_id="organize-only",
-        **kwargs,  # type: ignore[arg-type]
+        **kwargs,
     )
 
 

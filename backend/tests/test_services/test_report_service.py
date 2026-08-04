@@ -10,7 +10,7 @@ from app.services.report_service import ReportService
 
 
 @pytest.fixture()
-def report_service(db_with_operation):  # type: ignore[return]
+def report_service(db_with_operation):
     operation_id, test_db = db_with_operation
     return ReportService(db_manager=test_db), operation_id
 
@@ -21,7 +21,7 @@ def report_service(db_with_operation):  # type: ignore[return]
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_operation_id(report_service) -> None:  # type: ignore[return]
+async def test_get_report_returns_operation_id(report_service) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -29,7 +29,7 @@ async def test_get_report_returns_operation_id(report_service) -> None:  # type:
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_source_and_dest(report_service) -> None:  # type: ignore[return]
+async def test_get_report_returns_source_and_dest(report_service) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -38,7 +38,7 @@ async def test_get_report_returns_source_and_dest(report_service) -> None:  # ty
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_summary(report_service) -> None:  # type: ignore[return]
+async def test_get_report_returns_summary(report_service) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -56,7 +56,7 @@ async def test_get_report_returns_summary(report_service) -> None:  # type: igno
 
 
 @pytest.mark.asyncio
-async def test_get_report_includes_files(report_service) -> None:  # type: ignore[return]
+async def test_get_report_includes_files(report_service) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -67,7 +67,7 @@ async def test_get_report_includes_files(report_service) -> None:  # type: ignor
 
 
 @pytest.mark.asyncio
-async def test_get_report_files_have_tags_list(report_service) -> None:  # type: ignore[return]
+async def test_get_report_files_have_tags_list(report_service) -> None:
     """Each file entry has a 'tags' field that is a list."""
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
@@ -125,7 +125,7 @@ async def test_get_report_suspicious_flag_is_real_bool(db_with_operation) -> Non
 
 
 @pytest.mark.asyncio
-async def test_export_csv_includes_suspicious_column(report_service) -> None:  # type: ignore[return]
+async def test_export_csv_includes_suspicious_column(report_service) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
     header = content.splitlines()[0]
@@ -154,7 +154,7 @@ async def test_get_report_raises_for_unknown_id(db_with_operation) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_json_is_valid_json(report_service) -> None:  # type: ignore[return]
+async def test_export_json_is_valid_json(report_service) -> None:
     svc, operation_id = report_service
     content, media_type, filename = await svc.export(operation_id, "json")
 
@@ -166,7 +166,7 @@ async def test_export_json_is_valid_json(report_service) -> None:  # type: ignor
 
 
 @pytest.mark.asyncio
-async def test_export_json_contains_operation_id(report_service) -> None:  # type: ignore[return]
+async def test_export_json_contains_operation_id(report_service) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "json")
     assert operation_id in content
@@ -189,7 +189,7 @@ async def test_export_raises_for_unknown_id(db_with_operation) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_csv_has_correct_media_type(report_service) -> None:  # type: ignore[return]
+async def test_export_csv_has_correct_media_type(report_service) -> None:
     svc, operation_id = report_service
     content, media_type, filename = await svc.export(operation_id, "csv")
 
@@ -198,7 +198,7 @@ async def test_export_csv_has_correct_media_type(report_service) -> None:  # typ
 
 
 @pytest.mark.asyncio
-async def test_export_csv_contains_header_row(report_service) -> None:  # type: ignore[return]
+async def test_export_csv_contains_header_row(report_service) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
 
@@ -210,7 +210,7 @@ async def test_export_csv_contains_header_row(report_service) -> None:  # type: 
 
 
 @pytest.mark.asyncio
-async def test_export_csv_has_data_rows(report_service) -> None:  # type: ignore[return]
+async def test_export_csv_has_data_rows(report_service) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
 
@@ -225,7 +225,7 @@ async def test_export_csv_has_data_rows(report_service) -> None:  # type: ignore
 
 
 @pytest.mark.asyncio
-async def test_export_filename_includes_operation_id(report_service) -> None:  # type: ignore[return]
+async def test_export_filename_includes_operation_id(report_service) -> None:
     svc, operation_id = report_service
     _, _, json_filename = await svc.export(operation_id, "json")
     _, _, csv_filename = await svc.export(operation_id, "csv")

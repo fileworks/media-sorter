@@ -70,7 +70,7 @@ def test_organize_only_is_immutable_and_forbids_mutation_permissions() -> None:
     with pytest.raises(ValidationError):
         PreservationProfile(mode="organize_only", allow_repair=True)
     with pytest.raises(ValidationError):
-        profile.name = "Changed"  # type: ignore[misc]
+        profile.name = "Changed"
 
 
 def test_pending_migrated_mutation_profile_is_representable_but_not_acknowledged() -> None:

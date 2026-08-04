@@ -91,7 +91,7 @@ def test_acknowledgement_is_checked_even_for_a_validated_contract(
     validated = contract("video-remux-lossless-v1").__class__(
         **{**vars(contract("video-remux-lossless-v1")), "status": "validated"}
     )
-    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)  # type: ignore[arg-type]
+    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)
 
     with pytest.raises(OptimizationUnavailableError, match="requires an explicit acknowledgement"):
         build_optimization_profile("video-remux-lossless-v1", acknowledged=False)
@@ -104,7 +104,7 @@ def test_a_missing_tool_blocks_a_validated_acknowledged_contract(
 
     original = contract("video-remux-lossless-v1")
     validated = original.__class__(**{**vars(original), "status": "validated"})
-    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)  # type: ignore[arg-type]
+    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)
     monkeypatch.setattr(
         optimization_contracts,
         "discover_tool",
@@ -122,7 +122,7 @@ def test_a_built_profile_is_reproducible_and_retains_the_original(
 
     original = contract("video-remux-lossless-v1")
     validated = original.__class__(**{**vars(original), "status": "validated"})
-    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)  # type: ignore[arg-type]
+    monkeypatch.setitem(CONTRACTS, "video-remux-lossless-v1", validated)
     monkeypatch.setattr(
         optimization_contracts,
         "discover_tool",

@@ -24,24 +24,24 @@ def _mock_config(source: str = "") -> Config:
     return cfg
 
 
-def test_suggest_returns_empty_when_no_encoder():
+def test_suggest_returns_empty_when_no_encoder() -> None:
     svc = CategorySuggestionService(config=_mock_config("/some/path"), encoder=None)
     assert svc.suggest(5) == []
 
 
-def test_suggest_returns_empty_when_no_source():
+def test_suggest_returns_empty_when_no_source() -> None:
     enc = MagicMock()
     svc = CategorySuggestionService(config=_mock_config(""), encoder=enc)
     assert svc.suggest(5) == []
 
 
-def test_suggest_returns_empty_when_source_missing():
+def test_suggest_returns_empty_when_source_missing() -> None:
     enc = MagicMock()
     svc = CategorySuggestionService(config=_mock_config("/nonexistent/path"), encoder=enc)
     assert svc.suggest(5) == []
 
 
-def test_kmeans_centroids_shape():
+def test_kmeans_centroids_shape() -> None:
     rng = np.random.default_rng(0)
     X = rng.standard_normal((20, 32)).astype(np.float32)
     norms = np.linalg.norm(X, axis=1, keepdims=True) + 1e-8
@@ -50,7 +50,7 @@ def test_kmeans_centroids_shape():
     assert centroids.shape == (3, 32)
 
 
-def test_kmeans_centroids_fewer_points_than_k():
+def test_kmeans_centroids_fewer_points_than_k() -> None:
     rng = np.random.default_rng(1)
     X = rng.standard_normal((2, 16)).astype(np.float32)
     norms = np.linalg.norm(X, axis=1, keepdims=True) + 1e-8
@@ -59,7 +59,7 @@ def test_kmeans_centroids_fewer_points_than_k():
     assert centroids.shape == (2, 16)
 
 
-def test_suggest_deduplicates_labels(tmp_path: Path):
+def test_suggest_deduplicates_labels(tmp_path: Path) -> None:
     """Even if k-means returns the same vocab label twice, output is deduplicated."""
     # Create a tiny image file to iterate over
     img_path = tmp_path / "test.jpg"

@@ -110,7 +110,7 @@ def in_memory_db(tmp_path: Path) -> DatabaseManager:
 
 
 @pytest.fixture(scope="module")
-def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):  # type: ignore[return]
+def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):
     """FastAPI application wired with the test config and an isolated test DB."""
     db_path = str(tmp_path_factory.mktemp("test_app_db") / "mediasort.db")
     prev = os.environ.get("MEDIASORT_DB_PATH")
@@ -127,7 +127,7 @@ def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):  # type:
 
 
 @pytest.fixture(scope="module")
-def client(app) -> TestClient:  # type: ignore[return]
+def client(app) -> TestClient:
     """TestClient for API integration tests (module scope)."""
     return TestClient(app)
 
@@ -212,7 +212,7 @@ def test_db(tmp_path: Path) -> Generator[DatabaseManager, None, None]:
 
 
 @pytest.fixture()
-def db_with_operation(test_db: DatabaseManager):  # type: ignore[return]
+def db_with_operation(test_db: DatabaseManager):
     """DatabaseManager pre-populated with one operation and two file records."""
     operation_id = "test_op_001"
     with test_db._connect() as conn:

@@ -37,7 +37,7 @@ def validated_png(monkeypatch: pytest.MonkeyPatch) -> FormatContract:
     real registry untouched.
     """
     promoted = dataclasses.replace(load_contract(PNG_CONTRACT), status="validated")
-    monkeypatch.setitem(CONTRACTS, PNG_CONTRACT, promoted)  # type: ignore[arg-type]
+    monkeypatch.setitem(CONTRACTS, PNG_CONTRACT, promoted)
     return promoted
 
 

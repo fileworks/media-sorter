@@ -18,14 +18,10 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
     that a recipe is usable *as applied* — validation passes and a preview runs
     without the user having to fix anything the recipe left inconsistent.
     """
-    common: dict[str, object] = {
-        "source_directory": str(source),
-        "target_directory": str(destination),
-    }
-
     if recipe == "safe_sort":
         return Config(
-            **common,
+            source_directory=str(source),
+            target_directory=str(destination),
             sort=True,
             sort_criteria=["year", "month"],
             copy_instead_of_move=True,
@@ -40,7 +36,8 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
 
     if recipe == "clean_sweep":
         return Config(
-            **common,
+            source_directory=str(source),
+            target_directory=str(destination),
             sort=True,
             sort_criteria=["year", "month"],
             copy_instead_of_move=False,
@@ -55,7 +52,8 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
 
     if recipe == "scratch":
         return Config(
-            **common,
+            source_directory=str(source),
+            target_directory=str(destination),
             sort=False,
             copy_instead_of_move=True,
             remove_duplicates=False,
@@ -73,7 +71,8 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
 
     acknowledged = datetime.now(timezone.utc)
     return Config(
-        **common,
+        source_directory=str(source),
+        target_directory=str(destination),
         sort=True,
         sort_criteria=["year", "month"],
         copy_instead_of_move=True,

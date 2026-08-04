@@ -14,27 +14,27 @@ def client():
     return TestClient(app)
 
 
-def test_suggest_categories_reports_missing_optional_model(client: TestClient):
+def test_suggest_categories_reports_missing_optional_model(client: TestClient) -> None:
     """A selected but uninstalled local model has a specific, actionable error."""
     res = client.post("/api/ai/suggest-categories", json={"n_categories": 5})
     assert res.status_code == 409
     assert res.json()["code"] == "MODEL_NOT_INSTALLED"
 
 
-def test_suggest_categories_clamps_n_categories(client: TestClient):
+def test_suggest_categories_clamps_n_categories(client: TestClient) -> None:
     """n_categories outside 2–12 is rejected as 422."""
     assert client.post("/api/ai/suggest-categories", json={"n_categories": 1}).status_code == 422
     assert client.post("/api/ai/suggest-categories", json={"n_categories": 13}).status_code == 422
 
 
-def test_suggest_categories_accepts_valid_range(client: TestClient):
+def test_suggest_categories_accepts_valid_range(client: TestClient) -> None:
     """n_categories within 2–12 reaches the handler rather than validation."""
     for n in (2, 5, 12):
         res = client.post("/api/ai/suggest-categories", json={"n_categories": n})
         assert res.status_code == 409, f"unexpected {res.status_code} for n={n}"
 
 
-def test_model_inventory_exposes_required_pack_without_downloading(client: TestClient):
+def test_model_inventory_exposes_required_pack_without_downloading(client: TestClient) -> None:
     res = client.get("/api/ai/models")
     assert res.status_code == 200
     body = res.json()
@@ -47,7 +47,7 @@ def test_model_inventory_exposes_required_pack_without_downloading(client: TestC
     assert all(pack["total_size"] > 0 for pack in body["packs"])
 
 
-def test_model_removal_requires_explicit_confirmation(client: TestClient):
+def test_model_removal_requires_explicit_confirmation(client: TestClient) -> None:
     res = client.request(
         "DELETE",
         "/api/ai/models/clip-lite-v1",
@@ -57,7 +57,7 @@ def test_model_removal_requires_explicit_confirmation(client: TestClient):
     assert res.json()["code"] == "MODEL_REMOVAL_CONFIRMATION_REQUIRED"
 
 
-def test_suggest_categories_response_shape(client: TestClient, tmp_path):
+def test_suggest_categories_response_shape(client: TestClient, tmp_path) -> None:
     """When an encoder is present, response has a 'suggestions' list."""
     app = AppFactory.create()
     container = app.state.container
