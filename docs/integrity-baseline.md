@@ -1,8 +1,8 @@
 # Media Mutation and Integrity Ledger
 
-This ledger records the mutation surface of the engine. Rows are evidence, not a
-safety claim: each one states what the code actually does today. The executable
-fixtures live in `backend/tests/test_integrity_baseline.py`.
+This ledger records the mutation surface of the engine. Rows are evidence, not a safety
+claim: each one states what the code actually does today. The executable fixtures live
+in `backend/tests/test_integrity_baseline.py`.
 
 ## Media mutation paths
 
@@ -11,7 +11,7 @@ fixtures live in `backend/tests/test_integrity_baseline.py`.
 | `FileSystemService.safe_copy` | Copy and copy-mode quarantine | Stages under a private name, hashes while reading and rereads the closed stage, applies source timestamps, then publishes atomically | Verified; equal-size corruption and interruption never reach the destination path |
 | `FileSystemService.safe_move` | Normal move and move-mode quarantine | Same-volume: publishes a second name for the identical inode, then drops the old one. Cross-volume: staged verified copy, then source removal | Verified; a failed source removal raises with `redundant_verified_copies` rather than losing either copy |
 | `SortingService._process_file` | Normal organization | Authorizes a byte-identical manifest action, journals it, then executes the verified transfer | Verified; the manifest and journal are readable by reconciliation |
-| `SortingService._quarantine*` | Unknown date, future date, junk, duplicate, already-in-destination, failed, corrupted | Routes through the same authorized executor with `kind: quarantine` | Verified; quarantine still has no durable restore relation (task 5.6) |
+| `SortingService._quarantine*` | Unknown date, future date, junk, duplicate, already-in-destination, failed, corrupted | Routes through the same authorized executor with `kind: quarantine` | Verified; quarantine still has no durable restore relation |
 | `SortingService._process_file` | Image/video conversion | Creates another output, then unlinks the placed original | Conversion is post-placement and is not committed through a shared verified replacement protocol |
 | `SortingService._process_file` / `_apply_rename` | Planned/post-conversion rename | Calls `Path.rename` directly | Rename is outside a manifest/journal boundary |
 | `MetadataService.set_creation_date` | EXIF date override | Rewrites embedded EXIF through `piexif` | Refused unless a reviewed profile authorizes `embedded_metadata`; media bytes change when it is |
@@ -20,48 +20,37 @@ fixtures live in `backend/tests/test_integrity_baseline.py`.
 | `SortingService._process_file` | Filesystem timestamp synchronization | Preserves the source atime/mtime; writes the extracted date only when `preserve_filesystem_timestamps` is off | Verified; requested and observed values are recorded per action |
 | `RepairService.repair_image` | In-place repair | Re-encodes to a temporary file and replaces the media | Refused unless a reviewed profile authorizes `repair`; content may still change when it is |
 | `RepairService.repair_video` | In-place repair | Remuxes to a temporary file and replaces the media | Container bytes change; no manifest or recovery journal |
-| `ConversionService` | Image/video conversion | Produces a collision-free derived file | Refused unless reviewed preservation *and* optimization profiles authorize it; validation and original retention are still delegated to the caller (task 4.6) |
+| `ConversionService` | Image/video conversion | Produces a collision-free derived file | Refused unless reviewed preservation *and* optimization profiles authorize it; validation and original retention are still delegated to the caller |
 
-There is currently no user-facing restore executor. Operation-history database
-records can describe past destinations, but they are not durable mutation
-journals and cannot safely authorize or reconcile a restore.
+There is currently no user-facing restore executor. Operation-history database records
+can describe past destinations, but they are not durable mutation journals and cannot
+safely authorize or reconcile a restore.
 
 ## Guarantees now proven
 
-- Content identity is cryptographic. Size equality is never accepted as
-  evidence, on any copy, move, or quarantine path.
-- A copy is written to a private staged name in the destination directory,
-  flushed and fsynced, and hashed again after close. The visible destination
-  path appears only when it already holds the fully verified content.
-- Source filesystem timestamps are applied to copied content, and any field the
-  filesystem could not reproduce is returned as a warning rather than silently
-  claimed.
-- A move removes the source only after the destination is verified and the
-  commit is durably journalled. A source that cannot be removed raises with
-  `redundant_verified_copies`; both copies stay addressable.
-- Where a filesystem cannot publish atomically without clobbering, the reduced
-  guarantee is labelled `recoverable_non_atomic` on the outcome instead of being
-  presented as an atomic commit.
-- `backend/app/core/action_journal.py` records every stage transition with an
-  fsync before the next irreversible step, so an interrupted run leaves an
-  ordered prefix that reconciliation can classify.
-- Every placement is authorized by an immutable manifest action written and
-  fsynced *before* the filesystem is touched. A streaming sort appends one
+The promises themselves — byte identity, staged publication, timestamp
+best-effort, move-after-verify, the reduced-atomicity label, derived data never
+entering the media — are stated once, for users, in
+[preservation-guarantees.md](preservation-guarantees.md#the-default-organize-only).
+They are not restated here. What this ledger adds is the durable record behind
+them:
+
+- Every placement is authorized by an immutable manifest action, written and
+  fsynced **before** the filesystem is touched. A streaming sort appends one
   action per file to `manifests/<operation-id>.actions.jsonl`.
-- Media mutation is gated by the policy guard, not by a config boolean. Turning
-  on conversion, repair, or embedded tagging without a reviewed profile is
-  refused with `MUTATION_NOT_AUTHORIZED` before anything is written.
-- Derived tags and date corrections default to the operation report, and to a
-  `<file>.xmp` sidecar when the profile asks for one. Media bytes are untouched.
-- Each run stores an aggregate `IntegrityReport` under
-  `reports/<operation-id>.integrity.json` with per-action hashes, byte counts,
-  path transitions, preservation outcomes, commit method, warnings, and the
-  recovery state.
+- `core/action_journal.py` records each stage transition with an fsync before the
+  next irreversible step, so an interrupted run leaves an ordered prefix that
+  reconciliation can classify.
+- Mutation is gated by the policy guard, not a config boolean:
+  `MUTATION_NOT_AUTHORIZED` is raised before anything is written.
+- Each run stores an aggregate `IntegrityReport` at
+  `reports/<operation-id>.integrity.json` — per-action hashes, byte counts, path
+  transitions, preservation outcomes, commit method, warnings, recovery state.
 
 ## Transfer diagnostics
 
-Every transfer failure carries a stable `reason`, the `phase` it happened in,
-and the `source_safety` state, so a caller never has to parse an OS message.
+Every transfer failure carries a stable `reason`, the `phase` it happened in, and the
+`source_safety` state, so a caller never has to parse an OS message.
 
 | Reason | Meaning | Source safety |
 | --- | --- | --- |
@@ -79,18 +68,18 @@ and the `source_safety` state, so a caller never has to parse an OS message.
 | `source_removal_failed` | The destination is verified but the source could not be dropped | `redundant_verified_copies` |
 | `transfer_io_error` | An unmapped filesystem error; the raw errno is attached rather than guessed at | `source_retained` |
 
-Stage files are named `.<stem≤12>.ms-stage-<16 hex>.tmp` in the destination
-directory: hidden, collision-free, and short enough that staging does not push a
-long destination path past the filesystem limit.
+Stage files are named `.<stem≤12>.ms-stage-<16 hex>.tmp` in the destination directory:
+hidden, collision-free, and short enough that staging does not push a long destination
+path past the filesystem limit.
 
 ## Remaining gaps
 
-- Post-placement conversion output and the post-conversion rename are still
-  applied outside a manifest action (task 4.6).
-- Quarantine has no restore executor yet, so a quarantined original cannot be
-  put back through the verified path (task 5.6).
+- Post-placement conversion output and the post-conversion rename are applied
+  outside a manifest action.
+- Quarantine has no restore executor, so a quarantined original cannot be put
+  back through the verified path.
 - Reconciliation classifies and reports `stage_recoverable` and `resumable`
-  actions but does not yet promote or retry them automatically (task 6.5).
+  actions but does not promote or retry them automatically.
 
 ## Regression fixture map
 
@@ -105,14 +94,13 @@ long destination path past the filesystem limit.
 6. an embedded EXIF date update changes the media hash (still unsafe baseline,
    now reachable only through a reviewed profile).
 
-`backend/tests/test_verified_transfer.py` and
-`backend/tests/test_action_journal.py` cover the protocol selection, degraded
-commit labelling, journal ordering, and crash-truncation behavior directly.
-`backend/tests/test_organize_only_preservation.py` proves byte identity across
-copy, move, rename, quarantine, and duplicate scenarios, and pins the timestamp,
-sidecar, policy-refusal, manifest, journal, and report behavior.
+`backend/tests/test_verified_transfer.py` and `backend/tests/test_action_journal.py`
+cover the protocol selection, degraded commit labelling, journal ordering, and
+crash-truncation behavior directly. `backend/tests/test_organize_only_preservation.py`
+proves byte identity across copy, move, rename, quarantine, and duplicate scenarios, and
+pins the timestamp, sidecar, policy-refusal, manifest, journal, and report behavior.
 `backend/tests/test_reconciliation.py` covers restart classification.
 
-Existing focused suites additionally cover conversion replacement, image/video
-repair replacement, quarantine behavior, copy-mode source retention, partial
-task persistence, and sidecar/embedded tag writes.
+Existing focused suites additionally cover conversion replacement, image/video repair
+replacement, quarantine behavior, copy-mode source retention, partial task persistence,
+and sidecar/embedded tag writes.

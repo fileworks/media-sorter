@@ -1,15 +1,13 @@
 # Clean-machine release smoke checklist
 
-Use this checklist for periodic clean-host confidence testing and after changes
-to installers, startup, migration, signing, or operating-system support. A green
-tag workflow publishes the GitHub Release automatically through the protected
-`github-release` environment; routine releases do not wait for manual host
-evidence. Attach completed evidence to the release or a follow-up issue when the
-checklist is run.
+Use this checklist for periodic clean-host confidence testing and after changes to
+installers, startup, migration, signing, or operating-system support. A green tag
+workflow publishes the GitHub Release automatically through the protected
+`github-release` environment; routine releases do not wait for manual host evidence.
+Attach completed evidence to the release or a follow-up issue when the checklist is run.
 
-Record the commit, tag, artifact SHA-256 values, tester, date, OS version,
-architecture, package form, and whether the artifact is signed or explicitly
-unsigned.
+Record the commit, tag, artifact SHA-256 values, tester, date, OS version, architecture,
+package form, and whether the artifact is signed or explicitly unsigned.
 
 ## macOS Apple Silicon and Intel
 
@@ -47,6 +45,6 @@ Complete every item for each package form in a fresh Windows VM:
 - Unsigned mode: the SmartScreen flow is recorded and release metadata says
   unsigned without making verification claims.
 
-Treat a hash mismatch, signing-state mismatch, or clean-host regression as a
-release incident. Stop further distribution updates, preserve the evidence, and
-use the documented recovery playbook; do not silently replace published assets.
+Treat a hash mismatch, signing-state mismatch, or clean-host regression as a release
+incident. Stop further distribution updates, preserve the evidence, and use the
+documented recovery playbook; do not silently replace published assets.

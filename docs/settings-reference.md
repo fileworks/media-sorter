@@ -1,23 +1,21 @@
 # MediaSorter — Settings Reference
 
-Every option MediaSorter exposes, what it does, and its default. Settings are edited
-on the **Sources** stage (grouped into the sections below), or directly in
-`config.json` in your config directory. Any field can also be overridden by an
-environment variable named `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_COPY_INSTEAD_OF_MOVE=true`).
+Every option MediaSorter exposes, what it does, and its default. Settings are edited on
+the **Sources** stage (grouped into the sections below), or directly in `config.json` in
+your config directory. Any field can also be overridden by an environment variable named
+`MEDIASORT_<FIELD>` (e.g. `MEDIASORT_COPY_INSTEAD_OF_MOVE=true`).
 
 > **Duplicates are never deleted.** Files that cannot be placed are moved into
 > clearly named quarantine folders you can review.
 
 Defaults below are the real backend defaults from `backend/app/core/config.py`.
 
----
-
 ## Recipes and visibility
 
-Recipes are starting points, not modes. Applying one writes ordinary
-configuration fields, reports the exact keys it changed, and leaves every field
-editable. A recipe never reaches into a folder, a credential or a vocabulary,
-which is what makes it reusable across libraries.
+Recipes are starting points, not modes. Applying one writes ordinary configuration
+fields, reports the exact keys it changed, and leaves every field editable. A recipe
+never reaches into a folder, a credential or a vocabulary, which is what makes it
+reusable across libraries.
 
 | Recipe | Fields it establishes | Consequence stated before applying |
 |---|---|---|
@@ -37,25 +35,22 @@ A user can name the current run behaviour and reuse it later.
 | `DELETE /api/config/recipes/{recipe_id}` | Forget one; deleting an absent id is not an error |
 
 Stored on `Config.saved_recipes` as `SavedRecipe` records
-(`backend/app/core/recipes.py`). The captured slice is an explicit
-`RecipeSettings` model rather than a free-form mapping, so the round trip stays
-typed and a recipe written by an older build loads with the current defaults
-filled in. At most 50 recipes; names are whitespace-collapsed, at most 60
-characters, and may not shadow a built-in id.
+(`backend/app/core/recipes.py`). The captured slice is an explicit `RecipeSettings`
+model rather than a free-form mapping, so the round trip stays typed and a recipe
+written by an older build loads with the current defaults filled in. At most 50 recipes;
+names are whitespace-collapsed, at most 60 characters, and may not shadow a built-in id.
 
 ### Where settings appear
 
-The Configure screen groups every setting into three numbered cards in the order
-the work happens: **01 Sort** (how files travel and land) → **02 Clean**
-(duplicates and junk) → **03 Enrich** (convert and tag). The rail beside them
-carries the *current value* of each entry, so reading it top to bottom answers
-"what is this run going to do?" without expanding anything.
+The Configure screen groups every setting into three numbered cards in the order the
+work happens: **01 Sort** (how files travel and land) → **02 Clean** (duplicates and
+junk) → **03 Enrich** (convert and tag). The rail beside them carries the *current
+value* of each entry, so reading it top to bottom answers "what is this run going to
+do?" without expanding anything.
 
-Consequential detail — cloud credentials, label vocabularies, thresholds, rule
-editing — sits behind a per-row disclosure. A new setting belongs in a
-disclosure unless its value is normally decided for each run or library.
-
----
+Consequential detail — cloud credentials, label vocabularies, thresholds, rule editing —
+sits behind a per-row disclosure. A new setting belongs in a disclosure unless its value
+is normally decided for each run or library.
 
 ## Essentials
 
@@ -72,16 +67,16 @@ disclosure unless its value is normally decided for each run or library.
 
 ### Media units
 
-Pairing requires the same directory and a matching stem. A fixed primary
-precedence is used: RAW, HEIC/HEIF, JPEG, other image, then video. Recognized
-roles are edit sidecars (`.xmp`, `.aae`, `.pp3`, `.dop`, `.on1`, `.reastore`),
-Live Photo `.mov`, RAW+JPEG/HEIC siblings, video `.thm`, and image `.wav` notes.
+Pairing requires the same directory and a matching stem. A fixed primary precedence is
+used: RAW, HEIC/HEIF, JPEG, other image, then video. Recognized roles are edit sidecars
+(`.xmp`, `.aae`, `.pp3`, `.dop`, `.on1`, `.reastore`), Live Photo `.mov`, RAW+JPEG/HEIC
+siblings, video `.thm`, and image `.wav` notes.
 
-Only the primary drives date extraction, routing, renaming, and duplicate
-evaluation. Every companion inherits the primary's final folder and collision
-suffix but keeps its own extension. Preview lists the binding and warns before
-commit about unmatched files, `leave_in_place`, and conversion. Conversion
-does not rewrite an internal filename reference inside a companion.
+Only the primary drives date extraction, routing, renaming, and duplicate evaluation.
+Every companion inherits the primary's final folder and collision suffix but keeps its
+own extension. Preview lists the binding and warns before commit about unmatched files,
+`leave_in_place`, and conversion. Conversion does not rewrite an internal filename
+reference inside a companion.
 
 ## Folders & routing
 
@@ -118,11 +113,10 @@ does not rewrite an internal filename reference inside a companion.
 | Cache budget | `thumbnail_cache_budget_bytes` | `536870912` (512 MiB) | Fixed byte ceiling. Least-recently-used entries are removed opportunistically on a write; there is no timer or idle worker. |
 
 The cache lives at `<data directory>/thumbnail-cache/`. Its keys include source
-identity, sampled content, requested size, and renderer version. It contains
-only derived JPEG previews and is safe to delete at any time; the next visible
-request regenerates what it needs. Read, write, permission, full-disk, and
-corrupt-entry failures fall back to on-demand rendering and never block media
-access.
+identity, sampled content, requested size, and renderer version. It contains only
+derived JPEG previews and is safe to delete at any time; the next visible request
+regenerates what it needs. Read, write, permission, full-disk, and corrupt-entry
+failures fall back to on-demand rendering and never block media access.
 
 ## Duplicates
 
@@ -138,15 +132,15 @@ access.
 When duplicate detection is enabled, MediaSorter always compares source files with
 existing destination media before checking duplicates within the current source.
 Destination matches are quarantined to `_already_in_destination/`; the index also
-catches duplicates across separate runs. Preview performs the same comparison
-through a temporary read-only index. A legacy `dedup_against_destination` value
-is accepted when loading old config files but is ignored and is not saved.
+catches duplicates across separate runs. Preview performs the same comparison through a
+temporary read-only index. A legacy `dedup_against_destination` value is accepted when
+loading old config files but is ignored and is not saved.
 
 ## Photo bursts
 
-Off by default, and separate from duplicate detection: burst frames are
-legitimate alternatives, not redundant copies. A group forms only when capture
-time, a burst-specific perceptual distance, and camera identity all agree.
+Off by default, and separate from duplicate detection: burst frames are legitimate
+alternatives, not redundant copies. A group forms only when capture time, a
+burst-specific perceptual distance, and camera identity all agree.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
@@ -190,21 +184,21 @@ A profile holds several typed roots, each with one role:
 
 Copy/Move is profile-wide: it is one decision for the run, not per root.
 
-Each root carries its own `exclusions` — relative subtrees skipped for that root
-only. A root that is offline or unreadable contributes a partial-result issue and
-the remaining roots still run; one disconnected drive never fails the operation.
+Each root carries its own `exclusions` — relative subtrees skipped for that root only. A
+root that is offline or unreadable contributes a partial-result issue and the remaining
+roots still run; one disconnected drive never fails the operation.
 
 **Reference roots are enforced, not just documented.** The verified executor
 refuses any transfer whose source or destination falls inside one, with
 `MUTATION_NOT_AUTHORIZED` / `reference_root_is_immutable`, and records an
-`integrity.violation` event. Because the check lives at the single point where
-media moves, no pipeline step can bypass it by forgetting to look.
+`integrity.violation` event. Because the check lives at the single point where media
+moves, no pipeline step can bypass it by forgetting to look.
 
 ## Media mutation profiles
 
-MediaSorter organizes by default and mutates only when asked. Two profiles carry
-that authorization; both are stored in `config.json` and validated before any
-preview or sort starts.
+MediaSorter organizes by default and mutates only when asked. Two profiles carry that
+authorization; both are stored in `config.json` and validated before any preview or sort
+starts.
 
 ### `preservation_profile`
 
@@ -221,19 +215,17 @@ preview or sort starts.
 
 ### `optimization_profile`
 
-Conversion additionally needs an acknowledged optimization profile naming its
-`tool`, `tool_version`, and `validation_contract`; compression requires
-`mode: "visually_lossless"`. A disabled profile cannot carry any execution
-authorization.
+Conversion additionally needs an acknowledged optimization profile naming its `tool`,
+`tool_version`, and `validation_contract`; compression requires `mode:
+"visually_lossless"`. A disabled profile cannot carry any execution authorization.
 
 ### What happens without one
 
-Turning on a mutating setting under Organize Only does not silently downgrade
-the run — it is refused with `MUTATION_NOT_AUTHORIZED` and a `reason` naming the
-missing authorization (`explicit_profile_required`, `capability_not_authorized`,
+Turning on a mutating setting under Organize Only does not silently downgrade the run —
+it is refused with `MUTATION_NOT_AUTHORIZED` and a `reason` naming the missing
+authorization (`explicit_profile_required`, `capability_not_authorized`,
 `optimization_profile_required`, `compression_profile_required`, or
 `migration_review_required`). Nothing is written before the refusal.
-
 
 ## Rules (tagging and routing)
 
@@ -251,29 +243,30 @@ Conditions inspect the **source** file before conversion or renaming:
 - `size` compares source bytes with `eq`, `gt`, `lt`, `gte`, or `lte`.
 - `resolution` compares source width and height with the same operators.
 
-Rules are evaluated by ascending numeric priority; equal priorities retain their saved order.
-Every matching tag rule contributes its tag, while only the first matching route rule contributes
-a route. Tags are de-duplicated case-insensitively in stable order before being reported or
-written.
+Rules are evaluated by ascending numeric priority; equal priorities retain their saved
+order. Every matching tag rule contributes its tag, while only the first matching route
+rule contributes a route. Tags are de-duplicated case-insensitively in stable order
+before being reported or written.
 
-A route is a strict relative suffix such as `screenshots/mobile`. It is appended after the
-normal date/category-or-source/camera hierarchy. Absolute paths, empty or dot segments,
-backslashes, control characters, drive/UNC paths, and reserved device names are rejected rather
-than cleaned up. Routes never apply to technical folders such as `_duplicates/`, `_junk/`,
-`_failed/`, or `_already_in_destination/`.
+A route is a strict relative suffix such as `screenshots/mobile`. It is appended after
+the normal date/category-or-source/camera hierarchy. Absolute paths, empty or dot
+segments, backslashes, control characters, drive/UNC paths, and reserved device names
+are rejected rather than cleaned up. Routes never apply to technical folders such as
+`_duplicates/`, `_junk/`, `_failed/`, or `_already_in_destination/`.
 
 Preview and sort share destination planning. Existing and same-batch conflicts receive
-deterministic `_001`, `_002`, … suffixes without overwriting. If the destination changes after
-preview, the report records the safe path actually used by sort.
+deterministic `_001`, `_002`, … suffixes without overwriting. If the destination changes
+after preview, the report records the safe path actually used by sort.
 
-Legacy `rules` arrays are migrated once to tag rules with sequential priorities. Before the
-config is rewritten, MediaSorter saves `config.pre-rules-v1.json` (or a numbered variant).
-Malformed entries are skipped with a warning. To roll back, close MediaSorter, replace
-`config.json` with that backup, and use an older release.
+Legacy `rules` arrays are migrated once to tag rules with sequential priorities. Before
+the config is rewritten, MediaSorter saves `config.pre-rules-v1.json` (or a numbered
+variant). Malformed entries are skipped with a warning. To roll back, close MediaSorter,
+replace `config.json` with that backup, and use an older release.
 
 ## AI
 
-AI has **two independent features** that share the same local model but do different things:
+AI has **two independent features** that share the same local model but do different
+things:
 
 - **AI content tagging** writes descriptive *keywords into files / the report* — it does **not** move files.
 - **Smart Categorization** decides *which folder a file goes in* — it writes no tags.
@@ -290,8 +283,8 @@ Use either, both, or neither.
 The Configure screen probes your machine (`GET /api/hardware`) and shows a **capability
 chip**: your CPU/RAM/GPU summary and the recommended tier. If the machine is below the
 minimum for local AI (needs ≥4 CPU cores and ≥4 GB RAM), local features auto-disable and
-the UI steers you to a cloud tagging provider. Choosing a tier heavier than recommended is
-allowed but flagged **"may be slow"**, so the choice is always informed.
+the UI steers you to a cloud tagging provider. Choosing a tier heavier than recommended
+is allowed but flagged **"may be slow"**, so the choice is always informed.
 
 ### AI content tagging
 
@@ -305,12 +298,12 @@ allowed but flagged **"may be slow"**, so the choice is always informed.
 | Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
-Azure and Imagga receive the selected operation locale and request native German output. Google
-Vision does not guarantee German labels, so known English results are mapped through bundled
-concept aliases and unknown results are omitted with a warning. Local SigLIP uses localized
-descriptions and templates. Local CLIP may use stable English semantic prompts for model quality,
-but still emits the selected localized label. Provider failures remain best-effort and never fail
-the sort.
+Azure and Imagga receive the selected operation locale and request native German output.
+Google Vision does not guarantee German labels, so known English results are mapped
+through bundled concept aliases and unknown results are omitted with a warning. Local
+SigLIP uses localized descriptions and templates. Local CLIP may use stable English
+semantic prompts for model quality, but still emits the selected localized label.
+Provider failures remain best-effort and never fail the sort.
 
 ### Smart Categorization
 
@@ -321,8 +314,8 @@ the sort.
 | Categorization confidence | `categorize_confidence_threshold` | `0.55` | Top-1 probability floor (0.50–0.99). Files below it go to `_uncategorized/` rather than being guessed wrong. |
 | Categorization margin | `categorize_min_margin` | `0.15` | Required separation between the top and second-best category, so ambiguous files aren't force-filed. |
 
-² Default categories: `screenshots`, `documents`, `receipts`, `food`, `nature`, `people`,
-`pets`, `travel`, `events`, `sports`, `memes`.
+² Default categories: `screenshots`, `documents`, `receipts`, `food`, `nature`,
+`people`, `pets`, `travel`, `events`, `sports`, `memes`.
 
 ## Other
 
@@ -331,19 +324,16 @@ the sort.
 | EXIF sanity check | `exif_sanity_check_enabled` | `true` | Flag dates that look bogus (e.g. a reset camera clock) as *suspicious* instead of trusting them blindly. |
 | Check for updates | `update_check_enabled` | `true` | Allow the one GitHub Releases network call that powers the in-app "update available" banner. Set `false` for fully offline use. |
 
----
-
 ## Fields this page deliberately omits
 
-`library_profile`, `rule_set` and `saved_recipes` are structures with their own
-sections above rather than single settings. `migrated_legacy_rules`,
-`migration_warnings`, `ai_tagging_labels_provenance` and
-`categorize_categories_provenance` are state the loader maintains, not choices
-anybody makes.
+`library_profile`, `rule_set` and `saved_recipes` are structures with their own sections
+above rather than single settings. `migrated_legacy_rules`, `migration_warnings`,
+`ai_tagging_labels_provenance` and `categorize_categories_provenance` are state the
+loader maintains, not choices anybody makes.
 
-`analyze` is a persisted field that nothing reads — it survives in the schema
-but has no effect. It is listed here so its absence from the tables above is not
-mistaken for an oversight.
+`analyze` is a persisted field that nothing reads — it survives in the schema but has no
+effect. It is listed here so its absence from the tables above is not mistaken for an
+oversight.
 
 ## Where things live
 
@@ -356,5 +346,5 @@ mistaken for an oversight.
   the active file, so backend retention is at most about 20 MiB.
 - **Live API docs:** `http://127.0.0.1:<port>/api/docs` (OpenAPI) while the backend runs.
 
-See [`docs/design.md`](design.md) for architecture and [`docs/development.md`](development.md)
-for setup, testing, and the release flow.
+See [`docs/design.md`](design.md) for architecture and
+[`docs/development.md`](development.md) for setup, testing, and the release flow.
