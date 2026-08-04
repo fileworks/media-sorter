@@ -447,7 +447,6 @@ describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
       <ReviewScreen
         result={PREVIEW_RESULT}
         config={ACCESSIBILITY_CONFIG}
-        view="overview"
         onSelectView={() => undefined}
         onOpenSetting={() => undefined}
         onRerunPreview={() => undefined}
@@ -470,7 +469,6 @@ describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
         <ReviewScreen
           result={PREVIEW_RESULT}
           config={ACCESSIBILITY_CONFIG}
-          view="overview"
           onSelectView={() => undefined}
           onOpenSetting={() => undefined}
           onRerunPreview={() => undefined}

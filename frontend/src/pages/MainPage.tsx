@@ -49,7 +49,7 @@ import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes, formatDuration } from "@/lib/formatters";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
 import { blockingConflicts, validateRoots } from "@/lib/sourcesStage";
-import type { StageInputs, StageKey, StageState, View } from "@/lib/stageModel";
+import type { StageInputs, StageKey, StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { api } from "@/services/api";
@@ -751,7 +751,6 @@ export default function MainPage() {
               <ReviewScreen
                 result={preview.result}
                 config={config}
-                view={state.view as View}
                 onSelectView={nav.selectView}
                 onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
                 onRerunPreview={() => void preview.generatePreview()}

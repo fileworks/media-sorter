@@ -671,6 +671,10 @@ export interface PreviewItem {
 
 /**
  * Displayable metadata for a single local file, from GET /api/media/info.
+ *
+ * No screen calls this today: the hover card and comparison view that did were
+ * replaced by the Review rework. The endpoint and this method are kept because
+ * they work and are tested, not because something is using them.
  * Used to show resolution everywhere and to fill in a duplicate original's
  * details (date/source/size), which the preview item itself doesn't carry.
  */

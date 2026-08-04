@@ -19,7 +19,12 @@ export type Stage = "sources" | "configure" | "review" | "execute";
 /** Views only exist inside Review, where they are the design's four tabs. */
 export type View = "overview" | "duplicates" | "junk" | "changes" | "warnings";
 
-/** The four tabs the Review screen always shows, in order. */
+/**
+ * The views Review can be entered *at*, in order.
+ *
+ * These are no longer tabs — Review is one surface — but a summary tile still
+ * navigates by naming one, and `readiness` still gates entry on them.
+ */
 export const PRIMARY_REVIEW_VIEWS: View[] = ["duplicates", "junk", "changes", "warnings"];
 
 export const VIEWS_BY_STAGE: Record<Stage, View[]> = {

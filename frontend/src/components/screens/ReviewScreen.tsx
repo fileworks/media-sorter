@@ -42,7 +42,6 @@ import type { Config, KeeperPolicyId, PreviewResult } from "@/types/api";
 interface ReviewScreenProps {
   result: PreviewResult;
   config: Config;
-  view: View;
   onSelectView: (view: View) => void;
   /** Jump to Configure, scrolled to a specific setting row. */
   onOpenSetting: (anchorId: string) => void;

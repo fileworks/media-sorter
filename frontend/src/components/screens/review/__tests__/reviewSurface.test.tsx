@@ -84,7 +84,6 @@ function renderReview(result: PreviewResult, config: Config = TEST_CONFIG) {
         <ReviewScreen
           result={result}
           config={config}
-          view="overview"
           onSelectView={() => {}}
           onOpenSetting={() => {}}
           onRerunPreview={() => {}}
