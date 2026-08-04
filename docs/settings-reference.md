@@ -61,6 +61,8 @@ disclosure unless its value is normally decided for each run or library.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
+| What the run is for | `run_mode` | `"organize"` | `organize` places every file into the destination structure. `deduplicate_only` moves **nothing but duplicates and junk** — the input tree is left exactly as found and the destination is used only for the review folders. |
+| Organise into date folders | `sort` | `true` | `false` runs the scan and the reviews without producing any placement. |
 | Language | `language` | `"en"` | Interface language and language for application-generated labels in future operations: `en` or `de`. Switching is immediate and prospective; existing files, reports, user-entered names, and an operation already in progress are not translated. |
 | Source folder | `source_directory` | *(required)* | The messy folder to scan. Never modified except for a `move`. |
 | Destination folder | `target_directory` | *(required)* | Where the organised library is written. |
@@ -130,7 +132,7 @@ access.
 | Exact-match duplicates | `duplicate_exact_enabled` | `true` | SHA-256 byte-identical detection. |
 | Visual-similarity duplicates | `duplicate_perceptual_enabled` | `true` | Perceptual-hash near-duplicate detection (images and video). |
 | Similarity threshold | `duplicate_perceptual_threshold` | `95` | 0–100; how visually similar two files must be to count as duplicates. Higher = stricter. |
-| Default keep rule | `duplicate_keeper_policy` | `"newest"` | Which copy a group keeps when nobody has chosen one by hand: `newest` · `oldest` · `largest` · `smallest` · `highest_resolution`. A *default* — Review overrides it per group or in bulk, and a protected reference member always wins regardless. |
+| Default keep rule | `duplicate_keeper_policy` | `"best_quality"` | Which copy a group keeps when nobody has chosen one by hand: `best_quality` (most pixels, then largest) · `largest` · `smallest` · `newest` · `oldest` · `highest_resolution` · `longest_filename` · `shortest_filename` · `manual`. A *default* — Review overrides it per group or in bulk, and a protected reference member always wins regardless. `highest_resolution` refuses a group whose dimensions could not all be read; `best_quality` falls back to size for those. |
 | Dedup index path | `dedup_index_path` | `null` | Override where the index database lives. `null` → `<destination>/.mediasort-dedup-index.sqlite3`. |
 
 When duplicate detection is enabled, MediaSorter always compares source files with
@@ -139,6 +141,22 @@ Destination matches are quarantined to `_already_in_destination/`; the index als
 catches duplicates across separate runs. Preview performs the same comparison
 through a temporary read-only index. A legacy `dedup_against_destination` value
 is accepted when loading old config files but is ignored and is not saved.
+
+## Photo bursts
+
+Off by default, and separate from duplicate detection: burst frames are
+legitimate alternatives, not redundant copies. A group forms only when capture
+time, a burst-specific perceptual distance, and camera identity all agree.
+
+| Setting | Key | Default | What it does |
+|---|---|---|---|
+| Detect bursts | `burst_detection_enabled` | `false` | Master switch. When off, none of the metadata, perceptual, or sharpness work runs. |
+| Time window | `burst_time_window_seconds` | `3.0` | How close consecutive captures must be to be considered one burst. |
+| Perceptual distance | `burst_perceptual_distance` | `4` | Maximum hash distance, in bits. Tighter than, and independent of, similar-media matching. |
+| Same camera required | `burst_require_camera_identity` | `true` | Require identical camera make and model. Turning this off is how two devices photographing one scene get grouped. |
+
+Every burst group waits for a person; nothing is acted on before review. See
+`burst-review.md` for the calibration corpus behind the defaults.
 
 ## Rename
 
@@ -314,6 +332,18 @@ the sort.
 | Check for updates | `update_check_enabled` | `true` | Allow the one GitHub Releases network call that powers the in-app "update available" banner. Set `false` for fully offline use. |
 
 ---
+
+## Fields this page deliberately omits
+
+`library_profile`, `rule_set` and `saved_recipes` are structures with their own
+sections above rather than single settings. `migrated_legacy_rules`,
+`migration_warnings`, `ai_tagging_labels_provenance` and
+`categorize_categories_provenance` are state the loader maintains, not choices
+anybody makes.
+
+`analyze` is a persisted field that nothing reads — it survives in the schema
+but has no effect. It is listed here so its absence from the tables above is not
+mistaken for an oversight.
 
 ## Where things live
 

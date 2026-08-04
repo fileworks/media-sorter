@@ -34,11 +34,21 @@ is unmeasured, and sends it to review instead.
 
 | Policy | Decides by | Tie-breakers, in order |
 |---|---|---|
-| `largest` | byte size | newest modification time, then stable identity |
+| `best_quality` *(default)* | pixel count | byte size, newest modification time, then stable identity |
+| `largest` / `smallest` | byte size | newest modification time, then stable identity |
 | `newest` / `oldest` | modification time | larger file, then stable identity |
 | `highest_resolution` | pixel count | larger file, then stable identity |
+| `longest_filename` / `shortest_filename` | file-name length | larger file, then stable identity |
 | `preferred_root` | configured root order | larger file, then stable identity |
 | `protected_reference` | a reference in the group | first by stable identity |
+| `manual` | nothing — always sends the group to review | — |
+
+Two refusals matter more than the choices. `highest_resolution` refuses a group
+whose dimensions could not all be read, rather than treating an unknown as the
+smallest and quarantining the one good copy; `best_quality` falls back to size
+for those, because a library is full of files no decoder can measure and
+refusing them all would leave the common case undecided. `preferred_root` and
+`protected_reference` refuse when no member qualifies.
 
 Stable identity is `root:relative_path:member_id`, which makes every policy
 produce the same keeper on a rerun regardless of scan order. A protected

@@ -93,21 +93,21 @@ Wiring lives in one place, and services are trivial to swap in tests.
 
 ---
 
-## Services, briefly
+## Services
 
-The backend is around twelve services, each with one job:
+`backend/app/services/` — lazy singletons in `core/bootstrap.py`, pulled from the
+container by `api/deps.py`, never constructed by a route. The list is not
+reproduced here: it was written when there were twelve and there are now fifty-
+nine, and a stale inventory is worse than no inventory. `ls` is accurate.
 
-- **`DateExtractionService`** — reads dates in priority order: EXIF → video metadata → filename → filesystem mtime
-- **`FileSystemService`** — copy/move with post-op integrity checks
-- **`DuplicateService`** — SHA-256 exact + perceptual hash (images *and* video)
-- **`RuleEngineService`** — evaluate typed tag and safe-route rules against source files
-- **`PreviewService`** — dry-run mirror of the sort that writes nothing
-- **`SortingService`** — the orchestrator that ties everything together
-- **`ReportService`** — reads/exports the per-run SQLite log
-- **`MetadataService`**, **`ConversionService`**, **`RepairService`** — media helpers
+Two rules hold across all of them:
 
-Heavy file I/O is always offloaded with `asyncio.to_thread` so one slow file never
-blocks the event loop or the progress poller.
+- **Sync cores, async edges.** A service exposes a synchronous core; the route
+  wraps it in `asyncio.to_thread`, so one slow file never blocks the event loop
+  or the progress poller.
+- **`SortingService` is the only orchestrator.** Everything that moves media
+  goes through `OperationExecution`, which is the one place a placement becomes
+  authorized, journalled and verified.
 
 ---
 
