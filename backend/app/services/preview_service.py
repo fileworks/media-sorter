@@ -21,7 +21,11 @@ from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
-from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan
+from app.core.sort_plan import (
+    PLANNED_QUARANTINE_STATUSES,
+    FrozenSortPlan,
+    build_frozen_sort_plan,
+)
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
 from app.services.catalog_indexing import index_library_roots
 from app.services.dedup_index import DedupIndex
@@ -53,17 +57,12 @@ logger = get_logger(__name__)
 
 #: Statuses that are relocated into a review folder rather than left in place.
 #: In `deduplicate_only` these are the only files that move at all.
-_QUARANTINE_STATUSES = frozenset(
-    {
-        "duplicate",
-        "already_in_destination",
-        "junk",
-        "unknown_date",
-        "future_date",
-        "corrupted",
-        "failed",
-    }
-)
+#:
+#: The planned set is read from `sort_plan`, never restated, plus the two
+#: statuses the sort only discovers while running. `suspicious_date` is
+#: deliberately excluded: in `deduplicate_only` a file with no usable date is
+#: not a duplicate, so it stays exactly where it was found.
+_QUARANTINE_STATUSES = (PLANNED_QUARANTINE_STATUSES | {"corrupted", "failed"}) - {"suspicious_date"}
 
 
 class PreviewOutcomeStore:

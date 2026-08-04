@@ -274,3 +274,61 @@ def test_an_excluded_file_is_reported_as_excluded_not_failed(tmp_path: Path) -> 
 
     assert execution.outcomes[0].code == "excluded"
     assert execution.outcomes[0].code != "failed"
+
+
+# --------------------------------------------------------------------------- #
+# Quarantine statuses                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def _quarantine_plan(tmp_path: Path, status: str):
+    """A preview item the *preview* sends to a review folder, frozen into a plan."""
+    source = tmp_path / "input" / "photo.jpg"
+    source.parent.mkdir()
+    source.write_bytes(b"undated media")
+    destination = tmp_path / "output" / "_unknown_dates" / "photo.jpg"
+    config = _config(tmp_path)
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(source),
+                "destination": str(destination),
+                "status": status,
+                "file_size": source.stat().st_size,
+                "companions": [],
+            }
+        ],
+        config,
+    )
+    return source, destination, plan
+
+
+@pytest.mark.parametrize("status", ["unknown_date", "suspicious_date"])
+def test_every_previewed_review_folder_placement_is_planned(tmp_path: Path, status: str) -> None:
+    """A destination the preview showed must be one the executor may act on.
+
+    `suspicious_date` is a file whose EXIF date failed the sanity check and left
+    no usable date, so the preview sends it to `_unknown_dates/` exactly like
+    `unknown_date`. When the plan did not include it, the run reached the
+    whitelist with a placement nobody had authorized, recorded the file as
+    *failed*, and told the user to generate the preview again — which produced
+    the same plan and the same failure every time.
+    """
+    source, destination, plan = _quarantine_plan(tmp_path, status)
+
+    assert plan.impact.quarantine_count == 1
+    assert plan.impact.skip_count == 0
+    assert [action.destination_path for action in plan.actions] == [str(destination)]
+
+    guard = FrozenPlanGuard(plan)
+    assert (
+        guard.authorize(
+            source,
+            destination,
+            kind="quarantine",
+            move=False,
+            unit_id=None,
+            companion_role=None,
+        )
+        is not None
+    )

@@ -25,6 +25,33 @@ PlannedDisposition = Literal[
     "quarantine",
 ]
 
+#: Preview statuses that carry a review-folder destination.
+#:
+#: This is the one list, read rather than restated wherever the question "does
+#: this file go to a review folder?" is asked — `preview_service` derives its
+#: own set from it, and `reviewStatuses.test.ts` pins the frontend to it.
+#: Restating it was how `suspicious_date` came to be previewed into
+#: `_unknown_dates/` while the plan authorized nothing: the run then reached the
+#: whitelist with an unplanned placement, recorded the file as *failed*, and
+#: told the user to generate the preview again — which produced the same plan
+#: and the same failure every time.
+#:
+#: `failed` and `corrupted` are deliberately absent: they are outcomes the sort
+#: discovers while running, never statuses the preview freezes into a plan.
+PLANNED_QUARANTINE_STATUSES = frozenset(
+    {
+        "already_in_destination",
+        "duplicate",
+        "future_date",
+        "junk",
+        # No usable date, and the EXIF that was there failed the sanity check.
+        # The preview sends it to `_unknown_dates/` exactly like `unknown_date`,
+        # so it needs exactly the same planned action.
+        "suspicious_date",
+        "unknown_date",
+    }
+)
+
 
 def source_fingerprint(path: Path) -> str:
     """Versioned non-destructive hint used only to detect preview drift."""
@@ -139,13 +166,7 @@ def build_frozen_sort_plan(
     skipped = 0
     unresolved = 0
     companions_left = 0
-    quarantine_statuses = {
-        "junk",
-        "unknown_date",
-        "future_date",
-        "duplicate",
-        "already_in_destination",
-    }
+    quarantine_statuses = PLANNED_QUARANTINE_STATUSES
     for item in items:
         status = str(item.get("status") or "")
         destination = item.get("destination")

@@ -28,6 +28,37 @@ export type RowStatus =
 
 export type RowFlag = "name_clash" | "duplicate_pending" | "unit_member";
 
+/** What the frozen plan holds for a row: a placement, a review folder, or nothing. */
+export type PlannedAction = "transfer" | "quarantine" | "none";
+
+/**
+ * Preview statuses the backend freezes a *quarantine* action for.
+ *
+ * Mirrors `PLANNED_QUARANTINE_STATUSES` in `backend/app/core/sort_plan.py`;
+ * `reviewStatuses.test.ts` reads the backend's list and pins the two together.
+ */
+export const PLANNED_QUARANTINE_STATUSES: ReadonlySet<PreviewItem["status"]> = new Set([
+  "already_in_destination",
+  "duplicate",
+  "future_date",
+  "junk",
+  "suspicious_date",
+  "unknown_date",
+]);
+
+/**
+ * The plan entry a preview status produces.
+ *
+ * `RowStatus` is the language of the screen and deliberately folds several of
+ * these together — an undated file reads as "organize" because that is what the
+ * user asked for. The preflight arithmetic needs the other question answered,
+ * so it is answered here from the status the backend actually planned against.
+ */
+export function plannedActionOf(status: PreviewItem["status"]): PlannedAction {
+  if (PLANNED_QUARANTINE_STATUSES.has(status)) return "quarantine";
+  return status === "sort" ? "transfer" : "none";
+}
+
 export interface RowStack {
   id: string;
   kind: "exact" | "similar" | "burst";
@@ -52,6 +83,8 @@ export interface ReviewRow {
    * Execute preflight needs to subtract this file from the right total.
    */
   plannedStatus: RowStatus;
+  /** What the frozen plan holds for this row, for the Execute preflight's sums. */
+  plannedAction: PlannedAction;
   flags: RowFlag[];
   sizeBytes: number;
   width: number | null;
@@ -171,6 +204,7 @@ export function toReviewRows(
       destination: item.destination,
       status: isExcluded ? "excluded" : baseline ? "baseline" : base,
       plannedStatus: baseline ? "baseline" : base,
+      plannedAction: plannedActionOf(item.status),
       flags: flagsOf(item, nameCounts),
       sizeBytes: item.file_size ?? 0,
       width: null,
@@ -306,6 +340,25 @@ function matchesFilter(row: ReviewRow, filter: FilterKey): boolean {
   }
 }
 
+/**
+ * The folder segments a destination sits in, without the file name.
+ *
+ * Both the tree and the filter that answers a click on it derive from this one
+ * function. They used not to: the tree split the path into segments while the
+ * filter ran `includes()` over the whole string, so selecting `sorted/2019`
+ * listed `sorted/2019-backup` as well and the node's count no longer described
+ * the list beside it.
+ */
+export function destinationSegments(destination: string): string[] {
+  return destination.replace(/\\/g, "/").split("/").filter(Boolean).slice(0, -1);
+}
+
+function inTreeFolder(destination: string | null, treePath: string): boolean {
+  if (destination === null) return false;
+  const folder = destinationSegments(destination).join("/");
+  return folder === treePath || folder.startsWith(`${treePath}/`);
+}
+
 export interface FilterInput {
   filter: FilterKey;
   search: string;
@@ -318,10 +371,7 @@ export function applyFilters(rows: ReviewRow[], input: FilterInput): ReviewRow[]
   const needle = input.search.trim().toLowerCase();
   return rows.filter((row) => {
     if (!matchesFilter(row, input.filter)) return false;
-    if (input.treePath !== null) {
-      const destination = row.destination ?? "";
-      if (!destination.replace(/\\/g, "/").includes(input.treePath)) return false;
-    }
+    if (input.treePath !== null && !inTreeFolder(row.destination, input.treePath)) return false;
     if (needle !== "") {
       const haystack = `${row.name}\n${row.folder}\n${row.destination ?? ""}`.toLowerCase();
       if (!haystack.includes(needle)) return false;
@@ -362,7 +412,7 @@ export function treeFromRows(rows: ReviewRow[], rootName = "destination"): TreeN
   };
   for (const row of rows) {
     if (row.destination === null) continue;
-    const segments = row.destination.replace(/\\/g, "/").split("/").filter(Boolean).slice(0, -1);
+    const segments = destinationSegments(row.destination);
     root.count += 1;
     let node = root;
     let path = "";
@@ -521,15 +571,18 @@ export interface ExcludedTally {
  * by this before they are shown.
  */
 export function excludedTally(rows: ReviewRow[]): ExcludedTally {
-  const quarantineStatuses = new Set<RowStatus>(["duplicate", "junk", "already_there"]);
   let transfers = 0;
   let quarantine = 0;
   let bytes = 0;
   for (const row of rows) {
-    if (!row.excluded) continue;
+    if (!row.excluded || row.plannedAction === "none") continue;
+    // Only what the plan actually holds an action for. A file the backend froze
+    // nothing for — unreadable, or already left in place — takes nothing off a
+    // total it was never in, and subtracting its bytes would understate the
+    // free space the run still needs.
     bytes += row.sizeBytes;
-    if (quarantineStatuses.has(row.plannedStatus)) quarantine += 1;
-    else if (row.plannedStatus === "organize") transfers += 1;
+    if (row.plannedAction === "quarantine") quarantine += 1;
+    else transfers += 1;
   }
   return { transfers, quarantine, bytes };
 }

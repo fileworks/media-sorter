@@ -370,8 +370,11 @@ class FileSystemService:
         the return type.
         """
         root = Path(directory)
+        # Off the event loop: a source root is routinely a network mount, and a
+        # bare `stat` on an unreachable share blocks for the mount's timeout —
+        # which would stall every other request for as long as it hung.
         try:
-            exists = root.exists()
+            exists = await asyncio.to_thread(root.exists)
         except OSError:
             exists = False
         if not exists:

@@ -252,8 +252,15 @@ describe("applyFilters", () => {
   });
 
   it("filters by a destination-tree path", () => {
-    expect(applyFilters(rows, { filter: "all", search: "", treePath: "2025/07" })).toHaveLength(3);
-    expect(applyFilters(rows, { filter: "all", search: "", treePath: "1999" })).toHaveLength(0);
+    // The paths the tree emits are rooted, so those are the ones asserted here:
+    // a bare "2025/07" is not a node any click can produce.
+    expect(
+      applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2025/07" }),
+    ).toHaveLength(3);
+    expect(applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted" })).toHaveLength(
+      3,
+    );
+    expect(applyFilters(rows, { filter: "all", search: "", treePath: "out/1999" })).toHaveLength(0);
   });
 });
 
@@ -448,5 +455,52 @@ describe("excludedTally", () => {
 
     expect(rows[0].status).toBe("excluded");
     expect(rows[0].plannedStatus).toBe("junk");
+  });
+});
+
+describe("the destination tree and the list it filters", () => {
+  /**
+   * Clicking a folder must show that folder's files and no others. The filter
+   * matched the tree path as a *substring* of the destination, so selecting
+   * `sorted/2019` also listed `sorted/2019-backup`, and — because the match ran
+   * over the whole path including the file name — anything merely containing
+   * the digits. The tree's own count stayed right, so the two disagreed.
+   */
+  const rows = toReviewRows(
+    result(
+      item({ source: "/in/a.jpg", destination: "/out/sorted/2019/a.jpg" }),
+      item({ source: "/in/b.jpg", destination: "/out/sorted/2019-backup/b.jpg" }),
+      item({ source: "/in/c.jpg", destination: "/out/sorted/2019/07/c.jpg" }),
+      item({ source: "/in/d.jpg", destination: "/out/sorted/2020/2019-reunion.jpg" }),
+    ),
+  );
+
+  function nodeCount(path: string): number {
+    const segments = path.split("/");
+    let node = treeFromRows(rows);
+    for (const segment of segments) {
+      const child = node.children.find((candidate) => candidate.name === segment);
+      if (child === undefined) throw new Error(`no tree node at ${path}`);
+      node = child;
+    }
+    return node.count;
+  }
+
+  it("shows exactly what the selected folder's count promised", () => {
+    for (const path of ["out/sorted/2019", "out/sorted/2019-backup", "out/sorted/2020"]) {
+      expect(applyFilters(rows, { filter: "all", search: "", treePath: path })).toHaveLength(
+        nodeCount(path),
+      );
+    }
+  });
+
+  it("does not treat a sibling folder with a shared prefix as a match", () => {
+    const selected = applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2019" });
+    expect(selected.map((row) => row.source).sort()).toEqual(["/in/a.jpg", "/in/c.jpg"]);
+  });
+
+  it("does not match the folder name inside a file name", () => {
+    const selected = applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2020" });
+    expect(selected.map((row) => row.source)).toEqual(["/in/d.jpg"]);
   });
 });

@@ -200,23 +200,31 @@ export function ReviewScreen({
     return set;
   }, [surface.counts.excluded, surface.rows]);
 
-  const unresolvedStacks = useMemo(
-    () =>
-      new Set(surface.rows.filter((row) => row.stack !== null).map((row) => row.stack!.id)).size,
-    [surface.rows],
+  // The set the keep rule acts on, read from the stacks themselves rather than
+  // recounted off the rows. `current_filtered_exact` is every *exact* group the
+  // catalog holds; counting distinct stacks in the preview rows answered a
+  // different question — it dropped groups whose members fall outside this
+  // scan, and included similar and burst stacks the policy cannot touch.
+  const exactStacks = useMemo(
+    () => groups.groups.filter((group) => group.kind === "exact").length,
+    [groups.groups],
   );
 
+  // Depends on the two callbacks, not on `surface`: the hook returns a fresh
+  // object every render, so listing it here tore down and re-registered the
+  // window listener on every keystroke, filter change and hover.
+  const { clearSelection, selectAllVisible } = surface;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") surface.clearSelection();
+      if (event.key === "Escape") clearSelection();
       if (event.key === "a" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        surface.selectAllVisible();
+        selectAllVisible();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [surface]);
+  }, [clearSelection, selectAllVisible]);
 
   // From a stack header, the keeper is pre-selected and the second copy asked
   // for — never an arbitrary partner picked for the user.
@@ -312,7 +320,7 @@ export function ReviewScreen({
             onView={surface.setView}
             keepPolicy={surface.keepPolicy}
             onKeepPolicy={surface.setKeepPolicy}
-            unresolvedStacks={unresolvedStacks}
+            exactStacks={exactStacks}
             onApplyKeepPolicy={() => applyKeepPolicy.mutate()}
             applyPending={applyKeepPolicy.isPending}
           />

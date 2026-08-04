@@ -21,7 +21,7 @@ interface ReviewToolbarProps {
   keepPolicy: KeeperPolicyId;
   onKeepPolicy: (policy: KeeperPolicyId) => void;
   /** How many stacks the keep rule would change, for the preview before applying. */
-  unresolvedStacks: number;
+  exactStacks: number;
   onApplyKeepPolicy: () => void;
   applyPending: boolean;
 }
@@ -37,7 +37,7 @@ export function ReviewToolbar({
   onView,
   keepPolicy,
   onKeepPolicy,
-  unresolvedStacks,
+  exactStacks,
   onApplyKeepPolicy,
   applyPending,
 }: ReviewToolbarProps) {
@@ -149,20 +149,20 @@ export function ReviewToolbar({
           <span className="flex-1" />
           <Tooltip
             label={
-              unresolvedStacks === 0
+              exactStacks === 0
                 ? t("review.keepRule.nothingToApply")
-                : t("review.keepRule.willChange", { count: unresolvedStacks })
+                : t("review.keepRule.willChange", { count: exactStacks })
             }
           >
             <button
               type="button"
-              disabled={unresolvedStacks === 0 || applyPending}
+              disabled={exactStacks === 0 || applyPending}
               onClick={onApplyKeepPolicy}
               className="rounded-lg border border-border px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               {applyPending
                 ? t("review.keepRule.applying")
-                : t("review.keepRule.apply", { count: unresolvedStacks })}
+                : t("review.keepRule.apply", { count: exactStacks })}
             </button>
           </Tooltip>
         </div>

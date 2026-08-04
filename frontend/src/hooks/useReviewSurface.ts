@@ -83,14 +83,24 @@ export function useReviewSurface(
 
   // A new plan seeds its exclusions; an existing set survives a re-preview,
   // keyed by source path, with vanished paths dropped and reported once.
+  //
+  // The reconciliation is computed in the effect body rather than inside the
+  // updater: an updater must be pure, and React may run it more than once for
+  // one commit — which would report the same dropped exclusions twice.
   useEffect(() => {
-    setExcluded((current) => {
-      if (current === null) return seedExclusions(baseRows);
-      const { kept, dropped } = reconcileExclusions(baseRows, current);
-      if (dropped > 0) setDroppedExclusions(dropped);
-      return kept;
-    });
+    setExcluded((current) => (current === null ? seedExclusions(baseRows) : current));
   }, [baseRows]);
+
+  // Runs again whenever the set changes, which costs one pass over the rows per
+  // exclude/include; every source just added is present by construction, so it
+  // finds nothing to drop and settles immediately.
+  useEffect(() => {
+    if (excluded === null) return;
+    const { kept, dropped } = reconcileExclusions(baseRows, excluded);
+    if (dropped === 0) return;
+    setExcluded(kept);
+    setDroppedExclusions(dropped);
+  }, [baseRows, excluded]);
 
   // Memoised: a fresh Set on every render would make every derived value below
   // recompute on every render, over a list that can hold tens of thousands.
