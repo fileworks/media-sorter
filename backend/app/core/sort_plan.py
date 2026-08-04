@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
+from app.core.exceptions import PlanAuthorizationError
 from app.core.integrity import MutationActionKind, SourceEffect
 from app.core.provenance import OutcomeProvenance
 
@@ -221,17 +222,27 @@ def build_frozen_sort_plan(
             if not companion_source or not companion_destination:
                 continue
             source_path = Path(str(companion_source))
+            try:
+                companion_size = source_path.stat().st_size
+                companion_fingerprint = source_fingerprint(source_path)
+            except OSError:
+                # A scan and a preview are not the same instant. A sidecar that
+                # went in between is one companion the run cannot place, not a
+                # reason to lose the whole preview — and freezing an action for
+                # a file that is gone would only fail later, at the transfer.
+                companions_left += 1
+                continue
             actions.append(
                 FrozenSortAction(
                     source_path=str(source_path),
-                    source_fingerprint=source_fingerprint(source_path),
+                    source_fingerprint=companion_fingerprint,
                     destination_path=str(companion_destination),
                     reviewed_destination_path=str(companion_destination),
                     kind="copy" if config.copy_instead_of_move else "move",
                     source_effect=(
                         "retained" if config.copy_instead_of_move else "remove_after_verification"
                     ),
-                    expected_size_bytes=source_path.stat().st_size,
+                    expected_size_bytes=companion_size,
                     disposition="sort",
                     unit_id=item.get("unit_id"),
                     companion_role=companion.get("role"),
@@ -322,13 +333,24 @@ class FrozenPlanGuard:
         )
         planned = self._remaining.get(candidate.identity)
         if planned is None:
-            raise ValueError(
-                "The executable action differs from the reviewed plan; generate preview again."
+            raise PlanAuthorizationError(
+                "The executable action differs from the reviewed plan; generate preview again.",
+                reason="unplanned_action",
+                source_path=str(source),
+                destination_path=str(destination),
             )
         if planned.source_fingerprint != candidate.source_fingerprint:
-            raise ValueError("A planned source changed after preview; generate preview again.")
+            raise PlanAuthorizationError(
+                "A planned source changed after preview; generate preview again.",
+                reason="source_changed",
+                source_path=str(source),
+            )
         if planned.expected_size_bytes != candidate.expected_size_bytes:
-            raise ValueError("A planned source changed size after preview; generate preview again.")
+            raise PlanAuthorizationError(
+                "A planned source changed size after preview; generate preview again.",
+                reason="source_resized",
+                source_path=str(source),
+            )
         self._remaining.pop(candidate.identity)
         return planned
 
@@ -352,8 +374,11 @@ class FrozenPlanGuard:
             None,
         )
         if planned is None or planned.reviewed_destination_path != str(destination):
-            raise ValueError(
-                "The final destination differs from the reviewed plan; generate preview again."
+            raise PlanAuthorizationError(
+                "The final destination differs from the reviewed plan; generate preview again.",
+                reason="destination_changed",
+                source_path=str(source),
+                destination_path=str(destination),
             )
 
     @property

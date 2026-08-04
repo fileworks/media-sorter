@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
+from app.core.exceptions import PlanAuthorizationError
 from app.core.integrity import (
     MutationActionKind,
     OperationOutcomeCode,
@@ -152,6 +153,11 @@ def _relative_to(path: Path, root: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return path.name
+
+
+def _digest(path: Path) -> str:
+    """Short stable identifier for a path, for action ids that have no manifest."""
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
 
 
 def _result_sha256(result: TransferResult) -> str | None:
@@ -1134,6 +1140,27 @@ class SortingService:
 
         except DuplicateCheckCancelled:
             record["status"] = "cancelled"
+            return record
+        except PlanAuthorizationError as exc:
+            # Not a problem with this file: the plan and the executor disagree
+            # about what was reviewed. Filing it as `failed` put it beside
+            # genuinely unreadable media, under advice — "generate preview
+            # again" — that rebuilds the same plan and fails identically.
+            reason = str(exc.details.get("reason") or "unplanned_action")
+            logger.error(
+                "Placement is not in the reviewed plan", path=str(file_path), reason=reason
+            )
+            if execution is not None:
+                execution.emit(
+                    "integrity.violation", phase="sorting", reason=reason, path=str(file_path)
+                )
+                execution.record_failure(
+                    action_id=f"unplanned_{_digest(file_path)}",
+                    source_path=file_path,
+                    code="blocked",
+                    diagnostic_code=reason,
+                )
+            record.update(status="blocked", error_message=str(exc))
             return record
         except Exception as exc:
             logger.error("Failed to process file", path=str(file_path), error=str(exc))

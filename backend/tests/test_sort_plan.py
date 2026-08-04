@@ -8,7 +8,11 @@ import pytest
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.integrity_policy import authorize_config_mutations
-from app.core.sort_plan import FrozenPlanGuard, build_frozen_sort_plan
+from app.core.sort_plan import (
+    PLANNED_QUARANTINE_STATUSES,
+    FrozenPlanGuard,
+    build_frozen_sort_plan,
+)
 from app.services.operation_execution import OperationExecution
 
 
@@ -397,4 +401,110 @@ def test_actionable_groups_counts_a_unit_once_not_once_per_companion(tmp_path: P
     )
 
     assert len(plan.actions) == 2
+    assert plan.impact.actionable_groups == 1
+
+
+# --------------------------------------------------------------------------- #
+# Freeze → authorize round trip                                                 #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("copy_mode", [True, False])
+@pytest.mark.parametrize("status", ["sort", *sorted(PLANNED_QUARANTINE_STATUSES)])
+def test_every_planned_status_round_trips_from_freeze_to_authorization(
+    tmp_path: Path,
+    status: str,
+    copy_mode: bool,
+) -> None:
+    """What the preview froze is what the executor is allowed to do.
+
+    The action identity is a hash over source, destination, kind, source effect,
+    unit and companion role. Any drift between the two sides becomes a refused
+    placement, which the run then reports against the file — so the round trip
+    is asserted for every status the preview can freeze, under both transfer
+    modes, rather than for the one case that happened to be covered.
+    """
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    source = source_dir / "photo.jpg"
+    source.write_bytes(b"media bytes")
+    quarantined = status != "sort"
+    destination = (
+        tmp_path / "output" / "_unknown_dates" / "photo.jpg"
+        if quarantined
+        else tmp_path / "output" / "2024" / "photo.jpg"
+    )
+    config = Config(
+        source_directory=str(source_dir),
+        target_directory=str(tmp_path / "output"),
+        copy_instead_of_move=copy_mode,
+    )
+
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(source),
+                "destination": str(destination),
+                "status": status,
+                "file_size": source.stat().st_size,
+                "companions": [],
+            }
+        ],
+        config,
+    )
+
+    assert len(plan.actions) == 1, f"{status} froze no action"
+    action = plan.actions[0]
+    assert action.kind == ("quarantine" if quarantined else ("copy" if copy_mode else "move"))
+
+    guard = FrozenPlanGuard(plan)
+    authorized = guard.authorize(
+        source,
+        Path(action.destination_path),
+        kind=action.kind,
+        move=not copy_mode,
+        unit_id=action.unit_id,
+        companion_role=action.companion_role,
+    )
+    assert authorized is not None
+    assert guard.remaining == ()
+
+
+def test_a_companion_that_vanished_before_freezing_does_not_break_the_plan(
+    tmp_path: Path,
+) -> None:
+    """A scan and a preview are not the same instant.
+
+    The companion's size was read with a bare `stat()`, so a sidecar deleted
+    between the two raised `OSError` out of plan construction and lost the whole
+    preview rather than the one file that had gone.
+    """
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    jpeg = source_dir / "shot.jpg"
+    jpeg.write_bytes(b"jpeg bytes")
+    missing_raw = source_dir / "shot.raw"  # never created
+
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(jpeg),
+                "destination": str(tmp_path / "output" / "2024" / "shot.jpg"),
+                "status": "sort",
+                "file_size": jpeg.stat().st_size,
+                "unit_id": "unit-1",
+                "companions": [
+                    {
+                        "source": str(missing_raw),
+                        "destination": str(tmp_path / "output" / "2024" / "shot.raw"),
+                        "role": "raw_sibling",
+                        "status": "attached",
+                    }
+                ],
+            }
+        ],
+        _config(tmp_path),
+    )
+
+    assert [action.source_path for action in plan.actions] == [str(jpeg)]
     assert plan.impact.actionable_groups == 1

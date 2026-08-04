@@ -81,6 +81,22 @@ class MutationPolicyError(MediaSortException):
         super().__init__(message, "MUTATION_NOT_AUTHORIZED", 422, details)
 
 
+class PlanAuthorizationError(MediaSortException, ValueError):
+    """The executor asked for a placement the reviewed plan does not contain.
+
+    This is a disagreement between the plan and the executor, never a problem
+    with the file. Keeping it distinct stops the run from filing it as one more
+    unreadable photo and telling the user to generate the preview again — which
+    rebuilds the same plan and fails the same way.
+
+    Also a ``ValueError`` so the guard's long-standing contract still holds for
+    callers that catch it that way.
+    """
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message, "PLAN_NOT_AUTHORIZED", 409, details)
+
+
 class IntegrityTransferError(MediaSortException):
     """A staged transfer could not prove the active manifest contract."""
 

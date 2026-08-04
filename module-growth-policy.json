@@ -27,8 +27,8 @@
     {
       "owner": "verified-sort-orchestration",
       "path": "backend/app/services/sorting_service.py",
-      "rationale": "The service coordinates one verified sorting transaction; transfer, duplicate, conversion, repair, and persistence implementations already live behind injected services. Splitting the transaction coordinator would duplicate rollback and outcome state.",
-      "warning_lines": 1500
+      "rationale": "The service coordinates one verified sorting transaction; transfer, duplicate, conversion, repair, and persistence implementations already live behind injected services. Splitting the transaction coordinator would duplicate rollback and outcome state. Reviewed again when a distinct plan-authorization failure path was added: that path belongs to the same transaction's outcome handling, not to a new responsibility, so the point moves rather than the module splitting.",
+      "warning_lines": 1600
     }
   ],
   "schema_version": 1,
