@@ -35,6 +35,12 @@ const REMOVED_NAMESPACES = [
   "bursts.",
   "catalog.",
   "validation.",
+  // Review's four tabs, its junk and warnings panels, and its shortcut sheet.
+  // The rework replaced all of them with one item surface.
+  "view.",
+  "review.junk.",
+  "review.warnings.",
+  "review.shortcut",
 ];
 
 const PRODUCT_SOURCES = Object.entries(RAW_SOURCES).filter(
