@@ -74,7 +74,6 @@ export interface Config {
   categorize_categories_provenance: "bundled" | "custom";
   categorize_confidence_threshold: number;
   categorize_min_margin: number;
-  analyze: boolean;
   exclude_patterns: string[];
   min_file_size_kb: number | null;
   max_file_size_mb: number | null;

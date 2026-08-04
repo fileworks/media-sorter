@@ -372,3 +372,24 @@ def test_config_sections_have_unique_ids_and_copy() -> None:
     ids = [s.id for s in SECTIONS]
     assert len(ids) == len(set(ids))
     assert all(s.label and s.description for s in SECTIONS)
+
+
+def test_a_retired_field_neither_loads_nor_rejects_an_update() -> None:
+    """`analyze` was persisted since the first release and read by nothing.
+
+    Removing a field has to be safe in both directions: a stored config still
+    carrying it must load, and a client that has not caught up must not have its
+    whole update rejected because of it.
+    """
+    from app.core.config import coerce_config_update
+
+    loaded = Config.from_dict({"analyze": True, "rename": True})
+    assert loaded.rename is True
+    assert not hasattr(loaded, "analyze")
+
+    coerced, errors = coerce_config_update({"analyze": True, "rename": True})
+    assert errors == []
+    assert coerced == {"rename": True}
+
+    _unknown, real_errors = coerce_config_update({"definitely_not_a_field": 1})
+    assert real_errors  # a genuine typo is still reported

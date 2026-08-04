@@ -241,7 +241,6 @@ class Config:
     categorize_min_margin: float = 0.15  # required top1 - top2 separation
 
     # Analysis
-    analyze: bool = False
 
     # Folder exclusion (glob patterns relative to source root)
     exclude_patterns: list[str] = field(
@@ -564,6 +563,11 @@ def coerce_config_update(body: dict[str, Any]) -> tuple[dict[str, Any], list[str
             continue
         if key == "ai_tagging_embed_in_files":
             key = "embed_tags_in_files"
+        if key in RETIRED_CONFIG_KEYS:
+            # A client that still sends a retired field is out of date, not
+            # wrong. `from_dict` already drops these when loading a stored
+            # config; this keeps an update carrying one from failing outright.
+            continue
         if key not in hints:
             errors.append(f"Unknown config field: {key!r}")
             continue
@@ -643,6 +647,18 @@ def validate_rename_pattern(pattern: str) -> str | None:
         return "Unknown tokens in rename pattern: " + ", ".join(unknown)
     return None
 
+
+#: Fields that were removed. A stored config carrying one loads fine —
+#: `from_dict` drops unknown keys — and an update carrying one is ignored rather
+#: than rejected, so a client that has not caught up still works.
+RETIRED_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        # Persisted since the first release and read by nothing.
+        "analyze",
+        # Duplicates are always quarantined, never deleted.
+        "duplicate_action",
+    }
+)
 
 CURRENT_CONFIG_SCHEMA = 3
 CONFIG_SCHEMA_PREFIX = "mediasort-config-v"

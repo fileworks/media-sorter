@@ -163,7 +163,6 @@ SECTIONS: tuple[ConfigSection, ...] = (
 # flags without a dedicated control. Listed so the alignment test stays honest.
 UNGROUPED_FIELDS: frozenset[str] = frozenset(
     {
-        "analyze",
         "exif_sanity_check_enabled",
         # Advanced override without a dedicated control; the default (inside
         # the destination) is right for almost everyone.
