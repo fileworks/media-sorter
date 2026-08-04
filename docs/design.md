@@ -19,12 +19,14 @@ Python backend on it, and tells the React frontend where to find it via
 `invoke("get_api_port")`. The UI then talks to the backend over plain HTTP plus a
 WebSocket for the live log stream. No port is ever hardcoded.
 
-The interface has one navigation model: **Sources → Review → Execute**.
-Sources owns typed roots, recipes, configuration, and the non-mutating scan.
-Review owns overview, organization, exact duplicates, similar media,
-validation, and issues. Execute owns the frozen impact summary, deliberate
-confirmation, live operation state, and report. The operation center remains
-reachable across all three stages.
+The interface has one navigation model: **Sources → Configure → Review →
+Execute** (`Stage` in `frontend/src/lib/stageModel.ts` is the list).
+Sources owns typed roots, recipes, and the non-mutating scan. Configure owns
+the settings groups and the folder-tree preview. Review is **one surface**, not
+a set of tabs: a destination tree, filter chips, and a single item list, all
+derived from the same rows so two numbers on it cannot disagree. Execute owns
+the frozen impact summary, deliberate confirmation, live operation state, and
+report. The operation center remains reachable across all four stages.
 
 Stage readiness and back-navigation invalidation are derived from the typed
 model in `frontend/src/lib/stageModel.ts`; panels do not invent their own entry

@@ -1,8 +1,10 @@
 # Read-only library audits
 
-MediaSorter can audit an already organized destination independently of a sort. Open
-**Review → Validation**, choose a full audit or a deterministic sample, and run the
-library integrity audit. Headless installations can use:
+MediaSorter can audit an already organized destination independently of a sort.
+
+**There is no longer a screen for this.** The Review rework replaced the
+validation tab with the single item surface, so the audit is reached through the
+CLI or the `/api/audit` routes, which are unchanged:
 
 ```console
 mediasort audit /path/to/organized-library

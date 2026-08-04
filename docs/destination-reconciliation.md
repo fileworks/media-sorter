@@ -1,5 +1,10 @@
 # Destination reconciliation
 
+**Backend only.** The Review rework removed the surface that drove this, and no
+CLI command replaced it, so `/api/destination-reconciliation` is currently
+reachable only by calling it directly. The behaviour below is what those routes
+still do; nothing in the shipped interface invokes them.
+
 Reconciliation compares configured inputs directionally against the organized
 destination. It does not merge two libraries and never treats destination-only
 content as unwanted.

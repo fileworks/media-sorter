@@ -31,7 +31,7 @@ CLIP (fastembed) / SigLIP 2 (onnxruntime), tier-gated by a hardware probe.
 - **State/data:** TanStack Query for all server state; hooks in `frontend/src/hooks/` own fetch + polling; the API client is `frontend/src/services/api.ts` (types live there, re-exported from `frontend/src/types/api.ts`).
 - **Errors/loading:** surface via `frontend/src/lib/errorUtils.ts` + the toast context + per-step error/retry props; never show a raw stack trace. Two `ErrorBoundary`s (root in `main.tsx`, app-level in `App.tsx`). A static startup splash lives in `frontend/index.html` so there's no blank screen before React mounts.
 - **Styling:** Tailwind + the semantic HSL tokens in `frontend/src/index.css` (`success`/`warning`/`error`/`info`, orange brand `primary`); prefer tokens over raw colors.
-- **Quality gate:** `npm run lint` (ESLint, **`--max-warnings 0`**), `npm test` (Vitest, node env — pure logic only), `npm run build` (tsc + vite). `@typescript-eslint/no-use-before-define` is on to catch temporal-dead-zone bugs — declare helpers before the hooks/initialisers that use them.
+- **Quality gate:** `npm run lint` (ESLint, **`--max-warnings 0`**), `npm test` (Vitest — node env by default for pure logic; component tests opt into jsdom with a `// @vitest-environment jsdom` docblock), `npm run build` (tsc + vite). `@typescript-eslint/no-use-before-define` is on to catch temporal-dead-zone bugs — declare helpers before the hooks/initialisers that use them.
 
 ---
 
