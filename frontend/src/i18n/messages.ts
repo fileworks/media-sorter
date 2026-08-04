@@ -32,6 +32,10 @@ export const en = {
   "review.stacksFailed": "The duplicate sets could not be loaded.",
   "review.stacksFailedHelp": "Everything else on this screen is still accurate.",
   "review.filter.hasDecisions": "Contains decisions you have made",
+  // The chip names itself: without this the tooltip supplies the accessible
+  // name, so the visible "Junk 2" was announced as its help text instead —
+  // WCAG 2.5.3 wants the visible label inside the accessible one.
+  "review.filter.chipLabel": "{label}, {count} files",
   "review.view.grid": "Grid view",
   "review.keepRule.scope": "Applies to this run only; it does not change your settings.",
   "review.keepRule.apply": "Apply to {count} sets",
@@ -1549,6 +1553,7 @@ export const de: Record<MessageKey, string> = {
   "review.stacksFailed": "Die Duplikat-Gruppen konnten nicht geladen werden.",
   "review.stacksFailedHelp": "Alles andere auf diesem Bildschirm stimmt weiterhin.",
   "review.filter.hasDecisions": "Enthält von dir getroffene Entscheidungen",
+  "review.filter.chipLabel": "{label}, {count} Dateien",
   "review.view.grid": "Rasteransicht",
   "review.keepRule.scope":
     "Gilt nur für diesen Durchlauf; deine Einstellungen bleiben unverändert.",

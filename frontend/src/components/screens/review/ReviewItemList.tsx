@@ -318,15 +318,16 @@ function ListRow({
         checked={selected}
         disabled={locked}
         aria-label={row.name}
+        // Shift is read off the change event's own click, and the box is left
+        // to toggle normally. A second `onClick` handler used to call
+        // `preventDefault()` here, which reverted the DOM checkbox after
+        // React's value tracker had already recorded the toggle — so React
+        // skipped the re-render write and the row you shift-clicked showed
+        // *unchecked* while being fully selected, and every bulk action then
+        // acted on a file the list said was not selected.
         onChange={(event) =>
           onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
         }
-        onClick={(event) => {
-          if (event.shiftKey) {
-            event.preventDefault();
-            onToggle(true);
-          }
-        }}
         className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
       />
 

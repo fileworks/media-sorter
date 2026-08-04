@@ -59,6 +59,13 @@ export function ReviewToolbar({
                   <button
                     type="button"
                     aria-pressed={active}
+                    // Named explicitly so `Tooltip` does not supply the help
+                    // text as the accessible name: the chip reads "Junk 2" and
+                    // has to be announced and voice-addressable as that.
+                    aria-label={t("review.filter.chipLabel", {
+                      label: t(`review.filter.${key}`),
+                      count,
+                    })}
                     onClick={() => onFilter(key)}
                     className={cn(
                       "rounded-lg px-3 py-1.5 text-xs transition-colors",
