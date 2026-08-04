@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ from app.services.discovery import (
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("r1", tmp_path / "library")
         yield opened

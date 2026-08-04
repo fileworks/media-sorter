@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.core.bootstrap import AppFactory
 from app.core.config import Config
+from app.core.database import DatabaseManager
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +67,7 @@ def test_list_reports_respects_pagination(client: TestClient) -> None:
 
 
 def test_get_report_returns_200_for_existing_operation(
-    client: TestClient, db_with_operation
+    client: TestClient, db_with_operation: tuple[str, DatabaseManager]
 ) -> None:
     operation_id, _ = db_with_operation
 
@@ -118,7 +119,9 @@ def test_get_report_returns_404_for_unknown_id(client: TestClient) -> None:
 # ------------------------------------------------------------------ #
 
 
-def test_export_json_returns_streaming_response(client: TestClient, db_with_operation) -> None:
+def test_export_json_returns_streaming_response(
+    client: TestClient, db_with_operation: tuple[str, DatabaseManager]
+) -> None:
     operation_id, _ = db_with_operation
     export_data = json.dumps({"operation_id": operation_id, "files": []})
 
@@ -137,7 +140,9 @@ def test_export_json_returns_streaming_response(client: TestClient, db_with_oper
     assert "application/json" in response.headers.get("content-type", "")
 
 
-def test_export_csv_returns_streaming_response(client: TestClient, db_with_operation) -> None:
+def test_export_csv_returns_streaming_response(
+    client: TestClient, db_with_operation: tuple[str, DatabaseManager]
+) -> None:
     operation_id, _ = db_with_operation
     csv_data = "source_path,dest_path,status\n/source,/dest,success\n"
 
@@ -172,7 +177,9 @@ def test_export_returns_404_for_unknown_id(client: TestClient) -> None:
     assert data["code"] == "OPERATION_NOT_FOUND"
 
 
-def test_export_content_disposition_header(client: TestClient, db_with_operation) -> None:
+def test_export_content_disposition_header(
+    client: TestClient, db_with_operation: tuple[str, DatabaseManager]
+) -> None:
     operation_id, _ = db_with_operation
     filename = f"report_{operation_id}.json"
 
@@ -189,7 +196,9 @@ def test_export_content_disposition_header(client: TestClient, db_with_operation
     assert filename in disposition
 
 
-def test_export_exposes_content_disposition_header(client: TestClient, db_with_operation) -> None:
+def test_export_exposes_content_disposition_header(
+    client: TestClient, db_with_operation: tuple[str, DatabaseManager]
+) -> None:
     operation_id, _ = db_with_operation
     with patch(
         "app.services.report_service.ReportService.export",

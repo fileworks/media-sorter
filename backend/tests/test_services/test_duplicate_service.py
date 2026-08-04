@@ -4,6 +4,7 @@ import random
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -266,7 +267,7 @@ def _make_content_image(path: Path, size: int = 256) -> None:
     img.save(str(path), format="JPEG", quality=95)
 
 
-def _make_solid_image(path: Path, color: tuple, size: int = 64) -> None:
+def _make_solid_image(path: Path, color: tuple[Any, ...], size: int = 64) -> None:
     """Save a solid-colour JPEG to *path*."""
     PIL_Image = pytest.importorskip("PIL.Image")
     img = PIL_Image.new("RGB", (size, size), color=color)

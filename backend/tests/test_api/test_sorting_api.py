@@ -66,7 +66,7 @@ def test_changed_config_invalidates_reviewed_preview(client: TestClient) -> None
         client.post("/api/config", json={"sort": original_sort})
 
 
-def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path) -> None:
+def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path: Path) -> None:
     source = tmp_path / "source"
     destination = tmp_path / "destination"
     source.mkdir()

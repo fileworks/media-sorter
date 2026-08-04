@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterator
 
 import pytest
 
@@ -191,7 +192,7 @@ class TestBatching:
     def test_batching_never_materializes_the_whole_stream(self) -> None:
         seen = 0
 
-        def counting() -> object:
+        def counting() -> Iterator[object]:
             nonlocal seen
             for value in range(1_000_000):
                 seen += 1

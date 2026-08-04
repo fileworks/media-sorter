@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -20,7 +21,7 @@ _TASK_ROUTES = {
 }
 
 
-def _wait_terminal(client: TestClient, path: str) -> dict:
+def _wait_terminal(client: TestClient, path: str) -> dict[str, Any]:
     deadline = time.time() + 5
     payload = client.get(path).json()
     while payload["status"] in {"pending", "running"} and time.time() < deadline:
@@ -29,7 +30,7 @@ def _wait_terminal(client: TestClient, path: str) -> dict:
     return payload
 
 
-def _start_operation(client: TestClient, kind: str, key: str) -> dict:
+def _start_operation(client: TestClient, kind: str, key: str) -> dict[str, Any]:
     start_path, status_base = _TASK_ROUTES[kind]
     body = {"idempotency_key": key}
     if kind == "sort":

@@ -7,6 +7,8 @@ being down. These tests pin the header and the envelope on both paths.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -32,7 +34,7 @@ def boom_client(boom_app: FastAPI) -> TestClient:
     return TestClient(boom_app)
 
 
-def _envelope(response) -> dict:  # type: ignore[no-untyped-def]
+def _envelope(response) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     payload = response.json()
     assert "error" in payload, payload
     assert "code" in payload, payload

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from app.services.catalog_location import (
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("r1", tmp_path / "library")
         yield opened

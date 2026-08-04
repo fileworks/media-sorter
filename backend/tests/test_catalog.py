@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -26,7 +27,7 @@ from app.services.catalog import MediaCatalog, ObservedFile, bounded_sample_sha2
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         yield opened
 

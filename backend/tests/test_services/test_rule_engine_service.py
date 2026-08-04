@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,7 +11,7 @@ from app.core.config import Config
 from app.services.rule_engine_service import RuleEngineService
 
 
-def _engine(rules: list, rules_enabled: bool = True) -> RuleEngineService:
+def _engine(rules: list[Any], rules_enabled: bool = True) -> RuleEngineService:
     cfg = Config(rules_enabled=rules_enabled, rules=rules)
     return RuleEngineService(config=cfg)
 

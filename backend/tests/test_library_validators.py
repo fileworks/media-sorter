@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -27,7 +28,7 @@ def library(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path, library: Path) -> MediaCatalog:
+def catalog(tmp_path: Path, library: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("r1", library, role="input")
         discover_into_catalog(opened, "r1", library)

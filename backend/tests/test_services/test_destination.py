@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from app.core.config import Config
 from app.services.destination import build_dest_dir, predicted_filename, rename_stem
 
 
 def _cfg(**overrides: object) -> Config:
-    defaults: dict = {
+    defaults: dict[str, Any] = {
         "source_directory": "/src",
         "target_directory": "/dst",
         "sort_criteria": ["year", "month", "day"],

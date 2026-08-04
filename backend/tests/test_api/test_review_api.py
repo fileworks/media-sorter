@@ -3,6 +3,7 @@ handcrafted request that never went near the interface."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,7 @@ def _member(member_id: str, *, role: str = "input", size: int = 100) -> GroupMem
 
 
 @pytest.fixture()
-def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ReviewPlan:
+def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[ReviewPlan]:
     """A plan with one group, wired in so the routes do not need a real catalog."""
     monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path / "plans")
     # The routes now resolve a plan against the live catalog generation, and the

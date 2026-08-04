@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +13,9 @@ from support import authorize_mutations
 
 from app.background_tasks.task_manager import Task
 from app.core.config import Config
+from app.core.database import DatabaseManager
 from app.core.integrity import PreservationProfile
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
 from app.services.duplicate_service import DuplicateMatch, DuplicateRegistry, DuplicateService
@@ -30,7 +32,7 @@ from app.services.sorting_service import SortingService
 
 def _make_service(tmp_path: Path, **config_overrides: Any) -> SortingService:
     """Build a SortingService wired to real sub-services with temp directories."""
-    defaults: dict = {
+    defaults: dict[str, Any] = {
         "source_directory": str(tmp_path / "source"),
         "target_directory": str(tmp_path / "target"),
         "sort": True,
@@ -200,7 +202,7 @@ async def test_process_file_records_and_routes_category(tmp_path: Path) -> None:
     PIL_Image = pytest.importorskip("PIL.Image")
 
     svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
-    svc._classifier = _FakeClassifier("food")
+    svc._classifier = cast("CategoryClassifierService", _FakeClassifier("food"))
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
     source_root.mkdir(parents=True)
@@ -1057,7 +1059,7 @@ async def test_run_cancel_stops_processing(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_persists_to_db(tmp_path: Path, in_memory_db) -> None:
+async def test_run_persists_to_db(tmp_path: Path, in_memory_db: DatabaseManager) -> None:
     """run() with a real DB should persist one operation row (line 147-153)."""
     PIL_Image = pytest.importorskip("PIL.Image")
     piexif = pytest.importorskip("piexif")
@@ -1098,7 +1100,9 @@ async def test_run_persists_to_db(tmp_path: Path, in_memory_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_cancelled_still_persists_partial_operation(tmp_path: Path, in_memory_db) -> None:
+async def test_run_cancelled_still_persists_partial_operation(
+    tmp_path: Path, in_memory_db: DatabaseManager
+) -> None:
     """A cancelled (non-dry) run must still record its operation in the DB (P2-2).
 
     With cooperative cancellation the run loop breaks on the cancel event and
@@ -1384,7 +1388,9 @@ async def test_run_failed_file_does_not_abort_batch(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_persists_non_null_config_hash(tmp_path: Path, in_memory_db) -> None:
+async def test_run_persists_non_null_config_hash(
+    tmp_path: Path, in_memory_db: DatabaseManager
+) -> None:
     """After a real (non-dry-run) sort, the operation row has a non-null config_hash."""
     PIL_Image = pytest.importorskip("PIL.Image")
     piexif = pytest.importorskip("piexif")

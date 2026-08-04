@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +23,7 @@ def client():
         yield c
 
 
-def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0) -> dict:
+def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0) -> dict[str, Any]:
     """Poll /api/sorting/{task_id} until status is terminal; return final progress dict."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -35,7 +36,7 @@ def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0
     pytest.fail(f"Task {task_id} did not complete within {timeout}s")
 
 
-def _create_dated_images(source: Path, dates_and_files: list) -> None:
+def _create_dated_images(source: Path, dates_and_files: list[Any]) -> None:
     """Create distinct JPEGs with the given EXIF dates in source."""
     piexif = pytest.importorskip("piexif")
     PIL_Image = pytest.importorskip("PIL.Image")

@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -249,7 +250,7 @@ def test_extract_heic_exif_date(tmp_path: Path, svc: DateExtractionService) -> N
     img = PIL_Image.new("RGB", (8, 8), color=(0, 128, 255))
 
     # Construct EXIF bytes with DateTimeOriginal
-    exif_dict: dict = {"Exif": {piexif.ExifIFD.DateTimeOriginal: b"2023:08:20 10:30:00"}}
+    exif_dict: dict[str, Any] = {"Exif": {piexif.ExifIFD.DateTimeOriginal: b"2023:08:20 10:30:00"}}
     exif_bytes = piexif.dump(exif_dict)
 
     try:

@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.core.config import Config
 from app.core.integrity import PreservationProfile
 from app.services.ai.category_classifier_service import CategoryResult
@@ -120,7 +122,7 @@ def test_rejected_date_candidates_are_capped() -> None:
 
 def test_absent_sentinel_and_filename_winner_have_distinct_explanations(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = DateExtractionService()
     filesystem_only = tmp_path / "plain.jpg"

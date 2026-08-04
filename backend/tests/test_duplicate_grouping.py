@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,7 +14,7 @@ from app.services.duplicate_grouping import burst_groups, exact_groups, similar_
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("input", tmp_path / "input", role="input")
         opened.register_root("dest", tmp_path / "dest", role="destination")
@@ -28,7 +30,7 @@ def add(
     sha256: str | None = None,
     signature: str | None = None,
     size: int = 100,
-    facts: dict | None = None,
+    facts: dict[str, Any] | None = None,
 ):
     generation = catalog.begin_generation(root_id)
     [record] = catalog.observe(

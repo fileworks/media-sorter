@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from app.core.config import Config
@@ -99,7 +100,7 @@ def test_cancellation_retains_partial_report(tmp_path: Path) -> None:
 
 def test_audit_fixture_matrix_classifies_unreadable_and_misplaced(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = tmp_path / "library"
     current_year = str(datetime.now().year)

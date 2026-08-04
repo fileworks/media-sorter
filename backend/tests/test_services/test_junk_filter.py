@@ -1,6 +1,7 @@
 """Tests for the junk / thumbnail filter (P0-2)."""
 
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -9,7 +10,7 @@ from app.services.junk_filter import classify_junk
 
 
 def _config(**overrides: object) -> Config:
-    base: dict = {"junk_filter_enabled": True}
+    base: dict[str, Any] = {"junk_filter_enabled": True}
     base.update(overrides)
     return Config(**base)
 

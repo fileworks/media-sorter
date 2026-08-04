@@ -1,6 +1,7 @@
 """Integration tests for the media (thumbnail) API route."""
 
 import io
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -12,7 +13,7 @@ from app.core.config import Config
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory) -> TestClient:
+def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
     base = tmp_path_factory.mktemp("media")
     config = Config(source_directory=str(base), target_directory=str(base / "dest"))
     app = AppFactory.create(config=config)
@@ -23,7 +24,7 @@ def _write_jpeg(path) -> None:
     Image.new("RGB", (320, 240), (200, 120, 40)).save(path, format="JPEG")
 
 
-def test_thumbnail_returns_downscaled_jpeg(client: TestClient, tmp_path) -> None:
+def test_thumbnail_returns_downscaled_jpeg(client: TestClient, tmp_path: Path) -> None:
     img = tmp_path / "photo.jpg"
     _write_jpeg(img)
     response = client.get("/api/thumbnail", params={"path": str(img)})
@@ -34,12 +35,12 @@ def test_thumbnail_returns_downscaled_jpeg(client: TestClient, tmp_path) -> None
     assert max(out.size) <= 160
 
 
-def test_thumbnail_missing_file_returns_415(client: TestClient, tmp_path) -> None:
+def test_thumbnail_missing_file_returns_415(client: TestClient, tmp_path: Path) -> None:
     response = client.get("/api/thumbnail", params={"path": str(tmp_path / "nope.jpg")})
     assert response.status_code == 415
 
 
-def test_thumbnail_non_image_returns_415(client: TestClient, tmp_path) -> None:
+def test_thumbnail_non_image_returns_415(client: TestClient, tmp_path: Path) -> None:
     vid = tmp_path / "clip.mp4"
     vid.write_bytes(b"\x00" * 256)
     response = client.get("/api/thumbnail", params={"path": str(vid)})
@@ -52,7 +53,7 @@ def test_thumbnail_requires_path(client: TestClient) -> None:
 
 
 def test_thumbnail_second_pass_uses_cache_and_conditional_etag(
-    client: TestClient, tmp_path
+    client: TestClient, tmp_path: Path
 ) -> None:
     img = tmp_path / "cached.jpg"
     _write_jpeg(img)
@@ -74,7 +75,7 @@ def test_thumbnail_second_pass_uses_cache_and_conditional_etag(
     assert not not_modified.content
 
 
-def test_thumbnail_changed_source_changes_validator(client: TestClient, tmp_path) -> None:
+def test_thumbnail_changed_source_changes_validator(client: TestClient, tmp_path: Path) -> None:
     img = tmp_path / "changed.jpg"
     _write_jpeg(img)
     first = client.get("/api/thumbnail", params={"path": str(img)})
@@ -90,7 +91,9 @@ def test_thumbnail_changed_source_changes_validator(client: TestClient, tmp_path
     assert second.headers["etag"] != first.headers["etag"]
 
 
-def test_thumbnail_network_disconnect_degrades_to_placeholder(client: TestClient, tmp_path) -> None:
+def test_thumbnail_network_disconnect_degrades_to_placeholder(
+    client: TestClient, tmp_path: Path
+) -> None:
     image = tmp_path / "mounted-share.jpg"
     _write_jpeg(image)
     from app.api.routes import media
@@ -109,7 +112,7 @@ def test_thumbnail_network_disconnect_degrades_to_placeholder(client: TestClient
 # ── /api/media/info ────────────────────────────────────────────────────────────
 
 
-def test_media_info_reports_resolution_and_size(client: TestClient, tmp_path) -> None:
+def test_media_info_reports_resolution_and_size(client: TestClient, tmp_path: Path) -> None:
     img = tmp_path / "photo.jpg"
     Image.new("RGB", (640, 480), (10, 20, 30)).save(img, format="JPEG")
     response = client.get("/api/media/info", params={"path": str(img)})
@@ -121,7 +124,7 @@ def test_media_info_reports_resolution_and_size(client: TestClient, tmp_path) ->
     assert body["file_size"] > 0
 
 
-def test_media_info_missing_file_is_all_null(client: TestClient, tmp_path) -> None:
+def test_media_info_missing_file_is_all_null(client: TestClient, tmp_path: Path) -> None:
     response = client.get("/api/media/info", params={"path": str(tmp_path / "gone.jpg")})
     assert response.status_code == 200
     body = response.json()
@@ -137,7 +140,7 @@ def test_media_info_requires_path(client: TestClient) -> None:
 # ── /api/media/diff ────────────────────────────────────────────────────────────
 
 
-def test_media_diff_returns_png(client: TestClient, tmp_path) -> None:
+def test_media_diff_returns_png(client: TestClient, tmp_path: Path) -> None:
     a = tmp_path / "a.jpg"
     b = tmp_path / "b.jpg"
     Image.new("RGB", (64, 64), (0, 0, 0)).save(a, format="JPEG")
@@ -154,7 +157,7 @@ def test_media_diff_returns_png(client: TestClient, tmp_path) -> None:
     assert out.format == "PNG"
 
 
-def test_media_diff_non_image_returns_415(client: TestClient, tmp_path) -> None:
+def test_media_diff_non_image_returns_415(client: TestClient, tmp_path: Path) -> None:
     a = tmp_path / "a.jpg"
     _write_jpeg(a)
     vid = tmp_path / "clip.mp4"
@@ -163,7 +166,7 @@ def test_media_diff_non_image_returns_415(client: TestClient, tmp_path) -> None:
     assert response.status_code == 415
 
 
-def test_media_diff_requires_both_paths(client: TestClient, tmp_path) -> None:
+def test_media_diff_requires_both_paths(client: TestClient, tmp_path: Path) -> None:
     a = tmp_path / "a.jpg"
     _write_jpeg(a)
     assert client.get("/api/media/diff", params={"a": str(a)}).status_code == 422

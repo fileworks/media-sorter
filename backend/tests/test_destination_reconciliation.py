@@ -228,7 +228,7 @@ def test_reconciling_again_after_verified_plan_is_all_matched(tmp_path: Path) ->
 
 def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "input"
     destination = tmp_path / "destination"

@@ -1,5 +1,6 @@
 """Tests for the AI utility routes (POST /api/ai/suggest-categories)."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -57,7 +58,7 @@ def test_model_removal_requires_explicit_confirmation(client: TestClient) -> Non
     assert res.json()["code"] == "MODEL_REMOVAL_CONFIRMATION_REQUIRED"
 
 
-def test_suggest_categories_response_shape(client: TestClient, tmp_path) -> None:
+def test_suggest_categories_response_shape(client: TestClient, tmp_path: Path) -> None:
     """When an encoder is present, response has a 'suggestions' list."""
     app = AppFactory.create()
     container = app.state.container

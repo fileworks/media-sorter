@@ -6,11 +6,12 @@ import json
 
 import pytest
 
+from app.core.database import DatabaseManager
 from app.services.report_service import ReportService
 
 
 @pytest.fixture()
-def report_service(db_with_operation):
+def report_service(db_with_operation: tuple[str, DatabaseManager]):
     operation_id, test_db = db_with_operation
     return ReportService(db_manager=test_db), operation_id
 
@@ -21,7 +22,7 @@ def report_service(db_with_operation):
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_operation_id(report_service) -> None:
+async def test_get_report_returns_operation_id(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -29,7 +30,9 @@ async def test_get_report_returns_operation_id(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_source_and_dest(report_service) -> None:
+async def test_get_report_returns_source_and_dest(
+    report_service: tuple[ReportService, str],
+) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -38,7 +41,7 @@ async def test_get_report_returns_source_and_dest(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_returns_summary(report_service) -> None:
+async def test_get_report_returns_summary(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -56,7 +59,7 @@ async def test_get_report_returns_summary(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_includes_files(report_service) -> None:
+async def test_get_report_includes_files(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
 
@@ -67,7 +70,7 @@ async def test_get_report_includes_files(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_files_have_tags_list(report_service) -> None:
+async def test_get_report_files_have_tags_list(report_service: tuple[ReportService, str]) -> None:
     """Each file entry has a 'tags' field that is a list."""
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
@@ -83,7 +86,9 @@ async def test_get_report_files_have_tags_list(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_suspicious_flag_is_real_bool(db_with_operation) -> None:
+async def test_get_report_suspicious_flag_is_real_bool(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
     """The stored 0/1 suspicious flag is surfaced as a Python bool.
 
     The frontend keys on `f.suspicious === true`, and in JS `1 === true` is
@@ -125,7 +130,9 @@ async def test_get_report_suspicious_flag_is_real_bool(db_with_operation) -> Non
 
 
 @pytest.mark.asyncio
-async def test_export_csv_includes_suspicious_column(report_service) -> None:
+async def test_export_csv_includes_suspicious_column(
+    report_service: tuple[ReportService, str],
+) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
     header = content.splitlines()[0]
@@ -138,7 +145,9 @@ async def test_export_csv_includes_suspicious_column(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_raises_for_unknown_id(db_with_operation) -> None:
+async def test_get_report_raises_for_unknown_id(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
     """get_report raises OperationNotFoundError for an unknown operation_id."""
     from app.core.exceptions import OperationNotFoundError
 
@@ -154,7 +163,7 @@ async def test_get_report_raises_for_unknown_id(db_with_operation) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_json_is_valid_json(report_service) -> None:
+async def test_export_json_is_valid_json(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     content, media_type, filename = await svc.export(operation_id, "json")
 
@@ -166,14 +175,14 @@ async def test_export_json_is_valid_json(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_json_contains_operation_id(report_service) -> None:
+async def test_export_json_contains_operation_id(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "json")
     assert operation_id in content
 
 
 @pytest.mark.asyncio
-async def test_export_raises_for_unknown_id(db_with_operation) -> None:
+async def test_export_raises_for_unknown_id(db_with_operation: tuple[str, DatabaseManager]) -> None:
     """export raises OperationNotFoundError for an unknown operation_id."""
     from app.core.exceptions import OperationNotFoundError
 
@@ -189,7 +198,7 @@ async def test_export_raises_for_unknown_id(db_with_operation) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_csv_has_correct_media_type(report_service) -> None:
+async def test_export_csv_has_correct_media_type(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     content, media_type, filename = await svc.export(operation_id, "csv")
 
@@ -198,7 +207,7 @@ async def test_export_csv_has_correct_media_type(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_csv_contains_header_row(report_service) -> None:
+async def test_export_csv_contains_header_row(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
 
@@ -210,7 +219,7 @@ async def test_export_csv_contains_header_row(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_csv_has_data_rows(report_service) -> None:
+async def test_export_csv_has_data_rows(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     content, _, _ = await svc.export(operation_id, "csv")
 
@@ -225,7 +234,9 @@ async def test_export_csv_has_data_rows(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_filename_includes_operation_id(report_service) -> None:
+async def test_export_filename_includes_operation_id(
+    report_service: tuple[ReportService, str],
+) -> None:
     svc, operation_id = report_service
     _, _, json_filename = await svc.export(operation_id, "json")
     _, _, csv_filename = await svc.export(operation_id, "csv")
@@ -240,7 +251,9 @@ async def test_export_filename_includes_operation_id(report_service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_operations_returns_paginated_result(db_with_operation) -> None:
+async def test_list_operations_returns_paginated_result(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
     _, test_db = db_with_operation
     svc = ReportService(db_manager=test_db)
     result = await svc.list_operations(limit=10, offset=0)
@@ -255,7 +268,9 @@ async def test_list_operations_returns_paginated_result(db_with_operation) -> No
 
 
 @pytest.mark.asyncio
-async def test_list_operations_includes_inserted_operation(db_with_operation) -> None:
+async def test_list_operations_includes_inserted_operation(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
     operation_id, test_db = db_with_operation
     svc = ReportService(db_manager=test_db)
     result = await svc.list_operations()

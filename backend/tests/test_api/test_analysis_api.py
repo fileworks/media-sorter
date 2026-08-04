@@ -1,5 +1,7 @@
 """Integration tests for the analysis API routes."""
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,7 +10,7 @@ from app.core.config import Config
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory) -> TestClient:
+def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
     base = tmp_path_factory.mktemp("analysis")
     src = base / "source"
     src.mkdir()
@@ -31,7 +33,7 @@ def test_analysis_returns_200(client: TestClient) -> None:
     assert "estimated_duration_seconds" in data
 
 
-def test_analysis_returns_400_without_source(tmp_path) -> None:
+def test_analysis_returns_400_without_source(tmp_path: Path) -> None:
     config = Config(source_directory="", target_directory=str(tmp_path))
     app = AppFactory.create(config=config)
     c = TestClient(app)
@@ -50,7 +52,7 @@ def test_disk_space_returns_200(client: TestClient) -> None:
     assert "mode" in data
 
 
-def test_analysis_counts_files(tmp_path) -> None:
+def test_analysis_counts_files(tmp_path: Path) -> None:
     src = tmp_path / "source"
     src.mkdir()
     (src / "photo.jpg").write_bytes(b"\xff\xd8\xff" + b"\x00" * 1000)

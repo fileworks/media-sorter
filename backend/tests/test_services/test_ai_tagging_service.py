@@ -7,6 +7,7 @@ injected fake embedders.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -154,7 +155,7 @@ class _FakeEmbedder:
     def __init__(self, vector_for: Any) -> None:
         self._vector_for = vector_for
 
-    def embed(self, items: Any) -> Any:
+    def embed(self, items: Any) -> Iterator[Any]:
         for it in items:
             yield self._vector_for(it)
 

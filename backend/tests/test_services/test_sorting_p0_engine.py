@@ -36,7 +36,7 @@ def _photo(path: Path, seed: int = 0) -> Path:
 
 
 def _config(tmp_path: Path, **overrides: Any) -> Config:
-    defaults: dict = {
+    defaults: dict[str, Any] = {
         "source_directory": str(tmp_path / "source"),
         "target_directory": str(tmp_path / "target"),
         "sort_criteria": ["year", "month", "day"],

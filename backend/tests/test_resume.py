@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -21,13 +23,13 @@ ALGORITHMS = {"hash": "1", "media_facts": "1", "signature": "1", "thumbnail": "1
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         yield opened
 
 
-def _checkpoint(**overrides) -> DurableCheckpoint:
-    fields = {
+def _checkpoint(**overrides: Any) -> DurableCheckpoint:
+    fields: dict[str, Any] = {
         "operation_id": "op1",
         "profile_id": "profile-1",
         "profile_schema_version": 1,
@@ -38,7 +40,8 @@ def _checkpoint(**overrides) -> DurableCheckpoint:
         "algorithm_versions": dict(ALGORITHMS),
     }
     fields.update(overrides)
-    return DurableCheckpoint(**fields)
+    # Overrides are arbitrary by design, so this call is dynamic.
+    return DurableCheckpoint(**fields)  # type: ignore[arg-type]
 
 
 def _compatibility(**overrides):

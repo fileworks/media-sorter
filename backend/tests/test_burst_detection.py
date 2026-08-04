@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import piexif
+import pytest
 from PIL import Image, ImageDraw
 
 import app.services.burst_detection as burst_module
@@ -54,7 +55,7 @@ def _frame(
 
 def test_detection_requires_time_similarity_and_camera_and_ranks_sharpness(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = tmp_path / "shot-1.jpg"
     second = tmp_path / "shot-2.jpg"
@@ -219,7 +220,7 @@ def test_enabling_bursts_cannot_change_duplicate_verdicts(tmp_path: Path) -> Non
 
 def test_calibration_corpus_has_zero_recorded_false_pairs(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture_path = Path(__file__).parent / "fixtures" / "burst-calibration.json"
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
