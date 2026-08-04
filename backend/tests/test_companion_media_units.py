@@ -503,7 +503,7 @@ def test_move_commits_primary_first_and_retains_a_failing_companion_source(
             raise OSError("simulated companion verification failure")
         return original_move(source, destination)
 
-    service._fs.safe_move = Mock(side_effect=fail_companion)
+    service._fs.safe_move = Mock(side_effect=fail_companion)  # type: ignore[method-assign]  # monkeypatching a bound method for the duration of one test
     records = service._process_unit(
         unit=unit,
         source_root=root,

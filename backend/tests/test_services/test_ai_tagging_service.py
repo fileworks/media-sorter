@@ -51,7 +51,7 @@ def _patch_post(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> lis
         calls.append({"url": url, **kwargs})
         return _FakeResp(payload)
 
-    monkeypatch.setattr(base_tagger.httpx, "post", fake_post)
+    monkeypatch.setattr(base_tagger.httpx, "post", fake_post)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     return calls
 
 
@@ -117,7 +117,7 @@ def test_azure_parses_tags_and_thresholds(monkeypatch: pytest.MonkeyPatch) -> No
     calls = _patch_post(monkeypatch, payload)
     tagger = AzureVisionTagger(endpoint="https://x/", api_key="key", threshold=0.2)
     result = tagger.tag(_img())
-    assert result == [("beach", pytest.approx(0.91))]
+    assert result == [("beach", pytest.approx(0.91))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
     assert calls[0]["headers"]["Ocp-Apim-Subscription-Key"] == "key"
 
 
@@ -126,21 +126,23 @@ def test_imagga_scales_confidence_and_parses(monkeypatch: pytest.MonkeyPatch) ->
     _patch_post(monkeypatch, payload)
     tagger = ImaggaTagger(api_key="k", api_secret="s", threshold=0.2)
     result = tagger.tag(_img())
-    assert result == [("dog", pytest.approx(0.8))]  # 80/100
+    # `pytest.approx` compares fine at runtime; mypy sees `ApproxBase`
+    # against `float` and calls the comparison non-overlapping.
+    assert result == [("dog", pytest.approx(0.8))]  # type: ignore[comparison-overlap]
 
 
 def test_google_parses_label_annotations(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"responses": [{"labelAnnotations": [{"description": "Sky", "score": 0.97}]}]}
     _patch_post(monkeypatch, payload)
     tagger = GoogleCloudVisionTagger(api_key="k", threshold=0.2)
-    assert tagger.tag(_img()) == [("Sky", pytest.approx(0.97))]
+    assert tagger.tag(_img()) == [("Sky", pytest.approx(0.97))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
 
 
 def test_cloud_provider_returns_empty_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(url: str, **kwargs: Any) -> _FakeResp:
         raise RuntimeError("network down")
 
-    monkeypatch.setattr(base_tagger.httpx, "post", boom)
+    monkeypatch.setattr(base_tagger.httpx, "post", boom)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     assert AzureVisionTagger(endpoint="https://x", api_key="k").tag(_img()) == []
 
 

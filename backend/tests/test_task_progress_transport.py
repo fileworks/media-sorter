@@ -37,7 +37,7 @@ def test_eta_confidence_grows_with_evidence() -> None:
     assert task.progress.eta_confidence == "low"
 
     task.update_progress(20, eta_seconds=80.0)
-    assert task.progress.eta_confidence == "medium"
+    assert task.progress.eta_confidence == "medium"  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
 
 
 def test_an_eta_without_a_total_is_never_presented_as_confident() -> None:

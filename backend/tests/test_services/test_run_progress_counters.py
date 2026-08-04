@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
+from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
@@ -81,6 +82,7 @@ class _RecordingTask:
             self.estimated_time_remaining_seconds: float | None = None
             self.phase = ""
             self.outcomes: dict[str, int] = {}
+            self.last_checkpoint_label = ""
 
     def __init__(self) -> None:
         self.progress = self._Progress()
@@ -151,9 +153,9 @@ def test_the_collision_tally_starts_from_zero_on_every_run(tmp_path: Path) -> No
     service = _service(_config(tmp_path))
 
     first = _RecordingTask()
-    asyncio.run(service.run(first, dry_run=True))
+    asyncio.run(service.run(cast("Task", first), dry_run=True))
     second = _RecordingTask()
-    asyncio.run(service.run(second, dry_run=True))
+    asyncio.run(service.run(cast("Task", second), dry_run=True))
 
     # A second run on the same service instance must not inherit the first's
     # count — otherwise the panel would climb forever across runs.

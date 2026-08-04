@@ -237,7 +237,7 @@ def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     destination.mkdir()
     service = DestinationReconciliationService()
     config = _config(source, destination)
-    real_hash = reconciliation_module.stream_sha256
+    real_hash = reconciliation_module.stream_sha256  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     calls = 0
 
     def counted(path: Path) -> str:

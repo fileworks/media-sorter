@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -60,8 +61,9 @@ def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Rev
     review_routes._PLANS.pop("test-plan", None)
 
 
-def _decide(client: TestClient, member_id: str, action: str) -> object:
-    return client.post(
+def _decide(client: TestClient, member_id: str, action: str) -> httpx.Response:
+    # `TestClient.post` is `Any` in this httpx generation.
+    response: httpx.Response = client.post(
         "/api/review/decide",
         json={
             "plan_id": "test-plan",
@@ -70,6 +72,7 @@ def _decide(client: TestClient, member_id: str, action: str) -> object:
             "action": action,
         },
     )
+    return response
 
 
 class TestReferenceProtection:

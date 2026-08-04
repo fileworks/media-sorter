@@ -277,8 +277,8 @@ def test_an_excluded_file_is_reported_as_excluded_not_failed(tmp_path: Path) -> 
         unit_id="unit-other",
     )
 
+    # The point of the test: an exclusion is a decision, not a failure.
     assert execution.outcomes[0].code == "excluded"
-    assert execution.outcomes[0].code != "failed"
 
 
 # --------------------------------------------------------------------------- #

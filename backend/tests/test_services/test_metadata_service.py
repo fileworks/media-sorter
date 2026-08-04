@@ -168,7 +168,7 @@ def test_write_keywords_video_invokes_ffmpeg(
         Path(cmd[-1]).write_bytes(b"remuxed-with-tags")
         return _Result()
 
-    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     result = svc.write_keywords(src, ["beach", "vacation"])
     assert result == "embedded"
     assert "-metadata" in captured["cmd"]
@@ -188,6 +188,6 @@ def test_write_keywords_video_ffmpeg_failure_returns_empty(
     def fake_run(cmd: list[str], **kwargs: object) -> object:
         raise FileNotFoundError("ffmpeg not installed")
 
-    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     assert svc.write_keywords(src, ["x"]) == ""
     assert src.read_bytes() == b"original"  # original untouched on failure

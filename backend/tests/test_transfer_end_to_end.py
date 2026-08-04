@@ -145,7 +145,7 @@ def test_no_embedded_byte_changes_on_any_path(media: Path, tmp_path: Path) -> No
 def _pretend_volume_is_full(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     usage = shutil.disk_usage(tmp_path)
     monkeypatch.setattr(
-        verified_transfer.shutil,
+        verified_transfer.shutil,  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
         "disk_usage",
         lambda _path: shutil._ntuple_diskusage(usage.total, usage.used, 1),
     )

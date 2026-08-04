@@ -571,7 +571,7 @@ def test_full_destination_volume_is_refused_before_writing(
     action = _action(source, destination)
     usage = shutil.disk_usage(tmp_path)
     monkeypatch.setattr(
-        verified_transfer.shutil,
+        verified_transfer.shutil,  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
         "disk_usage",
         lambda _path: shutil._ntuple_diskusage(usage.total, usage.used, 1),
     )

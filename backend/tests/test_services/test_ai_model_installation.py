@@ -29,7 +29,7 @@ class _Response(AbstractContextManager[BinaryIO]):
     def read(self, size: int = -1) -> bytes:
         return self._stream.read(size)
 
-    def __enter__(self) -> _Response:
+    def __enter__(self) -> _Response:  # type: ignore[override]  # a narrower stand-in than the ABC, which is the point of the double
         return self
 
     def __exit__(self, *args: object) -> None:
