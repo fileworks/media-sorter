@@ -1,7 +1,7 @@
-name: Semantic Release
+name: Version Release
 
 # Runs after every push to main. If the new commits contain a `feat:` or `fix:`
-# (or a breaking change), semantic-release:
+# (or a breaking change), release-it:
 #   1. computes the next version from Conventional Commits,
 #   2. syncs that version into the app (scripts/sync-version.mjs),
 #   3. updates CHANGELOG.md,
@@ -24,7 +24,7 @@ on:
 
 permissions:
   # contents: write is all the configured plugins need — to push the release commit
-  # and tag. The plugin set deliberately omits @semantic-release/github, so nothing
+  # and tag. GitHub release creation is disabled here, so nothing
   # here comments on issues/PRs or creates a GitHub Release (release.yml does that),
   # hence no issues:/pull-requests: write grants.
   contents: write
@@ -32,7 +32,7 @@ permissions:
 # Never run two releases at once; never cancel one mid-flight (a half-done release
 # leaves a dangling tag).
 concurrency:
-  group: semantic-release
+  group: version-release
   cancel-in-progress: false
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # full history so commit-analyzer can see every commit
+          fetch-depth: 0 # full history so Conventional Commits can be analysed
           persist-credentials: true
           # PAT (preferred) so the pushed tag triggers release.yml; falls back to
           # GITHUB_TOKEN, which still tags but won't kick off the build (see header).
@@ -74,7 +74,10 @@ jobs:
       - name: Install release tooling
         run: npm ci
 
-      - name: Run semantic-release
+      - name: Audit release tooling
+        run: npm audit --audit-level=high
+
+      - name: Run release-it
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: npm run release

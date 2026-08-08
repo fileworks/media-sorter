@@ -1,16 +1,14 @@
 {
   "name": "media-sorter-release",
-  "version": "0.0.0-semantically-released",
+  "version": "0.0.0",
   "private": true,
-  "description": "Release tooling for MediaSorter. semantic-release derives the version from Conventional Commits; the app's actual version lives under frontend/ and is synced by scripts/sync-version.mjs. This package is never published to npm.",
+  "description": "Audited release tooling for MediaSorter. This private package is never versioned or published.",
   "scripts": {
-    "release": "semantic-release",
-    "release:dry": "semantic-release --dry-run"
+    "release": "release-it --ci",
+    "release:dry": "release-it --ci --dry-run"
   },
   "devDependencies": {
-    "@semantic-release/changelog": "^7.0.0",
-    "@semantic-release/exec": "^7.1.0",
-    "@semantic-release/git": "^11.0.1",
-    "semantic-release": "^25.0.8"
+    "@release-it/conventional-changelog": "^12.0.0",
+    "release-it": "^21.0.1"
   }
 }

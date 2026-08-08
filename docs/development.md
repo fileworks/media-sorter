@@ -125,7 +125,7 @@ listed exactly in [state-and-recovery.md](state-and-recovery.md).
 ## Releasing
 
 Releases are driven by **Conventional Commits** — you don't tag by hand. Push `fix:` or
-`feat:` commits to `main` and the semantic-release workflow computes the next version,
+`feat:` commits to `main` and the release-it workflow computes the next version,
 updates `CHANGELOG.md`, syncs that version everywhere (`scripts/sync-version.mjs` →
 `_version.py`, `tauri.conf.json`, `Cargo.toml`, …), and pushes a `v<version>` tag. That
 tag triggers the release workflow, which builds every OS natively — macOS arm64 + Intel

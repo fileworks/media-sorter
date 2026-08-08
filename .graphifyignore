@@ -60,6 +60,6 @@ scripts/
 # Changelog / release config / infra (not useful for graph)
 CHANGELOG.md
 BUGS_AND_IMPROVEMENTS.md
-.releaserc.json
+.release-it.json
 docker-compose.yml
 package.json

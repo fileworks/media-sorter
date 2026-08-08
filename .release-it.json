@@ -1,0 +1,29 @@
+{
+  "$schema": "https://unpkg.com/release-it@21/schema/release-it.json",
+  "git": {
+    "requireBranch": "main",
+    "requireCleanWorkingDir": true,
+    "requireUpstream": true,
+    "requireCommits": true,
+    "commitMessage": "chore(release): v${version}",
+    "tagName": "v${version}",
+    "tagAnnotation": "v${version}",
+    "push": true
+  },
+  "github": {
+    "release": false
+  },
+  "npm": false,
+  "hooks": {
+    "after:bump": "node scripts/sync-version.mjs ${version}"
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": {
+        "name": "conventionalcommits"
+      },
+      "infile": "CHANGELOG.md",
+      "header": "# Changelog\n\nAll notable changes to MediaSorter are documented here.\nThis file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand."
+    }
+  }
+}

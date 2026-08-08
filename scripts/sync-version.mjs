@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-// Sync the released version (chosen by semantic-release from Conventional Commits)
+// Sync the released version (chosen by release-it from Conventional Commits)
 // into every file that hardcodes the app/backend version, so the built installers
 // AND the running backend all report the same version.
 //
-// Invoked from .releaserc.json via the @semantic-release/exec prepareCmd:
+// Invoked from .release-it.json via its after:bump hook:
 //     node scripts/sync-version.mjs <version>
-// and runs from the repository root (semantic-release's cwd), so all paths below
+// and runs from the repository root (release-it's cwd), so all paths below
 // are relative to the repo root. The files updated here are committed back to main
-// by the @semantic-release/git step (see `assets` in .releaserc.json) — keep the two
-// lists in sync.
+// by release-it's git step.
 //
 // Single source of truth per ecosystem:
 //   • backend/app/_version.py  → backend version; pyproject.toml reads it via
@@ -18,7 +17,7 @@
 //   • frontend/package.json (+ lockfile) → keep the npm manifest valid for `npm ci`.
 //   • frontend/src-tauri/Cargo.toml (+ Cargo.lock) → the Rust crate version, kept in
 //     lockstep so the workspace metadata doesn't drift. Patched textually (no cargo
-//     invocation needed — the semantic-release runner has no Rust toolchain).
+//     invocation needed — the release runner has no Rust toolchain).
 
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -51,7 +50,9 @@ function patchText(path, pattern, label) {
     return `${pre}${version}${post}`;
   });
   if (!matched) {
-    throw new Error(`sync-version: pattern for ${label} did not match in ${path}`);
+    throw new Error(
+      `sync-version: pattern for ${label} did not match in ${path}`,
+    );
   }
   writeFileSync(path, after);
   console.log(`sync-version: ${path} (${label}) -> ${version}`);
