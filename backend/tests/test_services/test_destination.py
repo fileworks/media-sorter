@@ -6,8 +6,16 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from app.core.config import Config
-from app.services.destination import build_dest_dir, predicted_filename, rename_stem
+from app.services.destination import (
+    QUARANTINE_FOLDERS,
+    build_dest_dir,
+    copy_destination,
+    predicted_filename,
+    rename_stem,
+)
 
 
 def _cfg(**overrides: object) -> Config:
@@ -76,3 +84,33 @@ def test_predicted_filename_video_conversion() -> None:
     cfg = _cfg(convert_videos=True, video_format="mp4")
     assert predicted_filename(Path("/src/clip.mov"), date(2022, 8, 1), cfg) == "clip.mp4"
     assert predicted_filename(Path("/src/clip.mp4"), date(2022, 8, 1), cfg) == "clip.mp4"
+
+
+def test_set_aside_categories_collapse_to_three_current_root_folders() -> None:
+    assert set(QUARANTINE_FOLDERS.values()) == {"_undated", "_corrupted", "_junk"}
+    assert QUARANTINE_FOLDERS["unknown"] == QUARANTINE_FOLDERS["future"]
+    assert QUARANTINE_FOLDERS["failed"] == QUARANTINE_FOLDERS["corrupted"]
+    assert "duplicate" not in QUARANTINE_FOLDERS
+    assert "already_in_destination" not in QUARANTINE_FOLDERS
+
+
+def test_a_copy_is_named_for_its_keeper_and_source_root() -> None:
+    destination = copy_destination(
+        Path("/library/2024/03/keeper.jpg"),
+        Path("/phone/DCIM/keeper.jpg"),
+        Path("/backup/photos/copy.jpg"),
+        Path("/backup"),
+    )
+
+    assert destination == Path("/library/2024/03/_copies/keeper — from backup.jpg")
+    assert destination.parent.name == "_copies"
+
+
+def test_copies_is_a_leaf_and_cannot_be_nested() -> None:
+    with pytest.raises(ValueError, match="cannot itself be inside _copies"):
+        copy_destination(
+            Path("/library/2024/_copies/keeper.jpg"),
+            Path("/phone/keeper.jpg"),
+            Path("/backup/copy.jpg"),
+            Path("/backup"),
+        )

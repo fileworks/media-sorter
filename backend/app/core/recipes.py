@@ -43,13 +43,21 @@ class RecipeSettings(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    run_mode: Literal["organize", "deduplicate_only"] = "organize"
     sort: bool = True
     # Spelled out rather than inferred: a bare `["year"]` literal widens to
     # `list[str]`, which does not satisfy the annotated element type.
     sort_criteria: list[SortCriterion] = Field(
         default_factory=lambda: list[SortCriterion](["year"])
     )
+    recursive_scan: bool = True
+    max_recursion_depth: int | None = None
+    preserve_subfolders: bool = False
+    override_metadata: bool = False
     copy_instead_of_move: bool = False
+    companion_handling: Literal["keep_with_primary", "leave_in_place", "ignore"] = (
+        "keep_with_primary"
+    )
     rename: bool = False
     rename_pattern: str = "TYPE_YYYY-MM-DD"
     remove_duplicates: bool = True
@@ -57,10 +65,38 @@ class RecipeSettings(BaseModel):
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
     duplicate_keeper_policy: Literal[
-        "newest", "oldest", "largest", "smallest", "highest_resolution"
+        "best_quality",
+        "newest",
+        "oldest",
+        "largest",
+        "smallest",
+        "highest_resolution",
+        "longest_filename",
+        "shortest_filename",
+        "manual",
     ] = "newest"
+    burst_detection_enabled: bool = False
+    burst_time_window_seconds: float = 3.0
+    burst_perceptual_distance: int = 4
+    burst_require_camera_identity: bool = True
     junk_filter_enabled: bool = False
+    junk_min_file_size_kb: int = 8
+    junk_min_image_dimension: int = 200
+    junk_filename_patterns: list[str] = Field(
+        default_factory=lambda: [
+            "Thumbs.db",
+            "ehthumbs.db",
+            "desktop.ini",
+            "._*",
+            "*-thumb.*",
+            "*_thumb.*",
+            ".thumbnails",
+            ".thumbs",
+        ]
+    )
     categorize_enabled: bool = False
+    categorize_confidence_threshold: float = 0.55
+    categorize_min_margin: float = 0.15
     convert_images: bool = False
     image_format: Literal["jpeg", "png", "webp", "tiff"] = "jpeg"
     image_quality: int = 90
@@ -70,7 +106,25 @@ class RecipeSettings(BaseModel):
     repair_enabled: bool = False
     rules_enabled: bool = True
     ai_tagging_enabled: bool = False
+    ai_tagging_confidence_threshold: float = 0.5
+    ai_tagging_max_tags: int = 10
     embed_tags_in_files: bool = False
+    exclude_patterns: list[str] = Field(
+        default_factory=lambda: [
+            "@eaDir",
+            ".@__thumb",
+            "@Recycle",
+            "Thumbs.db",
+            "desktop.ini",
+            ".DS_Store",
+            ".Spotlight-V100",
+            "eaRecycle",
+        ]
+    )
+    min_file_size_kb: int | None = None
+    max_file_size_mb: int | None = None
+    camera_subfolder_enabled: bool = False
+    exif_sanity_check_enabled: bool = True
     ai_model_tier: Literal["auto", "off", "lite", "standard", "max"] = "auto"
 
     @field_validator("sort_criteria")

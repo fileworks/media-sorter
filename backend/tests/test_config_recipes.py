@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -176,6 +177,71 @@ def test_saved_recipes_round_trip_through_their_own_endpoints(tmp_path: Path) ->
         assert client.delete("/api/config/recipes/does-not-exist").status_code == 204
 
 
+def test_saved_recipe_preserves_every_recent_behavior_setting(tmp_path: Path) -> None:
+    """The save boundary must not silently discard settings the UI captures.
+
+    Pydantic intentionally ignores unknown fields for forward compatibility, so
+    a frontend/backend schema drift otherwise looks like a successful save and
+    only becomes visible when the recipe is applied later.  Exercise a value
+    from each recently added group to keep the two explicit models aligned.
+    """
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+
+    with TestClient(
+        AppFactory.create(config=_recipe_config("safe_sort", source, destination))
+    ) as client:
+        response = client.post(
+            "/api/config/recipes",
+            json={
+                "name": "Exact behavior",
+                "settings": {
+                    "run_mode": "deduplicate_only",
+                    "recursive_scan": False,
+                    "max_recursion_depth": 3,
+                    "preserve_subfolders": True,
+                    "override_metadata": True,
+                    "companion_handling": "leave_in_place",
+                    "burst_detection_enabled": True,
+                    "burst_time_window_seconds": 7.5,
+                    "junk_min_file_size_kb": 32,
+                    "junk_filename_patterns": ["*.cache"],
+                    "categorize_confidence_threshold": 0.7,
+                    "ai_tagging_max_tags": 4,
+                    "exclude_patterns": ["*.tmp"],
+                    "min_file_size_kb": 64,
+                    "max_file_size_mb": 512,
+                    "camera_subfolder_enabled": True,
+                    "exif_sanity_check_enabled": False,
+                },
+            },
+        )
+
+        assert response.status_code == 201
+        settings = response.json()["settings"]
+        assert settings["run_mode"] == "deduplicate_only"
+        assert settings["recursive_scan"] is False
+        assert settings["max_recursion_depth"] == 3
+        assert settings["preserve_subfolders"] is True
+        assert settings["override_metadata"] is True
+        assert settings["companion_handling"] == "leave_in_place"
+        assert settings["burst_detection_enabled"] is True
+        assert settings["burst_time_window_seconds"] == 7.5
+        assert settings["junk_min_file_size_kb"] == 32
+        assert settings["junk_filename_patterns"] == ["*.cache"]
+        assert settings["categorize_confidence_threshold"] == 0.7
+        assert settings["ai_tagging_max_tags"] == 4
+        assert settings["exclude_patterns"] == ["*.tmp"]
+        assert settings["min_file_size_kb"] == 64
+        assert settings["max_file_size_mb"] == 512
+        assert settings["camera_subfolder_enabled"] is True
+        assert settings["exif_sanity_check_enabled"] is False
+
+        assert client.get("/api/config/recipes").json()[0]["settings"] == settings
+
+
 def test_a_saved_recipe_refuses_a_blank_name_or_a_built_in_id(tmp_path: Path) -> None:
     source = tmp_path / "source"
     destination = tmp_path / "destination"
@@ -196,3 +262,60 @@ def test_a_saved_recipe_refuses_a_blank_name_or_a_built_in_id(tmp_path: Path) ->
             },
         )
         assert shadowed.status_code == 422
+
+
+def test_a_recipe_leaves_no_setting_requesting_a_rewrite_it_did_not_authorize(
+    tmp_path: Path,
+) -> None:
+    """The bug this test exists to prevent, stated as the backend sees it.
+
+    `_requested_capabilities` counts `override_metadata`, and
+    `ai_tagging_enabled and embed_tags_in_files`, as requests to rewrite file
+    bytes. Every recipe but *Archive & convert* declares `organize_only`, which
+    authorizes none of that — so a recipe leaving either switch on produced a
+    configuration the backend refuses, disabling "Preview changes" and naming
+    four settings the user never touched.
+
+    The frontend now clears them in the same patch that sets the profile. This
+    asserts the resulting configuration is one the backend accepts, which is the
+    only claim that matters.
+    """
+    for recipe in ("safe_sort", "clean_sweep", "scratch"):
+        source = tmp_path / f"clean-{recipe}" / "source"
+        destination = tmp_path / f"clean-{recipe}" / "destination"
+        source.mkdir(parents=True)
+        destination.mkdir()
+
+        # Tagging stays on: it is not a rewrite on its own, and a recipe that
+        # switched it off would be taking away a setting it never claimed.
+        config = replace(
+            _recipe_config(recipe, source, destination),
+            ai_tagging_enabled=True,
+            embed_tags_in_files=False,
+            override_metadata=False,
+        )
+
+        with TestClient(AppFactory.create(config=config)) as client:
+            validation = client.post("/api/config/validate")
+
+        assert validation.status_code == 200
+        assert validation.json()["valid"], (recipe, validation.json()["errors"])
+
+
+def test_leaving_metadata_overwriting_on_under_organize_only_is_refused(tmp_path: Path) -> None:
+    """The negative control: the rule the frontend mirrors is real.
+
+    Without this, the test above could pass because nothing validates rather
+    than because the recipe is coherent.
+    """
+    source = tmp_path / "refused" / "source"
+    destination = tmp_path / "refused" / "destination"
+    source.mkdir(parents=True)
+    destination.mkdir()
+    config = replace(_recipe_config("safe_sort", source, destination), override_metadata=True)
+
+    with TestClient(AppFactory.create(config=config)) as client:
+        validation = client.post("/api/config/validate")
+
+    assert validation.status_code == 200
+    assert not validation.json()["valid"]

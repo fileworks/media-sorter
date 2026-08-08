@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 from app.background_tasks.task_manager import CancellationToken
 from app.core.config import Config
 from app.core.logging_config import get_logger
+from app.services.destination import CONTEXTUAL_COPY_FOLDER, RECOGNIZED_SET_ASIDE_FOLDERS
 from app.services.duplicate_service import (
     DuplicateCheckCancelled,
     DuplicateRegistry,
@@ -46,17 +47,7 @@ DEFAULT_INDEX_FILENAME = ".mediasort-dedup-index.sqlite3"
 # Top-level quarantine folders are *outcomes* of previous runs, not library
 # content — indexing them would make e.g. an already-quarantined duplicate
 # block its own kept original from being recognised.
-_EXCLUDED_TOP_LEVEL_DIRS = frozenset(
-    {
-        "_unknown_dates",
-        "_future_dates",
-        "_duplicates",
-        "_failed",
-        "_corrupted",
-        "_junk",
-        "_already_in_destination",
-    }
-)
+_EXCLUDED_TOP_LEVEL_DIRS = RECOGNIZED_SET_ASIDE_FOLDERS - {CONTEXTUAL_COPY_FOLDER}
 
 _COMMIT_BATCH = 200
 
@@ -360,7 +351,9 @@ class DedupIndex:
             for entry in entries:
                 if cancel_event is not None and cancel_event.is_set():
                     return results, issues, True
-                if is_root and entry.name in _EXCLUDED_TOP_LEVEL_DIRS:
+                if (is_root and entry.name in _EXCLUDED_TOP_LEVEL_DIRS) or (
+                    entry.name == CONTEXTUAL_COPY_FOLDER
+                ):
                     continue
                 try:
                     if entry.is_file():

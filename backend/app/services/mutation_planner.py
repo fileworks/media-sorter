@@ -44,6 +44,10 @@ def build_placement_action(
     companion_role: CompanionRole | None = None,
     unit_primary_path: str | None = None,
     provenance: OutcomeProvenance | None = None,
+    source_root: str | None = None,
+    resolved_date: str | None = None,
+    would_be_destination_path: str | None = None,
+    keeper_path: str | None = None,
 ) -> MutationManifestAction:
     """Authorize one byte-identical placement of ``source`` at ``destination``.
 
@@ -86,6 +90,10 @@ def build_placement_action(
         companion_role=companion_role,
         unit_primary_path=unit_primary_path,
         provenance=provenance,
+        source_root=source_root,
+        resolved_date=resolved_date,
+        would_be_destination_path=would_be_destination_path,
+        keeper_path=keeper_path,
     )
 
 

@@ -102,6 +102,14 @@ def test_post_config_updates_sort_criteria(client: TestClient) -> None:
     assert response.json()["sort_criteria"] == ["year", "month"]
 
 
+def test_post_config_accepts_manual_duplicate_review(client: TestClient) -> None:
+    """The manual policy offered by Configure must survive the API boundary."""
+    response = client.post("/api/config", json={"duplicate_keeper_policy": "manual"})
+
+    assert response.status_code == 200
+    assert response.json()["duplicate_keeper_policy"] == "manual"
+
+
 def test_post_config_updates_ai_tagging_fields(client: TestClient) -> None:
     response = client.post(
         "/api/config",

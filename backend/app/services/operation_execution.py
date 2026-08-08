@@ -7,7 +7,6 @@ pipeline step can move media by any other route.
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -22,6 +21,7 @@ from app.core.integrity import (
     ActionOutcome,
     IntegrityReport,
     MutationActionKind,
+    MutationManifestAction,
     OperationOutcomeCode,
     OutcomeCode,
     OutcomeCounts,
@@ -168,28 +168,8 @@ class OperationExecution:
         companion_role: CompanionRole | None = None,
         unit_primary_path: str | None = None,
         provenance: OutcomeProvenance | None = None,
-    ) -> TransferResult | None:
-        """Authorize, journal, and verify one placement, then record its outcome.
-
-        Returns ``None`` when Review excluded this source. The check is first —
-        before protection, authorization and the journal — so an excluded file is
-        never opened, never journalled, and cannot be half-acted-on. It returns
-        no ``TransferResult`` because no transfer happened, and inventing one
-        would put a placement that never occurred into the audit record.
-        """
-        if self.plan_guard is not None and self.plan_guard.plan.is_skipped(source):
-            self.record_failure(
-                action_id=f"excluded_{hashlib.sha256(str(source).encode()).hexdigest()[:16]}",
-                source_path=source,
-                code="excluded",
-                diagnostic_code=None,
-            )
-            self.emit(
-                "action.excluded",
-                phase="executing",
-                source_path=str(source),
-            )
-            return None
+    ) -> TransferResult:
+        """Authorize, journal, and verify one placement, then record its outcome."""
         self._assert_not_protected(source, destination)
         planned = (
             self.plan_guard.authorize(
@@ -218,6 +198,12 @@ class OperationExecution:
             companion_role=companion_role,
             unit_primary_path=unit_primary_path,
             provenance=planned.provenance if planned is not None else provenance,
+            source_root=planned.source_root if planned is not None else None,
+            resolved_date=planned.resolved_date if planned is not None else None,
+            would_be_destination_path=(
+                planned.would_be_destination_path if planned is not None else None
+            ),
+            keeper_path=planned.keeper_path if planned is not None else None,
         )
         if self.journal is not None:
             self.journal.authorize(action)
@@ -230,7 +216,7 @@ class OperationExecution:
             destination_path=str(destination),
         )
         result = execute_transfer(action, journal=self.journal)
-        outcome = self.record(result)
+        outcome = self.record(result, action=action)
         self.emit(
             "action.outcome",
             action_id=action.action_id,
@@ -291,7 +277,13 @@ class OperationExecution:
                 source_safety="source_retained",
             )
 
-    def record(self, result: TransferResult, *, code: OutcomeCode | None = None) -> ActionOutcome:
+    def record(
+        self,
+        result: TransferResult,
+        *,
+        code: OutcomeCode | None = None,
+        action: MutationManifestAction | None = None,
+    ) -> ActionOutcome:
         outcome = ActionOutcome(
             action_id=result.action_id,
             code=_outcome_code(result) if code is None else code,
@@ -304,6 +296,12 @@ class OperationExecution:
             filesystem_metadata_observed=result.observed_metadata,
             warnings=result.warnings,
             diagnostic_code=result.reduced_guarantee,
+            source_root=action.source_root if action is not None else None,
+            resolved_date=action.resolved_date if action is not None else None,
+            would_be_destination_path=(
+                action.would_be_destination_path if action is not None else None
+            ),
+            keeper_path=action.keeper_path if action is not None else None,
         )
         self.outcomes.append(outcome)
         size = result.observed_metadata.size_bytes

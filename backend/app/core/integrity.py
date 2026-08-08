@@ -67,9 +67,6 @@ OutcomeCode = Literal[
     "verified_success",
     "success_with_metadata_limitation",
     "skipped",
-    # Review excluded this source from the run. Distinct from "skipped", which
-    # is the pipeline's own decision, so a report can state the two separately.
-    "excluded",
     "quarantined",
     "cancelled",
     "blocked",
@@ -225,6 +222,10 @@ class MutationManifestAction(BaseModel):
     companion_role: CompanionRole | None = None
     unit_primary_path: str | None = None
     provenance: OutcomeProvenance | None = None
+    source_root: str | None = None
+    resolved_date: str | None = None
+    would_be_destination_path: str | None = None
+    keeper_path: str | None = None
 
     @model_validator(mode="after")
     def expected_content_matches_observed_source(self) -> MutationManifestAction:
@@ -354,6 +355,10 @@ class ActionOutcome(BaseModel):
     filesystem_metadata_observed: FilesystemMetadataSnapshot | None = None
     warnings: tuple[str, ...] = ()
     diagnostic_code: str | None = None
+    source_root: str | None = None
+    resolved_date: str | None = None
+    would_be_destination_path: str | None = None
+    keeper_path: str | None = None
 
 
 class OperationEvent(BaseModel):

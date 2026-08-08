@@ -447,7 +447,7 @@ def test_every_fixture_companion_inherits_its_primary_destination(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_preview_attaches_roles_and_reports_split_and_unmatched_totals(
+async def test_leaving_companions_in_place_reports_the_split_before_commit(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source"
@@ -584,7 +584,7 @@ def test_duplicate_evaluation_quarantines_a_whole_different_unit(tmp_path: Path)
 
     assert {Path(item["dest_path"]).parent for item in first} == {target / "2020"}
     assert second[0]["status"] == "duplicate"
-    assert {Path(item["dest_path"]).parent for item in second} == {target / "_duplicates"}
+    assert {Path(item["dest_path"]).parent for item in second} == {target / "2020" / "_copies"}
 
 
 def test_manifest_actions_carry_unit_identity_and_primary_reference(tmp_path: Path) -> None:

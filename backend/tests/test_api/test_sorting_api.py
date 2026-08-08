@@ -15,6 +15,7 @@ from app.background_tasks.task_manager import Task
 from app.core.bootstrap import AppFactory
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
+from app.core.library_profiles import LibraryProfile, LibraryRoot
 
 
 @pytest.fixture(scope="module")
@@ -107,6 +108,72 @@ def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path: Path) -> N
     assert missing.json()["details"]["reason"] == "missing_plan"
     assert status["status"] == "completed"
     assert Path(preview["items"][0]["destination"]).is_file()
+
+
+def test_not_duplicates_survives_the_start_wire_and_real_sort(tmp_path: Path) -> None:
+    """``keep_all`` restores both placements and bypasses run-local matching.
+
+    This deliberately crosses every boundary the UI relies on: JSON request
+    validation, the derived frozen plan, task dispatch, and the actual duplicate
+    registry used by the running sorter. A model-only test would miss a route
+    silently dropping the flag or a run collapsing the pair again.
+    """
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    first = source / "2024-01-02-a.jpg"
+    second = source / "2024-01-02-b.jpg"
+    Image.new("RGB", (16, 16), "navy").save(first)
+    second.write_bytes(first.read_bytes())
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+            remove_duplicates=True,
+            duplicate_exact_enabled=True,
+        )
+    )
+
+    with TestClient(app) as local:
+        preview_response = local.post("/api/preview")
+        assert preview_response.status_code == 200
+        preview = preview_response.json()
+        members = [item["source"] for item in preview["items"]]
+        assert set(members) == {str(first), str(second)}
+        assert sum(item["status"] == "duplicate" for item in preview["items"]) == 1
+        decision = {"keep": members[0], "demote": [members[1]], "keep_all": True}
+
+        impact = local.post(
+            "/api/sorting/impact",
+            json={"plan_id": preview["plan_id"], "reviewed_sets": [decision]},
+        )
+        started = local.post(
+            "/api/sorting/start",
+            json={
+                "expected_config_fingerprint": preview["config_fingerprint"],
+                "plan_id": preview["plan_id"],
+                "reviewed_sets": [decision],
+            },
+        )
+        assert started.status_code == 200
+        task_id = started.json()["task_id"]
+        status = local.get(f"/api/sorting/{task_id}").json()
+        deadline = time.time() + 10
+        while time.time() < deadline and status["status"] in {"pending", "running"}:
+            time.sleep(0.05)
+            status = local.get(f"/api/sorting/{task_id}").json()
+
+    assert impact.status_code == 200
+    assert impact.json()["copy_count"] == 2
+    assert impact.json()["quarantine_count"] == 0
+    assert status["status"] == "completed"
+    assert status["result"]["sorted"] == 2
+    assert status["result"]["duplicates"] == 0
+    placed = list(destination.rglob("*.jpg"))
+    assert {path.name for path in placed} == {first.name, second.name}
+    assert all("_copies" not in path.parts for path in placed)
 
 
 # ------------------------------------------------------------------ #
@@ -205,76 +272,75 @@ def test_get_sorting_report_conflicts_when_not_completed(client: TestClient) -> 
 # ------------------------------------------------------------------ #
 
 
-def test_impact_describes_the_run_the_exclusions_leave(tmp_path: Path) -> None:
-    """Execute asks the plan what it will do, rather than deriving it.
-
-    Subtracting a per-reviewed-file tally from action-level totals counted two
-    different things, so an exclusion that took a whole media unit off the plan
-    left the preflight still promising part of it.
-    """
-    source = tmp_path / "source"
+def test_impact_describes_the_directory_scoped_preview(tmp_path: Path) -> None:
+    """The plan and preflight use the exact same configured-root scope."""
+    source = tmp_path / "phone"
+    skipped = tmp_path / "camera"
     destination = tmp_path / "destination"
     source.mkdir()
+    skipped.mkdir()
     destination.mkdir()
-    # Distinct colours: two identical images would be a duplicate, not a
-    # second sortable file.
-    for name, colour in (("2024-01-02-one.jpg", "navy"), ("2024-01-03-two.jpg", "olive")):
-        Image.new("RGB", (16, 16), colour).save(source / name)
+    Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-phone.jpg")
+    Image.new("RGB", (16, 16), "olive").save(skipped / "2024-01-03-camera.jpg")
+    profile = LibraryProfile(
+        profile_id="scope-test",
+        name="Scope test",
+        transfer_mode="copy",
+        roots=[
+            LibraryRoot(root_id="phone", role="input", path=str(source)),
+            LibraryRoot(root_id="camera", role="input", path=str(skipped)),
+            LibraryRoot(root_id="destination", role="destination", path=str(destination)),
+        ],
+    )
     app = AppFactory.create(
         config=Config(
             source_directory=str(source),
             target_directory=str(destination),
             copy_instead_of_move=True,
+            library_profile=profile,
         )
     )
     with TestClient(app) as local:
-        preview = local.post("/api/preview").json()
+        preview = local.post("/api/preview", json={"excluded_roots": ["camera"]}).json()
         plan_id = preview["plan_id"]
-        sortable = [item["source"] for item in preview["items"] if item["status"] == "sort"]
-
-        whole = local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": []})
-        one_off = local.post(
+        scoped = local.post(
             "/api/sorting/impact",
-            json={"plan_id": plan_id, "excluded_sources": sortable[:1]},
+            json={"plan_id": plan_id, "excluded_roots": ["camera"]},
         )
-        everything = local.post(
-            "/api/sorting/impact",
-            json={"plan_id": plan_id, "excluded_sources": sortable},
-        )
+        changed_scope = local.post("/api/sorting/impact", json={"plan_id": plan_id})
         missing = local.post(
-            "/api/sorting/impact", json={"plan_id": "sortplan_missing", "excluded_sources": []}
+            "/api/sorting/impact",
+            json={"plan_id": "sortplan_missing", "excluded_roots": ["camera"]},
         )
+        started = local.post(
+            "/api/sorting/start",
+            json={
+                "expected_config_fingerprint": preview["config_fingerprint"],
+                "plan_id": plan_id,
+                "excluded_roots": ["camera"],
+            },
+        )
+        task_id = started.json()["task_id"]
+        status = local.get(f"/api/sorting/{task_id}").json()
+        deadline = time.time() + 10
+        while time.time() < deadline and status["status"] in {"pending", "running"}:
+            time.sleep(0.05)
+            status = local.get(f"/api/sorting/{task_id}").json()
+        operation_id = status["result"]["operation_id"]
+        report = local.get(f"/api/reports/{operation_id}")
 
-    assert whole.status_code == 200
-    assert whole.json()["actionable_groups"] == len(sortable)
-    assert one_off.json()["actionable_groups"] == len(sortable) - 1
-    assert one_off.json()["required_bytes"] < whole.json()["required_bytes"]
-    assert everything.json()["actionable_groups"] == 0
-    assert everything.json()["required_bytes"] == 0
+    assert preview["excluded_roots"] == [str(skipped)]
+    assert preview["excluded_root_ids"] == ["camera"]
+    assert {item["source"] for item in preview["items"]} == {str(source / "2024-01-02-phone.jpg")}
+    assert scoped.status_code == 200
+    assert scoped.json()["actionable_groups"] == 1
+    assert changed_scope.status_code == 409
+    assert changed_scope.json()["details"]["reason"] == "stale_plan_scope"
     assert missing.status_code == 409
     assert missing.json()["details"]["reason"] == "missing_plan"
-
-
-def test_impact_never_mutates_the_stored_plan(tmp_path: Path) -> None:
-    """Asking what an exclusion would cost must not apply it."""
-    source = tmp_path / "source"
-    destination = tmp_path / "destination"
-    source.mkdir()
-    destination.mkdir()
-    Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-photo.jpg")
-    app = AppFactory.create(
-        config=Config(
-            source_directory=str(source),
-            target_directory=str(destination),
-            copy_instead_of_move=True,
-        )
-    )
-    with TestClient(app) as local:
-        preview = local.post("/api/preview").json()
-        plan_id = preview["plan_id"]
-        sortable = [item["source"] for item in preview["items"] if item["status"] == "sort"]
-
-        local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": sortable})
-        after = local.post("/api/sorting/impact", json={"plan_id": plan_id, "excluded_sources": []})
-
-    assert after.json()["actionable_groups"] == len(sortable)
+    assert started.status_code == 200
+    assert status["status"] == "completed"
+    assert status["result"]["excluded_roots"] == [str(skipped)]
+    assert report.status_code == 200
+    assert report.json()["excluded_roots"] == [str(skipped)]
+    assert not any(path.name == "2024-01-03-camera.jpg" for path in destination.rglob("*"))

@@ -34,6 +34,7 @@ from app.services.destination import (
     build_dest_dir,
     companion_destination,
     predicted_filename,
+    quarantine_dir,
 )
 from app.services.duplicate_service import DuplicateService
 from app.services.extraction_service import DateExtractionService
@@ -742,7 +743,9 @@ class DestinationReconciliationService:
     ) -> Path:
         extracted = extracted or self.extraction.extract_detailed(source).extracted_date
         if extracted is None:
-            return destination_root / "_unknown_dates" / source.name
+            return quarantine_dir(destination_root, "unknown", source, input_root) / source.name
+        if DateExtractionService.is_future_date(extracted):
+            return quarantine_dir(destination_root, "future", source, input_root) / source.name
         directory = build_dest_dir(source, extracted, input_root, destination_root, config)
         return directory / predicted_filename(source, extracted, config)
 

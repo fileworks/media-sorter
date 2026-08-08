@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.core.paths import resolve_app_paths
 
-CURRENT_DATABASE_SCHEMA = 4
+CURRENT_DATABASE_SCHEMA = 6
 BASELINE_OPERATION_COLUMNS = {
     "id",
     "execution_date",
@@ -52,6 +52,8 @@ VERSION_2_FILE_OPERATION_COLUMNS = {
 VERSION_3_OPERATION_COLUMNS = {"junk_files", "already_in_destination"}
 VERSION_4_OPERATION_COLUMNS = {"companion_files", "incomplete_units"}
 VERSION_4_FILE_OPERATION_COLUMNS = {"unit_id", "companion_role", "unit_primary_path"}
+VERSION_5_FILE_OPERATION_COLUMNS = {"source_root", "would_be_destination"}
+VERSION_6_OPERATION_COLUMNS = {"excluded_roots"}
 
 OPERATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS operations (
     already_in_destination INTEGER NOT NULL DEFAULT 0,
     companion_files INTEGER NOT NULL DEFAULT 0,
     incomplete_units INTEGER NOT NULL DEFAULT 0,
+    excluded_roots TEXT NOT NULL DEFAULT '[]',
     duration_seconds INTEGER,
     config_hash TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -100,6 +103,8 @@ CREATE TABLE IF NOT EXISTS file_operations (
     unit_id TEXT,
     companion_role TEXT,
     unit_primary_path TEXT,
+    source_root TEXT,
+    would_be_destination TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (operation_id) REFERENCES operations(id)
 )
@@ -218,6 +223,23 @@ class DatabaseManager:
                     },
                 ),
             ),
+            5: (
+                (
+                    "file_operations",
+                    {
+                        "source_root": "TEXT",
+                        "would_be_destination": "TEXT",
+                    },
+                ),
+            ),
+            6: (
+                (
+                    "operations",
+                    {
+                        "excluded_roots": "TEXT NOT NULL DEFAULT '[]'",
+                    },
+                ),
+            ),
         }
         steps = migrations.get(target_version)
         if steps is None:
@@ -273,6 +295,10 @@ class DatabaseManager:
                     ("file_operations", VERSION_4_FILE_OPERATION_COLUMNS),
                 )
             )
+        if version >= 5:
+            requirements.append(("file_operations", VERSION_5_FILE_OPERATION_COLUMNS))
+        if version >= 6:
+            requirements.append(("operations", VERSION_6_OPERATION_COLUMNS))
         for table, required in requirements:
             missing = required - self._columns(conn, table)
             if missing:

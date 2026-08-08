@@ -203,6 +203,7 @@ def test_rule_order_enablement_unicode_stems_and_first_route(tmp_path: Path) -> 
     assert result.matched_tag_rule_ids == ("early", "late", "dedupe")
     assert result.route == "screenshot"
     assert result.matched_route_rule_id == "first"
+    assert [rule.name for rule in result.matched_route_rules] == ["first", "second"]
 
     config.rules_enabled = False
     assert RuleEngineService(config).evaluate_all(source).tags == ()

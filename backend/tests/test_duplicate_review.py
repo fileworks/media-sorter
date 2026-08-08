@@ -1015,26 +1015,35 @@ class TestNewKeeperPolicies:
 class TestReviewedKeepersSurviveThePolicy:
     """Review's choice must beat the configured rule, or the review is theatre."""
 
-    def test_a_reviewed_keeper_is_seeded_as_the_first_seen_copy(self) -> None:
+    def test_a_decision_about_a_file_the_plan_never_saw_is_refused(self) -> None:
+        """Half-applying a decision leaves a duplicate the user believes is resolved.
+
+        The swap itself, and its agreement with what the run computes, is
+        covered end-to-end in `test_reviewed_sets.py`; what belongs here is the
+        refusal, because it is the case where review and plan have diverged.
+        """
+        from app.core.config import Config
+        from app.core.exceptions import ConflictError
+        from app.core.sort_plan import ReviewedSet, build_frozen_sort_plan
+
+        plan = build_frozen_sort_plan([], Config())
+
+        with pytest.raises(ConflictError) as raised:
+            plan.with_reviewed_sets(
+                [ReviewedSet(keep="/library/keep-this.jpg", demote=("/library/other.jpg",))],
+                source_root="/library",
+            )
+
+        assert raised.value.details["source_path"] == "/library/keep-this.jpg"
+
+    def test_an_empty_decision_list_leaves_the_plan_alone(self) -> None:
         from app.core.config import Config
         from app.core.sort_plan import build_frozen_sort_plan
 
         plan = build_frozen_sort_plan([], Config())
-        reviewed = plan.with_reviewed_keepers({"a" * 64: "/library/keep-this.jpg"})
 
-        assert reviewed.reviewed_keepers == {"a" * 64: "/library/keep-this.jpg"}
-        # Seeding uses the same map the registry keys on, so the reviewed copy
-        # is "already seen" and every later copy of those bytes is a duplicate.
-        assert plan.reviewed_keepers == {}
-
-    def test_reviewed_keepers_never_mutate_the_stored_plan(self) -> None:
-        from app.core.config import Config
-        from app.core.sort_plan import build_frozen_sort_plan
-
-        plan = build_frozen_sort_plan([], Config())
-        plan.with_reviewed_keepers({"b" * 64: "/x.jpg"})
-
-        assert plan.reviewed_keepers == {}
+        assert plan.with_reviewed_sets([], source_root="/") is plan
+        assert plan.reviewed_sets == ()
 
     def test_an_undecided_group_still_follows_the_policy(self) -> None:
         candidates = group(member("a", size=100), member("b", size=900))

@@ -78,12 +78,37 @@ class TestRefresh:
         _photo(dest / "2024" / "keep.jpg")
         _photo(dest / "_duplicates" / "dupe.jpg")
         _photo(dest / "_junk" / "tiny.jpg")
+        _photo(dest / "_undated" / "new-undated.jpg")
+        _photo(dest / "2024" / "_copies" / "contextual-copy.jpg")
 
         index = DedupIndex(tmp_path / "index.db")
         index.refresh(dest, DuplicateService(), perceptual=True, sample_video=False)
         registry = index.load_registry()
         assert len(registry.images) == 1
         assert registry.images[0].path.endswith("keep.jpg")
+
+    def test_old_and_new_set_aside_layouts_can_coexist_without_becoming_keepers(
+        self, tmp_path: Path
+    ) -> None:
+        dest = tmp_path / "dest"
+        keeper = _photo(dest / "2025" / "keep.jpg")
+        for relative in (
+            "_unknown_dates/old.jpg",
+            "_future_dates/future.jpg",
+            "_duplicates/dupe.jpg",
+            "_failed/failed.jpg",
+            "_already_in_destination/existing.jpg",
+            "_undated/new.jpg",
+            "_corrupted/corrupt.jpg",
+            "2025/_copies/context.jpg",
+        ):
+            _photo(dest / relative)
+
+        index = DedupIndex(tmp_path / "index.db")
+        index.refresh(dest, DuplicateService(), perceptual=True, sample_video=False)
+        registry = index.load_registry()
+
+        assert [signature.path for signature in registry.images] == [str(keeper)]
 
     def test_exact_only_when_perceptual_disabled(self, tmp_path: Path) -> None:
         dest = tmp_path / "dest"

@@ -22,22 +22,40 @@ from app.utils.path_utils import sanitize_path_segment
 # another token name is never double-substituted.
 _RENAME_TOKEN_RE = re.compile(r"YYYY|MM|DD|NAME|TYPE")
 
-# Folders for files that cannot be placed in the normal date structure.
-# Shared by SortingService (placement) and PreviewService (prediction).
+# Folders for files that have no meaningful place in the normal library.
+# Duplicate copies are deliberately absent: `copy_destination` places those
+# beside their keeper. A destination match is absent too because no second file
+# is written when identical content is already present.
 QUARANTINE_FOLDERS: dict[str, str] = {
-    "unknown": "_unknown_dates",
-    "future": "_future_dates",
-    "duplicate": "_duplicates",
-    "failed": "_failed",
+    "unknown": "_undated",
+    "future": "_undated",
+    "failed": "_corrupted",
     "corrupted": "_corrupted",
     "junk": "_junk",
-    "already_in_destination": "_already_in_destination",
 }
+
+CONTEXTUAL_COPY_FOLDER = "_copies"
+
+# Read-only recognition for destinations created by older versions. New runs
+# never choose these names, but indexing their contents as ordinary library
+# media would make old set-aside copies become keepers on the next run.
+RETIRED_QUARANTINE_FOLDERS = frozenset(
+    {
+        "_unknown_dates",
+        "_future_dates",
+        "_duplicates",
+        "_failed",
+        "_already_in_destination",
+    }
+)
+RECOGNIZED_SET_ASIDE_FOLDERS = frozenset(
+    {*QUARANTINE_FOLDERS.values(), *RETIRED_QUARANTINE_FOLDERS, CONTEXTUAL_COPY_FOLDER}
+)
 
 
 def quarantine_dir(dest_root: Path, reason: str, file_path: Path, source_root: Path) -> Path:
     """Quarantine directory for *file_path*, preserving its source-relative
-    subfolders (``_unknown_dates/2019-holiday/…``) so a large quarantine stays
+    subfolders (``_undated/2019-holiday/…``) so a large set-aside folder stays
     navigable and filename hints survive. Pure — never mkdirs. Files outside
     *source_root* (e.g. an already-placed destination file being quarantined as
     corrupted) fall back to the flat quarantine root.
@@ -48,6 +66,27 @@ def quarantine_dir(dest_root: Path, reason: str, file_path: Path, source_root: P
     except ValueError:
         return base
     return base / rel if str(rel) != "." else base
+
+
+def copy_destination(
+    keeper_destination: Path,
+    keeper_source: Path,
+    copy_source: Path,
+    source_root: Path,
+) -> Path:
+    """Return the contextual, unreserved destination for a duplicate copy.
+
+    The caller applies the shared collision reservation, exactly as for every
+    other planned path. The leaf name makes both relationships readable on
+    disk: which file won and which input root supplied this copy.
+    """
+    if keeper_destination.parent.name == CONTEXTUAL_COPY_FOLDER:
+        raise ValueError("a duplicate keeper cannot itself be inside _copies")
+
+    root_label = sanitize_path_segment(source_root.name) or "source"
+    keeper_label = sanitize_path_segment(keeper_source.stem) or "keeper"
+    filename = f"{keeper_label} — from {root_label}{copy_source.suffix}"
+    return keeper_destination.parent / CONTEXTUAL_COPY_FOLDER / filename
 
 
 def build_dest_dir(

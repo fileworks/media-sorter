@@ -41,6 +41,23 @@ async def test_get_report_returns_source_and_dest(
 
 
 @pytest.mark.asyncio
+async def test_get_report_names_the_roots_deliberately_skipped_for_the_run(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
+    operation_id, test_db = db_with_operation
+    skipped = ["/media/offline-camera", "/media/archive"]
+    with test_db._connect() as conn:
+        conn.execute(
+            "UPDATE operations SET excluded_roots = ? WHERE id = ?",
+            (json.dumps(skipped), operation_id),
+        )
+
+    report = await ReportService(test_db).get_report(operation_id)
+
+    assert report["excluded_roots"] == skipped
+
+
+@pytest.mark.asyncio
 async def test_get_report_returns_summary(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)

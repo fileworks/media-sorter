@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -12,11 +12,11 @@ from app.core.config import Config
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionHandling
+from app.core.run_scope import apply_run_scope
 from app.services.filesystem_service import (
     FileSystemService,
     TraversalResult,
     categorize_media_type,
-    is_within_any,
 )
 from app.utils.path_utils import (
     is_excluded_by_pattern,
@@ -34,11 +34,23 @@ class AnalysisService:
     def __init__(self, filesystem_service: FileSystemService) -> None:
         self._fs = filesystem_service
 
-    async def analyse(self, config: Config, task: Task | None = None) -> dict[str, Any]:
+    async def analyse(
+        self,
+        config: Config,
+        task: Task | None = None,
+        excluded_roots: Sequence[str] = (),
+    ) -> dict[str, Any]:
         """Run analysis in a thread pool to avoid blocking the event loop."""
-        return await asyncio.to_thread(self._analyse_sync, config, task)
+        return await asyncio.to_thread(self._analyse_sync, config, task, excluded_roots)
 
-    def _analyse_sync(self, config: Config, task: Task | None = None) -> dict[str, Any]:
+    def _analyse_sync(
+        self,
+        config: Config,
+        task: Task | None = None,
+        excluded_roots: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        scope = apply_run_scope(config, excluded_roots)
+        config = scope.config
         if task is not None:
             task.transition("validating")
         library = validate_configured_library(config, require_destination=False)
@@ -65,14 +77,10 @@ class AnalysisService:
                 max_file_size_mb,
                 task.cancel_token if task is not None else None,
                 config.companion_handling,
+                validated_input.exclusions,
             )
-            kept = [
-                path for path in part.files if not is_within_any(path, validated_input.exclusions)
-            ]
-            traversal.excluded_directories += len(part.files) - len(kept)
-            traversal.files.extend(kept)
-            kept_set = set(kept)
-            traversal.units.extend(unit for unit in part.units if unit.primary in kept_set)
+            traversal.files.extend(part.files)
+            traversal.units.extend(part.units)
             traversal.unmatched_companions.extend(part.unmatched_companions)
             traversal.companion_candidates.extend(part.companion_candidates)
             traversal.issues.extend(part.issues)
@@ -96,6 +104,8 @@ class AnalysisService:
             if task.cancel_token.is_set():
                 return {
                     **self._empty_result(),
+                    "excluded_roots": list(scope.excluded_paths),
+                    "excluded_root_ids": list(scope.excluded_root_ids),
                     "partial": traversal.partial,
                     "issues": [issue.to_dict() for issue in traversal.issues],
                 }
@@ -199,6 +209,8 @@ class AnalysisService:
             "media_units": len(traversal.units),
             "companion_files": sum(len(unit.companions) for unit in traversal.units),
             "unmatched_companions": len(traversal.unmatched_companions),
+            "excluded_roots": list(scope.excluded_paths),
+            "excluded_root_ids": list(scope.excluded_root_ids),
             "warnings": warnings,
             "partial": traversal.partial,
             "issues": [issue.to_dict() for issue in traversal.issues],

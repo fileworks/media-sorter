@@ -151,7 +151,9 @@ def test_same_key_replay_conflict_details_and_idempotent_cancel(
     target.mkdir()
     app = AppFactory.create(Config(source_directory=str(source), target_directory=str(target)))
 
-    async def slow_analysis(config: Any, *, task: Any) -> dict[str, Any]:
+    async def slow_analysis(
+        config: Any, *, task: Any, excluded_roots: list[str] | None = None
+    ) -> dict[str, Any]:
         while not task.cancel_token.is_set():
             await asyncio.sleep(0.01)
         return {"cancelled": True}

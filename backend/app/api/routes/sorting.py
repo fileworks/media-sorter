@@ -14,7 +14,8 @@ from app.api.schemas import (
 )
 from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
-from app.core.sort_plan import FrozenSortImpact
+from app.core.run_scope import apply_run_scope
+from app.core.sort_plan import FrozenSortImpact, ReviewedSet
 
 router = APIRouter()
 
@@ -23,39 +24,42 @@ class StartSortRequest(TaskStartRequest):
     dry_run: bool = False
     expected_config_fingerprint: str | None = None
     plan_id: str | None = None
-    #: Sources Review decided not to act on. Applied to a derived copy of the
-    #: stored plan; the stored plan is never mutated, so a second run of the
-    #: same plan is unaffected by one run's exclusions.
-    excluded_sources: list[str] = Field(default_factory=list)
-    #: Content hash → the path Review chose to keep. Applied to the derived
-    #: plan, so one run's overrides do not follow the stored plan around.
-    reviewed_keepers: dict[str, str] = Field(default_factory=dict)
+    #: Configured input/reference roots the Sources stage omitted from this run.
+    excluded_roots: list[str] = Field(default_factory=list)
+    #: The duplicate sets Review decided, and which copy it chose. Applied to
+    #: the derived plan, so one run's overrides do not follow the stored plan
+    #: around. Replaces `reviewed_keepers`, which could name a winner but not
+    #: the losers whose planned actions have to change with it.
+    reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
 
 
 class PlanImpactRequest(TaskStartRequest):
-    """The exclusions a run would carry, so its impact can be described."""
+    """The decisions a run would carry, so its impact can be described."""
 
     plan_id: str
-    excluded_sources: list[str] = Field(default_factory=list)
+    excluded_roots: list[str] = Field(default_factory=list)
+    reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
 
 
 @router.post("/sorting/impact", response_model=FrozenSortImpact)
 async def plan_impact(container: ContainerDep, body: PlanImpactRequest) -> FrozenSortImpact:
-    """What a run with these exclusions would actually do.
-
-    The Execute preflight used to derive this itself, by subtracting a
-    per-reviewed-file tally from the stored plan's action-level totals. The two
-    counted different things — a companion is an action but not a reviewed file
-    — so excluding a RAW+JPEG pair left the preflight promising a copy that
-    would never happen. The plan is the only thing that knows, so it answers.
-    """
+    """What a run carrying these duplicate decisions would actually do."""
     plan = container.preview_service.frozen_plan(body.plan_id)
     if plan is None:
         raise ConflictError(
             "The reviewed plan is no longer available; generate preview again.",
             details={"reason": "missing_plan", "plan_id": body.plan_id},
         )
-    return plan.with_exclusions(body.excluded_sources).impact
+    scoped = apply_run_scope(container.config, body.excluded_roots)
+    if plan.config_fingerprint != config_fingerprint(scoped.config):
+        raise ConflictError(
+            "The source scope changed after preview; generate and review a new plan.",
+            details={"reason": "stale_plan_scope", "plan_id": body.plan_id},
+        )
+    return plan.with_reviewed_sets(
+        body.reviewed_sets,
+        source_root=scoped.config.source_directory,
+    ).impact
 
 
 @router.post("/sorting/start", response_model=TaskStartResponse)
@@ -66,7 +70,8 @@ async def start_sorting(
     transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
 ) -> TaskStartResponse:
     request = body or StartSortRequest()
-    current_fingerprint = config_fingerprint(container.config)
+    scope = apply_run_scope(container.config, request.excluded_roots)
+    current_fingerprint = config_fingerprint(scope.config)
     if (
         request.expected_config_fingerprint is not None
         and request.expected_config_fingerprint != current_fingerprint
@@ -92,19 +97,18 @@ async def start_sorting(
                 "The configuration changed after preview; generate and review a new plan.",
                 details={"reason": "stale_plan", "plan_id": request.plan_id},
             )
-        if request.reviewed_keepers:
-            frozen_plan = frozen_plan.with_reviewed_keepers(request.reviewed_keepers)
-        if request.excluded_sources:
-            # A derived plan, never an edit of the stored one. Excluding a
-            # companion excludes its whole unit, which is expanded server-side
-            # so a client cannot half-exclude a RAW+JPEG pair.
-            frozen_plan = frozen_plan.with_exclusions(request.excluded_sources)
+        if request.reviewed_sets:
+            frozen_plan = frozen_plan.with_reviewed_sets(
+                request.reviewed_sets,
+                source_root=scope.config.source_directory,
+            )
     task, replayed = container.task_manager.start_task(
         "sort",
         request.idempotency_key,
         container.sorting_service.run,
         dry_run=request.dry_run,
         frozen_plan=frozen_plan,
+        excluded_roots=request.excluded_roots,
     )
     if retry_attempt is not None:
         task.record_transport_retry(

@@ -10,16 +10,17 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config_fingerprint import config_fingerprint
-from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction
+from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction, DuplicateGroup
 from app.core.library_profiles import CatalogPlacement
 from app.core.paths import resolve_app_paths
+from app.core.run_scope import apply_run_scope
 from app.services.catalog import MediaCatalog
 from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_location import open_catalog
@@ -133,7 +134,8 @@ async def review_outcomes(
     fingerprint, outcomes = container.preview_service.latest_outcomes(body.paths)
     if fingerprint is None:
         raise HTTPException(status_code=404, detail="No completed preview is available")
-    if fingerprint != config_fingerprint(config):
+    scoped = apply_run_scope(config, container.preview_service.latest_excluded_root_ids)
+    if fingerprint != config_fingerprint(scoped.config):
         raise HTTPException(
             status_code=409,
             detail="Configuration changed after preview; generate it again",
@@ -154,6 +156,7 @@ async def list_groups(
     kind: str = Query(default="exact", pattern="^(exact|similar|burst)$"),
     limit: int = Query(default=50, ge=1, le=500),
     max_distance: int = Query(default=DEFAULT_SIMILAR_DISTANCE, ge=0, le=16),
+    excluded_roots: Annotated[list[str] | None, Query()] = None,
 ) -> GroupPage:
     """A bounded page of groups; members come with them but the library does not.
 
@@ -162,7 +165,15 @@ async def list_groups(
     happens to include capture time and camera, and it resolves through the same
     ``/review/decide`` and ``/review/policy/*`` routes as the other two.
     """
-    return await asyncio.to_thread(_list_groups, container, config, kind, limit, max_distance)
+    return await asyncio.to_thread(
+        _list_groups,
+        container,
+        config,
+        kind,
+        limit,
+        max_distance,
+        excluded_roots or [],
+    )
 
 
 def _list_groups(
@@ -171,38 +182,66 @@ def _list_groups(
     kind: str,
     limit: int,
     max_distance: int,
+    excluded_roots: list[str],
 ) -> GroupPage:
+    excluded_ids = frozenset(apply_run_scope(config, excluded_roots).excluded_root_ids)
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
         generation = catalog.current_generation()
         if kind == "exact":
-            produced = list(exact_groups(catalog, index, generation=generation, limit=limit))
+            produced = exact_groups(catalog, index, generation=generation)
         elif kind == "burst":
-            produced = list(
-                burst_groups(
-                    catalog,
-                    index,
-                    time_window_seconds=config.burst_time_window_seconds,
-                    max_perceptual_distance=config.burst_perceptual_distance,
-                    require_camera_identity=config.burst_require_camera_identity,
-                    generation=generation,
-                    limit=limit,
-                )
+            produced = burst_groups(
+                catalog,
+                index,
+                time_window_seconds=config.burst_time_window_seconds,
+                max_perceptual_distance=config.burst_perceptual_distance,
+                require_camera_identity=config.burst_require_camera_identity,
+                generation=generation,
             )
         else:
-            produced = list(
-                similar_groups(
-                    catalog,
-                    index,
-                    max_distance=max_distance,
-                    generation=generation,
-                    limit=limit,
-                )
+            produced = similar_groups(
+                catalog,
+                index,
+                max_distance=max_distance,
+                generation=generation,
             )
+        scoped_groups = _take_scoped_groups(produced, excluded_ids, limit)
     return GroupPage(
-        groups=[group.model_dump(mode="json") for group in produced],
+        groups=[group.model_dump(mode="json") for group in scoped_groups],
         kind=kind,
     )
+
+
+def _take_scoped_groups(
+    groups: Any,
+    excluded_root_ids: frozenset[str],
+    limit: int,
+) -> list[DuplicateGroup]:
+    """Drop excluded-root members before they can influence a review decision."""
+    selected: list[DuplicateGroup] = []
+    for group in groups:
+        members = tuple(
+            member for member in group.members if member.root_id not in excluded_root_ids
+        )
+        if len(members) < 2:
+            continue
+        anchor = group.anchor_member_id
+        if anchor is not None and all(member.member_id != anchor for member in members):
+            anchor = members[0].member_id
+        selected.append(
+            group.model_copy(
+                update={
+                    "members": members,
+                    "member_count": len(members),
+                    "total_bytes": sum(member.facts.size_bytes for member in members),
+                    "anchor_member_id": anchor,
+                }
+            )
+        )
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 # --------------------------------------------------------------------------- #

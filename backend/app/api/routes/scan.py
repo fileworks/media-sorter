@@ -19,6 +19,7 @@ from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.core.exceptions import TaskNotFoundError
 from app.core.library_validation import validate_configured_library
+from app.core.run_scope import apply_run_scope
 
 router = APIRouter()
 
@@ -32,6 +33,16 @@ class ScanResponse(BaseModel):
     media_units: int = 0
     companion_files: int = 0
     unmatched_companions: int = 0
+    excluded_roots: list[str] = Field(default_factory=list)
+    excluded_root_ids: list[str] = Field(default_factory=list)
+
+
+class RunScopeRequest(BaseModel):
+    excluded_roots: list[str] = Field(default_factory=list)
+
+
+class ScopedTaskStartRequest(TaskStartRequest):
+    excluded_roots: list[str] = Field(default_factory=list)
 
 
 class DiskSpaceResponse(BaseModel):
@@ -62,13 +73,22 @@ class AnalysisResponse(BaseModel):
     media_units: int = 0
     companion_files: int = 0
     unmatched_companions: int = 0
+    excluded_roots: list[str] = Field(default_factory=list)
+    excluded_root_ids: list[str] = Field(default_factory=list)
 
 
 def _snapshot(config: Config) -> Config:
     return Config.from_dict(config.to_dict())
 
 
-async def _scan_operation(task: Task, container: Any, config: Config) -> dict[str, Any]:
+async def _scan_operation(
+    task: Task,
+    container: Any,
+    config: Config,
+    excluded_roots: list[str],
+) -> dict[str, Any]:
+    scope = apply_run_scope(config, excluded_roots)
+    config = scope.config
     task.transition("validating")
     library = await asyncio.to_thread(
         validate_configured_library,
@@ -99,16 +119,36 @@ async def _scan_operation(task: Task, container: Any, config: Config) -> dict[st
         media_units=len(traversal.units),
         companion_files=sum(len(unit.companions) for unit in traversal.units),
         unmatched_companions=len(traversal.unmatched_companions),
+        excluded_roots=list(scope.excluded_paths),
+        excluded_root_ids=list(scope.excluded_root_ids),
     ).model_dump()
 
 
-async def _analysis_operation(task: Task, container: Any, config: Config) -> dict[str, Any]:
-    return cast(dict[str, Any], await container.analysis_service.analyse(config, task=task))
+async def _analysis_operation(
+    task: Task,
+    container: Any,
+    config: Config,
+    excluded_roots: list[str],
+) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        await container.analysis_service.analyse(
+            config,
+            task=task,
+            excluded_roots=excluded_roots,
+        ),
+    )
 
 
 @router.post("/scan", response_model=ScanResponse)
-async def scan(container: ContainerDep, config: ConfigDep) -> ScanResponse:
+async def scan(
+    container: ContainerDep,
+    config: ConfigDep,
+    body: RunScopeRequest | None = None,
+) -> ScanResponse:
     """Compatibility endpoint; shipped clients use the task transport."""
+    scope = apply_run_scope(config, (body or RunScopeRequest()).excluded_roots)
+    config = scope.config
     library = await asyncio.to_thread(
         validate_configured_library,
         config,
@@ -134,6 +174,8 @@ async def scan(container: ContainerDep, config: ConfigDep) -> ScanResponse:
         media_units=len(traversal.units),
         companion_files=sum(len(unit.companions) for unit in traversal.units),
         unmatched_companions=len(traversal.unmatched_companions),
+        excluded_roots=list(scope.excluded_paths),
+        excluded_root_ids=list(scope.excluded_root_ids),
     )
 
 
@@ -141,17 +183,18 @@ async def scan(container: ContainerDep, config: ConfigDep) -> ScanResponse:
 async def start_scan(
     container: ContainerDep,
     config: ConfigDep,
-    body: TaskStartRequest | None = None,
+    body: ScopedTaskStartRequest | None = None,
     retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
     transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
 ) -> TaskStartResponse:
-    request = body or TaskStartRequest()
+    request = body or ScopedTaskStartRequest()
     task, replayed = container.task_manager.start_task(
         "scan",
         request.idempotency_key,
         _scan_operation,
         container,
         _snapshot(config),
+        request.excluded_roots,
     )
     _record_transport(task, retry_attempt, transport_event)
     return TaskStartResponse(
@@ -184,25 +227,33 @@ async def cancel_scan(
 
 
 @router.post("/preview")
-async def preview(container: ContainerDep, config: ConfigDep) -> dict[str, Any]:
+async def preview(
+    container: ContainerDep,
+    config: ConfigDep,
+    body: RunScopeRequest | None = None,
+) -> dict[str, Any]:
     """Compatibility endpoint; shipped clients use the task transport."""
-    return await container.preview_service.preview(config)
+    return await container.preview_service.preview(
+        config,
+        excluded_roots=(body or RunScopeRequest()).excluded_roots,
+    )
 
 
 @router.post("/preview/start", response_model=TaskStartResponse)
 async def start_preview(
     container: ContainerDep,
     config: ConfigDep,
-    body: TaskStartRequest | None = None,
+    body: ScopedTaskStartRequest | None = None,
     retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
     transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
 ) -> TaskStartResponse:
-    request = body or TaskStartRequest()
+    request = body or ScopedTaskStartRequest()
     task, replayed = container.task_manager.start_task(
         "preview",
         request.idempotency_key,
         container.preview_service.run_preview,
         config=_snapshot(config),
+        excluded_roots=request.excluded_roots,
     )
     _record_transport(task, retry_attempt, transport_event)
     return TaskStartResponse(
@@ -235,9 +286,20 @@ async def cancel_preview(
 
 
 @router.post("/analysis", response_model=AnalysisResponse)
-async def analysis(container: ContainerDep, config: ConfigDep) -> AnalysisResponse:
+async def analysis(
+    container: ContainerDep,
+    config: ConfigDep,
+    body: RunScopeRequest | None = None,
+) -> AnalysisResponse:
     """Compatibility endpoint; shipped clients use the task transport."""
-    return AnalysisResponse(**(await container.analysis_service.analyse(config)))
+    return AnalysisResponse(
+        **(
+            await container.analysis_service.analyse(
+                config,
+                excluded_roots=(body or RunScopeRequest()).excluded_roots,
+            )
+        )
+    )
 
 
 @router.get("/analysis/disk-space", response_model=DiskSpaceResponse)
@@ -250,17 +312,18 @@ async def disk_space(container: ContainerDep, config: ConfigDep) -> DiskSpaceRes
 async def start_analysis(
     container: ContainerDep,
     config: ConfigDep,
-    body: TaskStartRequest | None = None,
+    body: ScopedTaskStartRequest | None = None,
     retry_attempt: int | None = Header(default=None, alias="X-MediaSorter-Retry-Attempt"),
     transport_event: str | None = Header(default=None, alias="X-MediaSorter-Transport-Event"),
 ) -> TaskStartResponse:
-    request = body or TaskStartRequest()
+    request = body or ScopedTaskStartRequest()
     task, replayed = container.task_manager.start_task(
         "analysis",
         request.idempotency_key,
         _analysis_operation,
         container,
         _snapshot(config),
+        request.excluded_roots,
     )
     _record_transport(task, retry_attempt, transport_event)
     return TaskStartResponse(

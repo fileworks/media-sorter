@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -128,161 +127,6 @@ def test_changed_final_destination_is_rejected_before_transfer(tmp_path: Path) -
 
 
 # --------------------------------------------------------------------------- #
-# Exclusions                                                                    #
-# --------------------------------------------------------------------------- #
-
-
-def _unit_plan(tmp_path: Path) -> tuple[Config, Path, Path, Path, FrozenSortPlan]:
-    """A RAW+JPEG unit plus an unrelated file, so unit expansion is observable."""
-    inputs = tmp_path / "input"
-    inputs.mkdir()
-    raw = inputs / "shot.raw"
-    jpeg = inputs / "shot.jpg"
-    other = inputs / "other.jpg"
-    for path, payload in ((raw, b"raw bytes"), (jpeg, b"jpeg bytes"), (other, b"other bytes")):
-        path.write_bytes(payload)
-    config = _config(tmp_path)
-    plan = build_frozen_sort_plan(
-        [
-            {
-                "source": str(raw),
-                "destination": str(tmp_path / "output" / "shot.raw"),
-                "status": "sort",
-                "file_size": raw.stat().st_size,
-                "unit_id": "unit-shot",
-                "companions": [],
-            },
-            {
-                "source": str(jpeg),
-                "destination": str(tmp_path / "output" / "shot.jpg"),
-                "status": "sort",
-                "file_size": jpeg.stat().st_size,
-                "unit_id": "unit-shot",
-                "companions": [],
-            },
-            {
-                "source": str(other),
-                "destination": str(tmp_path / "output" / "other.jpg"),
-                "status": "sort",
-                "file_size": other.stat().st_size,
-                "unit_id": "unit-other",
-                "companions": [],
-            },
-        ],
-        config,
-    )
-    return config, raw, jpeg, other, plan
-
-
-def _execution(tmp_path: Path, config: Config, plan: Any) -> OperationExecution:
-    return OperationExecution.start(
-        operation_id="exclusions",
-        state_root=tmp_path / "state",
-        preservation=config.preservation_profile,
-        authorization=authorize_config_mutations(config),
-        effective_config_sha256=hashlib.sha256(b"config").hexdigest(),
-        frozen_plan=plan,
-    )
-
-
-def test_excluding_a_companion_excludes_its_whole_unit(tmp_path: Path) -> None:
-    _config_value, raw, jpeg, other, plan = _unit_plan(tmp_path)
-
-    derived = plan.with_exclusions([str(jpeg)])
-
-    assert derived.is_skipped(raw)
-    assert derived.is_skipped(jpeg)
-    assert not derived.is_skipped(other)
-
-
-def test_exclusions_never_mutate_the_stored_plan(tmp_path: Path) -> None:
-    _config_value, _raw, jpeg, _other, plan = _unit_plan(tmp_path)
-
-    plan.with_exclusions([str(jpeg)])
-
-    assert plan.skipped_sources == frozenset()
-
-
-def test_an_excluded_source_is_never_attempted(tmp_path: Path) -> None:
-    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
-    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
-    before = other.read_bytes()
-
-    result = execution.place(
-        other,
-        tmp_path / "output" / "other.jpg",
-        kind="copy",
-        move=False,
-        root_id="input",
-        relative_path="other.jpg",
-        unit_id="unit-other",
-    )
-
-    assert result is None
-    assert other.read_bytes() == before
-    assert not (tmp_path / "output" / "other.jpg").exists()
-    assert [outcome.code for outcome in execution.outcomes] == ["excluded"]
-
-
-def test_an_unplanned_action_still_raises_when_others_are_excluded(tmp_path: Path) -> None:
-    """The skip is not a hole in the whitelist — only the named sources skip."""
-    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
-    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
-
-    with pytest.raises(ValueError, match="differs from the reviewed plan"):
-        execution.place(
-            tmp_path / "input" / "shot.jpg",
-            tmp_path / "output" / "somewhere-else.jpg",
-            kind="copy",
-            move=False,
-            root_id="input",
-            relative_path="shot.jpg",
-            unit_id="unit-shot",
-        )
-
-
-def test_excluding_everything_completes_with_zero_actions(tmp_path: Path) -> None:
-    config, raw, jpeg, other, plan = _unit_plan(tmp_path)
-    everything = [str(raw), str(jpeg), str(other)]
-    execution = _execution(tmp_path, config, plan.with_exclusions(everything))
-
-    for source in (raw, jpeg, other):
-        assert (
-            execution.place(
-                source,
-                tmp_path / "output" / source.name,
-                kind="copy",
-                move=False,
-                root_id="input",
-                relative_path=source.name,
-                unit_id="unit-shot",
-            )
-            is None
-        )
-
-    assert not (tmp_path / "output").exists()
-    assert {outcome.code for outcome in execution.outcomes} == {"excluded"}
-
-
-def test_an_excluded_file_is_reported_as_excluded_not_failed(tmp_path: Path) -> None:
-    config, _raw, _jpeg, other, plan = _unit_plan(tmp_path)
-    execution = _execution(tmp_path, config, plan.with_exclusions([str(other)]))
-
-    execution.place(
-        other,
-        tmp_path / "output" / "other.jpg",
-        kind="copy",
-        move=False,
-        root_id="input",
-        relative_path="other.jpg",
-        unit_id="unit-other",
-    )
-
-    # The point of the test: an exclusion is a decision, not a failure.
-    assert execution.outcomes[0].code == "excluded"
-
-
-# --------------------------------------------------------------------------- #
 # Quarantine statuses                                                           #
 # --------------------------------------------------------------------------- #
 
@@ -292,7 +136,8 @@ def _quarantine_plan(tmp_path: Path, status: str) -> tuple[Path, Path, FrozenSor
     source = tmp_path / "input" / "photo.jpg"
     source.parent.mkdir()
     source.write_bytes(b"undated media")
-    destination = tmp_path / "output" / "_unknown_dates" / "photo.jpg"
+    folder = "_corrupted" if status == "failed" else "_undated"
+    destination = tmp_path / "output" / folder / "photo.jpg"
     config = _config(tmp_path)
     plan = build_frozen_sort_plan(
         [
@@ -309,21 +154,19 @@ def _quarantine_plan(tmp_path: Path, status: str) -> tuple[Path, Path, FrozenSor
     return source, destination, plan
 
 
-@pytest.mark.parametrize("status", ["unknown_date", "suspicious_date"])
+@pytest.mark.parametrize("status", ["unknown_date", "suspicious_date", "failed"])
 def test_every_previewed_review_folder_placement_is_planned(tmp_path: Path, status: str) -> None:
     """A destination the preview showed must be one the executor may act on.
 
-    `suspicious_date` is a file whose EXIF date failed the sanity check and left
-    no usable date, so the preview sends it to `_unknown_dates/` exactly like
-    `unknown_date`. When the plan did not include it, the run reached the
-    whitelist with a placement nobody had authorized, recorded the file as
-    *failed*, and told the user to generate the preview again — which produced
-    the same plan and the same failure every time.
+    Suspicious/undated files go to `_undated/`; unreadable files go to
+    `_corrupted/`. Every destination shown for review must therefore be in the
+    executor's whitelist rather than failing again as an unplanned action.
     """
     source, destination, plan = _quarantine_plan(tmp_path, status)
 
     assert plan.impact.quarantine_count == 1
     assert plan.impact.skip_count == 0
+    assert plan.impact.unresolved_count == 0
     assert [action.destination_path for action in plan.actions] == [str(destination)]
 
     guard = FrozenPlanGuard(plan)
@@ -343,14 +186,7 @@ def test_every_previewed_review_folder_placement_is_planned(tmp_path: Path, stat
 def test_actionable_groups_counts_planned_files_not_merely_whether_any_exist(
     tmp_path: Path,
 ) -> None:
-    """The preflight subtracts exclusions from this, so it has to be a count.
-
-    It was `1 if actions else 0`. Execute reads
-    `actionable_groups - (excluded transfers + excluded quarantine)` and refuses
-    to start when that reaches zero, so excluding a single file blocked a run of
-    any size with "every file is excluded" — and unreadable and undated files
-    start excluded, so it fired on any real library.
-    """
+    """Preflight needs the real number of primary actions, not an any/none flag."""
     source_dir = tmp_path / "input"
     source_dir.mkdir()
     items = []
@@ -510,120 +346,3 @@ def test_a_companion_that_vanished_before_freezing_does_not_break_the_plan(
 
     assert [action.source_path for action in plan.actions] == [str(jpeg)]
     assert plan.impact.actionable_groups == 1
-
-
-# --------------------------------------------------------------------------- #
-# Impact after exclusions                                                       #
-# --------------------------------------------------------------------------- #
-
-
-def _unit_and_loose_plan(
-    tmp_path: Path, *, copy_mode: bool = True
-) -> tuple[Path, Path, Path, Path, FrozenSortPlan]:
-    """A RAW+JPEG unit, a quarantined file, and a loose file."""
-    source_dir = tmp_path / "input"
-    source_dir.mkdir()
-    jpeg = source_dir / "shot.jpg"
-    jpeg.write_bytes(b"j" * 100)
-    raw = source_dir / "shot.raw"
-    raw.write_bytes(b"r" * 900)
-    junk = source_dir / "thumb.png"
-    junk.write_bytes(b"t" * 10)
-    loose = source_dir / "other.jpg"
-    loose.write_bytes(b"o" * 50)
-    config = Config(
-        source_directory=str(source_dir),
-        target_directory=str(tmp_path / "output"),
-        copy_instead_of_move=copy_mode,
-    )
-    plan = build_frozen_sort_plan(
-        [
-            {
-                "source": str(jpeg),
-                "destination": str(tmp_path / "output" / "2024" / "shot.jpg"),
-                "status": "sort",
-                "file_size": 100,
-                "unit_id": "u1",
-                "companions": [
-                    {
-                        "source": str(raw),
-                        "destination": str(tmp_path / "output" / "2024" / "shot.raw"),
-                        "role": "raw_sibling",
-                        "status": "attached",
-                    }
-                ],
-            },
-            {
-                "source": str(junk),
-                "destination": str(tmp_path / "output" / "_junk" / "thumb.png"),
-                "status": "junk",
-                "file_size": 10,
-                "companions": [],
-            },
-            {
-                "source": str(loose),
-                "destination": str(tmp_path / "output" / "2024" / "other.jpg"),
-                "status": "sort",
-                "file_size": 50,
-                "companions": [],
-            },
-        ],
-        config,
-    )
-    return jpeg, raw, junk, loose, plan
-
-
-def test_excluding_a_unit_takes_its_companion_out_of_the_impact(tmp_path: Path) -> None:
-    """The impact has to describe the run that will happen, companions included.
-
-    Review excludes a *reviewed file*; the plan expands that to the whole media
-    unit. The preflight then subtracted a per-file tally from action-level
-    totals, so excluding a RAW+JPEG pair took one file and the JPEG's bytes off
-    a total that held two files and both their bytes — it promised to copy one
-    file needing 900 bytes when it would copy nothing.
-    """
-    jpeg, _raw, _junk, _loose, plan = _unit_and_loose_plan(tmp_path)
-
-    assert plan.impact.copy_count == 3  # jpeg + raw + loose
-    # Quarantined copies consume destination space too, so the junk file counts.
-    assert plan.impact.required_bytes == 1060
-
-    derived = plan.with_exclusions([str(jpeg)])
-
-    assert derived.impact.copy_count == 1  # only the loose file survives
-    assert derived.impact.required_bytes == 60  # loose 50 + quarantined junk 10
-    assert derived.impact.quarantine_count == 1
-    assert derived.impact.actionable_groups == 2
-
-
-def test_impact_after_exclusions_always_matches_a_recount(tmp_path: Path) -> None:
-    """Every subset, recounted from the surviving actions themselves."""
-    jpeg, _raw, junk, loose, plan = _unit_and_loose_plan(tmp_path)
-    candidates = [str(jpeg), str(junk), str(loose)]
-
-    for mask in range(8):
-        excluded = [path for index, path in enumerate(candidates) if mask >> index & 1]
-        derived = plan.with_exclusions(excluded)
-        surviving = derived.live_actions
-        assert derived.impact.copy_count == sum(a.kind == "copy" for a in surviving), excluded
-        assert derived.impact.move_count == sum(a.kind == "move" for a in surviving), excluded
-        assert derived.impact.quarantine_count == sum(a.kind == "quarantine" for a in surviving), (
-            excluded
-        )
-        assert derived.impact.actionable_groups == sum(
-            a.companion_role is None for a in surviving
-        ), excluded
-        assert derived.impact.source_mutations == sum(
-            a.source_effect != "retained" for a in surviving
-        ), excluded
-
-
-def test_source_mutations_drop_with_the_files_that_were_excluded(tmp_path: Path) -> None:
-    """Move mode asks for an explicit acknowledgement; it must not overstate."""
-    jpeg, _raw, _junk, _loose, plan = _unit_and_loose_plan(tmp_path, copy_mode=False)
-
-    assert plan.impact.source_mutations == 4  # jpeg, raw, junk, loose
-
-    derived = plan.with_exclusions([str(jpeg)])
-
-    assert derived.impact.source_mutations == 2  # junk + loose

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,9 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
-from app.core.exceptions import PlanAuthorizationError
+from app.core.exceptions import ConflictError, PlanAuthorizationError
 from app.core.integrity import MutationActionKind, SourceEffect
 from app.core.provenance import OutcomeProvenance
+from app.services.destination import (
+    CONTEXTUAL_COPY_FOLDER,
+    QUARANTINE_FOLDERS,
+    companion_destination,
+    copy_destination,
+    reserve_destination,
+)
+from app.services.outcome_provenance import contextualize_copy
 
 PlannedDisposition = Literal[
     "sort",
@@ -31,22 +39,24 @@ PlannedDisposition = Literal[
 #: This is the one list, read rather than restated wherever the question "does
 #: this file go to a review folder?" is asked — `preview_service` derives its
 #: own set from it, and `reviewStatuses.test.ts` pins the frontend to it.
-#: Restating it was how `suspicious_date` came to be previewed into
-#: `_unknown_dates/` while the plan authorized nothing: the run then reached the
+#: Restating it was how `suspicious_date` came to be previewed into the undated
+#: folder while the plan authorized nothing: the run then reached the
 #: whitelist with an unplanned placement, recorded the file as *failed*, and
 #: told the user to generate the preview again — which produced the same plan
 #: and the same failure every time.
 #:
-#: `failed` and `corrupted` are deliberately absent: they are outcomes the sort
-#: discovers while running, never statuses the preview freezes into a plan.
+#: ``failed`` is a previewed unreadable outcome with a concrete `_corrupted/`
+#: destination. It must be frozen like every other reviewed placement; the run
+#: reports it as ``corrupted`` once that protective copy/move succeeds.
 PLANNED_QUARANTINE_STATUSES = frozenset(
     {
         "already_in_destination",
         "duplicate",
+        "failed",
         "future_date",
         "junk",
         # No usable date, and the EXIF that was there failed the sanity check.
-        # The preview sends it to `_unknown_dates/` exactly like `unknown_date`,
+        # The preview sends it to `_undated/` exactly like `unknown_date`,
         # so it needs exactly the same planned action.
         "suspicious_date",
         "unknown_date",
@@ -78,6 +88,15 @@ class FrozenSortAction(BaseModel):
     unit_id: str | None = None
     companion_role: str | None = None
     provenance: OutcomeProvenance | None = None
+    #: The explanation for this file's own destination before duplicate
+    #: placement made it follow a keeper. Needed when Review promotes a copy.
+    would_be_provenance: OutcomeProvenance | None = None
+    #: Audit context for keeper-relative placement. Optional for old plans.
+    source_root: str | None = None
+    destination_root: str | None = None
+    resolved_date: str | None = None
+    would_be_destination_path: str | None = None
+    keeper_path: str | None = None
 
     @property
     def identity(self) -> str:
@@ -109,6 +128,26 @@ class FrozenSortImpact(BaseModel):
     unresolved_count: int
 
 
+class ReviewedSet(BaseModel):
+    """One duplicate set, and which copy Review decided to keep.
+
+    Set-level rather than hash-keyed because the swap needs both sides. Nothing
+    in a frozen action carries a content hash — `source_fingerprint` is a cache
+    hint (size, mtime, ctime, inode), deliberately not proof of content — so
+    `{sha256: path}` could name the winner but never the losers whose actions
+    have to change with it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    keep: str
+    demote: tuple[str, ...] = ()
+    #: The user decided these files are independent rather than copies. ``keep``
+    #: remains the stable representative and ``demote`` carries the rest of the
+    #: complete set, but no member is demoted when this flag is true.
+    keep_all: bool = False
+
+
 class FrozenSortPlan(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -116,18 +155,12 @@ class FrozenSortPlan(BaseModel):
     config_fingerprint: str
     actions: tuple[FrozenSortAction, ...]
     impact: FrozenSortImpact
-    #: Content hash → the path Review chose to keep for that content. Seeding
-    #: the run's duplicate registry with these makes the reviewed copy the
-    #: "first seen" one, which is the same mechanism the configured policy uses
-    #: — so a reviewed keeper wins without a second, parallel notion of keeping.
-    reviewed_keepers: dict[str, str] = Field(default_factory=dict)
-    #: Sources Review excluded from this run. They are skipped before anything
-    #: touches them, and are not failures — the plan is unchanged, a derived
-    #: copy of it simply declines to act on these.
-    skipped_sources: frozenset[str] = frozenset()
-    #: Counters the item scan produced, which no exclusion can change: a file
-    #: the preview skipped stays skipped, and one it could not resolve stays
-    #: unresolved.
+    #: The keeper Review chose for each duplicate set it decided, applied to a
+    #: derived plan by `with_reviewed_sets`. One run's decisions, never the
+    #: stored plan's.
+    reviewed_sets: tuple[ReviewedSet, ...] = ()
+    #: Counters the item scan produced: a file the preview skipped stays
+    #: skipped, and one it could not resolve stays unresolved.
     skip_count: int = 0
     unresolved_count: int = 0
     companions_left_in_place: int = 0
@@ -137,53 +170,77 @@ class FrozenSortPlan(BaseModel):
     converts_media: bool = False
     embeds_tags: bool = False
 
-    @property
-    def live_actions(self) -> tuple[FrozenSortAction, ...]:
-        """The actions this plan will actually perform, exclusions applied."""
-        return tuple(
-            action for action in self.actions if action.source_path not in self.skipped_sources
-        )
-
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
 
-    def is_skipped(self, source: Path | str) -> bool:
-        return str(source) in self.skipped_sources
+    def with_reviewed_sets(
+        self,
+        sets: Sequence[ReviewedSet],
+        *,
+        source_root: Path | str,
+    ) -> FrozenSortPlan:
+        """A new plan in which Review's chosen copy is the one that gets placed.
 
-    def with_reviewed_keepers(self, keepers: dict[str, str]) -> FrozenSortPlan:
-        """A new plan carrying Review's keeper choices. The stored plan is untouched."""
-        return self.model_copy(update={"reviewed_keepers": dict(keepers)})
+        The run derives every destination itself, so a plan that merely *said*
+        the other copy wins would be a plan the run then contradicts — and
+        `FrozenPlanGuard` would abort it as an unplanned action. This therefore
+        rewrites the complete set into exactly what a run seeded with the same
+        decision will compute: the chosen copy takes its own predicted outcome,
+        every other member follows it into an adjacent ``_copies`` leaf, and
+        companions follow their primary.
 
-    def with_exclusions(self, sources: Iterable[str]) -> FrozenSortPlan:
-        """A new plan that declines the given sources, expanded to whole units.
-
-        Excluding one half of a RAW+JPEG pair would leave the other half moving
-        on its own, so a companion drags its unit with it. The stored plan is
-        never mutated: the exclusions belong to one run, not to the plan.
+        The stored plan is never mutated. Decisions belong to one run.
         """
-        requested = {str(source) for source in sources}
-        units = {
-            action.unit_id
-            for action in self.actions
-            if action.unit_id is not None and action.source_path in requested
-        }
-        expanded = {
-            action.source_path
-            for action in self.actions
-            if action.source_path in requested
-            or (action.unit_id is not None and action.unit_id in units)
-        }
-        derived = self.model_copy(update={"skipped_sources": frozenset(expanded)})
-        # The impact has to describe the run that will happen. Leaving the
-        # original totals here is what made the Execute preflight subtract a
-        # per-reviewed-file tally from action-level counts: excluding a RAW+JPEG
-        # pair took one file and the JPEG's bytes off a total holding two files
-        # and both, so it promised a copy that would never happen.
+        if not sets:
+            return self
+        root = Path(source_root)
+        by_source: dict[str, list[int]] = {}
+        for index, action in enumerate(self.actions):
+            by_source.setdefault(action.source_path, []).append(index)
+
+        rewritten = list(self.actions)
+        for reviewed in sets:
+            keeper_index = _primary_index(rewritten, by_source, reviewed.keep)
+            group_indices = [
+                _primary_index(rewritten, by_source, source)
+                for source in dict.fromkeys((reviewed.keep, *reviewed.demote))
+            ]
+            if reviewed.keep_all:
+                rewritten = _rewrite_distinct_set(
+                    rewritten,
+                    group_indices,
+                    copy_mode=self.copy_mode,
+                )
+                continue
+
+            planned_index = _planned_keeper_index(rewritten, by_source, reviewed)
+            if planned_index is None or planned_index == keeper_index:
+                # Already the keeper, or the set holds nothing else to demote.
+                continue
+            promoted = rewritten[keeper_index]
+            for group_index in group_indices:
+                if group_index != keeper_index:
+                    _refuse_incompatible_units(
+                        rewritten,
+                        promoted,
+                        rewritten[group_index],
+                    )
+            rewritten = _rewrite_reviewed_set(
+                rewritten,
+                group_indices,
+                keeper_index,
+                planned_index,
+                root,
+            )
+
+        derived = self.model_copy(
+            update={"actions": tuple(rewritten), "reviewed_sets": tuple(sets)}
+        )
         return derived.model_copy(update={"impact": derived._impact()})
 
     def _impact(self) -> FrozenSortImpact:
         return build_impact(
-            self.live_actions,
+            self.actions,
             skip_count=self.skip_count,
             unresolved_count=self.unresolved_count,
             companions_left_in_place=self.companions_left_in_place,
@@ -191,6 +248,311 @@ class FrozenSortPlan(BaseModel):
             converts_media=self.converts_media,
             embeds_tags=self.embeds_tags,
         )
+
+
+def _primary_index(
+    actions: Sequence[FrozenSortAction],
+    by_source: dict[str, list[int]],
+    source: str,
+) -> int:
+    """The reviewed file's own action, never one of its companions."""
+    for index in by_source.get(source, ()):
+        if actions[index].companion_role is None:
+            return index
+    raise ConflictError(
+        "A reviewed duplicate names a file the plan has no action for; generate preview again.",
+        details={"reason": "unplanned_review_decision", "source_path": source},
+    )
+
+
+def _planned_keeper_index(
+    actions: Sequence[FrozenSortAction],
+    by_source: dict[str, list[int]],
+    reviewed: ReviewedSet,
+) -> int | None:
+    """Return the member that every currently planned copy follows."""
+    members = (reviewed.keep, *reviewed.demote)
+    referenced_keepers = {
+        actions[_primary_index(actions, by_source, source)].keeper_path for source in members
+    }
+    for source in members:
+        if source in referenced_keepers:
+            return _primary_index(actions, by_source, source)
+
+    # Backward-compatible fallback for plans created before keeper_path was
+    # recorded. A normal dated keeper is the one sortable primary in the set.
+    for source in (reviewed.keep, *reviewed.demote):
+        index = _primary_index(actions, by_source, source)
+        if actions[index].disposition == "sort":
+            return index
+    # An undated/junk keeper is itself set aside, so no member is sortable. It
+    # is still the only primary that is not recorded as following another copy.
+    for source in members:
+        index = _primary_index(actions, by_source, source)
+        if actions[index].keeper_path is None:
+            return index
+    return None
+
+
+def _companion_roles(actions: Sequence[FrozenSortAction], unit_id: str | None) -> list[str]:
+    """Every companion travelling with one unit, by role."""
+    if unit_id is None:
+        return []
+    return sorted(
+        action.companion_role
+        for action in actions
+        if action.unit_id == unit_id and action.companion_role is not None
+    )
+
+
+def _refuse_incompatible_units(
+    actions: Sequence[FrozenSortAction],
+    promoted: FrozenSortAction,
+    demoted: FrozenSortAction,
+) -> None:
+    """Refuse a swap whose two sides do not carry the same companion files.
+
+    A RAW+JPEG pair demoted under a lone JPEG would leave its sidecar bound to a
+    primary that is now set aside as a copy. Half-swapping is worse than refusing:
+    the user believes the set is resolved either way, and only one of those two
+    beliefs can still be corrected.
+
+    Duplicate primaries retain their unit ids, so both sides can be compared and
+    their companions can be rewritten atomically with the selected primary.
+    """
+    promoted_roles = _companion_roles(actions, promoted.unit_id)
+    demoted_roles = _companion_roles(actions, demoted.unit_id)
+    if promoted_roles != demoted_roles:
+        raise ConflictError(
+            "These copies do not carry the same companion files, so one cannot take "
+            "the other's place; exclude one of them instead.",
+            details={
+                "reason": "incompatible_companions",
+                "source_path": promoted.source_path,
+                "conflicting_path": demoted.source_path,
+            },
+        )
+
+
+def _unit_indices(actions: Sequence[FrozenSortAction], primary_indices: Sequence[int]) -> set[int]:
+    """Return primaries plus every companion attached to one of their units."""
+    unit_ids = {
+        actions[index].unit_id for index in primary_indices if actions[index].unit_id is not None
+    }
+    return {
+        index
+        for index, action in enumerate(actions)
+        if index in primary_indices or (action.unit_id is not None and action.unit_id in unit_ids)
+    }
+
+
+def _is_root_set_aside_destination(path: Path) -> bool:
+    """Whether a keeper's own outcome is one of the three root categories."""
+    root_folders = frozenset(QUARANTINE_FOLDERS.values())
+    return any(part in root_folders for part in path.parts)
+
+
+def _keeper_provenance(action: FrozenSortAction) -> OutcomeProvenance | None:
+    """Restore the selected member's own explanation and duplicate status."""
+    provenance = action.would_be_provenance or action.provenance
+    if provenance is None:
+        return None
+    duplicate = provenance.duplicate.model_copy(
+        update={
+            "status": "unique",
+            "match_kind": None,
+            "matched_path": None,
+            "perceptual_distance": None,
+        }
+    )
+    return provenance.model_copy(update={"duplicate": duplicate})
+
+
+def _rewrite_reviewed_set(
+    actions: Sequence[FrozenSortAction],
+    primary_indices: Sequence[int],
+    keeper_index: int,
+    planned_keeper_index: int,
+    source_root: Path,
+) -> list[FrozenSortAction]:
+    """Rewrite a complete duplicate set around Review's selected keeper.
+
+    The selected file uses the own destination recorded during preview. Every
+    loser is then derived from that exact path with the same shared reservation
+    function used by preview and execution. This works across dates, input
+    folders, and root set-aside categories without guessing configuration.
+    """
+    rewritten = list(actions)
+    affected = _unit_indices(actions, primary_indices)
+    reserved = {
+        Path(action.reviewed_destination_path).resolve(strict=False)
+        for index, action in enumerate(actions)
+        if index not in affected
+    }
+
+    selected = actions[keeper_index]
+    own_destination = Path(selected.would_be_destination_path or selected.reviewed_destination_path)
+    keeper_destination = reserve_destination(own_destination, reserved)
+    keeper_is_set_aside = _is_root_set_aside_destination(keeper_destination)
+    reviewed_keeper = selected.model_copy(
+        update={
+            "destination_path": str(
+                keeper_destination
+                if keeper_is_set_aside
+                else keeper_destination.with_suffix(Path(selected.source_path).suffix)
+            ),
+            "reviewed_destination_path": str(keeper_destination),
+            "kind": (
+                "quarantine"
+                if keeper_is_set_aside
+                else (
+                    "copy" if actions[planned_keeper_index].source_effect == "retained" else "move"
+                )
+            ),
+            "source_effect": actions[planned_keeper_index].source_effect,
+            "disposition": "quarantine" if keeper_is_set_aside else "sort",
+            "keeper_path": None,
+            "provenance": _keeper_provenance(selected),
+        }
+    )
+    rewritten[keeper_index] = reviewed_keeper
+
+    loser_indices = sorted(
+        (index for index in primary_indices if index != keeper_index),
+        key=lambda index: actions[index].source_path,
+    )
+    for loser_index in loser_indices:
+        loser = actions[loser_index]
+        loser_root = Path(loser.source_root or source_root)
+        proposed = copy_destination(
+            keeper_destination,
+            Path(selected.source_path),
+            Path(loser.source_path),
+            loser_root,
+        )
+        copy_path = reserve_destination(proposed, reserved)
+        provenance = (
+            contextualize_copy(
+                loser.provenance,
+                destination=copy_path,
+                destination_root=Path(
+                    loser.destination_root
+                    or selected.destination_root
+                    or _destination_root(keeper_destination)
+                ),
+                keeper=Path(selected.source_path),
+            )
+            if loser.provenance is not None
+            else None
+        )
+        rewritten[loser_index] = loser.model_copy(
+            update={
+                "destination_path": str(copy_path),
+                "reviewed_destination_path": str(copy_path),
+                "kind": "quarantine",
+                "disposition": "quarantine",
+                "keeper_path": selected.source_path,
+                "provenance": provenance,
+            }
+        )
+
+    for primary_index in primary_indices:
+        primary = rewritten[primary_index]
+        if primary.unit_id is None:
+            continue
+        for index in affected:
+            companion = rewritten[index]
+            if companion.unit_id != primary.unit_id or companion.companion_role is None:
+                continue
+            destination = companion_destination(
+                Path(primary.reviewed_destination_path),
+                Path(companion.source_path),
+            )
+            rewritten[index] = companion.model_copy(
+                update={
+                    "destination_path": str(destination),
+                    "reviewed_destination_path": str(destination),
+                    "keeper_path": primary.keeper_path,
+                }
+            )
+    return rewritten
+
+
+def _rewrite_distinct_set(
+    actions: Sequence[FrozenSortAction],
+    primary_indices: Sequence[int],
+    *,
+    copy_mode: bool,
+) -> list[FrozenSortAction]:
+    """Restore every member's own reviewed destination for a keep-all answer.
+
+    Preview already recorded the independent destination before duplicate
+    placement made a copy follow its keeper. Reusing that record is both more
+    accurate and safer than re-running rules during execution. Reservations are
+    rebuilt across the whole set so two independent files that want one name
+    still receive the deterministic collision suffix the preview contract uses.
+    """
+    rewritten = list(actions)
+    affected = _unit_indices(actions, primary_indices)
+    reserved = {
+        Path(action.reviewed_destination_path).resolve(strict=False)
+        for index, action in enumerate(actions)
+        if index not in affected
+    }
+
+    for primary_index in sorted(primary_indices, key=lambda index: actions[index].source_path):
+        action = actions[primary_index]
+        own = Path(action.would_be_destination_path or action.reviewed_destination_path)
+        reviewed_destination = reserve_destination(own, reserved)
+        set_aside = _is_root_set_aside_destination(reviewed_destination)
+        rewritten[primary_index] = action.model_copy(
+            update={
+                "destination_path": str(
+                    reviewed_destination
+                    if set_aside
+                    else reviewed_destination.with_suffix(Path(action.source_path).suffix)
+                ),
+                "reviewed_destination_path": str(reviewed_destination),
+                "kind": "quarantine" if set_aside else ("copy" if copy_mode else "move"),
+                "source_effect": "retained" if copy_mode else "remove_after_verification",
+                "disposition": "quarantine" if set_aside else "sort",
+                "keeper_path": None,
+                "provenance": _keeper_provenance(action),
+            }
+        )
+
+    for primary_index in primary_indices:
+        primary = rewritten[primary_index]
+        if primary.unit_id is None:
+            continue
+        for index in affected:
+            companion = rewritten[index]
+            if companion.unit_id != primary.unit_id or companion.companion_role is None:
+                continue
+            destination = companion_destination(
+                Path(primary.reviewed_destination_path),
+                Path(companion.source_path),
+            )
+            rewritten[index] = companion.model_copy(
+                update={
+                    "destination_path": str(destination),
+                    "reviewed_destination_path": str(destination),
+                    "keeper_path": None,
+                }
+            )
+    return rewritten
+
+
+def _destination_root(destination: Path) -> Path:
+    """Best-effort root used only to make contextual provenance relative."""
+    parts = destination.parts
+    markers = (*sorted(set(QUARANTINE_FOLDERS.values())), CONTEXTUAL_COPY_FOLDER)
+    for marker in markers:
+        if marker in parts:
+            return Path(*parts[: parts.index(marker)])
+    # For an ordinary dated path there is no self-describing root boundary.
+    # Returning the anchor preserves every segment and never misattributes it.
+    return Path(destination.anchor)
 
 
 def build_impact(
@@ -205,19 +567,17 @@ def build_impact(
 ) -> FrozenSortImpact:
     """Describe exactly the given actions.
 
-    The one place these totals are produced, so a plan and the plan derived from
-    it by excluding sources cannot count differently.
+    The one place these totals are produced, so a stored plan and a plan derived
+    from duplicate decisions cannot count differently.
     """
     quarantines = [action for action in actions if action.kind == "quarantine"]
     sortable_primaries = sum(
         action.disposition == "sort" and action.companion_role is None for action in actions
     )
     return FrozenSortImpact(
-        # A count of reviewed files the run will act on, not a flag. The Execute
-        # preflight refuses to start at zero, so `1 if actions else 0` meant
-        # excluding a single file blocked a run of any size. Companions are not
-        # counted: an exclusion is expressed per reviewed file, and its unit
-        # follows it.
+        # A count of reviewed primary files the run will act on, not a flag.
+        # Companions are separate actions but remain part of their primary's
+        # group, so preflight must not count them twice.
         actionable_groups=sum(action.companion_role is None for action in actions),
         copy_count=sum(action.kind == "copy" for action in actions),
         move_count=sum(action.kind == "move" for action in actions),
@@ -249,9 +609,9 @@ def build_frozen_sort_plan(
         status = str(item.get("status") or "")
         destination = item.get("destination")
         source = item.get("source")
-        if status in {"failed", "duplicate_unknown"}:
+        if status == "duplicate_unknown":
             unresolved += 1
-        elif status not in {"sort", *quarantine_statuses}:
+        elif not source or not destination or status not in {"sort", *quarantine_statuses}:
             skipped += 1
         if source and destination and status in {"sort", *quarantine_statuses}:
             source_path = Path(str(source))
@@ -282,11 +642,29 @@ def build_frozen_sort_plan(
                     ),
                     expected_size_bytes=int(item.get("file_size") or 0),
                     disposition="quarantine" if status in quarantine_statuses else "sort",
-                    unit_id=None if status in quarantine_statuses else item.get("unit_id"),
+                    unit_id=item.get("unit_id"),
                     provenance=(
                         OutcomeProvenance.model_validate(provenance)
                         if isinstance(provenance, dict)
                         else None
+                    ),
+                    would_be_provenance=(
+                        OutcomeProvenance.model_validate(item["would_be_provenance"])
+                        if isinstance(item.get("would_be_provenance"), dict)
+                        else None
+                    ),
+                    source_root=str(item.get("source_root") or config.source_directory),
+                    destination_root=str(config.target_directory),
+                    resolved_date=(
+                        str(item["extracted_date"])
+                        if item.get("extracted_date") is not None
+                        else None
+                    ),
+                    would_be_destination_path=str(
+                        item.get("would_be_destination") or reviewed_destination
+                    ),
+                    keeper_path=(
+                        str(item["duplicate_of"]) if item.get("duplicate_of") is not None else None
                     ),
                 )
             )
@@ -323,6 +701,19 @@ def build_frozen_sort_plan(
                     disposition="sort",
                     unit_id=item.get("unit_id"),
                     companion_role=companion.get("role"),
+                    source_root=str(item.get("source_root") or config.source_directory),
+                    destination_root=str(config.target_directory),
+                    resolved_date=(
+                        str(companion["extracted_date"])
+                        if companion.get("extracted_date") is not None
+                        else None
+                    ),
+                    would_be_destination_path=str(companion_destination),
+                    keeper_path=(
+                        str(item["duplicate_of"])
+                        if status == "duplicate" and item.get("duplicate_of") is not None
+                        else None
+                    ),
                 )
             )
 
@@ -355,7 +746,6 @@ class FrozenPlanGuard:
     def __init__(self, plan: FrozenSortPlan) -> None:
         self.plan = plan
         self._remaining = plan.action_map()
-        self.skipped_sources = plan.skipped_sources
 
     def authorize(
         self,
@@ -366,15 +756,8 @@ class FrozenPlanGuard:
         move: bool,
         unit_id: str | None,
         companion_role: str | None,
-    ) -> FrozenSortAction | None:
-        """The planned action, or ``None`` when Review excluded this source.
-
-        A skip is not a whitelist violation: the source *is* in the plan, and the
-        user decided not to act on it. Every other path through the whitelist is
-        unchanged — an unplanned action still raises.
-        """
-        if str(source) in self.skipped_sources:
-            return None
+    ) -> FrozenSortAction:
+        """Return the exact planned action or refuse the mutation."""
         source_effect: SourceEffect = "remove_after_verification" if move else "retained"
         candidate = FrozenSortAction(
             source_path=str(source),
