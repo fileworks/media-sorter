@@ -122,7 +122,7 @@ failures fall back to on-demand rendering and never block media access.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Detect duplicates | `remove_duplicates` | `true` | Master switch for duplicate detection (per sort run). Detected duplicates are quarantined in `_duplicates/` — never deleted. |
+| Detect duplicates | `remove_duplicates` | `true` | Master switch for duplicate detection (per sort run). Each losing copy is verified under `<keeper folder>/_copies/`; it is never silently deleted. |
 | Exact-match duplicates | `duplicate_exact_enabled` | `true` | SHA-256 byte-identical detection. |
 | Visual-similarity duplicates | `duplicate_perceptual_enabled` | `true` | Perceptual-hash near-duplicate detection (images and video). |
 | Similarity threshold | `duplicate_perceptual_threshold` | `95` | 0–100; how visually similar two files must be to count as duplicates. Higher = stricter. |
@@ -131,10 +131,14 @@ failures fall back to on-demand rendering and never block media access.
 
 When duplicate detection is enabled, MediaSorter always compares source files with
 existing destination media before checking duplicates within the current source.
-Destination matches are quarantined to `_already_in_destination/`; the index also
-catches duplicates across separate runs. Preview performs the same comparison through a
-temporary read-only index. A legacy `dedup_against_destination` value is accepted when
-loading old config files but is ignored and is not saved.
+Destination matches are reported without writing redundant bytes; the index also catches
+duplicates across separate runs. Preview performs the same comparison through a temporary
+read-only index. A legacy `dedup_against_destination` value is accepted when loading old
+config files but is ignored and is not saved.
+
+A duplicate set follows its keeper even when members' own metadata would place them under
+different dates. The report preserves every copy's own resolved date, source root, and
+would-be destination so that choice stays auditable.
 
 ## Photo bursts
 
@@ -187,6 +191,11 @@ Copy/Move is profile-wide: it is one decision for the run, not per root.
 Each root carries its own `exclusions` — relative subtrees skipped for that root only. A
 root that is offline or unreadable contributes a partial-result issue and the remaining
 roots still run; one disconnected drive never fails the operation.
+
+Sources can also skip a complete input or reference root for one run without changing the
+saved profile. That root is removed before traversal, so scan, analysis, preview, duplicate
+catalog queries, execution and every displayed count share the same scope. The completed
+report records the skipped paths. Review does not offer per-file exclusion.
 
 **Reference roots are enforced, not just documented.** The verified executor
 refuses any transfer whose source or destination falls inside one, with
@@ -252,7 +261,7 @@ A route is a strict relative suffix such as `screenshots/mobile`. It is appended
 the normal date/category-or-source/camera hierarchy. Absolute paths, empty or dot
 segments, backslashes, control characters, drive/UNC paths, and reserved device names
 are rejected rather than cleaned up. Routes never apply to technical folders such as
-`_duplicates/`, `_junk/`, `_failed/`, or `_already_in_destination/`.
+`_copies/`, `_junk/`, `_undated/`, or `_corrupted/`.
 
 Preview and sort share destination planning. Existing and same-batch conflicts receive
 deterministic `_001`, `_002`, … suffixes without overwriting. If the destination changes

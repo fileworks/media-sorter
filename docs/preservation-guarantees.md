@@ -60,15 +60,15 @@ everything else, so keep independent backups.
 
 | Folder | Sent there when |
 |---|---|
-| `_unknown_dates/` | no date could be extracted |
-| `_future_dates/` | the extracted date is in the future |
-| `_duplicates/` | content already seen earlier in this run |
-| `_already_in_destination/` | content already in the destination index |
+| `_undated/` | no usable date could be established, including implausible future dates |
 | `_junk/` | thumbnail or cache debris |
-| `_failed/` | the file operation itself raised an error |
-| `_corrupted/` | failed the post-copy check and could not be repaired |
+| `_corrupted/` | the file could not be read, placed, or repaired |
+| `<keeper folder>/_copies/` | content is another copy of the keeper in that folder |
 
-**Duplicates are quarantined, never deleted.**
+Content already verified in the destination is reported but not written again. Duplicate
+copies are staged and verified like every other placement, never deleted without a verified
+result, and carry their own date, source root, would-be path, and keeper relation in the
+run audit.
 
 **Companion recognition is intentionally bounded.** A same-stem arbitrary file
 such as `README.txt` is not moved with `README.jpg`, and a recognized sidecar in a

@@ -39,7 +39,18 @@ score. The highest score is preselected, but sharpness measures edge contrast—
 aesthetics, faces, smiles, composition, or intent. An unreadable score is displayed as
 unknown and ranks after measured frames.
 
-Every group requires review. The user can keep another frame, keep several, or dismiss
-the group and keep everything. A decision cannot produce any action before review.
-Non-selected whole units are proposed for the ordinary quarantine path and are never
-deleted.
+Every group requires review, and a burst is resolved exactly the way a duplicate set is:
+it appears in Review's Resolve queue, one group at a time, with every frame side by side
+and the sharpness score under each. **Activating a frame keeps it** — by pointer or by its
+number key. "These are not duplicates" keeps every frame and places each on its own, which
+is the right answer for a continuous-shooting sequence somebody wants whole.
+
+No keep *rule* touches a burst. A perceptual match is not proof that two frames are the
+same photograph, so the bulk rule counts burst groups among the sets it will not decide
+and says so once, rather than showing a disabled control on each of them. A decision
+cannot produce any action before review. Non-selected whole units are proposed for the
+ordinary quarantine path and are never deleted.
+
+Until a group is decided the run leaves it alone — every frame stays where it is — and
+Browse lists it under *Stays where it is → Sets with no decision* so that outcome is
+visible before the run rather than reported after it.

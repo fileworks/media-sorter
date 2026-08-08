@@ -51,6 +51,12 @@ and are still tested; each file says so at the top.
 | [destination-reconciliation.md](destination-reconciliation.md) | `/api/destination-reconciliation` only |
 | [optimization-contracts.md](optimization-contracts.md) | nothing yet — no contract has passed validation, so no optimizer can run |
 
+Review uses `GET /api/media/info` for the open inspector and
+`POST /api/review/outcomes` for complete plan provenance. Keeper choices stay in
+client run state and are sent as `reviewed_sets` to `POST /api/sorting/start`.
+The older server-side review-decision and policy endpoints remain tested for API
+compatibility but are not used by the desktop interface.
+
 ## Supply chain and release
 
 | File | Covers |
