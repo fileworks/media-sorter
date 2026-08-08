@@ -295,10 +295,7 @@ export function nextUnresolved(rows: GroupRow[], currentGroupId: string | null):
 // ── Bulk ─────────────────────────────────────────────────────────────────────
 
 export type BulkScopeId =
-  | "this_group"
-  | "selected_groups"
-  | "current_filtered_exact"
-  | "all_unresolved_exact";
+  "this_group" | "selected_groups" | "current_filtered_exact" | "all_unresolved_exact";
 
 export interface BulkImpact {
   scope: BulkScopeId;
