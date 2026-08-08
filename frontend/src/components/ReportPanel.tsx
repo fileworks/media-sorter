@@ -3,6 +3,7 @@ import { FiLoader, FiSearch } from "react-icons/fi";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import { triggerDownload } from "@/lib/download";
 import { cn } from "@/lib/utils";
@@ -185,8 +186,9 @@ function StatsDashboard({
   return (
     <div className="rounded-xl border border-border bg-card">
       <button
+        type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/50"
+        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
       >
         <span>{t("report.statistics")}</span>
         <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
@@ -397,6 +399,7 @@ function FileTableSection({
           {FILTER_TABS.map((tabOption) => (
             <button
               key={tabOption.id}
+              type="button"
               onClick={() => {
                 setTab(tabOption.id);
                 setPage(0);
@@ -405,7 +408,7 @@ function FileTableSection({
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 tab === tabOption.id
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {t(`report.filter.${tabOption.id}`)}{" "}
@@ -480,7 +483,7 @@ function FileTableSection({
               </tr>
             ) : (
               pageFiles.map((f) => (
-                <tr key={f.id} className="transition-colors hover:bg-accent/30">
+                <tr key={f.id} className="transition-colors hover:bg-muted/40">
                   <td
                     className="max-w-[180px] truncate px-3 py-2 text-foreground"
                     title={f.source_path}
@@ -503,20 +506,26 @@ function FileTableSection({
                     <div className="flex items-center gap-1.5">
                       <StatusBadge status={f.status} />
                       {["duplicate", "already_in_destination"].includes(f.status) &&
-                        f.duplicate_type && (
-                          <span
-                            className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info"
-                            title={
-                              f.duplicate_of
-                                ? t("report.duplicateOf", { path: f.duplicate_of })
-                                : undefined
-                            }
-                          >
-                            {f.duplicate_type === "exact"
-                              ? "exact"
-                              : `~${f.duplicate_similarity ?? 0}%`}
-                          </span>
-                        )}
+                        f.duplicate_type &&
+                        (() => {
+                          const badge = (
+                            <span className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info">
+                              {f.duplicate_type === "exact"
+                                ? "exact"
+                                : `~${f.duplicate_similarity ?? 0}%`}
+                            </span>
+                          );
+                          // Which file this one duplicates is a fact, not a
+                          // truncation, so it goes in the app's tooltip rather
+                          // than a native `title` no keyboard user ever sees.
+                          return f.duplicate_of ? (
+                            <Tooltip label={t("report.duplicateOf", { path: f.duplicate_of })}>
+                              {badge}
+                            </Tooltip>
+                          ) : (
+                            badge
+                          );
+                        })()}
                     </div>
                   </td>
                   <td
@@ -653,6 +662,21 @@ export function ReportPanel({ report }: ReportPanelProps) {
             {t("report.destination", { path: report.dest_path })}
           </span>
         </div>
+
+        {(report.excluded_roots?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
+              {t("report.excludedRoots", { count: report.excluded_roots?.length ?? 0 })}
+            </p>
+            <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+              {report.excluded_roots?.map((path) => (
+                <li key={path} className="break-all font-mono">
+                  {path}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Export buttons */}
         <div className="mt-3 flex gap-2">

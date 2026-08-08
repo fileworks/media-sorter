@@ -5,30 +5,27 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-import json
 import os
 import tempfile
 import time
 import uuid
-from datetime import date, datetime, timezone
+from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
-from app.core.integrity import (
-    MutationActionKind,
-    OperationOutcomeCode,
-    PreservationProfile,
-)
-from app.core.integrity_policy import MutationAuthorization, authorize_config_mutations
+from app.core.exceptions import PlanAuthorizationError
+from app.core.integrity import OperationOutcomeCode
+from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionRole, MediaUnit
 from app.core.paths import resolve_app_paths
-from app.core.provenance import OutcomeProvenance
 from app.core.rules import normalized_key
+from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortPlan
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
@@ -38,9 +35,9 @@ from app.services.dedup_index import DedupIndex, resolve_index_path
 from app.services.destination import (
     build_dest_dir,
     companion_destination,
+    copy_destination,
     predicted_filename,
     quarantine_dir,
-    rename_stem,
     reserve_destination,
 )
 from app.services.duplicate_service import (
@@ -61,12 +58,15 @@ from app.services.operation_execution import OperationExecution
 from app.services.outcome_provenance import build_outcome_provenance
 from app.services.repair_service import RepairService
 from app.services.rule_engine_service import RuleEngineService
+from app.services.sorting_support import SortingSupportMixin, root_identifier
 from app.services.verified_transfer import TransferResult
 from app.utils.media_utils import is_image, is_video
 from app.utils.path_utils import (
     canonicalize_target,
     sanitize_path_segment,
 )
+
+__all__ = ["SortingService", "root_identifier"]
 
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
@@ -118,11 +118,6 @@ _DUPLICATE_STATUS_BY_SCOPE = {
 }
 
 
-def _tags_to_json(tags: list[str]) -> str:
-    """Serialise a tag list as JSON so commas inside tag text are preserved."""
-    return json.dumps(tags, ensure_ascii=False) if tags else "[]"
-
-
 def _operation_outcome(stats: dict[str, Any], *, cancelled: bool) -> OperationOutcomeCode:
     if cancelled:
         return "cancelled"
@@ -137,21 +132,9 @@ def _operation_outcome(stats: dict[str, Any], *, cancelled: bool) -> OperationOu
     return "completed"
 
 
-def root_identifier(root: Path) -> str:
-    """A stable, bounded id for one root.
-
-    The manifest already records each action's full observed path; ``root_id``
-    exists to group actions by origin, so a short digest is both sufficient and
-    safe for a length-limited identity field.
-    """
-    return f"root_{hashlib.sha256(str(root).encode('utf-8')).hexdigest()[:16]}"
-
-
-def _relative_to(path: Path, root: Path) -> str:
-    try:
-        return str(path.relative_to(root))
-    except ValueError:
-        return path.name
+def _digest(path: Path) -> str:
+    """Short stable identifier for a path, for action ids that have no manifest."""
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
 
 
 def _result_sha256(result: TransferResult) -> str | None:
@@ -170,7 +153,7 @@ def _merge_tags(tags: list[str]) -> list[str]:
     return merged
 
 
-class SortingService:
+class SortingService(SortingSupportMixin):
     def __init__(
         self,
         config: Config,
@@ -187,6 +170,9 @@ class SortingService:
         category_classifier_service: CategoryClassifierService | None = None,
     ) -> None:
         self._config = config
+        # Files whose planned name had to be suffixed because another file
+        # claimed it first. Reset at the start of every run; reported live.
+        self._collisions_planned = 0
         self._config_service = config_service
         self._fs = filesystem_service
         self._extraction = extraction_service
@@ -204,17 +190,19 @@ class SortingService:
         task: Task,
         dry_run: bool = False,
         frozen_plan: FrozenSortPlan | None = None,
+        excluded_roots: Sequence[str] = (),
     ) -> dict[str, Any]:
         """Sort all media files from source to destination.
 
-        Quarantine strategy:
-        - No date extracted       → _unknown_dates/
-        - Date in the future      → _future_dates/
-        - Duplicate content       → _duplicates/  (never deleted)
-        - Corrupted after copy    → _corrupted/
-        - Any other error         → _failed/
+        Set-aside strategy:
+        - No usable date          → _undated/
+        - Duplicate content       → <keeper folder>/_copies/
+        - Junk                    → _junk/
+        - Unreadable/corrupted    → _corrupted/
+        - Already at destination  → report only; no write
         """
-        config = self._config_service.get()
+        scope = apply_run_scope(self._config_service.get(), excluded_roots)
+        config = scope.config
         if frozen_plan is not None and frozen_plan.config_fingerprint != config_fingerprint(config):
             raise ValueError(
                 "The configuration changed after preview; generate and review a new plan."
@@ -296,6 +284,12 @@ class SortingService:
             "incomplete_units": 0,
             "operation_id": None,
             "review_only": len(units) if not config.sort else 0,
+            # Mode-appropriate names: in deduplicate_only the interface must not
+            # say "sorted" about files that never moved.
+            "run_mode": config.run_mode,
+            "kept_in_place": 0,
+            "excluded_roots": list(scope.excluded_paths),
+            "excluded_root_ids": list(scope.excluded_root_ids),
         }
 
         if not config.sort:
@@ -306,6 +300,11 @@ class SortingService:
 
         operation_id = f"sort_{uuid.uuid4().hex[:12]}"
         start_time = time.monotonic()
+        # Per-run counters. `collisions_reported` is the high-water mark already
+        # pushed to the task, so the live tally is reported as a delta rather
+        # than re-counted from zero on every file.
+        self._collisions_planned = 0
+        collisions_reported = 0
         protected_roots = tuple(item.canonical_path for item in library.references)
         execution = (
             None
@@ -321,8 +320,38 @@ class SortingService:
             )
         )
 
-        # Per-operation in-memory duplicate registry
+        # Per-operation in-memory duplicate registry.
         registry = DuplicateRegistry()
+        distinct_sources = frozenset(
+            source
+            for reviewed in (frozen_plan.reviewed_sets if frozen_plan is not None else ())
+            if reviewed.keep_all
+            for source in (reviewed.keep, *reviewed.demote)
+        )
+        # A reviewed keeper is seeded as the content's first-seen path, so the
+        # ordinary "first seen wins" rule keeps it and every later copy of the
+        # same bytes becomes a duplicate. This is why a keeper chosen in Review
+        # survives a configured policy that would have chosen differently: there
+        # is one keeper mechanism, not two.
+        #
+        # Seeded from the same `reviewed_sets` the plan was rewritten from, so
+        # the run-time keeper and the whitelisted action cannot disagree. The
+        # hash is one the run would have paid for anyway, and only for files the
+        # user actually decided about.
+        if frozen_plan is not None and frozen_plan.reviewed_sets:
+            for reviewed in frozen_plan.reviewed_sets:
+                if reviewed.keep_all:
+                    continue
+                keeper = Path(reviewed.keep)
+                try:
+                    registry.exact[
+                        await asyncio.to_thread(self._duplicates.compute_hash, keeper)
+                    ] = reviewed.keep
+                except OSError:
+                    # The chosen copy vanished between preview and run. The plan
+                    # guard reports that precisely when it reaches the file;
+                    # guessing a keeper here would only make the report wrong.
+                    logger.warning("Reviewed keeper is unreadable", path=str(keeper))
 
         # Destination-aware / cross-run dedup: refresh the persistent
         # index of what already lives in the destination and load it as a
@@ -394,6 +423,17 @@ class SortingService:
         )
         records: list[list[dict[str, Any]] | None] = [None] * len(units)
         reserved_destinations: set[Path] = set()
+        # The frozen plan is the authority during execution and also makes a
+        # reviewed keeper's destination available before processing order
+        # reaches that file. Dry runs fill the same map as each keeper is seen.
+        planned_destinations: dict[str, Path] = (
+            {
+                action.source_path: Path(action.reviewed_destination_path)
+                for action in frozen_plan.actions
+            }
+            if frozen_plan is not None
+            else {}
+        )
         bytes_done = 0
         # Snapshot locale-sensitive dependencies. A config update can replace
         # the container's live services while this coroutine is running; these
@@ -445,12 +485,14 @@ class SortingService:
                 operation_id=operation_id,
                 dest_registry=dest_registry,
                 reserved_destinations=reserved_destinations,
+                planned_destinations=planned_destinations,
                 operation_rules=operation_rules,
                 operation_ai=operation_ai,
                 operation_classifier=operation_classifier,
                 use_operation_services=True,
                 cancel_signal=cancel_signal,
                 execution=execution,
+                force_distinct=str(units[idx].primary) in distinct_sources,
             )
             record = unit_records[0]
             if record["status"] == "cancelled":
@@ -460,6 +502,8 @@ class SortingService:
             status = record["status"]
             if status == "success":
                 stats["sorted"] += 1
+            elif status == "kept_in_place":
+                stats["kept_in_place"] += 1
             elif status == "duplicate":
                 stats["duplicates"] += 1
             elif status == "future_date":
@@ -479,6 +523,12 @@ class SortingService:
 
             if rich_task is not None:
                 rich_task.record_outcome(status)
+                if self._collisions_planned > collisions_reported:
+                    rich_task.record_outcome(
+                        "name_collision",
+                        count=self._collisions_planned - collisions_reported,
+                    )
+                    collisions_reported = self._collisions_planned
                 # Every completed file is a point a restart could resume from:
                 # its placement is already verified and journalled.
                 rich_task.checkpoint(f"file:{rank + 1}")
@@ -566,14 +616,18 @@ class SortingService:
         operation_id: str,
         dest_registry: DuplicateRegistry | None,
         reserved_destinations: set[Path],
+        planned_destinations: dict[str, Path] | None = None,
         operation_rules: RuleEngineService | None,
         operation_ai: AITaggingService | None,
         operation_classifier: CategoryClassifierService | None,
         use_operation_services: bool,
         cancel_signal: Any,
         execution: OperationExecution | None,
+        force_distinct: bool = False,
     ) -> list[dict[str, Any]]:
         """Process a primary first, then place its companions beside the result."""
+        if planned_destinations is None:
+            planned_destinations = {}
         primary = self._process_file(
             file_path=unit.primary,
             source_root=source_root,
@@ -584,6 +638,7 @@ class SortingService:
             operation_id=operation_id,
             dest_registry=dest_registry,
             reserved_destinations=reserved_destinations,
+            planned_destinations=planned_destinations,
             operation_rules=operation_rules,
             operation_ai=operation_ai,
             operation_classifier=operation_classifier,
@@ -592,6 +647,7 @@ class SortingService:
             execution=execution,
             unit_id=unit.unit_id,
             unit_primary_path=str(unit.primary),
+            force_distinct=force_distinct,
         )
         primary.update(
             unit_id=unit.unit_id,
@@ -613,6 +669,7 @@ class SortingService:
                 unit,
                 operation_id,
                 config,
+                source_root,
             )
             records.append(companion)
             if config.companion_handling == "leave_in_place":
@@ -635,6 +692,7 @@ class SortingService:
 
             destination = companion_destination(Path(str(primary_destination)), member.path)
             companion["dest_path"] = str(destination)
+            companion["would_be_destination"] = str(destination)
             if dry_run:
                 companion["status"] = "success"
                 continue
@@ -683,6 +741,7 @@ class SortingService:
         unit: MediaUnit,
         operation_id: str,
         config: Config,
+        source_root: Path,
     ) -> dict[str, Any]:
         extracted_date: str | None = None
         with contextlib.suppress(Exception):
@@ -715,6 +774,8 @@ class SortingService:
             "commit_method": None,
             "source_safety": "source_retained",
             "preservation_warnings": [],
+            "source_root": str(source_root),
+            "would_be_destination": None,
         }
 
     def _process_file(
@@ -728,6 +789,7 @@ class SortingService:
         operation_id: str,
         dest_registry: DuplicateRegistry | None = None,
         reserved_destinations: set[Path] | None = None,
+        planned_destinations: dict[str, Path] | None = None,
         operation_rules: RuleEngineService | None = None,
         operation_ai: AITaggingService | None = None,
         operation_classifier: CategoryClassifierService | None = None,
@@ -736,6 +798,7 @@ class SortingService:
         execution: OperationExecution | None = None,
         unit_id: str | None = None,
         unit_primary_path: str | None = None,
+        force_distinct: bool = False,
     ) -> dict[str, Any]:
         """Process a single file through the full sort pipeline.
 
@@ -743,8 +806,8 @@ class SortingService:
         ffmpeg, Pillow, SHA-256, subprocess) and must be dispatched via
         asyncio.to_thread from the async run() loop.
 
-        One bad file never aborts the batch: the outer except always quarantines
-        the file to _failed/ and records a non-empty error_message.
+        One bad file never aborts the batch: the outer except always sets the
+        file aside under _corrupted/ and records a non-empty error_message.
         """
         record: dict[str, Any] = {
             "id": str(uuid.uuid4()),
@@ -771,6 +834,8 @@ class SortingService:
             "preservation_warnings": [],
             "derived_date_applied": False,
             "tags_written": "",
+            "source_root": str(source_root),
+            "would_be_destination": None,
         }
         preservation = config.preservation_profile
         authorization = (
@@ -793,19 +858,40 @@ class SortingService:
                     logger.warning("Rule evaluation failed", path=str(file_path), error=str(exc))
             record["tags"] = rule_tags
 
-            # Junk / thumbnail filter — cheapest check first; quarantined to
-            # _junk/ with the reason in the record (never deleted).
+            # Classify cheaply up front, but let duplicate identity win first.
+            # This permits a junk item to keep its copies together under
+            # `_junk/_copies` while preserving the non-destructive junk outcome.
             junk_reason = classify_junk(file_path, config)
-            if junk_reason is not None:
-                dest = self._quarantine_auto(
-                    file_path, "junk", dest_root, dry_run, config, source_root, execution
+            try:
+                result = self._extraction.extract_detailed(
+                    file_path, check_suspicious=config.exif_sanity_check_enabled
                 )
-                record.update(status="junk", dest_path=str(dest), error_message=junk_reason)
+            except Exception:
+                if junk_reason is None:
+                    raise
+                planned_junk = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
+                )
+                dest = self._quarantine_auto(
+                    file_path,
+                    "junk",
+                    dest_root,
+                    dry_run,
+                    config,
+                    source_root,
+                    execution,
+                    planned_destination=planned_junk,
+                    unit_id=unit_id,
+                )
+                record.update(
+                    status="junk",
+                    dest_path=str(dest),
+                    would_be_destination=str(dest),
+                    error_message=junk_reason,
+                )
                 return record
-
-            result = self._extraction.extract_detailed(
-                file_path, check_suspicious=config.exif_sanity_check_enabled
-            )
             extracted_date = result.extracted_date
             meta_source = result.source
             record["metadata_source"] = meta_source
@@ -819,34 +905,22 @@ class SortingService:
                 )
                 record["error_message"] = f"Suspicious EXIF: {result.suspicious_reason}"
 
-            # Unknown date — quarantined respecting the copy-mode invariant
-            # (in copy mode the source is copied to _unknown_dates/, never moved).
-            if extracted_date is None:
-                dest = self._quarantine_auto(
-                    file_path, "unknown", dest_root, dry_run, config, source_root, execution
-                )
-                record.update(status="unknown_date", dest_path=str(dest))
-                return record
+            record["extracted_date"] = str(extracted_date) if extracted_date else None
 
-            record["extracted_date"] = str(extracted_date)
-
-            # Future date — same copy-mode-aware quarantine as unknown dates.
-            if DateExtractionService.is_future_date(extracted_date):
-                dest = self._quarantine_auto(
-                    file_path, "future", dest_root, dry_run, config, source_root, execution
-                )
-                record.update(status="future_date", dest_path=str(dest))
-                return record
-
-            # Duplicate check (exact + perceptual for images and videos).
-            # The match's scope decides the quarantine folder: "run" →
-            # _duplicates/, "destination" → _already_in_destination/.
-            # Duplicates are always quarantined, never deleted.
+            # Duplicate identity exists independently of date. Checking it
+            # before the date branches lets an undated keeper hold its copies
+            # under `_undated/_copies/` instead of splitting the set.
             match = DuplicateMatch(False)
             if config.remove_duplicates:
+                # A binding "not duplicates" decision exempts the complete set
+                # from comparisons against this run, while destination matches
+                # still count. A private registry preserves that distinction
+                # and deliberately contributes no signature to later run-local
+                # matches.
+                comparison_registry = DuplicateRegistry() if force_distinct else registry
                 match = self._duplicates.check_duplicate(
                     file_path,
-                    registry,
+                    comparison_registry,
                     exact=config.duplicate_exact_enabled,
                     perceptual=config.duplicate_perceptual_enabled,
                     threshold=config.duplicate_perceptual_threshold,
@@ -856,32 +930,226 @@ class SortingService:
                 # Reuse the hash the duplicate check already paid for, so
                 # authorizing the placement costs no second full read.
                 record["content_sha256"] = match.content_sha256
-                if match.is_duplicate:
-                    status = _DUPLICATE_STATUS_BY_SCOPE.get(match.scope or "run", "duplicate")
-                    record["duplicate_type"] = match.match_type
-                    record["duplicate_similarity"] = match.similarity
-                    record["duplicate_of"] = match.original_path
-                    logger.info(
-                        "Duplicate detected",
-                        path=str(file_path),
-                        match_type=match.match_type,
-                        similarity=match.similarity,
-                        original=match.original_path,
-                        scope=match.scope or "run",
+
+            if match.is_duplicate:
+                record["duplicate_type"] = match.match_type
+                record["duplicate_similarity"] = match.similarity
+                record["duplicate_of"] = match.original_path
+
+                duplicate_category_result = CategoryResult(None, 0.0, 0.0)
+                duplicate_category: str | None = None
+                duplicate_camera = ""
+                if junk_reason is not None:
+                    would_be = (
+                        quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name
                     )
-                    if config.copy_instead_of_move:
-                        # Copy mode: the duplicate is copied into its quarantine
-                        # folder without touching the source.
-                        dest = self._quarantine_copy(
-                            file_path, status, dest_root, dry_run, source_root, execution
+                elif extracted_date is None:
+                    would_be = (
+                        quarantine_dir(dest_root, "unknown", file_path, source_root)
+                        / file_path.name
+                    )
+                elif DateExtractionService.is_future_date(extracted_date):
+                    would_be = (
+                        quarantine_dir(dest_root, "future", file_path, source_root) / file_path.name
+                    )
+                else:
+                    if config.categorize_enabled and classifier is not None:
+                        duplicate_category_result = classifier.classify_file(file_path)
+                        duplicate_category = duplicate_category_result.category
+                    if config.camera_subfolder_enabled:
+                        duplicate_camera = sanitize_path_segment(
+                            self._extraction.extract_camera_model(file_path) or ""
                         )
-                    else:
-                        # Move mode: the source is consumed into quarantine.
-                        dest = self._quarantine(
-                            file_path, status, dest_root, dry_run, source_root, execution
-                        )
-                    record.update(status=status, dest_path=str(dest))
+                    would_be = build_dest_dir(
+                        file_path,
+                        extracted_date,
+                        source_root,
+                        dest_root,
+                        config,
+                        duplicate_category,
+                        duplicate_camera,
+                        route_suffix,
+                    ) / predicted_filename(file_path, extracted_date, config)
+                record["would_be_destination"] = str(would_be)
+                record["category"] = duplicate_category
+
+                logger.info(
+                    "Duplicate detected",
+                    path=str(file_path),
+                    match_type=match.match_type,
+                    similarity=match.similarity,
+                    original=match.original_path,
+                    scope=match.scope or "run",
+                )
+
+                provenance = build_outcome_provenance(
+                    file_path=file_path,
+                    source_root=source_root,
+                    destination=None,
+                    config=config,
+                    extraction=result,
+                    rules=evaluation,
+                    category=duplicate_category_result,
+                    duplicate_evaluated=True,
+                    duplicate_type=match.match_type,
+                    duplicate_similarity=match.similarity,
+                    duplicate_of=match.original_path,
+                    duplicate_evaluation=match.evaluation,
+                    route_suffix=route_suffix,
+                    camera=duplicate_camera,
+                    unit_id=unit_id,
+                    unit_members=(str(file_path),),
+                )
+
+                if match.scope == "destination":
+                    # Identical verified content is already present. Report the
+                    # skip, but do not manufacture another copy of it.
+                    record.update(
+                        status="already_in_destination",
+                        dest_path=None,
+                        provenance=provenance.model_dump(mode="json"),
+                    )
                     return record
+
+                keeper = Path(str(match.original_path))
+                keeper_destination = (planned_destinations or {}).get(str(keeper))
+                if keeper_destination is None:
+                    keeper_destination = self._predict_keeper_destination(
+                        keeper,
+                        source_root,
+                        dest_root,
+                        config,
+                        rules,
+                        classifier,
+                    )
+                reviewed_copy = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
+                )
+                if reviewed_copy is not None:
+                    dest = reviewed_copy
+                    if reserved_destinations is not None:
+                        reserved_destinations.add(dest.resolve(strict=False))
+                else:
+                    proposed = copy_destination(
+                        keeper_destination,
+                        keeper,
+                        file_path,
+                        source_root,
+                    )
+                    reservations = (
+                        reserved_destinations if reserved_destinations is not None else set()
+                    )
+                    dest = reserve_destination(proposed, reservations)
+
+                from app.services.outcome_provenance import contextualize_copy
+
+                provenance = contextualize_copy(
+                    provenance,
+                    destination=dest,
+                    destination_root=dest_root,
+                    keeper=keeper,
+                )
+                if not dry_run:
+                    self._quarantine_transfer(
+                        file_path,
+                        dest,
+                        source_root,
+                        execution,
+                        move=not config.copy_instead_of_move,
+                        provenance=provenance,
+                        unit_id=unit_id,
+                    )
+                if planned_destinations is not None:
+                    planned_destinations[str(file_path)] = dest
+                record.update(
+                    status="duplicate",
+                    dest_path=str(dest),
+                    provenance=provenance.model_dump(mode="json"),
+                )
+                return record
+
+            if junk_reason is not None:
+                reviewed_junk = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
+                )
+                dest = self._quarantine_auto(
+                    file_path,
+                    "junk",
+                    dest_root,
+                    dry_run,
+                    config,
+                    source_root,
+                    execution,
+                    planned_destination=reviewed_junk,
+                    unit_id=unit_id,
+                )
+                if planned_destinations is not None:
+                    planned_destinations[str(file_path)] = dest
+                record.update(
+                    status="junk",
+                    dest_path=str(dest),
+                    would_be_destination=str(dest),
+                    error_message=junk_reason,
+                )
+                return record
+
+            # Unknown date — quarantined respecting the copy-mode invariant.
+            if extracted_date is None:
+                reviewed_unknown = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
+                )
+                dest = self._quarantine_auto(
+                    file_path,
+                    "unknown",
+                    dest_root,
+                    dry_run,
+                    config,
+                    source_root,
+                    execution,
+                    planned_destination=reviewed_unknown,
+                    unit_id=unit_id,
+                )
+                if planned_destinations is not None:
+                    planned_destinations[str(file_path)] = dest
+                record.update(
+                    status="unknown_date",
+                    dest_path=str(dest),
+                    would_be_destination=str(dest),
+                )
+                return record
+
+            # Future date — the same merged `_undated` destination.
+            if DateExtractionService.is_future_date(extracted_date):
+                reviewed_future = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
+                )
+                dest = self._quarantine_auto(
+                    file_path,
+                    "future",
+                    dest_root,
+                    dry_run,
+                    config,
+                    source_root,
+                    execution,
+                    planned_destination=reviewed_future,
+                    unit_id=unit_id,
+                )
+                if planned_destinations is not None:
+                    planned_destinations[str(file_path)] = dest
+                record.update(
+                    status="future_date",
+                    dest_path=str(dest),
+                    would_be_destination=str(dest),
+                )
+                return record
 
             # Smart Categorization: classify the SOURCE file (it hasn't moved
             # yet) into a topic folder before building the destination. Runs in
@@ -900,19 +1168,44 @@ class SortingService:
                 raw_camera = self._extraction.extract_camera_model(file_path)
                 record["camera_model"] = raw_camera
 
-            # Build destination
-            initial_dest, planned_final = self._plan_dest(
-                file_path,
-                extracted_date,
-                source_root,
-                dest_root,
-                config,
-                category,
-                sanitize_path_segment(raw_camera or ""),
-                route_suffix,
-                reserved_destinations,
+            if config.run_mode == "deduplicate_only":
+                # This file is not a duplicate and not junk — those paths return
+                # before here — so in this mode it does not move at all. No
+                # copy, no move, no journal entry: the input tree is left byte
+                # for byte as it was found.
+                record["status"] = "kept_in_place"
+                record["dest_path"] = None
+                return record
+
+            # A frozen plan owns the exact reviewed path, including a keeper
+            # promotion and all collision suffixes. Without one, derive and
+            # reserve the path exactly as preview does.
+            reviewed_final = (
+                planned_destinations.get(str(file_path))
+                if planned_destinations is not None
+                else None
             )
+            if reviewed_final is not None:
+                planned_final = reviewed_final
+                if reserved_destinations is not None:
+                    reserved_destinations.add(planned_final.resolve(strict=False))
+                initial_dest = planned_final.with_suffix(file_path.suffix)
+            else:
+                initial_dest, planned_final = self._plan_dest(
+                    file_path,
+                    extracted_date,
+                    source_root,
+                    dest_root,
+                    config,
+                    category,
+                    sanitize_path_segment(raw_camera or ""),
+                    route_suffix,
+                    reserved_destinations,
+                )
             dest = initial_dest
+            record["would_be_destination"] = str(planned_final)
+            if planned_destinations is not None:
+                planned_destinations[str(file_path)] = planned_final
             provenance = build_outcome_provenance(
                 file_path=file_path,
                 source_root=source_root,
@@ -974,7 +1267,7 @@ class SortingService:
                         converted = self._conversion.convert_image(
                             source=dest,
                             target_format=config.image_format,
-                            quality=90,
+                            quality=config.image_quality,
                             preserve_exif=True,
                         )
                         if converted != dest:
@@ -994,7 +1287,7 @@ class SortingService:
                         converted = self._conversion.convert_video(
                             source=dest,
                             target_format=config.video_format,
-                            quality="medium",
+                            quality=config.video_quality,
                         )
                         if converted != dest:
                             dest.unlink(missing_ok=True)
@@ -1091,6 +1384,27 @@ class SortingService:
         except DuplicateCheckCancelled:
             record["status"] = "cancelled"
             return record
+        except PlanAuthorizationError as exc:
+            # Not a problem with this file: the plan and the executor disagree
+            # about what was reviewed. Filing it as `failed` put it beside
+            # genuinely unreadable media, under advice — "generate preview
+            # again" — that rebuilds the same plan and fails identically.
+            reason = str(exc.details.get("reason") or "unplanned_action")
+            logger.error(
+                "Placement is not in the reviewed plan", path=str(file_path), reason=reason
+            )
+            if execution is not None:
+                execution.emit(
+                    "integrity.violation", phase="sorting", reason=reason, path=str(file_path)
+                )
+                execution.record_failure(
+                    action_id=f"unplanned_{_digest(file_path)}",
+                    source_path=file_path,
+                    code="blocked",
+                    diagnostic_code=reason,
+                )
+            record.update(status="blocked", error_message=str(exc))
+            return record
         except Exception as exc:
             logger.error("Failed to process file", path=str(file_path), error=str(exc))
             if execution is not None:
@@ -1104,335 +1418,29 @@ class SortingService:
                 # Copy mode: quarantine a *copy* — the source must survive even
                 # a failed run (the failure may have struck after the file was
                 # already placed, in which case the source is all the user has).
-                dest = self._quarantine_auto(
-                    file_path, "failed", dest_root, dry_run, config, source_root, execution
+                reviewed_failed = (
+                    planned_destinations.get(str(file_path))
+                    if planned_destinations is not None
+                    else None
                 )
-                record["dest_path"] = str(dest)
+                dest = self._quarantine_auto(
+                    file_path,
+                    "failed",
+                    dest_root,
+                    dry_run,
+                    config,
+                    source_root,
+                    execution,
+                    planned_destination=reviewed_failed,
+                    unit_id=unit_id,
+                )
+                record.update(
+                    status="corrupted",
+                    dest_path=str(dest),
+                    would_be_destination=str(dest),
+                )
             except Exception:
                 pass
             record["error_message"] = str(exc)
 
         return record
-
-    # ------------------------------------------------------------------ #
-    # Helpers                                                               #
-    # ------------------------------------------------------------------ #
-
-    def _place(
-        self,
-        source: Path,
-        destination: Path,
-        *,
-        kind: MutationActionKind,
-        config: Config,
-        execution: OperationExecution | None,
-        source_root: Path,
-        known_sha256: str | None = None,
-        unit_id: str | None = None,
-        companion_role: CompanionRole | None = None,
-        unit_primary_path: str | None = None,
-        provenance: OutcomeProvenance | None = None,
-    ) -> TransferResult:
-        """Move media only through the authorized, journalled, verified executor.
-
-        Without a run-scoped execution (a direct ``_process_file`` call, as tests
-        make) the same verified transfer still runs; only the manifest and
-        journal records are absent.
-        """
-        move = not config.copy_instead_of_move
-        if execution is None:
-            return (
-                self._fs.safe_move(source, destination)
-                if move
-                else self._fs.safe_copy(source, destination)
-            )
-        return execution.place(
-            source,
-            destination,
-            kind=kind,
-            move=move,
-            root_id=root_identifier(source_root),
-            relative_path=_relative_to(source, source_root),
-            known_sha256=known_sha256,
-            unit_id=unit_id,
-            companion_role=companion_role,
-            unit_primary_path=unit_primary_path,
-            provenance=provenance,
-        )
-
-    def _write_derived_tags(
-        self,
-        dest: Path,
-        tags: list[str],
-        *,
-        config: Config,
-        preservation: PreservationProfile,
-        authorization: MutationAuthorization,
-    ) -> str:
-        """Record derived tags without touching media bytes by default.
-
-        Embedding rewrites the file, so it needs an explicitly reviewed profile.
-        Otherwise the tags go to the operation report, plus a standards-shaped
-        sidecar when the profile asks for one.
-        """
-        if not tags:
-            return ""
-        if config.embed_tags_in_files:
-            authorization.require("embedded_metadata")
-            try:
-                return self._metadata.write_keywords(dest, tags)
-            except Exception as exc:
-                logger.warning("Tag embedding failed", path=str(dest), error=str(exc))
-                return ""
-        if preservation.derived_metadata == "sidecar_and_report":
-            try:
-                return "sidecar" if self._metadata.write_sidecar(dest, tags) else "report"
-            except Exception as exc:
-                logger.warning("Sidecar write failed", path=str(dest), error=str(exc))
-                return "report"
-        return "report"
-
-    def _build_dest(
-        self,
-        file_path: Path,
-        extracted_date: date,
-        source_root: Path,
-        dest_root: Path,
-        config: Config,
-        category: str | None = None,
-        camera: str = "",
-    ) -> Path:
-        """Compatibility helper for the pre-planner destination calculation."""
-        dest_dir = build_dest_dir(
-            file_path, extracted_date, source_root, dest_root, config, category, camera
-        )
-        return self._fs.find_available_filename(dest_dir / file_path.name)
-
-    def _plan_dest(
-        self,
-        file_path: Path,
-        extracted_date: date,
-        source_root: Path,
-        dest_root: Path,
-        config: Config,
-        category: str | None = None,
-        camera: str = "",
-        route_suffix: str | None = None,
-        reserved_destinations: set[Path] | None = None,
-    ) -> tuple[Path, Path]:
-        """Compute a collision-free destination path. Pure path math — the
-        directory tree is created by ``safe_copy``/``safe_move`` at placement
-        time, so a dry run never mutates the destination volume.
-
-        The sanitized camera string is pre-computed by the caller to avoid a
-        second EXIF read.
-        """
-        dest_dir = build_dest_dir(
-            file_path,
-            extracted_date,
-            source_root,
-            dest_root,
-            config,
-            category,
-            camera,
-            route_suffix,
-        )
-        final = dest_dir / predicted_filename(file_path, extracted_date, config)
-        if reserved_destinations is not None:
-            final = reserve_destination(final, reserved_destinations)
-        else:
-            final = self._fs.find_available_filename(final)
-        initial = final.with_suffix(file_path.suffix)
-        return initial, final
-
-    def _apply_rename(self, path: Path, d: date, config: Config) -> Path:
-        """Compatibility helper using the shared single-pass rename tokens."""
-        file_type = "VID" if is_video(path) else "IMG"
-        new_stem = rename_stem(config.rename_pattern, d, path.stem, file_type)
-        new_path = self._fs.find_available_filename(path.parent / (new_stem + path.suffix))
-        path.rename(new_path)
-        return new_path
-
-    def _quarantine_auto(
-        self,
-        file_path: Path,
-        reason: str,
-        dest_root: Path,
-        dry_run: bool,
-        config: Config,
-        source_root: Path,
-        execution: OperationExecution | None = None,
-    ) -> Path:
-        """Quarantine honouring the copy-mode invariant: in copy mode the source
-        is copied into the quarantine folder and never touched; in move mode it
-        is consumed (the original behaviour)."""
-        if config.copy_instead_of_move:
-            return self._quarantine_copy(
-                file_path, reason, dest_root, dry_run, source_root, execution
-            )
-        return self._quarantine(file_path, reason, dest_root, dry_run, source_root, execution)
-
-    def _quarantine(
-        self,
-        file_path: Path,
-        reason: str,
-        dest_root: Path,
-        dry_run: bool,
-        source_root: Path,
-        execution: OperationExecution | None = None,
-    ) -> Path:
-        """Quarantine by moving (used in move mode). The source-relative
-        subfolders are preserved inside the quarantine folder (P0-4: a large
-        `_unknown_dates/` stays navigable and keeps its filename hints)."""
-        folder = quarantine_dir(dest_root, reason, file_path, source_root)
-        dest = self._fs.find_available_filename(folder / file_path.name)
-        if not dry_run:
-            self._quarantine_transfer(file_path, dest, source_root, execution, move=True)
-        return dest
-
-    def _quarantine_copy(
-        self,
-        file_path: Path,
-        reason: str,
-        dest_root: Path,
-        dry_run: bool,
-        source_root: Path,
-        execution: OperationExecution | None = None,
-    ) -> Path:
-        """Quarantine by copying (used in copy mode — source is never touched)."""
-        folder = quarantine_dir(dest_root, reason, file_path, source_root)
-        dest = self._fs.find_available_filename(folder / file_path.name)
-        if not dry_run:
-            self._quarantine_transfer(file_path, dest, source_root, execution, move=False)
-        return dest
-
-    def _quarantine_transfer(
-        self,
-        source: Path,
-        destination: Path,
-        source_root: Path,
-        execution: OperationExecution | None,
-        *,
-        move: bool,
-    ) -> None:
-        """Quarantine through the same verified executor as ordinary placement."""
-        if execution is None:
-            if move:
-                self._fs.safe_move(source, destination)
-            else:
-                self._fs.safe_copy(source, destination)
-            return
-        result = execution.place(
-            source,
-            destination,
-            kind="quarantine",
-            move=move,
-            root_id=root_identifier(source_root),
-            relative_path=_relative_to(source, source_root),
-        )
-        execution.outcomes[-1] = execution.outcomes[-1].model_copy(update={"code": "quarantined"})
-        del result
-
-    @staticmethod
-    def _safe_stat(path: Path) -> int:
-        try:
-            return path.stat().st_size
-        except OSError:
-            return 0
-
-    # ------------------------------------------------------------------ #
-    # DB persistence                                                        #
-    # ------------------------------------------------------------------ #
-
-    def _persist_operation(
-        self,
-        operation_id: str,
-        config: Config,
-        stats: dict[str, Any],
-        duration: int,
-        file_records: list[dict[str, Any]],
-    ) -> None:
-        """Persist the completed operation to SQLite.
-
-        This is a *synchronous* method and must be called via asyncio.to_thread.
-        """
-        if self._db is None:
-            return
-        try:
-            # Compute a short stable hash of the run config for auditing.
-            config_hash = hashlib.sha256(
-                json.dumps(config.to_dict(), sort_keys=True, default=str).encode()
-            ).hexdigest()[:16]
-
-            with self._db._connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO operations
-                        (id, execution_date, source_path, dest_path, total_files,
-                         files_sorted, files_failed, files_skipped, duplicates_found,
-                         future_dates, unknown_dates, corrupted_files,
-                         junk_files, already_in_destination, companion_files,
-                         incomplete_units,
-                         duration_seconds, config_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        operation_id,
-                        datetime.now(timezone.utc).isoformat(),
-                        config.source_directory,
-                        config.target_directory,
-                        stats["total"],
-                        stats["sorted"],
-                        stats["failed"],
-                        stats["skipped"],
-                        stats["duplicates"],
-                        stats["future_dates"],
-                        stats["unknown_dates"],
-                        stats["corrupted"],
-                        stats["junk"],
-                        stats["already_in_destination"],
-                        stats["companion_files"],
-                        stats["incomplete_units"],
-                        duration,
-                        config_hash,
-                    ),
-                )
-                conn.executemany(
-                    """
-                    INSERT INTO file_operations
-                        (id, operation_id, source_path, dest_path, extracted_date,
-                         metadata_source, action, status, error_message, file_size, file_type,
-                         tags, category, camera_model, duplicate_type, duplicate_similarity,
-                         duplicate_of, suspicious, unit_id, companion_role, unit_primary_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        (
-                            r["id"],
-                            r["operation_id"],
-                            r["source_path"],
-                            r["dest_path"],
-                            r["extracted_date"],
-                            r["metadata_source"],
-                            r["action"],
-                            r["status"],
-                            r["error_message"],
-                            r["file_size"],
-                            r["file_type"],
-                            _tags_to_json(r.get("tags", [])),
-                            r.get("category"),
-                            r.get("camera_model"),
-                            r.get("duplicate_type"),
-                            r.get("duplicate_similarity"),
-                            r.get("duplicate_of"),
-                            1 if r.get("suspicious") else 0,
-                            r.get("unit_id"),
-                            r.get("companion_role"),
-                            r.get("unit_primary_path"),
-                        )
-                        for r in file_records
-                    ],
-                )
-            logger.info("Operation persisted to DB", operation_id=operation_id)
-        except Exception as exc:
-            logger.error("Failed to persist operation", operation_id=operation_id, error=str(exc))

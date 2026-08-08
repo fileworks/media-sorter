@@ -3,8 +3,10 @@ handcrafted request that never went near the interface."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -32,10 +34,14 @@ def _member(member_id: str, *, role: str = "input", size: int = 100) -> GroupMem
 
 
 @pytest.fixture()
-def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ReviewPlan:
+def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[ReviewPlan]:
     """A plan with one group, wired in so the routes do not need a real catalog."""
     monkeypatch.setattr(review_routes, "_plans_directory", lambda: tmp_path / "plans")
-    plan = ReviewPlan(plan_id="test-plan", transfer_mode="copy")
+    # The routes now resolve a plan against the live catalog generation, and the
+    # catalog is shared for the session. Pin the generation to the seeded one so
+    # this fixture keeps its promise of not needing a real catalog.
+    monkeypatch.setattr(review_routes, "_live_generation", lambda _container: 1)
+    plan = ReviewPlan(plan_id="test-plan", transfer_mode="copy", catalog_generation=1)
     plan.register(
         DuplicateGroup(
             group_id="g1",
@@ -55,8 +61,9 @@ def seeded_plan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ReviewPlan:
     review_routes._PLANS.pop("test-plan", None)
 
 
-def _decide(client: TestClient, member_id: str, action: str) -> object:
-    return client.post(
+def _decide(client: TestClient, member_id: str, action: str) -> httpx.Response:
+    # `TestClient.post` is `Any` in this httpx generation.
+    response: httpx.Response = client.post(
         "/api/review/decide",
         json={
             "plan_id": "test-plan",
@@ -65,6 +72,7 @@ def _decide(client: TestClient, member_id: str, action: str) -> object:
             "action": action,
         },
     )
+    return response
 
 
 class TestReferenceProtection:

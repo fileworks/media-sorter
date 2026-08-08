@@ -112,8 +112,10 @@ Files that cannot be placed in the normal date structure are quarantined (never 
 
 | Folder | Reason |
 |--------|--------|
-| `_unknown_dates/` | No date could be extracted |
-| `_future_dates/` | Extracted date is after today (UTC) |
-| `_duplicates/` | Content duplicate of another file in the same run (SHA-256 / perceptual) |
-| `_failed/` | File operation raised an exception |
-| `_corrupted/` | Post-copy validation failed and repair did not succeed |
+| `_undated/` | No usable date could be established |
+| `_corrupted/` | The file could not be read, placed, or repaired |
+| `_junk/` | Thumbnail or cache debris |
+| `<keeper folder>/_copies/` | Another copy of the keeper in that folder |
+
+An exact match already present in the destination is reported without another write.
+Legacy review-folder names remain recognised but new runs never create them.

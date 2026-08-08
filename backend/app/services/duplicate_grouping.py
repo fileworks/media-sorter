@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
 
 from app.core.duplicate_plans import (
@@ -27,12 +29,14 @@ from app.services.catalog_duplicates import (
     DuplicateCandidate,
     LookupTelemetry,
     RootRole,
+    hamming,
 )
 
 logger = get_logger(__name__)
 
 EXACT_RULE_VERSION = "exact-1"
 SIMILAR_RULE_VERSION = "similar-1"
+BURST_RULE_VERSION = "burst-1"
 
 #: Distance at which a perceptual match stops being confidently a match. Inside
 #: half the threshold it is `medium`; beyond that it is `low` and stays in review.
@@ -212,6 +216,175 @@ def similar_groups(
         produced += 1
         if limit is not None and produced >= limit:
             return
+
+
+def burst_groups(
+    catalog: MediaCatalog,
+    index: CatalogDuplicateIndex,
+    *,
+    time_window_seconds: float,
+    max_perceptual_distance: int,
+    require_camera_identity: bool = True,
+    kind: str = "phash",
+    roles: Sequence[RootRole] = ("input", "destination", "reference"),
+    generation: int = 0,
+    limit: int | None = None,
+) -> Iterator[DuplicateGroup]:
+    """Yield burst groups as stacks, in the same shape as exact and similar.
+
+    A burst is a run of frames taken within seconds of each other, by the same
+    camera, that look alike. It is the same *thing* as a duplicate stack — a set
+    of near-copies with one to keep — so it is served as a third ``kind`` rather
+    than through a second set of endpoints with their own decision vocabulary.
+
+    Mirrors ``BurstDetectionService.detect``: the chain grows while consecutive
+    frames stay inside the window, keep the camera, and stay within the
+    perceptual distance. Reading it from the catalog rather than from the
+    filesystem is what lets Review page it alongside the other two kinds.
+    """
+    candidates = sorted(
+        _burst_candidates(catalog, index, kind, roles, require_camera_identity),
+        key=lambda item: (item.captured_at, item.candidate.record.relative_path),
+    )
+
+    for produced, run in enumerate(
+        _burst_runs(
+            candidates,
+            catalog=catalog,
+            time_window_seconds=time_window_seconds,
+            max_perceptual_distance=max_perceptual_distance,
+            require_camera_identity=require_camera_identity,
+        ),
+        start=1,
+    ):
+        anchor = run[0]
+        members = tuple(
+            _member(
+                catalog,
+                item.candidate,
+                MemberEvidence(
+                    algorithm=kind,
+                    algorithm_version=BURST_RULE_VERSION,
+                    signature=item.candidate.signature,
+                    distance=item.distance,
+                    threshold=max_perceptual_distance,
+                    # A burst frame is a deliberate near-copy, never a
+                    # byte-identical one; claiming "high" would overstate what
+                    # three agreeing signals actually prove.
+                    confidence="medium",
+                ),
+            )
+            for item in run
+        )
+        anchor_id = member_id(anchor.candidate.record)
+        yield DuplicateGroup(
+            group_id=group_id_for("burst", anchor_id),
+            kind="burst",
+            catalog_generation=generation,
+            rule_version=BURST_RULE_VERSION,
+            member_count=len(members),
+            total_bytes=sum(item.facts.size_bytes for item in members),
+            anchor_member_id=anchor_id,
+            members=members,
+            evidence_summary=(
+                f"{len(members)} frames within {time_window_seconds:g}s"
+                f"{f' from {anchor.camera}' if anchor.camera else ''}"
+            ),
+        )
+        if limit is not None and produced >= limit:
+            return
+
+
+@dataclass(frozen=True)
+class _BurstCandidate:
+    candidate: DuplicateCandidate
+    captured_at: datetime
+    camera: str
+    distance: int | None = None
+
+
+def _burst_candidates(
+    catalog: MediaCatalog,
+    index: CatalogDuplicateIndex,
+    kind: str,
+    roles: Sequence[RootRole],
+    require_camera_identity: bool,
+) -> Iterator[_BurstCandidate]:
+    """Signature-bearing files that also have the capture time a burst needs."""
+    for candidate in _signature_records(catalog, index, kind, roles):
+        facts = catalog.media_facts_for(candidate.record)
+        if facts is None:
+            continue
+        captured = _parse_captured_at(facts.get("captured_at"))
+        camera = str(facts.get("camera_model") or "")
+        if captured is None:
+            continue
+        if require_camera_identity and not camera:
+            continue
+        yield _BurstCandidate(candidate=candidate, captured_at=captured, camera=camera)
+
+
+def _parse_captured_at(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _burst_runs(
+    candidates: Sequence[_BurstCandidate],
+    *,
+    catalog: MediaCatalog,
+    time_window_seconds: float,
+    max_perceptual_distance: int,
+    require_camera_identity: bool,
+) -> Iterator[list[_BurstCandidate]]:
+    """Split the ordered candidates into runs of two or more agreeing frames."""
+    current: list[_BurstCandidate] = []
+    for candidate in candidates:
+        if not current:
+            current = [candidate]
+            continue
+        previous = current[-1]
+        seconds = (candidate.captured_at - previous.captured_at).total_seconds()
+        camera_agrees = candidate.camera == previous.camera or (
+            not require_camera_identity and not candidate.camera
+        )
+        distance = hamming(previous.candidate.signature or "", candidate.candidate.signature or "")
+        identical = _byte_identical(catalog, previous.candidate, candidate.candidate)
+        if (
+            seconds < 0
+            or seconds > time_window_seconds
+            or not camera_agrees
+            or distance is None
+            or distance > max_perceptual_distance
+            # Byte-identical frames are an exact group's business, where the
+            # evidence is stronger; a burst claiming them would double-count.
+            or identical
+        ):
+            if len(current) > 1:
+                yield current
+            current = [candidate]
+            continue
+        current.append(
+            _BurstCandidate(candidate.candidate, candidate.captured_at, candidate.camera, distance)
+        )
+    if len(current) > 1:
+        yield current
+
+
+def _byte_identical(
+    catalog: MediaCatalog,
+    left: DuplicateCandidate,
+    right: DuplicateCandidate,
+) -> bool:
+    left_hash = catalog.hash_for(left.record)
+    right_hash = catalog.hash_for(right.record)
+    return left_hash is not None and left_hash == right_hash
 
 
 def _confidence(

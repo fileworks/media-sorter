@@ -5,31 +5,47 @@ import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import axe from "axe-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import type { PreviewResult } from "@/types/api";
+import { comparableFromMember, type GroupMember } from "@/lib/reviewWorkbench";
 
-import { BurstReviewPanel } from "@/components/BurstReviewPanel";
-import { CatalogPanel } from "@/components/CatalogPanel";
-import { ConfigPanel } from "@/components/ConfigPanel";
-import { DestinationReconciliationPanel } from "@/components/DestinationReconciliationPanel";
+import { CompareModal } from "@/components/screens/review/CompareModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
+import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
+import { ResetDialog } from "@/components/config/ResetDialog";
+import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { ExecutePreflight } from "@/components/OperationCenter";
-import { PreviewPanel } from "@/components/PreviewPanel";
-import { QuarantineManager } from "@/components/QuarantineManager";
-import { RecipeChooser } from "@/components/RecipeChooser";
-import { ReviewWorkbench } from "@/components/ReviewWorkbench";
-import { SourcesPanel } from "@/components/SourcesPanel";
+import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
+import { RunLog } from "@/components/screens/RunLog";
+import { DestinationTree } from "@/components/screens/review/DestinationTree";
+import { PlanSummary } from "@/components/screens/review/PlanSummary";
+import { destinationTree } from "@/lib/reviewPlan";
+import type { ReviewStats } from "@/lib/reviewBrowse";
+import { RecipeScreen } from "@/components/screens/RecipeScreen";
+import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { StageShell } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
-import { ValidationPanel } from "@/components/ValidationPanel";
-import { SECTION_DEFAULTS } from "@/components/config/constants";
+import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
 import { I18nProvider, translate, type Locale } from "@/i18n/I18nContext";
-import { VIEWS_BY_STAGE, type StageState } from "@/lib/stageModel";
+import { type StageState } from "@/lib/stageModel";
 import { api } from "@/services/api";
-import type { Config } from "@/types/api";
 
-const ACCESSIBILITY_CONFIG = {
-  ...Object.assign({}, ...Object.values(SECTION_DEFAULTS)),
-  source_directory: "",
-  target_directory: "",
-} as Config;
+const ACCESSIBILITY_CONFIG = TEST_CONFIG;
+
+const SOURCES_PROPS = {
+  cards: [],
+  excludedForRun: [],
+  analysis: null,
+  config: ACCESSIBILITY_CONFIG,
+  savedRecipes: [],
+  onChange: () => undefined,
+  onExcludeForRun: () => undefined,
+  onAddFolder: () => undefined,
+  onChangeFolder: () => undefined,
+  onRemove: () => undefined,
+  onApplyConfig: () => undefined,
+  onDeleteRecipe: () => undefined,
+};
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -44,30 +60,6 @@ beforeEach(() => {
     groups: [],
     next_cursor: null,
     kind: "exact",
-  });
-  vi.spyOn(api, "catalogDiagnostics").mockResolvedValue({
-    path: "/state/catalog.sqlite3",
-    schema_version: 1,
-    size_bytes: 0,
-    soft_limit_bytes: 1,
-    over_soft_limit: false,
-    mode: "application_data",
-    roots: 0,
-    files: 0,
-    hashed_files: 0,
-    missing_files: 0,
-    generations: 0,
-    open_generations: 0,
-    freshness: [],
-  });
-  vi.spyOn(api, "listQuarantine").mockResolvedValue([]);
-  vi.spyOn(api, "quarantineSummary").mockResolvedValue({
-    record_count: 0,
-    retained_count: 0,
-    restored_count: 0,
-    retained_bytes: 0,
-    oldest_age_days: 0,
-    by_reason: {},
   });
   vi.spyOn(api, "getConfig").mockResolvedValue(ACCESSIBILITY_CONFIG);
   vi.spyOn(api, "validateConfig").mockResolvedValue({
@@ -127,6 +119,23 @@ function expectKeyboardReachable(container: HTMLElement): void {
   }
 }
 
+/**
+ * Both themes, for real: the palette is a `dark` class on the document root, so
+ * a component that hard-codes a colour instead of using a token renders
+ * identically in both and a component that branches on the theme renders twice.
+ * jsdom computes no colour, so axe's contrast rule stays off and the token
+ * palette is what carries that guarantee; what this sweep does catch is a
+ * theme-conditional branch that produces broken markup in one of the two.
+ */
+function useTheme(theme: "light" | "dark") {
+  beforeEach(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  });
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+  });
+}
+
 function renderWithProviders(element: ReactElement, locale: Locale) {
   const queryClient = new QueryClient({
     // Do not leave React Query's five-minute cache timer alive after the
@@ -140,15 +149,17 @@ function renderWithProviders(element: ReactElement, locale: Locale) {
   );
 }
 
-function renderShell(locale: Locale) {
+function renderShell(locale: Locale, planExists = false) {
   return renderWithProviders(
     <StageShell
       inputs={{
         rootsReady: true,
         rootsReason: null,
         scanned: true,
-        reviewed: true,
-        reviewedReason: null,
+        planned: true,
+        plannedReason: null,
+        duplicateReviewReady: true,
+        duplicateReviewReason: null,
         blocked: false,
         blockedReason: null,
       }}
@@ -158,6 +169,9 @@ function renderShell(locale: Locale) {
         planVersion: 1,
         taskId: null,
       }}
+      titleBar={<div />}
+      planExists={planExists}
+      onUnlock={() => undefined}
     >
       {(state: StageState) => (
         <StateView
@@ -173,21 +187,249 @@ function renderShell(locale: Locale) {
   );
 }
 
-const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
-  ["Sources", () => <SourcesPanel cards={[]} onChange={() => undefined} />],
-  ["organization", () => <PreviewPanel result={null} loading={false} error={null} />],
-  ["exact review", () => <ReviewWorkbench kindFilter="exact" />],
-  ["similar review", () => <ReviewWorkbench kindFilter="similar" />],
-  ["burst review", () => <BurstReviewPanel root="/library" items={[]} enabled={false} />],
-  ["reconciliation", () => <DestinationReconciliationPanel />],
-  ["validation", () => <ValidationPanel rootId="" />],
+const REVIEW_STATS: ReviewStats = {
+  scanned: 1000,
+  organized: 900,
+  setAside: 80,
+  staysPut: 20,
+  sets: 40,
+  copies: 80,
+  copyBytes: 1_200_000,
+  undecided: 30,
+  proposed: 0,
+  outstanding: 30,
+  share: { organized: 90, setAside: 8, staysPut: 2 },
+};
+
+/** A dry run with one ordinary file, one duplicate stack and one warning. */
+const PREVIEW_RESULT = {
+  config_fingerprint: "fp",
+  plan_id: "plan-1",
+  impact: {
+    actionable_groups: 2,
+    copy_count: 2,
+    move_count: 0,
+    quarantine_count: 1,
+    quarantine_bytes: 1_000,
+    skip_count: 0,
+    source_mutations: 0,
+    required_bytes: 3_000,
+    conversion_without_originals: 0,
+    companions_left_in_place: 0,
+    embedded_tag_count: 0,
+    unresolved_count: 0,
+  },
+  items: [
+    {
+      source: "/in/IMG_0001.jpg",
+      destination: "/out/2025/07/IMG_0001.jpg",
+      extracted_date: "2025-07-14",
+      metadata_source: "exif",
+      tags: [],
+      status: "sort",
+      file_size: 1_000,
+    },
+    {
+      source: "/in/IMG_0002.jpg",
+      destination: "/out/_duplicates/IMG_0002.jpg",
+      extracted_date: "2025-07-14",
+      metadata_source: "exif",
+      tags: [],
+      status: "duplicate",
+      file_size: 1_000,
+    },
+    {
+      source: "/in/broken.jpg",
+      destination: null,
+      extracted_date: null,
+      metadata_source: "none",
+      tags: [],
+      status: "unknown_date",
+      file_size: 1_000,
+    },
+  ],
+  stats: {
+    total: 3,
+    will_sort: 1,
+    will_fail: 0,
+    will_quarantine_unknown: 1,
+    will_quarantine_future: 0,
+    will_skip_duplicate: 1,
+    will_quarantine_junk: 0,
+    will_skip_already_in_destination: 0,
+    uncategorized: 0,
+  },
+} as unknown as PreviewResult;
+
+const COMPARE_MEMBER = (id: string, name: string) =>
+  ({
+    member_id: id,
+    root_id: "input-a",
+    role: "input" as const,
+    relative_path: name,
+    observed_path: `/in/${name}`,
+    facts: {
+      size_bytes: 1_000,
+      modified_at: { known: true, value: 1 },
+      captured_at: { known: true, value: "2025-07-14T10:00:00" },
+      width: { known: true, value: 4032 },
+      height: { known: true, value: 3024 },
+      duration_seconds: { known: false, value: null },
+      codec: { known: false, value: null },
+      media_kind: "image",
+    },
+    evidence: { confidence: "high" as const },
+  }) as unknown as GroupMember;
+
+/**
+ * Every dialog the application can open, so axe sees each one rather than only
+ * the screens that open them. A dialog is where the focus trap, the labelling
+ * and the escape route all live, which makes it the part most worth checking.
+ */
+const DIALOG_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   [
-    "issues",
+    "confirmation",
     () => (
-      <div>
-        <CatalogPanel />
-        <QuarantineManager />
-      </div>
+      <ConfirmDialog
+        open
+        title="Go back?"
+        description="The computed plan will be discarded."
+        confirmLabel="Go back"
+        cancelLabel="Cancel"
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    ),
+  ],
+  [
+    "reset",
+    () => (
+      <ResetDialog
+        open
+        title="Reset Sort to defaults"
+        destinations={[
+          {
+            id: "baseline",
+            label: "recipe Safe sort",
+            rows: [
+              {
+                key: "copy_instead_of_move",
+                setting: "Copy instead of move",
+                current: "On",
+                result: "Off",
+              },
+            ],
+            patch: { copy_instead_of_move: false },
+          },
+          {
+            id: "defaults",
+            label: "the application defaults",
+            rows: [],
+            patch: {},
+            unavailable: "Nothing to do — everything here already matches the defaults.",
+          },
+        ]}
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    ),
+  ],
+  [
+    "folder browser",
+    () => (
+      <FolderBrowserDialog
+        open
+        initialPath="/"
+        requireWritable={false}
+        onSelect={() => undefined}
+        onClose={() => undefined}
+      />
+    ),
+  ],
+  [
+    "compare",
+    () => (
+      <CompareModal
+        a={comparableFromMember(COMPARE_MEMBER("m1", "a.jpg"))}
+        b={comparableFromMember(COMPARE_MEMBER("m2", "b.jpg"))}
+        keeperId="m1"
+        setId="set-1"
+        onKeep={() => undefined}
+        onKeepBoth={() => undefined}
+        onClose={() => undefined}
+      />
+    ),
+  ],
+];
+
+const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
+  ["Sources", () => <SourcesScreen {...SOURCES_PROPS} />],
+  [
+    "plan summary",
+    () => (
+      <PlanSummary
+        stats={REVIEW_STATS}
+        requiredBytes={68_400_000_000}
+        rootCount={3}
+        onResolve={() => undefined}
+      />
+    ),
+  ],
+  [
+    "destination tree",
+    () => (
+      <DestinationTree
+        root={destinationTree(
+          [
+            {
+              source: "/in/a.jpg",
+              destination: "/out/2025/07/a.jpg",
+              extracted_date: null,
+              metadata_source: "exif",
+              tags: [],
+              status: "sort",
+            },
+          ],
+          "Sorted",
+          { rootPath: "/out" },
+        )}
+        selectedPath={null}
+        onSelect={() => undefined}
+        outOfScopeSets={2}
+      />
+    ),
+  ],
+  [
+    "run in progress",
+    () => (
+      <ExecuteScreen
+        status="running"
+        progress={{
+          current: 7172,
+          total: 11206,
+          percentage: 64,
+          phase: "sorting",
+          estimated_time_remaining_seconds: 540,
+          outcomes: { sorted: 7172, duplicate: 964, junk: 312, name_collision: 3 },
+        }}
+        outcomes={{ sorted: 7172, duplicate: 964, junk: 312, name_collision: 3 }}
+        error={null}
+        config={ACCESSIBILITY_CONFIG}
+        reportPath="Sorted/_Reports/run.html"
+        onCancel={() => undefined}
+        onRetry={() => undefined}
+      >
+        <RunLog
+          entries={[
+            {
+              timestamp: "2026-08-02T18:42:07Z",
+              level: "info",
+              message: "Camera/IMG_7204.heic → 2025/07/…jpg · verified",
+            },
+          ]}
+          running
+        />
+      </ExecuteScreen>
     ),
   ],
   [
@@ -220,81 +462,138 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   ],
 ];
 
-describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
-  it("uses one authoritative empty-source message", () => {
+describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
+  useTheme(theme);
+
+  describe.each(["en", "de"] as const)("every dialog in %s", (locale) => {
+    it.each(DIALOG_CASES)("%s has no automated violations", async (_name, makeDialog) => {
+      const rendered = renderWithProviders(makeDialog(), locale);
+      // A dialog is portalled to the body, so the render container is empty and
+      // the sweep has to look at the document.
+      await expectNoViolations(document.body);
+      rendered.unmount();
+    });
+  });
+
+  it("covers the Review surface, the one screen every dialog is opened from", async () => {
     const rendered = renderWithProviders(
-      <SourcesPanel cards={[]} onChange={() => undefined} />,
-      locale,
+      <ReviewScreen
+        result={PREVIEW_RESULT}
+        config={ACCESSIBILITY_CONFIG}
+        onOpenSetting={() => undefined}
+        onRerunPreview={() => undefined}
+      />,
+      "en",
     );
 
+    await within(rendered.container).findByRole("group", {
+      name: translate("en", "review.items"),
+    });
+    await expectNoViolations(rendered.container);
+  });
+
+  it("gives every screen at most one primary action", async () => {
+    // The primary is the one thing a screen exists for. Two of them is two
+    // answers to "what do I do here", which is none.
+    for (const makeScreen of [
+      () => <SourcesScreen {...SOURCES_PROPS} />,
+      () => (
+        <ReviewScreen
+          result={PREVIEW_RESULT}
+          config={ACCESSIBILITY_CONFIG}
+          onOpenSetting={() => undefined}
+          onRerunPreview={() => undefined}
+        />
+      ),
+    ]) {
+      const rendered = renderWithProviders(makeScreen(), "en");
+      const primaries = [...rendered.container.querySelectorAll("button")].filter((button) =>
+        /(^|\s)bg-primary(\s|$)/.test(button.className),
+      );
+      expect(primaries.map((button) => button.textContent)).toHaveLength(
+        primaries.length > 1 ? 1 : primaries.length,
+      );
+      rendered.unmount();
+    }
+  });
+});
+
+describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
+  it("offers exactly one way to add a folder per empty section", () => {
+    const rendered = renderWithProviders(<SourcesScreen {...SOURCES_PROPS} />, locale);
+
+    // Two sections, not three: a baseline is a checkbox on an input folder, so
+    // there is no separate reference column to add one to.
+    for (const role of ["input", "destination"] as const) {
+      expect(
+        within(rendered.container).getAllByText(translate(locale, `sources.empty.${role}`)),
+      ).toHaveLength(1);
+    }
     expect(
-      within(rendered.container).getAllByText(translate(locale, "sources.empty")),
-    ).toHaveLength(1);
-    expect(within(rendered.container).queryByRole("alert")).toBeNull();
+      within(rendered.container).queryByText(translate(locale, "sources.empty.reference")),
+    ).toBeNull();
   });
 
   it("has no automated violations in the navigation shell", async () => {
     const rendered = renderShell(locale);
     await expectNoViolations(rendered.container);
 
-    fireEvent.click(
-      within(rendered.container).getByRole("button", {
-        name: new RegExp(`^${translate(locale, "stage.review.label")}`),
-      }),
-    );
-    for (const view of VIEWS_BY_STAGE.review) {
+    for (const stage of ["recipe", "configure", "review", "execute"] as const) {
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: translate(locale, `view.${view}`),
+          name: new RegExp(`^${translate(locale, `stage.${stage}.label`)}`),
         }),
       );
       await expectNoViolations(rendered.container);
     }
+  });
 
-    fireEvent.click(
-      within(rendered.container).getByRole("button", {
-        name: new RegExp(`^${translate(locale, "stage.execute.label")}`),
-      }),
-    );
+  it("keeps the lock banner and its action reachable while the stages are locked", async () => {
+    const rendered = renderShell(locale, true);
+
+    // Standing on a locked stage: the banner explains, and its action is the
+    // one control the inert region does not swallow.
+    const unlock = within(rendered.container).getByRole("button", {
+      name: translate(locale, "stage.locked.action"),
+    });
+    expect(unlock.closest("[inert]")).toBeNull();
+    unlock.focus();
+    expect(document.activeElement).toBe(unlock);
+
     await expectNoViolations(rendered.container);
   });
 
-  it("has no automated violations in the recipe chooser", async () => {
+  it("has no automated violations on the recipe stage", async () => {
     const rendered = renderWithProviders(
-      <RecipeChooser config={{} as Config} onApply={() => undefined} />,
+      <RecipeScreen
+        config={ACCESSIBILITY_CONFIG}
+        savedRecipes={[]}
+        onApply={() => undefined}
+        onDelete={() => undefined}
+      />,
       locale,
     );
 
     await expectNoViolations(rendered.container);
   });
 
-  it("covers the configuration surface and search states", async () => {
-    const rendered = renderWithProviders(<ConfigPanel />, locale);
-    const search = await within(rendered.container).findByRole("searchbox");
-    await expectNoViolations(rendered.container);
-
-    fireEvent.change(search, { target: { value: "__no_setting_matches__" } });
-    await expectNoViolations(rendered.container);
-
-    fireEvent.change(search, { target: { value: "video" } });
-    fireEvent.click(
-      within(rendered.container).getByRole("button", {
-        name: translate(locale, "config.section.conversion.label"),
-      }),
+  it("covers the configuration surface, rail and all three groups", async () => {
+    const rendered = renderWithProviders(
+      <ConfigureScreen
+        onSaveConfig={() => undefined}
+        onSaveRecipe={async () => undefined}
+        savedRecipes={[]}
+        onEditRecipe={() => undefined}
+      />,
+      locale,
     );
-    await within(rendered.container).findByRole("heading", {
-      name: translate(locale, "config.section.conversion.label"),
-    });
-    await expectNoViolations(rendered.container);
-  });
 
-  it("covers the expanded shortcut reference", async () => {
-    const rendered = renderWithProviders(<ReviewWorkbench kindFilter="exact" />, locale);
-    fireEvent.click(
-      within(rendered.container).getByRole("button", {
-        name: new RegExp(translate(locale, "review.shortcuts")),
-      }),
-    );
+    // Every group renders at once, so one pass covers all of them.
+    for (const group of ["sort", "clean", "enrich"] as const) {
+      await within(rendered.container).findByRole("heading", {
+        name: translate(locale, `config.group.${group}.label`),
+      });
+    }
     await expectNoViolations(rendered.container);
   });
 

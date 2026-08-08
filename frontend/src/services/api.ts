@@ -17,6 +17,7 @@ export interface Config {
   library_profile: LibraryProfile;
   preservation_profile: PreservationProfile;
   optimization_profile: OptimizationProfile;
+  run_mode: RunMode;
   sort: boolean;
   sort_criteria: string[];
   recursive_scan: boolean;
@@ -33,6 +34,8 @@ export interface Config {
   duplicate_exact_enabled: boolean;
   duplicate_perceptual_enabled: boolean;
   duplicate_perceptual_threshold: number;
+  /** Default keeper policy — a starting point Review may override per group. */
+  duplicate_keeper_policy: KeeperPolicyId;
   burst_detection_enabled: boolean;
   burst_time_window_seconds: number;
   burst_perceptual_distance: number;
@@ -45,8 +48,12 @@ export interface Config {
   junk_filename_patterns: string[];
   convert_videos: boolean;
   video_format: "mp4" | "mkv" | "mov" | "webm" | "avi";
+  /** Re-encode quality for video conversion; mapped to a CRF by the backend. */
+  video_quality: "low" | "medium" | "high";
   convert_images: boolean;
   image_format: "jpeg" | "png" | "webp" | "tiff";
+  /** Encoder quality for lossy image formats. Ignored by PNG and TIFF. */
+  image_quality: number;
   repair_enabled: boolean;
   rules_enabled: boolean;
   rule_set: RuleSet;
@@ -67,7 +74,6 @@ export interface Config {
   categorize_categories_provenance: "bundled" | "custom";
   categorize_confidence_threshold: number;
   categorize_min_margin: number;
-  analyze: boolean;
   exclude_patterns: string[];
   min_file_size_kb: number | null;
   max_file_size_mb: number | null;
@@ -79,10 +85,135 @@ export interface Config {
   // providers (CoreML / CUDA / DirectML) for the local encoder.
   ai_model_tier: AiModelTier;
   ai_allow_gpu: boolean;
+  /** The user's own named starting points, most recently saved first. */
+  saved_recipes: SavedRecipe[];
+}
+
+/**
+ * The slice of a configuration a recipe restores.
+ *
+ * Deliberately not the whole config: folders, credentials, vocabularies and
+ * resource preferences are excluded so a recipe stays reusable across
+ * libraries. Mirrors `backend/app/core/recipes.py`.
+ */
+export interface RecipeSettings {
+  run_mode: RunMode;
+  sort: boolean;
+  sort_criteria: string[];
+  recursive_scan: boolean;
+  max_recursion_depth: number | null;
+  preserve_subfolders: boolean;
+  override_metadata?: boolean;
+  copy_instead_of_move: boolean;
+  companion_handling: Config["companion_handling"];
+  rename: boolean;
+  rename_pattern: string;
+  remove_duplicates: boolean;
+  duplicate_exact_enabled: boolean;
+  duplicate_perceptual_enabled: boolean;
+  duplicate_perceptual_threshold: number;
+  duplicate_keeper_policy: KeeperPolicyId;
+  burst_detection_enabled: boolean;
+  burst_time_window_seconds: number;
+  burst_perceptual_distance: number;
+  burst_require_camera_identity: boolean;
+  junk_filter_enabled: boolean;
+  junk_min_file_size_kb: number;
+  junk_min_image_dimension: number;
+  junk_filename_patterns: string[];
+  categorize_enabled: boolean;
+  categorize_confidence_threshold: number;
+  categorize_min_margin: number;
+  convert_images: boolean;
+  image_format: Config["image_format"];
+  image_quality: number;
+  convert_videos: boolean;
+  video_format: Config["video_format"];
+  video_quality: Config["video_quality"];
+  repair_enabled: boolean;
+  rules_enabled: boolean;
+  ai_tagging_enabled: boolean;
+  ai_tagging_confidence_threshold: number;
+  ai_tagging_max_tags: number;
+  embed_tags_in_files: boolean;
+  exclude_patterns: string[];
+  min_file_size_kb: number | null;
+  max_file_size_mb: number | null;
+  camera_subfolder_enabled: boolean;
+  exif_sanity_check_enabled: boolean;
+  ai_model_tier: AiModelTier;
+}
+
+export interface SavedRecipe {
+  schema_version: 1;
+  recipe_id: string;
+  name: string;
+  created_at: string;
+  settings: RecipeSettings;
 }
 
 export type LibraryRootRole = "input" | "reference" | "destination";
 export type TransferMode = "copy" | "move";
+
+/**
+ * How a duplicate group picks its keeper. Mirrors the backend's
+ * `KeeperPolicyId`. Not every member is selectable: `protected_reference` is
+ * automatic and always wins, and `preferred_root` depends on a root order the
+ * interface no longer lets anyone set.
+ */
+/**
+ * One duplicate set's decision, as the run receives it.
+ *
+ * Both halves are needed. `keep` alone cannot express the change, because
+ * promoting a copy also demotes whichever copy the plan was going to place —
+ * two actions, not one.
+ */
+export interface ReviewedSet {
+  keep: string;
+  demote: string[];
+  /** Every member is independent; duplicate detection must not collapse them. */
+  keep_all?: boolean;
+}
+
+export type KeeperPolicyId =
+  | "best_quality"
+  | "newest"
+  | "oldest"
+  | "largest"
+  | "smallest"
+  | "highest_resolution"
+  | "longest_filename"
+  | "shortest_filename"
+  | "preferred_root"
+  | "protected_reference"
+  | "manual";
+
+/**
+ * The keep rules a person may choose, in Configure as the default or in Review
+ * as a per-run override. Mirrors the backend's `SELECTABLE_KEEPER_POLICIES`;
+ * exported from here alone so the two surfaces cannot offer different sets.
+ */
+export const SELECTABLE_KEEPER_POLICIES = [
+  "best_quality",
+  "newest",
+  "oldest",
+  "largest",
+  "smallest",
+  "highest_resolution",
+  "longest_filename",
+  "shortest_filename",
+  "manual",
+] as const satisfies readonly KeeperPolicyId[];
+
+/**
+ * What a run is for.
+ *
+ * `organize` places every file into the destination structure. In
+ * `deduplicate_only` nothing but duplicates and junk moves: the input tree is
+ * left exactly as it was found, and the destination is used only for the review
+ * folders.
+ */
+export type RunMode = "organize" | "deduplicate_only";
 
 export interface RootIdentity {
   schema_version: 1;
@@ -158,33 +289,6 @@ export interface OptimizationProfile {
   retain_original: boolean;
 }
 
-/** One declared format contract: what an optimizer would promise, and prove. */
-export interface OptimizationContract {
-  contract_id: string;
-  media_kind: "image" | "video";
-  mode: "disabled" | "lossless" | "visually_lossless";
-  status: "declared" | "validated" | "blocked";
-  enabled: boolean;
-  source_formats: string[];
-  output_container: string;
-  output_codec: string;
-  tool: string;
-  tool_available: boolean;
-  tool_version: string | null;
-  minimum_tool_version: string;
-  decoded_content: string;
-  metadata_policy: string;
-  quality_setting: string;
-  metrics: {
-    name: string;
-    comparison: string;
-    threshold: number | string | boolean;
-    applies_to: string;
-    rationale: string;
-  }[];
-  compatibility_warnings: string[];
-}
-
 /** One representative encode the user may open beside its original. */
 export interface SampleEncode {
   source_path: string;
@@ -220,66 +324,6 @@ export interface ItemProjection {
   sample_source_path: string | null;
 }
 
-export interface OptimizationProjection {
-  contract_id: string;
-  mode: "disabled" | "lossless" | "visually_lossless";
-  output_container: string;
-  output_codec: string;
-  item_count: number;
-  current_bytes: number;
-  projected_low_bytes: number | null;
-  projected_high_bytes: number | null;
-  estimated_saving_bytes: number | null;
-  confidence: "measured" | "sampled" | "estimated" | "unknown";
-  estimate_only: boolean;
-  recommended_count: number;
-  skipped_count: number;
-  blocked_count: number;
-  temporary_space_bytes: number;
-  quarantine_space_bytes: number;
-  samples: SampleEncode[];
-  items: ItemProjection[];
-  warnings: string[];
-  compatibility_warnings: string[];
-  failures: string[];
-}
-
-/** A quarantined original and everything needed to put it back. */
-export interface QuarantineRecord {
-  record_id: string;
-  operation_id: string;
-  reason: string;
-  original_path: string;
-  quarantine_path: string;
-  keeper_path: string | null;
-  size_bytes: number;
-  quarantined_at: string;
-  retention: "retained" | "restored" | "removed";
-  restored_to: string | null;
-  age_days: number;
-  notes: string[];
-}
-
-export interface QuarantineSummary {
-  record_count: number;
-  retained_count: number;
-  restored_count: number;
-  retained_bytes: number;
-  oldest_age_days: number;
-  by_reason: Record<string, number>;
-}
-
-export interface RestorePreview {
-  record_id: string;
-  target_path: string;
-  restorable: boolean;
-  conflict: boolean;
-  conflict_is_identical: boolean;
-  quarantined_file_present: boolean;
-  hash_matches: boolean | null;
-  blocked_reason: string | null;
-}
-
 /** Where the index lives, what it costs, and how fresh each root is. */
 export interface CatalogFreshness {
   root_id: string;
@@ -308,10 +352,11 @@ export interface CatalogDiagnostics {
 import type {
   BulkImpact as ReviewBulkImpact,
   DuplicateGroup as ReviewGroup,
+  GroupKind,
   GroupPlan as ReviewGroupPlan,
 } from "@/lib/reviewWorkbench";
 
-export type { ReviewGroup, ReviewGroupPlan };
+export type { GroupKind, ReviewGroup, ReviewGroupPlan };
 export type BulkImpactResponse = ReviewBulkImpact;
 
 export interface SimilarRulePreview {
@@ -368,21 +413,6 @@ export interface CatalogViewPage {
   total_bytes: number;
 }
 
-export interface CleanupImpact {
-  record_ids: string[];
-  item_count: number;
-  total_bytes: number;
-  excluded_reasons: string[];
-  acknowledgement_text: string;
-}
-
-export interface CleanupOutcome {
-  code: string;
-  removed: string[];
-  failed: { record_id: string; reason: string }[];
-  bytes_removed: number;
-}
-
 export type AiModelTier = "auto" | "off" | "lite" | "standard" | "max";
 
 /**
@@ -416,6 +446,23 @@ export interface UpdateInfo {
  * `app/core/config_sections.py` is the source of the labels/descriptions; the
  * frontend supplies the icon + control body per id.
  */
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  readable: boolean;
+}
+
+export interface DirectoryListing {
+  path: string;
+  /** `null` at a root, so the browser knows it cannot ascend further. */
+  parent: string | null;
+  exists: boolean;
+  readable: boolean;
+  writable: boolean;
+  entries: DirectoryEntry[];
+}
+
 export interface ConfigSectionMeta {
   id: string;
   label_key: string;
@@ -496,6 +543,13 @@ export interface TaskProgress {
   bytes_total?: number;
   bytes_total_known?: boolean;
   /**
+   * Terminal per-item outcomes tallied as they happen, keyed by the same status
+   * codes the report uses (`sorted`, `duplicate`, `junk`, `name_collision`,
+   * `failed`, …). This is what makes a live "so far" panel possible without
+   * re-reading the operation log.
+   */
+  outcomes?: Record<string, number>;
+  /**
    * Coarse setup/processing stage, so the UI can show meaningful feedback during
    * work that happens before the per-file loop instead of a frozen 0%.
    * Validation, source scan, destination index, ranking, and per-file phases.
@@ -567,6 +621,62 @@ export interface AiModelInventory {
 
 export type AiModelTaskStatus = TaskStatus<Record<string, unknown>>;
 
+export const PROVENANCE_DECISION_KINDS = [
+  "date",
+  "category",
+  "source_subfolder",
+  "camera",
+  "route",
+  "rename",
+  "conversion",
+  "collision",
+  "quarantine",
+  "original_name",
+] as const;
+
+export type ProvenanceDecision = (typeof PROVENANCE_DECISION_KINDS)[number];
+
+export interface OutcomeProvenance {
+  date: {
+    resolved_date: string | null;
+    winning_source: string | null;
+    candidates: Array<{
+      source: string;
+      value: string | null;
+      accepted: boolean;
+      rejection_reason:
+        | "absent"
+        | "unparseable"
+        | "sentinel_value"
+        | "suspicious"
+        | "overridden"
+        | null;
+    }>;
+  };
+  rules: {
+    matched_tags: Array<{ name: string; priority: number; saved_order: number }>;
+    matched_routes: Array<{ name: string; priority: number; saved_order: number }>;
+    winning_route: { name: string; priority: number; saved_order: number } | null;
+    route_folder: string | null;
+  };
+  categorization: {
+    enabled: boolean;
+    label: string | null;
+    confidence: number | null;
+    threshold: number | null;
+    passed: boolean | null;
+  };
+  duplicate: {
+    evaluated: boolean;
+    status: "unique" | "duplicate" | "unknown" | "not_evaluated";
+    match_kind: string | null;
+    matched_path: string | null;
+    perceptual_distance: number | null;
+  };
+  unit: { unit_id: string; role: string; members: string[] } | null;
+  path: Array<{ segment: string; decision: ProvenanceDecision; detail: string }>;
+}
+
 export interface PreviewItem {
   source: string;
   destination: string | null;
@@ -585,7 +695,9 @@ export interface PreviewItem {
     | "junk"
     | "already_in_destination"
     | "duplicate_unknown"
-    | "review_only";
+    | "review_only"
+    /** `deduplicate_only` run mode: neither duplicate nor junk, so it stays put. */
+    | "keep_in_place";
   file_size?: number;
   /** Why the junk filter quarantined this file (junk status only). */
   quarantine_reason?: string | null;
@@ -594,6 +706,10 @@ export interface PreviewItem {
   duplicate_of?: string | null;
   duplicate_evaluation?: "known" | "unknown";
   duplicate_unknown_reason?: "video_perceptual_not_computed" | null;
+  /** Input root this item came from, retained for contextual-copy audit. */
+  source_root?: string;
+  /** Its own predicted path before it follows a duplicate keeper. */
+  would_be_destination?: string | null;
   unit_id?: string;
   unit_primary?: boolean;
   companions?: Array<{
@@ -606,51 +722,15 @@ export interface PreviewItem {
     placement_date_source?: string;
   }>;
   unit_warnings?: string[];
-  provenance?: {
-    date: {
-      resolved_date: string | null;
-      winning_source: string | null;
-      candidates: Array<{
-        source: string;
-        value: string | null;
-        accepted: boolean;
-        rejection_reason:
-          | "absent"
-          | "unparseable"
-          | "sentinel_value"
-          | "suspicious"
-          | "overridden"
-          | null;
-      }>;
-    };
-    rules: {
-      matched_tags: Array<{ name: string; priority: number; saved_order: number }>;
-      winning_route: { name: string; priority: number; saved_order: number } | null;
-      route_folder: string | null;
-    };
-    categorization: {
-      enabled: boolean;
-      label: string | null;
-      confidence: number | null;
-      threshold: number | null;
-      passed: boolean | null;
-    };
-    duplicate: {
-      evaluated: boolean;
-      status: "unique" | "duplicate" | "unknown" | "not_evaluated";
-      match_kind: string | null;
-      matched_path: string | null;
-      perceptual_distance: number | null;
-    };
-    unit: { unit_id: string; role: string; members: string[] } | null;
-    path: Array<{ segment: string; decision: string; detail: string }>;
-  };
+  provenance?: OutcomeProvenance;
 }
 
 /**
  * Displayable metadata for a single local file, from GET /api/media/info.
- * Used to show resolution everywhere and to fill in a duplicate original's
- * details (date/source/size), which the preview item itself doesn't carry.
+ *
+ * Read by Review's detail view, one open file at a time. It carries the facts
+ * the plan does not: a preview item knows where a file goes, not how many pixels
+ * it has.
  */
 export interface MediaInfo {
   width: number | null;
@@ -659,6 +739,34 @@ export interface MediaInfo {
   extracted_date: string | null;
   metadata_source: string;
   media_type: "image" | "video" | "other";
+}
+
+/** One candidate date the preview considered, and what became of it. */
+export interface DateCandidate {
+  source: string;
+  value: string | null;
+  accepted: boolean;
+  rejection_reason:
+    | "absent"
+    | "unparseable"
+    | "sentinel_value"
+    | "suspicious"
+    | "overridden"
+    | null;
+}
+
+/** Provenance for one file, as `POST /api/review/outcomes` records it. */
+export interface ReviewOutcome {
+  source: string;
+  resolved_date: string | null;
+  candidates: DateCandidate[];
+  provenance?: OutcomeProvenance;
+}
+
+export interface ReviewOutcomeResponse {
+  config_fingerprint: string;
+  outcomes: ReviewOutcome[];
+  unavailable_paths: string[];
 }
 
 export interface AnalysisResult {
@@ -686,6 +794,9 @@ export interface AnalysisResult {
   media_units?: number;
   companion_files?: number;
   unmatched_companions?: number;
+  /** Configured folders deliberately omitted from this run. */
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
 }
 
 export interface AuditFinding {
@@ -702,35 +813,6 @@ export interface AuditFinding {
   actionable: boolean;
   newly_appeared: boolean;
   suggested_path: string | null;
-}
-
-export interface AuditActionPlan {
-  plan_id: string;
-  action_count: number;
-  bytes_affected: number;
-  source_mutations: number;
-  config_fingerprint: string;
-}
-
-export interface AuditReport {
-  audit_id: string;
-  root: string;
-  started_at: string;
-  finished_at: string;
-  scope: {
-    subtree: string | null;
-    date_from: string | null;
-    date_to: string | null;
-    sample_proportion: number;
-    sample_seed: string;
-  };
-  selection_method: string;
-  coverage: "full" | "sample" | "partial";
-  scanned_files: number;
-  baseline_established: number;
-  findings: AuditFinding[];
-  issues: string[];
-  cancelled: boolean;
 }
 
 export interface BurstFrame {
@@ -751,48 +833,6 @@ export interface BurstGroup {
   reviewed: boolean;
   dismissed: boolean;
   kept_frame_ids: string[];
-}
-
-export interface BurstDecision {
-  group: BurstGroup;
-  plan: {
-    plan_id: string;
-    group_id: string;
-    kept_frame_ids: string[];
-    members: Array<{
-      frame_id: string;
-      unit_id: string;
-      path: string;
-      fingerprint: string;
-    }>;
-  };
-  impact: {
-    quarantine_count: number;
-    quarantine_bytes: number;
-    source_mutations: number;
-    irreversible: string;
-  };
-  planned_quarantine_units: Array<{
-    unit_id: string;
-    members: string[];
-    action: "quarantine";
-    delete: false;
-  }>;
-}
-
-export interface BurstRunReport {
-  operation_id: string;
-  plan_id: string;
-  group_id: string;
-  completed_at: string;
-  kept_frame_ids: string[];
-  quarantined: Array<{
-    frame_id: string;
-    unit_id: string;
-    original_path: string;
-    quarantine_path: string;
-    size_bytes: number;
-  }>;
 }
 
 export interface ReconciliationFinding {
@@ -816,24 +856,27 @@ export interface ReconciliationFinding {
   unit_member_fingerprints: Record<string, string>;
 }
 
-export interface ReconciliationReport {
-  report_id: string;
-  created_at: string;
-  findings: ReconciliationFinding[];
-  next_cursor: string | null;
-  counts: Record<ReconciliationFinding["classification"], number>;
-  input_coverage: "full" | "partial" | "unavailable";
-  destination_coverage: "full" | "partial" | "unavailable";
-  issues: string[];
-  config_fingerprint: string;
-}
-
-export interface ReconciliationPlan {
-  plan_id: string;
-  manifest: Record<string, unknown>;
-  action_count: number;
-  bytes_affected: number;
+/**
+ * What a run will do, counted by the plan itself.
+ *
+ * Always fetched rather than derived: Execute used to subtract a
+ * per-reviewed-file tally from these action-level totals, and a companion is an
+ * action but not a reviewed file — so excluding a RAW+JPEG pair left the
+ * preflight promising a copy that would never happen.
+ */
+export interface PlanImpact {
+  actionable_groups: number;
+  copy_count: number;
+  move_count: number;
+  quarantine_count: number;
+  quarantine_bytes: number;
+  skip_count: number;
   source_mutations: number;
+  required_bytes: number;
+  conversion_without_originals: number;
+  companions_left_in_place: number;
+  embedded_tag_count: number;
+  unresolved_count: number;
 }
 
 export interface PreviewResult {
@@ -841,20 +884,9 @@ export interface PreviewResult {
   config_fingerprint: string;
   /** Identity of the immutable reviewed plan accepted by the executor. */
   plan_id: string;
-  impact: {
-    actionable_groups: number;
-    copy_count: number;
-    move_count: number;
-    quarantine_count: number;
-    quarantine_bytes: number;
-    skip_count: number;
-    source_mutations: number;
-    required_bytes: number;
-    conversion_without_originals: number;
-    companions_left_in_place: number;
-    embedded_tag_count: number;
-    unresolved_count: number;
-  };
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
+  impact: PlanImpact;
   items: PreviewItem[];
   stats: {
     total: number;
@@ -899,6 +931,8 @@ export type ScanStatus = TaskStatus<
     excluded_files: number;
     partial: boolean;
     issues: Array<Record<string, unknown>>;
+    excluded_roots?: string[];
+    excluded_root_ids?: string[];
   } & Record<string, unknown>
 >;
 
@@ -951,6 +985,7 @@ export interface OperationReport {
   execution_date: string;
   source_path: string;
   dest_path: string;
+  excluded_roots?: string[];
   duration_seconds: number | null;
   summary: {
     total: number;
@@ -1082,6 +1117,25 @@ export class MediaSorterApiClient {
   private async ensureReady(): Promise<void> {
     await this.ready;
   }
+
+  /**
+   * `fetch` against the loopback API with the capability header attached.
+   *
+   * Every media endpoint needs it, and neither a bare `fetch` nor an `<img
+   * src>` carries it — which is why every thumbnail, hero image and difference
+   * map in the app was answered with 401 and drew a "cannot preview this file"
+   * placeholder instead. Images therefore go through here and are handed to the
+   * DOM as object URLs.
+   *
+   * Shaped as `typeof fetch` and bound, so it can be passed straight to
+   * anything that takes a fetcher.
+   */
+  readonly mediaFetch: typeof fetch = async (input, init) => {
+    await this.ensureReady();
+    const headers = new Headers(init?.headers);
+    if (this.capability) headers.set("X-MediaSorter-Capability", this.capability);
+    return fetch(input, { ...init, headers });
+  };
 
   /** Keep the global loader active until the caller observes a terminal task state. */
   beginOperation(): () => void {
@@ -1218,6 +1272,20 @@ export class MediaSorterApiClient {
     return data;
   }
 
+  /**
+   * List the sub-directories of one folder, and report what it permits.
+   *
+   * The same call browses and validates: a root's card state is derived from
+   * this, so the folder a person picks is checked by the code that listed it.
+   */
+  async listDirectory(path: string): Promise<DirectoryListing> {
+    await this.ensureReady();
+    const { data } = await this.http.get<DirectoryListing>("/api/fs/list", {
+      params: { path },
+    });
+    return data;
+  }
+
   async getConfigSections(): Promise<ConfigSectionMeta[]> {
     await this.ensureReady();
     const { data } = await this.http.get<{ sections: ConfigSectionMeta[] }>("/api/config/sections");
@@ -1229,6 +1297,25 @@ export class MediaSorterApiClient {
     await this.ensureReady();
     const { data } = await this.http.get<Partial<Config>>("/api/config/defaults");
     return data;
+  }
+
+  /** The user's own saved recipes. Built-ins ship with the frontend. */
+  async listRecipes(): Promise<SavedRecipe[]> {
+    await this.ensureReady();
+    const { data } = await this.http.get<SavedRecipe[]>("/api/config/recipes");
+    return data;
+  }
+
+  /** Save the current run behaviour under a name, replacing any same-named one. */
+  async saveRecipe(name: string, settings: RecipeSettings): Promise<SavedRecipe> {
+    await this.ensureReady();
+    const { data } = await this.http.post<SavedRecipe>("/api/config/recipes", { name, settings });
+    return data;
+  }
+
+  async deleteRecipe(recipeId: string): Promise<void> {
+    await this.ensureReady();
+    await this.http.delete(`/api/config/recipes/${encodeURIComponent(recipeId)}`);
   }
 
   /** AI-relevant hardware profile (probed once at startup on the backend). */
@@ -1276,8 +1363,18 @@ export class MediaSorterApiClient {
 
   // ── Analysis ─────────────────────────────────────────────────────────────────
 
-  async startAnalysis(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/analysis/start", {}, idempotencyKey);
+  async startAnalysis(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/analysis/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getAnalysisStatus(taskId: string, afterSequence = 0): Promise<AnalysisStatus> {
@@ -1290,8 +1387,18 @@ export class MediaSorterApiClient {
 
   // ── Source scan ──────────────────────────────────────────────────────────────
 
-  async startScan(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/scan/start", {}, idempotencyKey);
+  async startScan(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/scan/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getScanStatus(taskId: string, afterSequence = 0): Promise<ScanStatus> {
@@ -1304,8 +1411,18 @@ export class MediaSorterApiClient {
 
   // ── Preview (background task + progress polling) ──────────────────────────────
 
-  async startPreview(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/preview/start", {}, idempotencyKey);
+  async startPreview(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/preview/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getPreviewStatus(taskId: string, afterSequence = 0): Promise<PreviewStatus> {
@@ -1318,11 +1435,23 @@ export class MediaSorterApiClient {
 
   // ── Sorting ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Start a run.
+   *
+   * `excludedRoots` is the Sources-stage scope and `reviewedSets` contains the
+   * duplicate confirmations. Both belong to this run only.
+   *
+   * A decision is set-level — `{ keep, demote }` — rather than a `{hash: path}`
+   * map, because promoting a copy changes the planned action of every *other*
+   * copy too. A map could name the winner but not the losers, and the plan
+   * guard would then abort the run on the first action it did not recognise.
+   */
   async startSort(
     dryRun = false,
     idempotencyKey?: string,
     expectedConfigFingerprint?: string,
     planId?: string,
+    decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
   ): Promise<string> {
     return this.startTask(
       "/api/sorting/start",
@@ -1330,6 +1459,8 @@ export class MediaSorterApiClient {
         dry_run: dryRun,
         expected_config_fingerprint: expectedConfigFingerprint,
         plan_id: planId,
+        excluded_roots: decisions.excludedRoots ?? [],
+        reviewed_sets: decisions.reviewedSets ?? [],
       },
       idempotencyKey,
     );
@@ -1374,199 +1505,19 @@ export class MediaSorterApiClient {
     return data as Blob;
   }
 
-  async runLibraryAudit(input: {
-    root: string;
-    subtree?: string;
-    sampleProportion?: number;
-  }): Promise<AuditReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<AuditReport>("/api/audit", {
-      root: input.root,
-      scope: {
-        subtree: input.subtree || null,
-        sample_proportion: input.sampleProportion ?? 1,
-      },
-    });
-    return data;
-  }
-
-  async auditHistory(): Promise<AuditReport[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<AuditReport[]>("/api/audit/history");
-    return data;
-  }
-
-  async exportAudit(auditId: string, format: "csv" | "json"): Promise<Blob> {
-    await this.ensureReady();
-    const { data } = await this.http.post(
-      `/api/audit/reports/${encodeURIComponent(auditId)}/export`,
-      { format },
-      { responseType: "blob" },
-    );
-    return data as Blob;
-  }
-
-  async planAuditFixes(auditId: string, findingIds: string[]): Promise<AuditActionPlan> {
-    await this.ensureReady();
-    const { data } = await this.http.post<AuditActionPlan>(
-      `/api/audit/reports/${encodeURIComponent(auditId)}/plan`,
-      { finding_ids: findingIds },
-    );
-    return data;
-  }
-
-  async executeAuditFixes(planId: string): Promise<{ plan_id: string; completed: number }> {
-    await this.ensureReady();
-    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
-      `/api/audit/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
-  async detectBursts(root: string, paths: string[]): Promise<BurstGroup[]> {
-    await this.ensureReady();
-    const { data } = await this.http.post<BurstGroup[]>("/api/review/bursts/detect", {
-      root,
-      paths,
-    });
-    return data;
-  }
-
-  async decideBurst(
-    group: BurstGroup,
-    keepFrameIds: string[],
-    dismissed = false,
-  ): Promise<BurstDecision> {
-    await this.ensureReady();
-    const { data } = await this.http.post("/api/review/bursts/decision", {
-      group,
-      keep_frame_ids: keepFrameIds,
-      dismissed,
-    });
-    return data;
-  }
-
-  async executeBurstPlan(planId: string): Promise<BurstRunReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<BurstRunReport>(
-      `/api/review/bursts/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
-  async reconcileDestination(): Promise<ReconciliationReport> {
-    await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationReport>("/api/reconciliation/compare", {
-      input_available: true,
-    });
-    return data;
-  }
-
-  async reconciliationFindings(
-    reportId: string,
-    options: {
-      cursor?: string | null;
-      classification?: ReconciliationFinding["classification"];
-      limit?: number;
-    } = {},
-  ): Promise<ReconciliationReport> {
-    await this.ensureReady();
-    const { data } = await this.http.get<ReconciliationReport>(
-      `/api/reconciliation/reports/${encodeURIComponent(reportId)}/findings`,
-      {
-        params: {
-          ...(options.cursor ? { cursor: options.cursor } : {}),
-          ...(options.classification ? { classification: options.classification } : {}),
-          ...(options.limit ? { limit: options.limit } : {}),
-        },
-      },
-    );
-    return data;
-  }
-
-  async planReconciliation(
-    report: ReconciliationReport,
-    findingIds: string[],
-    confirmedProbable: string[],
-  ): Promise<ReconciliationPlan> {
-    await this.ensureReady();
-    const { data } = await this.http.post<ReconciliationPlan>("/api/reconciliation/plan", {
-      report_id: report.report_id,
-      finding_ids: findingIds,
-      confirm_probable: confirmedProbable,
-    });
-    return data;
-  }
-
-  async executeReconciliation(planId: string): Promise<{ plan_id: string; completed: number }> {
-    await this.ensureReady();
-    const { data } = await this.http.post<{ plan_id: string; completed: number }>(
-      `/api/reconciliation/plans/${encodeURIComponent(planId)}/execute`,
-      { acknowledged: true },
-    );
-    return data;
-  }
-
-  // ── Optimization ──────────────────────────────────────────────────────────────
-
-  /** Every declared contract with its status and whether its tool exists here. */
-  async listOptimizationContracts(): Promise<OptimizationContract[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<OptimizationContract[]>("/api/optimization/contracts");
-    return data;
-  }
-
   /**
-   * Project what optimization would cost and save for the given files.
-   *
-   * Nothing is mutated: the backend encodes a bounded sample into its own
-   * workspace. With `retainSamples` the candidates stay readable so the
-   * comparison modal has something real to show; without it the response is
-   * numbers only and says so via `estimate_only`.
+   * What a run carrying this scope and these duplicate decisions would do.
    */
-  async previewOptimization(
-    contractId: string,
-    paths: string[],
-    options: { retainSamples?: boolean; maxSamples?: number } = {},
-  ): Promise<OptimizationProjection> {
+  async planImpact(
+    planId: string,
+    excludedRoots: string[],
+    reviewedSets: ReviewedSet[] = [],
+  ): Promise<PlanImpact> {
     await this.ensureReady();
-    const { data } = await this.http.post<OptimizationProjection>("/api/optimization/preview", {
-      contract_id: contractId,
-      paths,
-      retain_samples: options.retainSamples ?? true,
-      max_samples: options.maxSamples ?? 3,
-    });
-    return data;
-  }
-
-  // ── Quarantine ────────────────────────────────────────────────────────────────
-
-  async listQuarantine(retention?: QuarantineRecord["retention"]): Promise<QuarantineRecord[]> {
-    await this.ensureReady();
-    const { data } = await this.http.get<QuarantineRecord[]>("/api/quarantine", {
-      params: retention ? { retention } : {},
-    });
-    return data;
-  }
-
-  async quarantineSummary(): Promise<QuarantineSummary> {
-    await this.ensureReady();
-    const { data } = await this.http.get<QuarantineSummary>("/api/quarantine/summary");
-    return data;
-  }
-
-  /** Describe a restore fully before any byte moves. */
-  async previewRestore(
-    recordId: string,
-    options: { targetPath?: string; onConflict?: "block" | "alternate_path" | "skip" } = {},
-  ): Promise<RestorePreview> {
-    await this.ensureReady();
-    const { data } = await this.http.post<RestorePreview>("/api/quarantine/restore/preview", {
-      record_id: recordId,
-      target_path: options.targetPath ?? null,
-      on_conflict: options.onConflict ?? "block",
+    const { data } = await this.http.post<PlanImpact>("/api/sorting/impact", {
+      plan_id: planId,
+      excluded_roots: excludedRoots,
+      reviewed_sets: reviewedSets,
     });
     return data;
   }
@@ -1574,8 +1525,8 @@ export class MediaSorterApiClient {
   // ── Duplicate review ──────────────────────────────────────────────────────────
 
   async listReviewGroups(
-    kind: "exact" | "similar" = "exact",
-    options: { limit?: number; maxDistance?: number } = {},
+    kind: GroupKind = "exact",
+    options: { limit?: number; maxDistance?: number; excludedRoots?: string[] } = {},
   ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
     await this.ensureReady();
     const { data } = await this.http.get<{
@@ -1583,7 +1534,12 @@ export class MediaSorterApiClient {
       next_cursor: string | null;
       kind: string;
     }>("/api/review/groups", {
-      params: { kind, limit: options.limit ?? 50, max_distance: options.maxDistance ?? 2 },
+      params: {
+        kind,
+        limit: options.limit ?? 50,
+        max_distance: options.maxDistance ?? 2,
+        excluded_roots: options.excludedRoots ?? [],
+      },
     });
     return data;
   }
@@ -1646,7 +1602,9 @@ export class MediaSorterApiClient {
       plan_id: input.planId ?? "default",
       scope: input.scope,
       group_ids: input.groupIds ?? [],
-      policy_id: input.policyId ?? "largest",
+      // Omitted rather than defaulted: the backend falls back to the
+      // configured keep rule, so the client never has to restate it.
+      policy_id: input.policyId ?? null,
       filter_key: input.filterKey ?? "",
     });
     return data;
@@ -1667,7 +1625,7 @@ export class MediaSorterApiClient {
       scope: input.scope,
       impact: input.impact,
       group_ids: input.groupIds ?? [],
-      policy_id: input.policyId ?? "largest",
+      policy_id: input.policyId ?? null,
       preferred_roots: input.preferredRoots ?? [],
       filter_key: input.filterKey ?? "",
     });
@@ -1744,24 +1702,7 @@ export class MediaSorterApiClient {
 
   // ── Quarantine cleanup ────────────────────────────────────────────────────────
 
-  async previewCleanup(recordIds: string[]): Promise<CleanupImpact> {
-    await this.ensureReady();
-    const { data } = await this.http.post<CleanupImpact>("/api/quarantine/cleanup/preview", {
-      record_ids: recordIds,
-    });
-    return data;
-  }
-
   /** Permanently delete quarantined files. The only irreversible call here. */
-  async cleanupQuarantine(recordIds: string[], acknowledge: boolean): Promise<CleanupOutcome> {
-    await this.ensureReady();
-    const { data } = await this.http.post<CleanupOutcome>("/api/quarantine/cleanup", {
-      record_ids: recordIds,
-      acknowledge_permanent_deletion: acknowledge,
-    });
-    return data;
-  }
-
   // ── Catalog ───────────────────────────────────────────────────────────────────
 
   async catalogDiagnostics(): Promise<CatalogDiagnostics> {
@@ -1848,6 +1789,22 @@ export class MediaSorterApiClient {
     await this.ensureReady();
     const { data } = await this.http.get<MediaInfo>("/api/media/info", {
       params: { path },
+    });
+    return data;
+  }
+
+  /**
+   * What the last completed preview recorded about how each date was chosen.
+   *
+   * The candidates it considered, which one won, and why the others were
+   * rejected — the provenance behind the one-sentence reason every row carries.
+   * Capped at 500 paths by the endpoint, and asked for one file at a time by the
+   * only caller that needs it.
+   */
+  async reviewOutcomes(paths: string[]): Promise<ReviewOutcomeResponse> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReviewOutcomeResponse>("/api/review/outcomes", {
+      paths,
     });
     return data;
   }

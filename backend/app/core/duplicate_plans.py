@@ -26,7 +26,10 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 DUPLICATE_PLAN_SCHEMA_VERSION: Literal[1] = 1
 
-GroupKind = Literal["exact", "similar"]
+#: A burst is a third *kind* of stack, not a second concept: same members, same
+#: decisions, same keeper policies. Only the evidence differs — a burst is
+#: grouped by capture time and camera as well as by visual signature.
+GroupKind = Literal["exact", "similar", "burst"]
 RootRole = Literal["input", "reference", "destination"]
 
 #: What a user may decide about one member. There is deliberately no
@@ -51,14 +54,37 @@ OutcomeKind = Literal[
 ]
 
 KeeperPolicyId = Literal[
+    "best_quality",
     "largest",
+    "smallest",
     "newest",
     "oldest",
     "highest_resolution",
+    "longest_filename",
+    "shortest_filename",
     "preferred_root",
     "protected_reference",
     "manual",
 ]
+
+#: The policies a person may choose, in Configure or as a per-run override in
+#: Review. Exported from one place so the two cannot offer different sets.
+#:
+#: `protected_reference` is absent deliberately: it is automatic and always
+#: wins, so offering it as a choice would imply it could be turned off.
+#: `preferred_root` is absent because the root order it depended on is no longer
+#: something the interface lets anyone set.
+SELECTABLE_KEEPER_POLICIES: tuple[KeeperPolicyId, ...] = (
+    "best_quality",
+    "largest",
+    "smallest",
+    "newest",
+    "oldest",
+    "highest_resolution",
+    "longest_filename",
+    "shortest_filename",
+    "manual",
+)
 
 BulkScopeId = Literal[
     "this_group",

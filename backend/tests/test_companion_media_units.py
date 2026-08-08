@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from time import monotonic
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -446,7 +447,7 @@ def test_every_fixture_companion_inherits_its_primary_destination(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_preview_attaches_roles_and_reports_split_and_unmatched_totals(
+async def test_leaving_companions_in_place_reports_the_split_before_commit(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source"
@@ -497,12 +498,12 @@ def test_move_commits_primary_first_and_retains_a_failing_companion_source(
     target = tmp_path / "target"
     original_move = service._fs.safe_move
 
-    def fail_companion(source: Path, destination: Path):
+    def fail_companion(source: Path, destination: Path) -> Any:
         if source.suffix.lower() == ".xmp":
             raise OSError("simulated companion verification failure")
         return original_move(source, destination)
 
-    service._fs.safe_move = Mock(side_effect=fail_companion)
+    service._fs.safe_move = Mock(side_effect=fail_companion)  # type: ignore[method-assign]  # monkeypatching a bound method for the duration of one test
     records = service._process_unit(
         unit=unit,
         source_root=root,
@@ -531,7 +532,7 @@ def test_move_commits_primary_first_and_retains_a_failing_companion_source(
 def test_duplicate_evaluation_quarantines_a_whole_different_unit(tmp_path: Path) -> None:
     root = tmp_path / "source"
     root.mkdir()
-    paths = []
+    paths: list[Path] = []
     for stem in ("a", "b"):
         image = root / f"{stem}.jpg"
         sidecar = root / f"{stem}.xmp"
@@ -583,7 +584,7 @@ def test_duplicate_evaluation_quarantines_a_whole_different_unit(tmp_path: Path)
 
     assert {Path(item["dest_path"]).parent for item in first} == {target / "2020"}
     assert second[0]["status"] == "duplicate"
-    assert {Path(item["dest_path"]).parent for item in second} == {target / "_duplicates"}
+    assert {Path(item["dest_path"]).parent for item in second} == {target / "2020" / "_copies"}
 
 
 def test_manifest_actions_carry_unit_identity_and_primary_reference(tmp_path: Path) -> None:
@@ -605,6 +606,7 @@ def test_manifest_actions_carry_unit_identity_and_primary_reference(tmp_path: Pa
 
     assert action.model_dump()["unit_id"] == "unit_123"
     assert action.companion_role == "edit_sidecar"
+    assert action.unit_primary_path is not None
     assert action.unit_primary_path.endswith("photo.jpg")
 
 

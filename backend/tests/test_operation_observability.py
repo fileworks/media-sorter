@@ -114,6 +114,8 @@ def test_action_events_correlate_to_the_manifest_action(tmp_path: Path) -> None:
     )
     execution.finish("completed")
 
+    # `place` returns None only for a source Review excluded; this one is not.
+    assert result is not None
     action_events = [event for event in _events(execution) if event.action_id is not None]
     assert action_events
     assert {event.action_id for event in action_events} == {result.action_id}

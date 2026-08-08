@@ -5,12 +5,14 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.core.config import Config
 from app.core.integrity import PreservationProfile
 from app.services.ai.category_classifier_service import CategoryResult
 from app.services.extraction_service import DateCandidate, DateExtractionService, ExtractionResult
 from app.services.mutation_planner import build_placement_action
-from app.services.outcome_provenance import build_outcome_provenance
+from app.services.outcome_provenance import append_collision, build_outcome_provenance
 from app.services.verified_transfer import execute_transfer
 
 
@@ -31,6 +33,7 @@ def test_bounded_provenance_records_decisions_and_is_carried_by_action(tmp_path:
         image_format="png",
         rename=True,
         rename_pattern="YYYY_NAME",
+        camera_subfolder_enabled=True,
     )
     extraction = ExtractionResult(
         date(2024, 3, 2),
@@ -42,9 +45,11 @@ def test_bounded_provenance_records_decisions_and_is_carried_by_action(tmp_path:
     )
     tag_match = SimpleNamespace(name="Camera JPEG", priority=2, saved_order=1)
     route_match = SimpleNamespace(name="Trips", priority=4, saved_order=0)
+    losing_route_match = SimpleNamespace(name="Archive", priority=9, saved_order=1)
     rules = SimpleNamespace(
         matched_tag_rules=(tag_match,),
         matched_route_rule=route_match,
+        matched_route_rules=(route_match, losing_route_match),
     )
 
     provenance = build_outcome_provenance(
@@ -60,6 +65,7 @@ def test_bounded_provenance_records_decisions_and_is_carried_by_action(tmp_path:
         duplicate_similarity=97,
         duplicate_of="/reference/IMG_1.jpg",
         route_suffix="trip",
+        camera="Nikon Z",
         unit_id="unit-1",
         unit_members=(str(source),),
     )
@@ -80,15 +86,30 @@ def test_bounded_provenance_records_decisions_and_is_carried_by_action(tmp_path:
     assert provenance.duplicate.perceptual_distance == 3
     assert provenance.rules.winning_route is not None
     assert provenance.rules.winning_route.name == "Trips"
+    assert [match.name for match in provenance.rules.matched_routes] == ["Trips", "Archive"]
     assert [part.decision for part in provenance.path] == [
         "date",
         "date",
         "category",
+        "camera",
         "route",
         "conversion",
         "rename",
     ]
     assert len(json.dumps(provenance.model_dump(mode="json"))) < 4_096
+    rename = next(part for part in provenance.path if part.decision == "rename")
+    assert "YYYY_NAME" in rename.detail
+    assert "IMG_1" in rename.detail
+
+    collided = append_collision(
+        provenance,
+        proposed=destination,
+        reserved=destination.with_name("2024_IMG_1_001.png"),
+    )
+    collision = collided.path[-1]
+    assert collision.decision == "collision"
+    assert collision.segment == "2024_IMG_1_001.png"
+    assert destination.name in collision.detail
 
     result = execute_transfer(action)
     assert result.destination_path == destination
@@ -120,7 +141,7 @@ def test_rejected_date_candidates_are_capped() -> None:
 
 def test_absent_sentinel_and_filename_winner_have_distinct_explanations(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = DateExtractionService()
     filesystem_only = tmp_path / "plain.jpg"

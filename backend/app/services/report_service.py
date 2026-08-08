@@ -128,6 +128,7 @@ class ReportService:
             "execution_date": op["execution_date"],
             "source_path": op["source_path"],
             "dest_path": op["dest_path"],
+            "excluded_roots": _json_list(op.get("excluded_roots")),
             "duration_seconds": op.get("duration_seconds"),
             "summary": {
                 "total": op["total_files"],
@@ -183,7 +184,9 @@ class ReportService:
             # rich than what the UI shows.
             fieldnames = [
                 "source_path",
+                "source_root",
                 "dest_path",
+                "would_be_destination",
                 "extracted_date",
                 "metadata_source",
                 "action",
@@ -252,3 +255,13 @@ class ReportService:
     async def clear_all_history(self) -> dict[str, Any]:
         """Delete every operation and its file records from the database."""
         return await asyncio.to_thread(self._clear_all_history_sync)
+
+
+def _json_list(value: Any) -> list[str]:
+    if not value:
+        return []
+    try:
+        decoded = json.loads(str(value))
+    except (TypeError, ValueError):
+        return []
+    return [str(item) for item in decoded] if isinstance(decoded, list) else []

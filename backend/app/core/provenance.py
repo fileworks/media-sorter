@@ -44,6 +44,7 @@ class RulesProvenance(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     matched_tags: tuple[RuleMatchProvenance, ...] = Field(default=(), max_length=16)
+    matched_routes: tuple[RuleMatchProvenance, ...] = Field(default=(), max_length=16)
     winning_route: RuleMatchProvenance | None = None
     route_folder: str | None = None
 

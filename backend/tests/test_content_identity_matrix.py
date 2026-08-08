@@ -37,7 +37,10 @@ def test_same_size_preserved_mtime_rewrite_invalidates_platform_hint(
     after: dict[str, int | str | None],
 ) -> None:
     common = {"size_bytes": 4096, "mtime_ns": 123}
-    assert fingerprint(**common, **before) != fingerprint(**common, **after), platform
+    # The keys are the matrix dimension under test, so both calls are dynamic.
+    left = fingerprint(**common, **before)  # type: ignore[arg-type]
+    right = fingerprint(**common, **after)  # type: ignore[arg-type]
+    assert left != right, platform
 
 
 def test_replace_and_rename_identity_changes_invalidate_the_hint() -> None:

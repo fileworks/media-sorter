@@ -12,6 +12,13 @@ interface Toast {
 
 let _idCounter = 0;
 
+const STATE_VARIANT: Record<ToastVariant, StateViewVariant> = {
+  success: "success",
+  error: "error",
+  info: "info",
+  warning: "warning",
+};
+
 export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -24,20 +31,15 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
     );
   }, []);
 
-  const STATE_VARIANT: Record<ToastVariant, StateViewVariant> = {
-    success: "success",
-    error: "error",
-    info: "info",
-    warning: "warning",
-  };
-
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {/* Toast container */}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {/* Above the dialogs on purpose: a toast raised by an action taken inside
+          a modal has to be visible from inside that modal. Full width on a
+          narrow window, a column in the corner once there is room for one. */}
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[300] flex flex-col items-end gap-2 sm:left-auto sm:right-4">
         {toasts.map((t) => (
-          <div key={t.id} className="pointer-events-auto max-w-sm shadow-lg">
+          <div key={t.id} className="pointer-events-auto w-full max-w-sm shadow-card">
             <StateView variant={STATE_VARIANT[t.variant]} title={t.message} compact />
           </div>
         ))}

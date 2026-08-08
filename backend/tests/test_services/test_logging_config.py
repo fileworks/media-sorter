@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from app.core.logging_config import (
@@ -84,7 +85,7 @@ def test_log_queue_broadcast_carries_context_fields() -> None:
         "error": Exception("boom"),
     }
 
-    captured: list = []
+    captured: list[Any] = []
 
     with patch("app.core.log_queue.get_queue") as mock_get_queue:
         q = MagicMock()
@@ -120,7 +121,7 @@ def test_log_queue_broadcast_reserved_keys_excluded_from_context() -> None:
         "operation_id": "sort_abc123",
     }
 
-    captured: list = []
+    captured: list[Any] = []
 
     with patch("app.core.log_queue.get_queue") as mock_get_queue:
         q = MagicMock()
@@ -150,7 +151,7 @@ def test_log_queue_broadcast_no_extra_context_is_none() -> None:
         "level": "debug",
     }
 
-    captured: list = []
+    captured: list[Any] = []
 
     with patch("app.core.log_queue.get_queue") as mock_get_queue:
         q = MagicMock()

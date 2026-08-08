@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -19,7 +20,7 @@ from cli.main import cli  # noqa: E402
 from cli.utils.api_client import APIClient, APIClientError  # noqa: E402
 
 
-def _response(request: httpx.Request, status: int, payload: dict) -> httpx.Response:
+def _response(request: httpx.Request, status: int, payload: dict[str, Any]) -> httpx.Response:
     return httpx.Response(status, request=request, content=json.dumps(payload).encode())
 
 
@@ -50,7 +51,7 @@ def test_cli_option_passes_capability_without_echoing_it() -> None:
 
 
 def test_start_retry_reuses_one_idempotency_key() -> None:
-    attempts: list[dict] = []
+    attempts: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         attempts.append(json.loads(request.content))

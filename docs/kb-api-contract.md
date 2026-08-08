@@ -24,7 +24,8 @@ Every error goes through the global `MediaSortException` handler:
 | 503 | `ENCODER_UNAVAILABLE` | AI endpoint with no local encoder (tier off / model missing) |
 | 507 | `INSUFFICIENT_STORAGE` | destination volume can't hold the copy |
 
-Never raise bare `HTTPException` — subclass `MediaSortException` so the envelope stays uniform.
+Never raise bare `HTTPException` — subclass `MediaSortException` so the envelope stays
+uniform.
 
 ## Response Models
 - Declare `response_model` on endpoints with stable shapes (`HealthResponse`, `HardwareResponse`, `AnalysisResponse`, `TaskProgressResponse`, …)
@@ -45,12 +46,12 @@ Never raise bare `HTTPException` — subclass `MediaSortException` so the envelo
 4. `GET /sorting/{task_id}/report` → 409 while not completed, 404 if completed without a result.
 
 Video preview items can report `duplicate_evaluation: "unknown"` with
-`duplicate_unknown_reason: "video_perceptual_not_computed"`. Their final
-destination is deliberately omitted because the real sort performs the
-authoritative frame comparison.
+`duplicate_unknown_reason: "video_perceptual_not_computed"`. Their final destination is
+deliberately omitted because the real sort performs the authoritative frame comparison.
 
 ## Pagination
-`GET /reports` uses bounded limit/offset — SQLite reads `LIMIT -1` as unbounded, so bounds live at the query layer:
+`GET /reports` uses bounded limit/offset — SQLite reads `LIMIT -1` as unbounded, so
+bounds live at the query layer:
 
 ```python
 limit: int = Query(default=20, ge=1, le=500)
@@ -64,7 +65,9 @@ Response: `{"operations": [...], "total": n, "limit": l, "offset": o}`.
 - Browsers do **not** apply CORS to WebSocket handshakes → `/api/logs` does its own anchored origin check (`^http://(localhost|127\.0\.0\.1)(:\d+)?$` — a bare `startswith` would accept `localhost.attacker.com`)
 
 ## File Downloads
-Report export returns `StreamingResponse` with `Content-Disposition: attachment` and exposes the header via `Access-Control-Expose-Headers` so the frontend can read the filename.
+Report export returns `StreamingResponse` with `Content-Disposition: attachment` and
+exposes the header via `Access-Control-Expose-Headers` so the frontend can read the
+filename.
 
 ## ⚠️ Never
 - Never skip `response_model` on a stable-shape endpoint; never add an undocumented dict return

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -22,6 +22,7 @@ from app.services.ai.category_classifier_service import (
     CategoryClassifierService,
     CategoryResult,
 )
+from app.services.ai.encoder_protocol import VisionEncoder
 
 # 4-D space: dims 0–2 are the three test categories, dim 3 is the anchor axis.
 _BASIS = {
@@ -88,7 +89,9 @@ def _service(image_vec: list[float] | None, **cfg: Any) -> CategoryClassifierSer
         categorize_categories=["food", "nature", "people"],
         **cfg,
     )
-    return CategoryClassifierService(config, _FakeEmbedder(_BASIS, image_vec))
+    return CategoryClassifierService(
+        config, cast("VisionEncoder", _FakeEmbedder(_BASIS, image_vec))
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -99,7 +102,7 @@ def _service(image_vec: list[float] | None, **cfg: Any) -> CategoryClassifierSer
 def test_categories_sanitizes_and_dedupes() -> None:
     svc = CategoryClassifierService(
         Config(categorize_enabled=True, categorize_categories=["Food", "food", "../food", "a/b"]),
-        _FakeEmbedder({}, None),
+        cast("VisionEncoder", _FakeEmbedder({}, None)),
     )
     # "Food"/"food"/"../food" all collapse to the same folder (case-insensitive);
     # first wins. "a/b" → "ab".
@@ -137,14 +140,18 @@ def test_out_of_vocab_image_routes_to_uncategorized(tmp_path: Path) -> None:
 def test_disabled_returns_uncategorized(tmp_path: Path) -> None:
     p = _save_jpg(tmp_path / "x.jpg")
     config = Config(categorize_enabled=False, categorize_categories=["food"])
-    svc = CategoryClassifierService(config, _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0]))
+    svc = CategoryClassifierService(
+        config, cast("VisionEncoder", _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0]))
+    )
     assert svc.classify_file(p).category is None
 
 
 def test_empty_categories_returns_uncategorized(tmp_path: Path) -> None:
     p = _save_jpg(tmp_path / "x.jpg")
     config = Config(categorize_enabled=True, categorize_categories=[])
-    svc = CategoryClassifierService(config, _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0]))
+    svc = CategoryClassifierService(
+        config, cast("VisionEncoder", _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0]))
+    )
     assert svc.classify_file(p).category is None
 
 
@@ -152,7 +159,8 @@ def test_embedder_unavailable_returns_uncategorized(tmp_path: Path) -> None:
     p = _save_jpg(tmp_path / "x.jpg")
     config = Config(categorize_enabled=True, categorize_categories=["food", "nature", "people"])
     svc = CategoryClassifierService(
-        config, _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0], text_returns_none=True)
+        config,
+        cast("VisionEncoder", _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0], text_returns_none=True)),
     )
     assert svc.classify_file(p).category is None
 
@@ -166,7 +174,7 @@ def test_unsupported_type_returns_uncategorized(tmp_path: Path) -> None:
 def test_never_raises_on_inference_error(tmp_path: Path) -> None:
     p = _save_jpg(tmp_path / "x.jpg")
     config = Config(categorize_enabled=True, categorize_categories=["food", "nature", "people"])
-    embedder = _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0], image_raises=True)
+    embedder = cast("VisionEncoder", _FakeEmbedder(_BASIS, [1.0, 0.0, 0.0, 0.0], image_raises=True))
     svc = CategoryClassifierService(config, embedder)
     assert svc.classify_file(p).category is None  # swallowed → uncategorized
 

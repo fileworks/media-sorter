@@ -20,6 +20,7 @@ from app.core.media_units import CompanionHandling, bind_media_units
 from app.services.catalog import MediaCatalog, ObservedFile, bounded_sample_sha256
 from app.services.pipeline import batched
 from app.utils.media_utils import is_media
+from app.utils.path_utils import path_relationship
 
 logger = get_logger(__name__)
 
@@ -60,11 +61,10 @@ class TraversalRules:
 
 def _is_within(candidate: Path, exclusion: Path, root: Path) -> bool:
     target = exclusion if exclusion.is_absolute() else root / exclusion
-    try:
-        candidate.relative_to(target)
-    except ValueError:
-        return False
-    return True
+    return path_relationship(target.resolve(strict=False), candidate.resolve(strict=False)) in {
+        "equal",
+        "left_contains_right",
+    }
 
 
 @dataclass

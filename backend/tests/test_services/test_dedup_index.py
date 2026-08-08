@@ -3,7 +3,9 @@
 import asyncio
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -76,12 +78,37 @@ class TestRefresh:
         _photo(dest / "2024" / "keep.jpg")
         _photo(dest / "_duplicates" / "dupe.jpg")
         _photo(dest / "_junk" / "tiny.jpg")
+        _photo(dest / "_undated" / "new-undated.jpg")
+        _photo(dest / "2024" / "_copies" / "contextual-copy.jpg")
 
         index = DedupIndex(tmp_path / "index.db")
         index.refresh(dest, DuplicateService(), perceptual=True, sample_video=False)
         registry = index.load_registry()
         assert len(registry.images) == 1
         assert registry.images[0].path.endswith("keep.jpg")
+
+    def test_old_and_new_set_aside_layouts_can_coexist_without_becoming_keepers(
+        self, tmp_path: Path
+    ) -> None:
+        dest = tmp_path / "dest"
+        keeper = _photo(dest / "2025" / "keep.jpg")
+        for relative in (
+            "_unknown_dates/old.jpg",
+            "_future_dates/future.jpg",
+            "_duplicates/dupe.jpg",
+            "_failed/failed.jpg",
+            "_already_in_destination/existing.jpg",
+            "_undated/new.jpg",
+            "_corrupted/corrupt.jpg",
+            "2025/_copies/context.jpg",
+        ):
+            _photo(dest / relative)
+
+        index = DedupIndex(tmp_path / "index.db")
+        index.refresh(dest, DuplicateService(), perceptual=True, sample_video=False)
+        registry = index.load_registry()
+
+        assert [signature.path for signature in registry.images] == [str(keeper)]
 
     def test_exact_only_when_perceptual_disabled(self, tmp_path: Path) -> None:
         dest = tmp_path / "dest"
@@ -137,7 +164,7 @@ class TestRefresh:
 
         real_iterdir = Path.iterdir
 
-        def partial_iterdir(path: Path):
+        def partial_iterdir(path: Path) -> Iterator[Path]:
             if path == bad_dir:
                 raise PermissionError("offline")
             return real_iterdir(path)
@@ -165,7 +192,7 @@ class TestRefresh:
         real_hash = service.compute_hash
         calls = 0
 
-        def cancelling_hash(*args, **kwargs):
+        def cancelling_hash(*args: Any, **kwargs: Any) -> str:
             nonlocal calls
             result = real_hash(*args, **kwargs)
             calls += 1
@@ -204,7 +231,7 @@ class TestRefresh:
         token = CancellationToken()
         real_hash = service.compute_hash
 
-        def cancel_after_hash(*args, **kwargs):
+        def cancel_after_hash(*args: Any, **kwargs: Any) -> str:
             digest = real_hash(*args, **kwargs)
             token.set()
             return digest
@@ -305,7 +332,7 @@ async def test_destination_index_worker_observes_cancellation_before_later_phase
     entered = threading.Event()
     real_hash = service.compute_hash
 
-    def waiting_hash(*args, **kwargs):
+    def waiting_hash(*args: Any, **kwargs: Any) -> str:
         entered.set()
         while not token.is_set():
             time.sleep(0.001)

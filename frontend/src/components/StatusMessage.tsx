@@ -8,6 +8,7 @@
  */
 
 import { StateView, type StateViewVariant } from "@/components/StateView";
+import { Button } from "@/components/ui/button";
 import { presentStatus, type StatusAction, type StatusInput } from "@/lib/statusPresentation";
 
 interface StatusMessageProps extends StatusInput {
@@ -37,14 +38,14 @@ export function StatusMessage({ onAction, className = "", ...input }: StatusMess
         status.actions.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {status.actions.map((action) => (
-              <button
+              <Button
                 key={action.id}
-                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => onAction?.(action.id)}
-                className="rounded-lg border border-border px-3 py-1 text-xs text-foreground hover:border-primary"
               >
                 {action.label}
-              </button>
+              </Button>
             ))}
           </div>
         ) : undefined

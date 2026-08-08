@@ -6,10 +6,13 @@ export type {
   LibraryRootRole,
   OptimizationProfile,
   PreservationProfile,
+  RecipeSettings,
+  SavedRecipe,
   RootIdentity,
   CatalogPlacement,
   ResourcePreferences,
   TransferMode,
+  KeeperPolicyId,
   AiModelTier,
   HardwareInfo,
   ConfigSectionMeta,
@@ -32,6 +35,9 @@ export type {
   AiModelTaskStatus,
   SortingStatus,
   PreviewItem,
+  OutcomeProvenance,
+  ProvenanceDecision,
+  PlanImpact,
   PreviewResult,
   PreviewStatus,
   MediaInfo,
@@ -45,6 +51,9 @@ export type {
   OperationListItem,
   OperationListResponse,
 } from "@/services/api";
+
+// Value re-export: the selectable keep rules are a runtime list, not a type.
+export { SELECTABLE_KEEPER_POLICIES } from "@/services/api";
 
 // ── Extended types ─────────────────────────────────────────────────────────────
 
@@ -66,6 +75,8 @@ export interface SortTaskResult {
   /** Files skipped because they already exist in the destination (0 when off). */
   already_in_destination?: number;
   operation_id: string;
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
 }
 
 export interface LogEntry {

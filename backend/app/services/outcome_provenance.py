@@ -63,6 +63,14 @@ def build_outcome_provenance(
         for match in (getattr(rules, "matched_tag_rules", ()) or ())[:16]
     )
     route_match = getattr(rules, "matched_route_rule", None)
+    route_matches = tuple(
+        RuleMatchProvenance(
+            name=match.name,
+            priority=match.priority,
+            saved_order=match.saved_order,
+        )
+        for match in (getattr(rules, "matched_route_rules", ()) or ())[:16]
+    )
     if not duplicate_evaluated:
         duplicate_status: Literal["unique", "duplicate", "unknown", "not_evaluated"] = (
             "not_evaluated"
@@ -84,6 +92,7 @@ def build_outcome_provenance(
         ),
         rules=RulesProvenance(
             matched_tags=tag_rules,
+            matched_routes=route_matches,
             winning_route=(
                 RuleMatchProvenance(
                     name=route_match.name,
@@ -151,6 +160,43 @@ def append_collision(
         detail=f"reserved after collision with {proposed.name}",
     )
     return provenance.model_copy(update={"path": (*provenance.path[:15], segment)})
+
+
+def contextualize_copy(
+    provenance: OutcomeProvenance,
+    *,
+    destination: Path,
+    destination_root: Path,
+    keeper: Path,
+) -> OutcomeProvenance:
+    """Attribute the actual keeper-relative path without borrowing the copy's date.
+
+    A copy whose own metadata says 2021 can legitimately follow a keeper into
+    2019. Reusing the ordinary date segments would therefore be a persuasive
+    lie. Each inherited folder is explicitly attributed to the keeper instead.
+    """
+    try:
+        relative = destination.relative_to(destination_root)
+    except ValueError:
+        relative = destination
+    parts = relative.parts
+    contextual = [
+        PathSegmentProvenance(
+            segment=segment,
+            decision="quarantine",
+            detail=f"follows kept copy {keeper.name}",
+        )
+        for segment in parts[:-1]
+    ]
+    if parts:
+        contextual.append(
+            PathSegmentProvenance(
+                segment=parts[-1],
+                decision="original_name",
+                detail=f"named for kept copy {keeper.stem} and its source root",
+            )
+        )
+    return provenance.model_copy(update={"path": tuple(contextual[:16])})
 
 
 def _path_segments(
@@ -244,7 +290,10 @@ def _path_segments(
             PathSegmentProvenance(
                 segment=destination.name,
                 decision="rename",
-                detail=f"rename pattern applied to {file_path.stem}",
+                detail=(
+                    f"rename pattern {config.rename_pattern!r} applied to original stem "
+                    f"{file_path.stem!r}"
+                ),
             )
         )
     else:

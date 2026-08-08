@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -20,18 +21,18 @@ _TASK_ROUTES = {
 }
 
 
-def _wait_terminal(client: TestClient, path: str) -> dict:
+def _wait_terminal(client: TestClient, path: str) -> dict[str, Any]:
     deadline = time.time() + 5
     payload = client.get(path).json()
     while payload["status"] in {"pending", "running"} and time.time() < deadline:
         time.sleep(0.01)
         payload = client.get(path).json()
-    return payload
+    return payload  # type: ignore[no-any-return]  # the wrapped original is untyped
 
 
-def _start_operation(client: TestClient, kind: str, key: str) -> dict:
+def _start_operation(client: TestClient, kind: str, key: str) -> dict[str, Any]:
     start_path, status_base = _TASK_ROUTES[kind]
-    body = {"idempotency_key": key}
+    body: dict[str, Any] = {"idempotency_key": key}
     if kind == "sort":
         body["dry_run"] = True
     start = client.post(start_path, json=body)
@@ -150,7 +151,9 @@ def test_same_key_replay_conflict_details_and_idempotent_cancel(
     target.mkdir()
     app = AppFactory.create(Config(source_directory=str(source), target_directory=str(target)))
 
-    async def slow_analysis(config, *, task):
+    async def slow_analysis(
+        config: Any, *, task: Any, excluded_roots: list[str] | None = None
+    ) -> dict[str, Any]:
         while not task.cancel_token.is_set():
             await asyncio.sleep(0.01)
         return {"cancelled": True}

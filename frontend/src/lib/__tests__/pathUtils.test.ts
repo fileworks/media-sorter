@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getBasename, sanitizeCategory } from "@/lib/pathUtils";
+import { getBasename, redactRoot, sanitizeCategory } from "@/lib/pathUtils";
 
 describe("getBasename", () => {
   it("extracts the final segment from POSIX paths", () => {
@@ -59,5 +59,16 @@ describe("sanitizeCategory", () => {
   it("is idempotent", () => {
     const once = sanitizeCategory("../My Photos: 2024?");
     expect(sanitizeCategory(once)).toBe(once);
+  });
+});
+
+describe("redactRoot", () => {
+  it("keeps enough to recognise the library and drops the user's name", () => {
+    expect(redactRoot("/Users/someone/Pictures/Library")).toBe("…/Pictures/Library");
+    expect(redactRoot("D:\\Photos\\2019")).toBe("…/Photos/2019");
+  });
+
+  it("leaves a short root alone rather than redacting it to nothing", () => {
+    expect(redactRoot("/Volumes")).toBe("/Volumes");
   });
 });

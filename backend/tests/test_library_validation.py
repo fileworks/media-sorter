@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -10,8 +11,12 @@ from app.core.exceptions import LibraryProfileError
 from app.core.library_profiles import LibraryProfile, LibraryRoot
 from app.core.library_validation import validate_library_profile
 
+LibraryRootRole = Literal["input", "reference", "destination"]
 
-def _root(root_id: str, role: str, path: Path, **kwargs):
+
+def _root(
+    root_id: str, role: Literal["input", "reference", "destination"], path: Path, **kwargs: Any
+) -> LibraryRoot:
     return LibraryRoot(root_id=root_id, role=role, path=str(path), **kwargs)
 
 
@@ -94,8 +99,8 @@ def test_rejects_overlap_for_every_role_pair(
     separate_input.mkdir()
     separate_destination = tmp_path / "separate-destination"
     roots = [
-        _root("left", left_role, parent),
-        _root("right", right_role, child),
+        _root("left", cast("LibraryRootRole", left_role), parent),
+        _root("right", cast("LibraryRootRole", right_role), child),
     ]
     if "input" not in (left_role, right_role):
         roots.append(_root("input", "input", separate_input))

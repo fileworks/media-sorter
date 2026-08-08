@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,7 +15,7 @@ from app.core.config import Config
 
 
 @pytest.fixture(scope="module")
-def client():  # type: ignore[return]
+def client() -> Iterator[TestClient]:
     """Module-scoped TestClient used as context manager so the anyio portal (and its
     event loop) stays alive across requests, allowing asyncio background tasks to
     complete without being cancelled when the per-request portal closes."""
@@ -22,7 +24,7 @@ def client():  # type: ignore[return]
         yield c
 
 
-def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0) -> dict:
+def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0) -> dict[str, Any]:
     """Poll /api/sorting/{task_id} until status is terminal; return final progress dict."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -30,12 +32,12 @@ def _wait_for_completion(client: TestClient, task_id: str, timeout: float = 30.0
         assert resp.status_code == 200
         data = resp.json()
         if data["status"] not in ("pending", "running"):
-            return data
+            return data  # type: ignore[no-any-return]  # the wrapped original is untyped
         time.sleep(0.2)
     pytest.fail(f"Task {task_id} did not complete within {timeout}s")
 
 
-def _create_dated_images(source: Path, dates_and_files: list) -> None:
+def _create_dated_images(source: Path, dates_and_files: list[Any]) -> None:
     """Create distinct JPEGs with the given EXIF dates in source."""
     piexif = pytest.importorskip("piexif")
     PIL_Image = pytest.importorskip("PIL.Image")

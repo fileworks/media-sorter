@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from app.core.optimization_contracts import FormatContract
 from app.core.optimization_contracts import contract as load_contract
 from app.services.optimization_encoders import EncodeAttempt, PillowImageEncoder
 from app.services.optimization_preview import (
@@ -35,7 +36,7 @@ def _png(path: Path, *, size: tuple[int, int] = (64, 48), colour: int = 0) -> Pa
 class _StubEncoder:
     """An encoder with a fixed ratio, so projections can be asserted exactly."""
 
-    contract: object
+    contract: FormatContract
     ratio: float = 0.5
     fail: bool = False
     pixels_identical: bool = True
@@ -122,7 +123,12 @@ class TestProjection:
         assert len(measured) == 1
         assert len(sampled) == 3
         assert measured[0].projected_low_bytes == measured[0].projected_high_bytes
-        assert all(item.projected_low_bytes < item.projected_high_bytes for item in sampled)
+        assert all(
+            item.projected_low_bytes is not None
+            and item.projected_high_bytes is not None
+            and item.projected_low_bytes < item.projected_high_bytes
+            for item in sampled
+        )
 
     def test_aggregate_reports_temporary_and_quarantine_space(self, tmp_path: Path) -> None:
         items = [

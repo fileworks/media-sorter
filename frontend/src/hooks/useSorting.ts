@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/services/api";
+import { api, type ReviewedSet } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { useI18n } from "@/i18n/I18nContext";
@@ -223,7 +223,7 @@ export function useSorting() {
 
   useEffect(() => {
     if (!progressError || uiStatus === "failed") return;
-    const message = extractErrorMessage(progressError, t("sort.statusFailed"));
+    const message = extractErrorMessage(progressError, t("sort.statusFailed")).message;
     setUiStatus("failed");
     setError(message);
     releaseLoader();
@@ -233,7 +233,14 @@ export function useSorting() {
   useEffect(() => releaseLoader, [releaseLoader]);
 
   const startSorting = useCallback(
-    async (dryRun = false, expectedConfigFingerprint?: string, planId?: string) => {
+    async (
+      dryRun = false,
+      expectedConfigFingerprint?: string,
+      planId?: string,
+      // Review's decisions for this run. Not configuration: they are sent with
+      // the run and forgotten.
+      decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
+    ) => {
       // Clear old task id before the async call so the stale ["sorting", oldId]
       // query is never polled during the API round-trip.
       setTaskId(null);
@@ -251,12 +258,18 @@ export function useSorting() {
       releaseLoaderRef.current = api.beginOperation();
       setUiStatus("pending");
       try {
-        const id = await api.startSort(dryRun, undefined, expectedConfigFingerprint, planId);
+        const id = await api.startSort(
+          dryRun,
+          undefined,
+          expectedConfigFingerprint,
+          planId,
+          decisions,
+        );
         setTaskId(id);
         setUiStatus("running");
       } catch (err) {
         releaseLoader();
-        const msg = extractErrorMessage(err, t("sort.startFailed"));
+        const msg = extractErrorMessage(err, t("sort.startFailed")).message;
         setUiStatus("failed");
         setError(msg);
         toast(msg, "error");
@@ -281,7 +294,7 @@ export function useSorting() {
       await api.cancelSort(taskId);
       toast(t("sort.cancelRequested"), "info");
     } catch (err) {
-      const msg = extractErrorMessage(err, t("sort.cancelFailed"));
+      const msg = extractErrorMessage(err, t("sort.cancelFailed")).message;
       setError(msg);
       toast(msg, "error");
     }

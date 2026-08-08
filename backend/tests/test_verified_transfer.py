@@ -228,6 +228,7 @@ def test_same_volume_move_publishes_without_copying_after_full_revalidation(
     assert result.protocol == "same_volume_link"
     assert result.commit_method == "atomic_rename"
     assert result.integrity_source == "measured"
+    assert result.integrity is not None
     assert result.integrity.verified is True
     assert hashed == [source]
     assert result.source_removed is True
@@ -571,7 +572,7 @@ def test_full_destination_volume_is_refused_before_writing(
     action = _action(source, destination)
     usage = shutil.disk_usage(tmp_path)
     monkeypatch.setattr(
-        verified_transfer.shutil,
+        verified_transfer.shutil,  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
         "disk_usage",
         lambda _path: shutil._ntuple_diskusage(usage.total, usage.used, 1),
     )
@@ -612,7 +613,7 @@ def test_environment_failures_get_stable_diagnostic_reasons(
     def failing_open(path: Path, mode: str = "r", *args: object, **kwargs: object) -> Any:
         if mode == "xb":
             raise OSError(error_number, os.strerror(error_number))
-        return real_open(path, mode, *args, **kwargs)
+        return real_open(path, mode, *args, **kwargs)  # type: ignore[call-overload]  # forwarding a caller's *args to an overloaded builtin
 
     monkeypatch.setattr(Path, "open", failing_open)
 
@@ -640,7 +641,7 @@ def test_windows_sharing_violation_is_reported_as_a_lock(
             locked = OSError(errno.EACCES, "sharing violation")
             locked.winerror = 32  # type: ignore[attr-defined]
             raise locked
-        return real_open(path, mode, *args, **kwargs)
+        return real_open(path, mode, *args, **kwargs)  # type: ignore[call-overload]  # forwarding a caller's *args to an overloaded builtin
 
     monkeypatch.setattr(Path, "open", locked_open)
 

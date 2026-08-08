@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +14,7 @@ from app.services.update_service import UpdateService, _is_newer, _parse_semver
 # ──────────────────────────────────────────────────────────── helpers ──
 
 
-def _fake_release(tag: str = "v1.0.0", html_url: str | None = None) -> dict:
+def _fake_release(tag: str = "v1.0.0", html_url: str | None = None) -> dict[str, Any]:
     return {
         "tag_name": tag,
         "html_url": html_url or f"https://github.com/fileworks/media-sorter/releases/tag/{tag}",

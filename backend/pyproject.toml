@@ -113,6 +113,10 @@ pythonpath = ["tests"]
 strict = true
 python_version = "3.10"
 ignore_missing_imports = true
+# Same scope as the sibling CLI repos. The suite is the thing that says the
+# product is correct, so it is held to the product's standard: a fixture that
+# quietly returns the wrong shape is a test that proves nothing.
+files = ["app", "tests"]
 
 [tool.ruff]
 line-length = 100

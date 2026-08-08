@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.bootstrap import AppFactory
@@ -40,10 +42,11 @@ os.environ.pop("MEDIASORT_DB_PATH", None)
 _test_client_init = TestClient.__init__
 
 
-def _authenticated_test_client_init(self: TestClient, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+def _authenticated_test_client_init(self: TestClient, *args: Any, **kwargs: Any) -> None:
     headers = dict(kwargs.pop("headers", {}) or {})
     headers.setdefault("X-MediaSorter-Capability", _TEST_API_CAPABILITY)
-    _test_client_init(self, *args, headers=headers, **kwargs)
+    # Forwarding a caller's *args to an overloaded __init__.
+    _test_client_init(self, *args, headers=headers, **kwargs)  # type: ignore[misc]
 
 
 TestClient.__init__ = _authenticated_test_client_init  # type: ignore[method-assign]
@@ -110,7 +113,7 @@ def in_memory_db(tmp_path: Path) -> DatabaseManager:
 
 
 @pytest.fixture(scope="module")
-def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):  # type: ignore[return]
+def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory) -> FastAPI:
     """FastAPI application wired with the test config and an isolated test DB."""
     db_path = str(tmp_path_factory.mktemp("test_app_db") / "mediasort.db")
     prev = os.environ.get("MEDIASORT_DB_PATH")
@@ -127,7 +130,7 @@ def app(test_config: Config, tmp_path_factory: pytest.TempPathFactory):  # type:
 
 
 @pytest.fixture(scope="module")
-def client(app) -> TestClient:  # type: ignore[return]
+def client(app: Any) -> TestClient:
     """TestClient for API integration tests (module scope)."""
     return TestClient(app)
 
@@ -212,7 +215,7 @@ def test_db(tmp_path: Path) -> Generator[DatabaseManager, None, None]:
 
 
 @pytest.fixture()
-def db_with_operation(test_db: DatabaseManager):  # type: ignore[return]
+def db_with_operation(test_db: DatabaseManager) -> Iterator[tuple[str, DatabaseManager]]:
     """DatabaseManager pre-populated with one operation and two file records."""
     operation_id = "test_op_001"
     with test_db._connect() as conn:
@@ -281,7 +284,7 @@ def db_with_operation(test_db: DatabaseManager):  # type: ignore[return]
             ),
         )
 
-    return operation_id, test_db
+    yield operation_id, test_db
 
 
 @pytest.fixture()

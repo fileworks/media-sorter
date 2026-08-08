@@ -1,11 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="media-sorter">
-  <title>media-sorter — many things becoming ordered</title>
-  <rect width="24" height="24" rx="4" fill="#FAF7F2"/>
-  <g fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5.00,2.00 H19.00 A3.00,3.00 0 0 1 22.00,5.00 V19.00 A3.00,3.00 0 0 1 19.00,22.00 H5.00 A3.00,3.00 0 0 1 2.00,19.00 V5.00 A3.00,3.00 0 0 1 5.00,2.00 Z" stroke="#14110F"/>
-    <path d="M5.50,18.00 V12.50 A1.50,1.50 0 0 1 7.00,11.00 H10.96 L12.56,12.80 H17.00 A1.50,1.50 0 0 1 18.50,14.30 V18.00 A1.50,1.50 0 0 1 17.00,19.50 H7.00 A1.50,1.50 0 0 1 5.50,18.00 Z" stroke="#14110F"/>
-    <path d="M6.50,7.70 V4.50 H10.50 V7.70 Z" stroke="#C2410C"/>
-    <path d="M12.00,7.70 V4.50 H16.00 V7.70 Z" stroke="#C2410C"/>
-    <path d="M16.50,6.10 L18.50,6.10" stroke="#C2410C"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="MediaSorter">
+  <title>MediaSorter — media landing in an ordered folder</title>
+  <rect x="1.5" y="1.5" width="45" height="45" rx="12" fill="#efeae2" stroke="#e2dcd1"/>
+  <g fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 36V20a2 2 0 012-2h7l3 3h14a2 2 0 012 2v13a2 2 0 01-2 2H12a2 2 0 01-2-2z" stroke="#2a251f"/>
+    <path d="M24 8v7M20.5 11.5L24 15l3.5-3.5" stroke="#e8582a"/>
   </g>
 </svg>

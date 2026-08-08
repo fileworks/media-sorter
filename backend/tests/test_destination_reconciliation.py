@@ -228,7 +228,7 @@ def test_reconciling_again_after_verified_plan_is_all_matched(tmp_path: Path) ->
 
 def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "input"
     destination = tmp_path / "destination"
@@ -237,10 +237,10 @@ def test_unchanged_second_reconcile_reuses_incremental_unit_facts(
     destination.mkdir()
     service = DestinationReconciliationService()
     config = _config(source, destination)
-    real_hash = reconciliation_module.stream_sha256
+    real_hash = reconciliation_module.stream_sha256  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
     calls = 0
 
-    def counted(path: Path):
+    def counted(path: Path) -> tuple[str, int]:
         nonlocal calls
         calls += 1
         return real_hash(path)

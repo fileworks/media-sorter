@@ -1,47 +1,98 @@
+/* Geist ships with the app rather than from a CDN: this is a desktop tool that
+   has to look identical on a machine that has never been online. Latin subset
+   only — the UI is English and German. Imports lead the file because CSS
+   requires @import before any other rule. */
+@import "@fontsource/geist-sans/latin-400.css";
+@import "@fontsource/geist-sans/latin-500.css";
+@import "@fontsource/geist-sans/latin-600.css";
+@import "@fontsource/geist-sans/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-500.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Orange on near-neutral, in both themes.
+ *
+ * The surfaces carry almost no chroma: light mode is a near-white paper with a
+ * few degrees of warmth so it does not read as clinical, dark mode a graphite
+ * with a hint of blue so it does not read as brown. Everything that used to be
+ * a saturated warm beige is gone — that saturation was what made the orange
+ * look muddy, because an accent only reads as an accent when the surface under
+ * it is not already the same hue.
+ *
+ * Every text-bearing value clears WCAG 2.1 AA (4.5:1) against both the page and
+ * the card. `--brand` is the undimmed accent, decoration only — bars, rules,
+ * dots, the selected border — where the 3:1 non-text threshold applies.
+ */
 @layer base {
   :root {
     color-scheme: light;
-    --background: 32 33% 98%;
-    --foreground: 24 22% 10%;
+    --background: 30 14% 98%;
+    --foreground: 24 10% 12%;
 
+    /* Cards are pure white so they lift off the page without needing a border
+       to do the work; the shadow does the rest. */
     --card: 0 0% 100%;
-    --card-foreground: 24 22% 10%;
+    --card-foreground: 24 10% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 24 22% 10%;
+    --popover-foreground: 24 10% 12%;
 
-    --primary: 20 88% 40%;
+    --primary: 19 86% 40%;
     --primary-foreground: 0 0% 100%;
+    /* Hover deepens rather than fades. `bg-primary/90` blends 10% of the white
+       page through the fill, which drops white-on-primary to 4.34:1 — a button
+       that fails AA exactly while the pointer is on it. */
+    --primary-hover: 19 88% 33%;
 
-    --secondary: 30 28% 95%;
-    --secondary-foreground: 24 22% 10%;
+    /* One raised neutral, shared by secondary / muted / hover surfaces. */
+    --secondary: 30 10% 94%;
+    --secondary-foreground: 24 10% 12%;
 
-    --muted: 30 20% 94%;
-    --muted-foreground: 24 9% 40%;
+    --muted: 30 10% 94%;
+    --muted-foreground: 25 7% 37%;
 
-    --accent: 24 55% 94%;
-    --accent-foreground: 20 88% 32%;
+    --accent: 30 10% 94%;
+    --accent-foreground: 24 10% 12%;
 
-    --destructive: 0 72% 43%;
+    --destructive: 2 72% 44%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 28 18% 84%;
-    --input: 28 18% 80%;
-    --ring: 20 88% 40%;
+    --border: 28 10% 89%;
+    --input: 28 10% 89%;
+    --ring: 19 86% 40%;
 
     --radius: 0.75rem;
+
+    /* Third text level, below `muted-foreground`: counts, units, row meta.
+       Held at 43% so it still clears AA on the raised neutral, not only on
+       the page. */
+    --faint: 25 6% 42%;
+
+    /* The undimmed accents. Decoration only — never text, never a surface with
+       text on it — so they are free of the 4.5:1 floor that keeps the status
+       colours below dark enough to read as brown when used as a fill. Bars,
+       rules, dots, the selected border. */
+    --brand: 20 92% 52%;
+    --decor-success: 158 62% 40%;
+    --decor-warning: 38 92% 52%;
+
+    /* Soft status tints — badge and callout backgrounds. */
+    --tint-primary: 24 88% 95%;
+    --tint-success: 152 45% 94%;
+    --tint-warning: 38 88% 94%;
+    --tint-error: 6 80% 95%;
 
     /* Semantic status colours — theme-aware accents for validation, badges,
        status text, and subtle alert boxes. Exposed as Tailwind utilities
        (success/warning/error/info); tuned for contrast on a light surface. */
-    --color-success: 145 70% 29%;
-    --color-warning: 32 95% 32%;
-    --color-error: 0 72% 43%;
-    --color-info: 217 80% 42%;
+    --color-success: 158 80% 26%;
+    --color-warning: 33 92% 31%;
+    --color-error: 2 72% 44%;
+    --color-info: 214 82% 42%;
 
     /* Smart Categorization accent — category chips and folder labels. */
     --color-category: 263 70% 50%;
@@ -59,51 +110,70 @@
     --chart-5: 345 75% 55%;
     --chart-6: 215 15% 55%;
 
-    /* The log console is deliberately a fixed dark surface in both themes: it
-       is a terminal, and a terminal that inverts with the page reads as a
-       different component. Declared once here rather than as scattered
-       gray-700/900 values across the viewer. */
-    --console-surface: 24 12% 10%;
-    --console-border: 24 10% 23%;
-    --console-text: 30 8% 88%;
-    --console-muted: 30 6% 55%;
+    /* The run log reads as part of the page, not as an embedded terminal: it is
+       rendered on the page background with mono type and coloured level tags,
+       so these follow the theme rather than staying fixed dark. */
+    --console-surface: 30 10% 96%;
+    --console-border: 28 10% 89%;
+    --console-text: 25 7% 37%;
+    --console-muted: 25 6% 42%;
+
+    /* Elevation. One card shadow — a single soft, neutral, downward shadow
+       rather than a full elevation scale. */
+    --shadow-card: 0 1px 2px hsl(25 12% 15% / 0.05), 0 12px 32px -12px hsl(25 12% 15% / 0.14);
   }
 
   .dark {
     color-scheme: dark;
-    --background: 24 14% 8%;
-    --foreground: 30 20% 95%;
+    --background: 220 11% 9%;
+    --foreground: 210 14% 93%;
 
-    --card: 24 13% 11%;
-    --card-foreground: 30 20% 96%;
+    --card: 220 10% 12%;
+    --card-foreground: 210 14% 93%;
 
-    --popover: 24 13% 11%;
-    --popover-foreground: 30 20% 96%;
+    --popover: 220 10% 12%;
+    --popover-foreground: 210 14% 93%;
 
-    --primary: 24 94% 62%;
-    --primary-foreground: 24 22% 9%;
+    --primary: 20 95% 58%;
+    --primary-foreground: 220 12% 8%;
+    /* On a dark surface "deeper" means brighter: same direction of travel, more
+       contrast against both the page and the dark label on the fill. */
+    --primary-hover: 20 97% 66%;
 
-    --secondary: 24 12% 15%;
-    --secondary-foreground: 30 20% 96%;
+    --secondary: 220 9% 17%;
+    --secondary-foreground: 210 14% 93%;
 
-    --muted: 24 11% 17%;
-    --muted-foreground: 28 10% 66%;
+    --muted: 220 9% 17%;
+    --muted-foreground: 215 10% 66%;
 
-    --accent: 24 22% 18%;
-    --accent-foreground: 30 20% 96%;
+    --accent: 220 9% 17%;
+    --accent-foreground: 210 14% 93%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 30 20% 96%;
+    --destructive: 4 82% 63%;
+    --destructive-foreground: 220 12% 8%;
 
-    --border: 24 10% 23%;
-    --input: 24 10% 27%;
-    --ring: 24 94% 62%;
+    --border: 220 9% 22%;
+    --input: 220 9% 22%;
+    --ring: 20 95% 58%;
+
+    --faint: 215 9% 58%;
+
+    /* Dark mode needs no separate decorative accents: the dark status colours
+       already clear AA, so the pairs converge. */
+    --brand: 20 95% 58%;
+    --decor-success: 156 62% 50%;
+    --decor-warning: 36 92% 60%;
+
+    --tint-primary: 20 38% 15%;
+    --tint-success: 158 30% 14%;
+    --tint-warning: 35 38% 15%;
+    --tint-error: 4 34% 16%;
 
     /* Semantic status colours — brighter so they read on a dark surface. */
-    --color-success: 142 69% 58%;
-    --color-warning: 38 95% 62%;
-    --color-error: 0 91% 71%;
-    --color-info: 213 93% 68%;
+    --color-success: 156 62% 50%;
+    --color-warning: 36 92% 60%;
+    --color-error: 4 82% 66%;
+    --color-info: 212 92% 68%;
 
     /* Category accent flips to a light violet on dark surfaces. */
     --color-category: 252 95% 85%;
@@ -117,7 +187,12 @@
     --chart-5: 350 90% 70%;
     --chart-6: 215 15% 65%;
 
-    /* The console does not flip: it is already the dark variant. */
+    --console-surface: 220 11% 7%;
+    --console-border: 220 9% 22%;
+    --console-text: 215 10% 66%;
+    --console-muted: 215 9% 58%;
+
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3), 0 12px 32px -12px hsl(0 0% 0% / 0.5);
   }
 }
 
@@ -126,13 +201,14 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
     min-width: 320px;
     min-height: 100vh;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
   button,
   input,
@@ -175,9 +251,18 @@
   overflow: hidden;
 }
 
-/* ── Custom radio input styling ───────────────────────────────────────────── */
+/* ── Custom radio and checkbox styling ────────────────────────────────────── */
 
-input[type="radio"] {
+/*
+ * `:not(.sr-only)` is load-bearing. `input[type="radio"]` outranks `.sr-only`
+ * on specificity, so without it the visually-hidden radios inside every
+ * segmented control were given a real 1rem box. They are `position: absolute`
+ * with no positioned ancestor, which resolves against the viewport — so those
+ * boxes escaped the scrolling `<main>`, made the *document* taller than the
+ * window, and let a `scrollIntoView` from the settings rail scroll the whole
+ * app shell — title bar, stepper and all — off the top of the screen.
+ */
+input[type="radio"]:not(.sr-only) {
   appearance: none;
   -webkit-appearance: none;
   width: 1rem;
@@ -192,17 +277,67 @@ input[type="radio"] {
   flex-shrink: 0;
 }
 
-input[type="radio"]:hover {
+input[type="radio"]:not(.sr-only):hover {
   border-color: hsl(var(--foreground) / 0.3);
 }
 
-input[type="radio"]:checked {
+input[type="radio"]:not(.sr-only):checked {
   border-color: hsl(var(--primary));
   background: hsl(var(--primary));
   box-shadow: inset 0 0 0 2.5px hsl(var(--background));
 }
 
-input[type="radio"]:focus-visible {
+/* Checkboxes follow the radios rather than the platform's default, so a
+   confirmation tick beside a themed toggle is recognisably the same product. */
+input[type="checkbox"]:not(.sr-only) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid hsl(var(--input));
+  border-radius: 0.3rem;
+  cursor: pointer;
+  background: hsl(var(--background));
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-content: center;
+}
+
+input[type="checkbox"]:not(.sr-only)::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.3rem;
+  border: 2px solid hsl(var(--primary-foreground));
+  border-top: 0;
+  border-right: 0;
+  transform: translateY(-1px) rotate(-45deg);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+input[type="checkbox"]:not(.sr-only):hover {
+  border-color: hsl(var(--foreground) / 0.3);
+}
+
+input[type="checkbox"]:not(.sr-only):checked {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+}
+
+input[type="checkbox"]:not(.sr-only):checked::after {
+  opacity: 1;
+}
+
+input[type="checkbox"]:not(.sr-only):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input[type="radio"]:not(.sr-only):focus-visible,
+input[type="checkbox"]:not(.sr-only):focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }

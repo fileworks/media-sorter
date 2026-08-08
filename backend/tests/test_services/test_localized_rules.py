@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -28,6 +28,7 @@ from app.services.ai.base_tagger import (
     ImaggaTagger,
     LocalClipTagger,
 )
+from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.destination import build_dest_dir, reserve_destination
 from app.services.rule_engine_service import RuleEngineService
 
@@ -202,6 +203,7 @@ def test_rule_order_enablement_unicode_stems_and_first_route(tmp_path: Path) -> 
     assert result.matched_tag_rule_ids == ("early", "late", "dedupe")
     assert result.route == "screenshot"
     assert result.matched_route_rule_id == "first"
+    assert [rule.name for rule in result.matched_route_rules] == ["first", "second"]
 
     config.rules_enabled = False
     assert RuleEngineService(config).evaluate_all(source).tags == ()
@@ -328,7 +330,7 @@ def test_siglip_uses_german_prompts_but_emits_only_german() -> None:
     tagger = LocalClipTagger(
         ["Bildschirmfoto"],
         threshold=0,
-        embedder=embedder,
+        embedder=cast("VisionEncoder", embedder),
         locale="de",
         bundled=True,
     )

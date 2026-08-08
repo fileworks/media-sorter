@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,14 +29,14 @@ def library(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path, library: Path) -> MediaCatalog:
+def catalog(tmp_path: Path, library: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("r1", library, role="input")
         discover_into_catalog(opened, "r1", library)
         yield opened
 
 
-def _context(catalog: MediaCatalog, **kwargs) -> ValidatorContext:
+def _context(catalog: MediaCatalog, **kwargs: Any) -> ValidatorContext:
     return ValidatorContext(catalog=catalog, root_id="r1", generation=1, **kwargs)
 
 
@@ -113,7 +115,7 @@ class TestReportSemantics:
         original = catalog.iter_files
 
         class SinglePass:
-            def __iter__(self):
+            def __iter__(self) -> Iterator[Any]:
                 yield from original("r1")
 
             def __len__(self) -> int:

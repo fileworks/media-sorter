@@ -249,7 +249,7 @@ lint:
 	cd $(BACKEND) && $(PYTHON) -m ruff format --check app tests
 
 typecheck:
-	cd $(BACKEND) && $(PYTHON) -m mypy app
+	cd $(BACKEND) && $(PYTHON) -m mypy
 
 format:
 	cd $(BACKEND) && $(PYTHON) -m ruff check --fix app tests

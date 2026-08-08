@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ from app.services.discovery import (
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("r1", tmp_path / "library")
         yield opened
@@ -65,9 +66,20 @@ class TestTraversal:
         assert not any("deeper" in item.relative_path for item in found)
         assert any("sub" in item.relative_path for item in found)
 
-    def test_an_excluded_subtree_is_never_entered(self, tmp_path: Path) -> None:
+    def test_an_excluded_subtree_is_never_entered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         root = _library(tmp_path / "library")
         stats = DiscoveryStats()
+        excluded = root / "sub"
+        real_iterdir = Path.iterdir
+
+        def guarded_iterdir(path: Path):  # type: ignore[no-untyped-def]
+            if path == excluded:
+                raise AssertionError("excluded subtree was entered")
+            return real_iterdir(path)
+
+        monkeypatch.setattr(Path, "iterdir", guarded_iterdir)
 
         found = list(walk(root, TraversalRules(exclusions=(Path("sub"),)), stats))
 

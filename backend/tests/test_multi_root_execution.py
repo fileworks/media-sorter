@@ -72,16 +72,25 @@ async def test_each_file_remembers_the_root_it_came_from(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_per_root_exclusions_apply_to_their_own_root_only(tmp_path: Path) -> None:
+async def test_per_root_exclusions_apply_to_their_own_root_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = tmp_path / "phone"
     second = tmp_path / "camera"
     _media(first / "skip" / "a.jpg")
     _media(first / "keep" / "b.jpg")
     _media(second / "skip" / "c.jpg")
+    excluded = first / "skip"
+    real_iterdir = Path.iterdir
 
-    enumerated = await FileSystemService().traverse_roots(
-        [(first, (first / "skip",)), (second, ())]
-    )
+    def guarded_iterdir(path: Path):  # type: ignore[no-untyped-def]
+        if path == excluded:
+            raise AssertionError("excluded subtree was entered")
+        return real_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", guarded_iterdir)
+
+    enumerated = await FileSystemService().traverse_roots([(first, (excluded,)), (second, ())])
 
     names = {path.name for path in enumerated.result.files}
     assert names == {"b.jpg", "c.jpg"}
@@ -179,6 +188,7 @@ def test_a_sibling_of_a_reference_root_is_not_protected(tmp_path: Path) -> None:
         relative_path="new.jpg",
     )
 
+    assert result is not None
     assert result.destination_path.read_bytes() == b"media"
 
 

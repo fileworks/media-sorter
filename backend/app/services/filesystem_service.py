@@ -57,7 +57,7 @@ from app.utils.media_utils import (
     is_media,
     is_size_included,
 )
-from app.utils.path_utils import is_excluded_by_pattern, validate_source_root
+from app.utils.path_utils import is_excluded_by_pattern, path_relationship, validate_source_root
 
 logger = get_logger(__name__)
 
@@ -303,14 +303,8 @@ class TraversalIssue:
 
 
 def is_within_any(path: Path, roots: Sequence[Path]) -> bool:
-    """Whether ``path`` sits under any of ``roots``."""
-    for root in roots:
-        try:
-            path.relative_to(root)
-        except ValueError:
-            continue
-        return True
-    return False
+    """Whether ``path`` sits under any root, including filesystem aliases."""
+    return any(path_relationship(root, path) in {"equal", "left_contains_right"} for root in roots)
 
 
 @dataclass
@@ -370,8 +364,11 @@ class FileSystemService:
         the return type.
         """
         root = Path(directory)
+        # Off the event loop: a source root is routinely a network mount, and a
+        # bare `stat` on an unreachable share blocks for the mount's timeout —
+        # which would stall every other request for as long as it hung.
         try:
-            exists = root.exists()
+            exists = await asyncio.to_thread(root.exists)
         except OSError:
             exists = False
         if not exists:
@@ -430,6 +427,7 @@ class FileSystemService:
                     cancel_token=cancel_token,
                     task=task,
                     companion_handling=companion_handling,
+                    exclusions=exclusions,
                 )
             except (MediaSortException, OSError) as exc:
                 # A disconnected or unreadable root is reported as a partial
@@ -448,27 +446,13 @@ class FileSystemService:
                     )
                 )
                 continue
-            kept = [path for path in part.files if not is_within_any(path, exclusions)]
-            merged.excluded_directories += len(part.files) - len(kept)
-            for path in kept:
+            for path in part.files:
                 root_of.setdefault(path, canonical_root)
-            merged.files.extend(kept)
-            kept_set = set(kept)
-            merged.units.extend(
-                unit
-                for unit in part.units
-                if unit.primary in kept_set
-                and all(not is_within_any(member.path, exclusions) for member in unit.members)
-            )
-            merged.unmatched_companions.extend(
-                item
-                for item in part.unmatched_companions
-                if not is_within_any(item.path, exclusions)
-            )
-            merged.companion_candidates.extend(
-                path for path in part.companion_candidates if not is_within_any(path, exclusions)
-            )
-            for unit in merged.units:
+            merged.files.extend(part.files)
+            merged.units.extend(part.units)
+            merged.unmatched_companions.extend(part.unmatched_companions)
+            merged.companion_candidates.extend(part.companion_candidates)
+            for unit in part.units:
                 for member in unit.members:
                     root_of.setdefault(member.path, canonical_root)
             merged.issues.extend(part.issues)
@@ -491,6 +475,7 @@ class FileSystemService:
         cancel_token: CancellationToken | None = None,
         task: Task | None = None,
         companion_handling: CompanionHandling = "keep_with_primary",
+        exclusions: tuple[Path, ...] = (),
     ) -> TraversalResult:
         """Enumerate eligible media with cancellation and partial-error details."""
         result = await asyncio.to_thread(
@@ -503,6 +488,7 @@ class FileSystemService:
             max_file_size_mb,
             cancel_token,
             companion_handling,
+            exclusions,
         )
         if task is not None and result.issues:
             task.mark_partial([issue.to_dict() for issue in result.issues])
@@ -528,6 +514,7 @@ class FileSystemService:
         max_file_size_mb: int | None,
         cancel_token: CancellationToken | None,
         companion_handling: CompanionHandling = "keep_with_primary",
+        exclusions: tuple[Path, ...] = (),
     ) -> TraversalResult:
         result = TraversalResult()
         self._walk_result(
@@ -541,6 +528,7 @@ class FileSystemService:
             min_file_size_kb,
             max_file_size_mb,
             cancel_token,
+            exclusions,
             is_root=True,
         )
         result.units, result.unmatched_companions = bind_media_units(
@@ -562,6 +550,7 @@ class FileSystemService:
         min_file_size_kb: int | None,
         max_file_size_mb: int | None,
         cancel_token: CancellationToken | None,
+        exclusions: tuple[Path, ...],
         *,
         is_root: bool,
     ) -> None:
@@ -608,6 +597,9 @@ class FileSystemService:
                 continue
 
             if is_file_entry:
+                if exclusions and is_within_any(entry, exclusions):
+                    result.excluded_directories += 1
+                    continue
                 if not is_media(entry) and entry.suffix.lower() not in {
                     ".xmp",
                     ".aae",
@@ -647,6 +639,10 @@ class FileSystemService:
                     result.companion_candidates.append(entry)
             elif is_dir_entry and recursive and not entry.name.startswith("."):
                 # Check directory exclusion
+                if exclusions and is_within_any(entry, exclusions):
+                    logger.debug("Excluded directory", path=str(entry))
+                    result.excluded_directories += 1
+                    continue
                 if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
                     logger.debug("Excluded directory", path=str(entry))
                     result.excluded_directories += 1
@@ -663,6 +659,7 @@ class FileSystemService:
                         min_file_size_kb,
                         max_file_size_mb,
                         cancel_token,
+                        exclusions,
                         is_root=False,
                     )
 
@@ -692,6 +689,7 @@ class FileSystemService:
             min_file_size_kb,
             max_file_size_mb,
             None,
+            (),
             is_root=current == root,
         )
         results.extend(traversal.files)

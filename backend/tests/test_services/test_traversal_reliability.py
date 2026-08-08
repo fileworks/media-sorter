@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,7 +97,7 @@ def test_cancellation_during_directory_iteration_is_observed(tmp_path: Path) -> 
     token = CancellationToken()
     real_iterdir = Path.iterdir
 
-    def cancelling_iterdir(path: Path):
+    def cancelling_iterdir(path: Path) -> Iterator[Path]:
         for index, entry in enumerate(real_iterdir(path)):
             if index == 3:
                 token.set()
@@ -115,7 +116,7 @@ async def test_worker_thread_traversal_observes_cancellation(tmp_path: Path) -> 
     entered = threading.Event()
     real_iterdir = Path.iterdir
 
-    def waiting_iterdir(path: Path):
+    def waiting_iterdir(path: Path) -> Iterator[Path]:
         entered.set()
         while not token.is_set():
             time.sleep(0.001)
@@ -141,7 +142,7 @@ def test_local_child_oserror_is_partial_but_root_oserror_fails(tmp_path: Path) -
     bad.mkdir()
     real_iterdir = Path.iterdir
 
-    def flaky_iterdir(path: Path):
+    def flaky_iterdir(path: Path) -> Iterator[Path]:
         if path == bad:
             raise PermissionError("child denied")
         return real_iterdir(path)
@@ -169,7 +170,7 @@ async def test_partial_issue_log_is_correlated_with_safe_path_context(
     bad.mkdir()
     real_iterdir = Path.iterdir
 
-    def flaky_iterdir(path: Path):
+    def flaky_iterdir(path: Path) -> Iterator[Path]:
         if path == bad:
             raise PermissionError("child denied")
         return real_iterdir(path)

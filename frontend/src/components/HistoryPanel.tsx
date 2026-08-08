@@ -1,15 +1,15 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useReportHistory } from "@/hooks/useReportHistory";
 import { useToast } from "@/context/toast-context";
 import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { ReportPanel } from "@/components/ReportPanel";
 import { triggerDownload } from "@/lib/download";
 import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
-import { FiTrash2, FiAlertTriangle, FiSearch, FiX } from "react-icons/fi";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { FiTrash2, FiAlertTriangle, FiSearch } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
 import type { OperationReport } from "@/types/api";
 
@@ -17,8 +17,6 @@ import type { OperationReport } from "@/types/api";
 
 function ReportModal({ operationId, onClose }: { operationId: string; onClose: () => void }) {
   const { t } = useI18n();
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, true);
 
   const { data: report, isLoading } = useQuery<OperationReport>({
     queryKey: ["report", operationId],
@@ -26,58 +24,31 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
     staleTime: 60_000,
   });
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("history.reportLabel", { id: operationId })}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Modal
+      open
+      onClose={onClose}
+      title={t("history.reportTitle", { id: operationId })}
+      size="xl"
+      className="h-[calc(100dvh-2rem)]"
     >
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="relative flex h-[90vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl bg-background shadow-2xl outline-none"
-      >
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-sm font-semibold text-foreground">
-            {t("history.reportTitle", { id: operationId })}
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            aria-label={t("history.closeReport")}
-          >
-            <FiX className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="animate-pulse space-y-4">
-              <div className="h-24 rounded-xl bg-muted" />
-              <div className="h-48 rounded-xl bg-muted" />
-              <div className="h-64 rounded-xl bg-muted" />
-            </div>
-          ) : report ? (
-            <ReportPanel report={report} />
-          ) : (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              {t("history.loadFailed")}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
+      <ModalHeader />
+      <ModalBody>
+        {isLoading ? (
+          <div className="animate-pulse space-y-4" aria-busy>
+            <div className="h-24 rounded-xl bg-muted" />
+            <div className="h-48 rounded-xl bg-muted" />
+            <div className="h-64 rounded-xl bg-muted" />
+          </div>
+        ) : report ? (
+          <ReportPanel report={report} />
+        ) : (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {t("history.loadFailed")}
+          </p>
+        )}
+      </ModalBody>
+    </Modal>
   );
 }
 
@@ -88,22 +59,22 @@ function ClearHistoryButton() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const [clearing, setClearing] = useState(false);
 
-  const handleClear = async () => {
-    setClearing(true);
-    try {
-      await api.clearHistory();
+  // The last two direct API calls in the app. As mutations they get a pending
+  // state, an error surface and cache invalidation like everything else.
+  const clearHistory = useMutation({
+    mutationFn: () => api.clearHistory(),
+    onSuccess: async () => {
       // Invalidate all report-related queries so the list refreshes immediately
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast(t("history.cleared"), "success");
-    } catch {
-      toast(t("history.clearFailed"), "error");
-    } finally {
-      setClearing(false);
-      setConfirming(false);
-    }
-  };
+    },
+    onError: () => toast(t("history.clearFailed"), "error"),
+    onSettled: () => setConfirming(false),
+  });
+  const clearing = clearHistory.isPending;
+
+  const handleClear = () => clearHistory.mutate();
 
   if (confirming) {
     return (
@@ -154,7 +125,6 @@ export function HistoryPanel() {
   const { toast } = useToast();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
-  const [exportingId, setExportingId] = useState<string | null>(null);
   const [modalId, setModalId] = useState<string | null>(null);
 
   const { operations, total, isLoading } = useReportHistory(PAGE_SIZE, page * PAGE_SIZE);
@@ -169,19 +139,18 @@ export function HistoryPanel() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleExport = async (operationId: string) => {
-    setExportingId(operationId);
-    try {
+  // Exporting reads; it changes nothing, so it is not confirmed.
+  const exportReport = useMutation({
+    mutationFn: async (operationId: string) => {
       const blob = await api.exportReport(operationId, "csv");
       const filename = `mediasort_${operationId}_${new Date().toISOString().slice(0, 10)}.csv`;
       await triggerDownload(blob, filename);
-      toast(t("history.exported"), "success");
-    } catch {
-      toast(t("history.exportFailed"), "error");
-    } finally {
-      setExportingId(null);
-    }
-  };
+    },
+    onSuccess: () => toast(t("history.exported"), "success"),
+    onError: () => toast(t("history.exportFailed"), "error"),
+  });
+
+  const handleExport = (operationId: string) => exportReport.mutate(operationId);
 
   // ── Loading skeleton ────────────────────────────────────────────────────────
   if (isLoading) {
@@ -269,10 +238,12 @@ export function HistoryPanel() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={exportingId === op.id}
+                    disabled={exportReport.isPending && exportReport.variables === op.id}
                     onClick={() => void handleExport(op.id)}
                   >
-                    {exportingId === op.id ? "…" : t("history.export")}
+                    {exportReport.isPending && exportReport.variables === op.id
+                      ? "…"
+                      : t("history.export")}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setModalId(op.id)}>
                     {t("history.view")}

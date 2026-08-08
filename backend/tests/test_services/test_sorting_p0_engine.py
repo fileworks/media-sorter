@@ -5,12 +5,15 @@ the new outcomes."""
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 from PIL import Image
 
+from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
@@ -36,7 +39,7 @@ def _photo(path: Path, seed: int = 0) -> Path:
 
 
 def _config(tmp_path: Path, **overrides: Any) -> Config:
-    defaults: dict = {
+    defaults: dict[str, Any] = {
         "source_directory": str(tmp_path / "source"),
         "target_directory": str(tmp_path / "target"),
         "sort_criteria": ["year", "month", "day"],
@@ -87,7 +90,7 @@ class _FakeTask:
 
 
 def _run(svc: SortingService, dry_run: bool = False) -> dict[str, Any]:
-    return asyncio.run(svc.run(_FakeTask(), dry_run=dry_run))
+    return asyncio.run(svc.run(cast("Task", _FakeTask()), dry_run=dry_run))
 
 
 # ------------------------------------------------------------------ #
@@ -130,7 +133,9 @@ class TestJunkRouting:
 
 
 class TestDestinationAwareDedup:
-    def test_source_file_already_in_destination_is_quarantined(self, tmp_path: Path) -> None:
+    def test_source_file_already_in_destination_is_reported_without_a_write(
+        self, tmp_path: Path
+    ) -> None:
         cfg = _config(tmp_path, remove_duplicates=True)
         placed = _photo(tmp_path / "target" / "2024" / "03" / "10" / "a.jpg", seed=7)
         source_copy = tmp_path / "source" / "2024-03-10_a.jpg"
@@ -141,8 +146,7 @@ class TestDestinationAwareDedup:
 
         assert stats["already_in_destination"] == 1
         assert stats["sorted"] == 0
-        quarantined = tmp_path / "target" / "_already_in_destination" / "2024-03-10_a.jpg"
-        assert quarantined.is_file()
+        assert not (tmp_path / "target" / "_already_in_destination").exists()
         assert source_copy.is_file()  # copy mode: source untouched
 
     def test_destination_comparison_is_mandatory(self, tmp_path: Path) -> None:
@@ -213,7 +217,7 @@ class TestQuarantineStructure:
 
         assert stats["unknown_dates"] == 1
         assert (
-            tmp_path / "target" / "_unknown_dates" / "old-hdd" / "camera-roll" / "mystery.jpg"
+            tmp_path / "target" / "_undated" / "old-hdd" / "camera-roll" / "mystery.jpg"
         ).is_file()
 
 
@@ -264,6 +268,75 @@ class TestNeverDeleteInvariant:
 
 
 class TestPreviewParity:
+    @staticmethod
+    def _dates(path: Path, *_args: Any, **_kwargs: Any) -> ExtractionResult:
+        captured = date(2019, 1, 4) if path.name.startswith("a") else date(2021, 6, 11)
+        return ExtractionResult(extracted_date=captured, source="filesystem")
+
+    def test_duplicate_set_follows_keeper_across_different_own_dates(self, tmp_path: Path) -> None:
+        cfg = _config(tmp_path, remove_duplicates=True, duplicate_perceptual_enabled=False)
+        keeper = _photo(tmp_path / "source" / "a-keeper.jpg", seed=21)
+        copy = tmp_path / "source" / "b-copy.jpg"
+        copy.write_bytes(keeper.read_bytes())
+
+        previewer = _preview_service()
+        with patch.object(previewer._extraction, "extract_detailed", side_effect=self._dates):
+            preview = asyncio.run(previewer.preview(cfg))
+        by_source = {Path(item["source"]).name: item for item in preview["items"]}
+        copy_item = by_source["b-copy.jpg"]
+
+        assert copy_item["extracted_date"] == "2021-06-11"
+        assert copy_item["would_be_destination"].endswith("2021/06/11/b-copy.jpg")
+        assert "/2019/01/04/_copies/" in copy_item["destination"]
+
+        plan = previewer.frozen_plan(preview["plan_id"])
+        assert plan is not None
+        planned_copy = next(action for action in plan.actions if action.source_path == str(copy))
+        assert planned_copy.source_root == str(tmp_path / "source")
+        assert planned_copy.resolved_date == "2021-06-11"
+        assert planned_copy.would_be_destination_path == copy_item["would_be_destination"]
+        assert planned_copy.keeper_path == str(keeper)
+
+        sorter = _service(cfg)
+        with patch.object(sorter._extraction, "extract_detailed", side_effect=self._dates):
+            stats = asyncio.run(
+                sorter.run(cast("Task", _FakeTask()), dry_run=False, frozen_plan=plan)
+            )
+
+        assert Path(copy_item["destination"]).is_file()
+        report = json.loads(Path(stats["integrity_report"]).read_text(encoding="utf-8"))
+        recorded = next(
+            action for action in report["actions"] if action["source_path"] == str(copy)
+        )
+        assert recorded["source_root"] == str(tmp_path / "source")
+        assert recorded["resolved_date"] == "2021-06-11"
+        assert recorded["would_be_destination_path"] == copy_item["would_be_destination"]
+        assert recorded["keeper_path"] == str(keeper)
+
+    def test_undated_keeper_keeps_its_copy_under_undated(self, tmp_path: Path) -> None:
+        cfg = _config(tmp_path, remove_duplicates=True, duplicate_perceptual_enabled=False)
+        keeper = _photo(tmp_path / "source" / "a-keeper.jpg", seed=22)
+        copy = tmp_path / "source" / "b-copy.jpg"
+        copy.write_bytes(keeper.read_bytes())
+        undated = ExtractionResult(extracted_date=None, source="none")
+
+        previewer = _preview_service()
+        with patch.object(previewer._extraction, "extract_detailed", return_value=undated):
+            preview = asyncio.run(previewer.preview(cfg))
+        by_source = {Path(item["source"]).name: item for item in preview["items"]}
+
+        assert by_source["a-keeper.jpg"]["destination"].endswith("_undated/a-keeper.jpg")
+        assert "/_undated/_copies/" in by_source["b-copy.jpg"]["destination"]
+
+        plan = previewer.frozen_plan(preview["plan_id"])
+        assert plan is not None
+        sorter = _service(cfg)
+        with patch.object(sorter._extraction, "extract_detailed", return_value=undated):
+            asyncio.run(sorter.run(cast("Task", _FakeTask()), dry_run=False, frozen_plan=plan))
+
+        assert Path(by_source["a-keeper.jpg"]["destination"]).is_file()
+        assert Path(by_source["b-copy.jpg"]["destination"]).is_file()
+
     def test_preview_predicts_junk_and_destination_outcomes(self, tmp_path: Path) -> None:
         cfg = _config(
             tmp_path,
@@ -293,7 +366,12 @@ class TestPreviewParity:
         assert stats["already_in_destination"] == 1
         assert stats["sorted"] == 1
 
-        # The three predicted destinations exist exactly where promised.
+        # Written outcomes exist exactly where promised. A destination match is
+        # deliberately a no-write outcome with a null destination.
         for item in preview["items"]:
-            assert item["destination"] is not None
-            assert Path(item["destination"]).is_file(), item
+            if item["status"] == "already_in_destination":
+                assert item["destination"] is None
+                assert Path(item["source"]).is_file()
+            else:
+                assert item["destination"] is not None
+                assert Path(item["destination"]).is_file(), item

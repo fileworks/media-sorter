@@ -194,3 +194,22 @@ export function formatDuration(
 export function formatCount(value: number, locale?: string): string {
   return value.toLocaleString(locale);
 }
+
+/**
+ * Bytes → a short label, e.g. `1536` → `"1.5 KB"`.
+ *
+ * Rounds to a whole number at three digits or in bytes, and to one decimal
+ * otherwise, so a column of these stays the same width. Negative values keep
+ * their sign.
+ */
+export function formatBytesShort(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = Math.abs(bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = value >= 100 || unit === 0 ? Math.round(value) : Number(value.toFixed(1));
+  return `${bytes < 0 ? "-" : ""}${rounded} ${units[unit]}`;
+}

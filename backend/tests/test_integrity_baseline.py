@@ -30,7 +30,8 @@ class _SameSizeCorruptingWriter:
         return self
 
     def __exit__(self, *args: object) -> object:
-        return self._raw.__exit__(*args)
+        # Forwarding a caller's *args to an overloaded protocol method.
+        return self._raw.__exit__(*args)  # type: ignore[arg-type]
 
     def flush(self) -> None:
         self._raw.flush()
@@ -55,7 +56,7 @@ def test_equal_length_corruption_is_rejected_before_publication(
     real_open = Path.open
 
     def corrupting_open(path: Path, mode: str = "r", *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
-        opened = real_open(path, mode, *args, **kwargs)
+        opened = real_open(path, mode, *args, **kwargs)  # type: ignore[call-overload]  # forwarding a caller's *args to an overloaded builtin
         if mode == "xb":
             return _SameSizeCorruptingWriter(opened)
         return opened

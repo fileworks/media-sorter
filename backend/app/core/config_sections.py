@@ -47,6 +47,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "language",
             "source_directory",
             "target_directory",
+            "run_mode",
             "sort",
             "sort_criteria",
             "copy_instead_of_move",
@@ -76,6 +77,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "duplicate_exact_enabled",
             "duplicate_perceptual_enabled",
             "duplicate_perceptual_threshold",
+            "duplicate_keeper_policy",
             "burst_detection_enabled",
             "burst_time_window_seconds",
             "burst_perceptual_distance",
@@ -92,7 +94,14 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "conversion",
         "Convert formats",
         "Standardize everything to one image and/or video format.",
-        ("convert_images", "image_format", "convert_videos", "video_format"),
+        (
+            "convert_images",
+            "image_format",
+            "image_quality",
+            "convert_videos",
+            "video_format",
+            "video_quality",
+        ),
     ),
     ConfigSection(
         "filters",
@@ -154,7 +163,6 @@ SECTIONS: tuple[ConfigSection, ...] = (
 # flags without a dedicated control. Listed so the alignment test stays honest.
 UNGROUPED_FIELDS: frozenset[str] = frozenset(
     {
-        "analyze",
         "exif_sanity_check_enabled",
         # Advanced override without a dedicated control; the default (inside
         # the destination) is right for almost everyone.
@@ -165,5 +173,8 @@ UNGROUPED_FIELDS: frozenset[str] = frozenset(
         "library_profile",
         "preservation_profile",
         "optimization_profile",
+        # Named snapshots of the settings above, managed through their own
+        # endpoints rather than edited as a field on the settings screen.
+        "saved_recipes",
     }
 )

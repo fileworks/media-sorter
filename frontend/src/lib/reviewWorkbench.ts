@@ -8,7 +8,10 @@
  * decides anything, it only draws what these functions already decided.
  */
 
-export type GroupKind = "exact" | "similar";
+import type { KeeperPolicyId } from "@/services/api";
+
+/** Three kinds of stack, one shape. Mirrors the backend's `GroupKind`. */
+export type GroupKind = "exact" | "similar" | "burst";
 export type RootRole = "input" | "reference" | "destination";
 export type DecisionAction = "keep" | "quarantine" | "skip" | "replace_keeper" | "keep_additional";
 export type OutcomeKind =
@@ -389,4 +392,178 @@ export function deserializeUiState(raw: string | null): ReviewUiState {
   } catch {
     return fallback;
   }
+}
+
+// ── Keep rules, decided here ─────────────────────────────────────────────────
+
+/**
+ * Which copy a keep rule would choose, or `null` when it refuses to choose.
+ *
+ * Mirrors `backend/app/services/keeper_policies.py::_choose` exactly, including
+ * every tie-break, so the rule a user picks in Review and the rule the backend
+ * applies from Configure cannot select different copies for the same set.
+ *
+ * It lives on the client because a keeper choice is now client-held run state:
+ * applying a rule to two hundred sets used to be a preview-then-apply pair of
+ * requests writing a server-side plan nothing read back. Deciding locally makes
+ * a bulk apply instant *and* individually overridable, which is the property
+ * that matters — a rule that cannot be argued with is not a review.
+ *
+ * A refusal is deliberate. Treating an unmeasured file as the smallest one is
+ * how the only good copy gets quarantined, so those sets go to a person.
+ */
+export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): string | null {
+  const members = group.members;
+  if (members.length === 0) return null;
+
+  const pixels = (member: GroupMember): number | null => {
+    const { width, height } = member.facts;
+    if (!width.known || !height.known) return null;
+    const value = Number(width.value ?? 0) * Number(height.value ?? 0);
+    return Number.isFinite(value) ? value : null;
+  };
+  const size = (member: GroupMember) => member.facts.size_bytes;
+  const modified = (member: GroupMember): number | null => {
+    const fact = member.facts.modified_at;
+    if (!fact.known || fact.value === null || fact.value === undefined) return null;
+    const value = Number(fact.value);
+    return Number.isFinite(value) ? value : null;
+  };
+  const filename = (member: GroupMember) =>
+    member.relative_path.split(/[\\/]/).pop() ?? member.relative_path;
+  // The last tie-break, and the reason a result never depends on scan order.
+  const identity = (member: GroupMember) =>
+    `${member.root_id}:${member.relative_path}:${member.member_id}`;
+
+  const best = (
+    pool: readonly GroupMember[],
+    rank: (member: GroupMember) => (number | string)[],
+  ): string | null => {
+    if (pool.length === 0) return null;
+    const sorted = [...pool].sort((a, b) => {
+      const left = rank(a);
+      const right = rank(b);
+      for (let index = 0; index < left.length; index += 1) {
+        if (left[index] < right[index]) return -1;
+        if (left[index] > right[index]) return 1;
+      }
+      return 0;
+    });
+    return sorted[0].member_id;
+  };
+
+  switch (policy) {
+    case "best_quality":
+      // Most pixels, then most bytes. Unlike `highest_resolution` it does not
+      // refuse a set whose dimensions could not all be read: a photo library is
+      // full of files no parser handles, and refusing them all would leave the
+      // common case undecided.
+      return best(members, (m) => [-(pixels(m) ?? 0), -size(m), -(modified(m) ?? 0), identity(m)]);
+    case "largest":
+      return best(members, (m) => [-size(m), -(modified(m) ?? 0), identity(m)]);
+    case "smallest":
+      return best(members, (m) => [size(m), -(modified(m) ?? 0), identity(m)]);
+    case "longest_filename":
+      return best(members, (m) => [-filename(m).length, -size(m), identity(m)]);
+    case "shortest_filename":
+      return best(members, (m) => [filename(m).length, -size(m), identity(m)]);
+    case "newest":
+    case "oldest": {
+      const dated = members.filter((member) => modified(member) !== null);
+      if (dated.length === 0) return null;
+      const sign = policy === "newest" ? -1 : 1;
+      return best(dated, (m) => [sign * (modified(m) ?? 0), -size(m), identity(m)]);
+    }
+    case "highest_resolution": {
+      const measured = members.filter((member) => pixels(member) !== null);
+      // Refuse rather than guess: one unreadable file must not be ranked last.
+      if (measured.length !== members.length || measured.length === 0) return null;
+      return best(measured, (m) => [-(pixels(m) ?? 0), -size(m), identity(m)]);
+    }
+    default:
+      // `manual`, `protected_reference` and `preferred_root` never decide here:
+      // the first is a refusal by definition, the second is automatic, and the
+      // third needs a root order the interface no longer lets anyone set.
+      return null;
+  }
+}
+
+// ── Comparison ───────────────────────────────────────────────────────────────
+
+/**
+ * One side of a comparison, whether or not it belongs to a duplicate set.
+ *
+ * Comparing used to require two members of the same group, so selecting any two
+ * files that were not in one set returned without a word — a control that
+ * silently does nothing is the worst kind of disabled. Two files can always be
+ * put side by side; what depends on them sharing a set is only whether a
+ * *keeper* can be chosen from the comparison, and that is stated rather than
+ * enforced by silence.
+ */
+export interface ComparableFile {
+  /** The member id where there is one, else the source path. */
+  id: string;
+  /** The path the thumbnail and diff endpoints take. */
+  path: string;
+  /** What to call it in the table. */
+  label: string;
+  /** Absent for a file the catalog holds no member record for. */
+  facts: MemberFacts | null;
+  /** Which extractor supplied captured_at; null when the catalog did not record it. */
+  capturedAtSource: string | null;
+  confidence: MemberEvidence["confidence"] | null;
+}
+
+export function comparableFromMember(
+  member: GroupMember,
+  capturedAtSource: string | null = null,
+): ComparableFile {
+  return {
+    id: member.member_id,
+    path: member.observed_path,
+    label: member.relative_path,
+    facts: member.facts,
+    capturedAtSource,
+    confidence: member.evidence.confidence,
+  };
+}
+
+/** A known fact, wrapped in the shape the fact table reads. */
+function knownFact(value: unknown): FactValue {
+  return { known: value !== null && value !== undefined, value, issue: null };
+}
+
+/**
+ * A comparison side built from a plan row alone.
+ *
+ * Size and date come from the dry run; resolution does not, and is reported as
+ * unknown rather than as a fabricated zero. The comparison is still worth
+ * having — two thumbnails side by side answer "is this the same picture", which
+ * is the question that brought the user here.
+ */
+export function comparableFromRow(row: {
+  source: string;
+  folder: string;
+  name: string;
+  sizeBytes: number;
+  date: string | null;
+  dateSource?: string | null;
+}): ComparableFile {
+  return {
+    id: row.source,
+    path: row.source,
+    label: `${row.folder}/${row.name}`,
+    facts: {
+      size_bytes: row.sizeBytes,
+      modified_at: knownFact(null),
+      captured_at: knownFact(row.date),
+      width: knownFact(null),
+      height: knownFact(null),
+      duration_seconds: knownFact(null),
+      codec: knownFact(null),
+      media_kind: "unknown",
+    },
+    capturedAtSource: row.dateSource ?? null,
+    confidence: null,
+  };
 }

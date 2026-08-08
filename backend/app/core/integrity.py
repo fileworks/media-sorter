@@ -222,6 +222,10 @@ class MutationManifestAction(BaseModel):
     companion_role: CompanionRole | None = None
     unit_primary_path: str | None = None
     provenance: OutcomeProvenance | None = None
+    source_root: str | None = None
+    resolved_date: str | None = None
+    would_be_destination_path: str | None = None
+    keeper_path: str | None = None
 
     @model_validator(mode="after")
     def expected_content_matches_observed_source(self) -> MutationManifestAction:
@@ -351,6 +355,10 @@ class ActionOutcome(BaseModel):
     filesystem_metadata_observed: FilesystemMetadataSnapshot | None = None
     warnings: tuple[str, ...] = ()
     diagnostic_code: str | None = None
+    source_root: str | None = None
+    resolved_date: str | None = None
+    would_be_destination_path: str | None = None
+    keeper_path: str | None = None
 
 
 class OperationEvent(BaseModel):

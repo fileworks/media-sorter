@@ -59,6 +59,21 @@ describe("changedKeys", () => {
     expect(changedKeys(config, defaults)).toEqual(new Set(["image_format", "sort_criteria"]));
   });
 
+  // The second argument is a *baseline*, not necessarily the factory defaults:
+  // Configure passes the recipe in force merged over them. A value the recipe
+  // deliberately moved is therefore unchanged, which is the whole point — it is
+  // what stops a freshly applied recipe marking a dozen rows at once.
+  it("reports nothing for a value the baseline itself sets", () => {
+    const factory = cfg({ copy_instead_of_move: false, sort_criteria: ["year"] });
+    const recipe = { copy_instead_of_move: true, sort_criteria: ["year", "month"] };
+    const baseline = { ...factory, ...recipe };
+    const config = cfg({ ...factory, ...recipe });
+
+    expect(changedKeys(config, baseline).size).toBe(0);
+    // Against the factory defaults alone, both would be reported.
+    expect(changedKeys(config, factory).size).toBe(2);
+  });
+
   it("treats arrays order-sensitively", () => {
     const defaults = cfg({ sort_criteria: ["year", "month"] });
     expect(

@@ -24,14 +24,26 @@ from app.services.sorting_service import SortingService
 NOW = datetime.now(timezone.utc)
 
 
-def _explicit_profile(**permissions: bool) -> PreservationProfile:
+def _explicit_profile(
+    *,
+    allow_embedded_metadata_edits: bool = False,
+    allow_repair: bool = False,
+    allow_conversion: bool = False,
+    allow_compression: bool = False,
+) -> PreservationProfile:
+    """Named rather than `**permissions`: a `**dict[str, bool]` splat switches
+    keyword checking off for the whole call, so a misspelt permission would have
+    been accepted here and silently granted nothing."""
     return PreservationProfile(
         profile_id="reviewed-mutations",
         name="Reviewed mutations",
         mode="explicit_mutation",
         authorization_origin="saved_profile",
         acknowledged_at=NOW,
-        **permissions,
+        allow_embedded_metadata_edits=allow_embedded_metadata_edits,
+        allow_repair=allow_repair,
+        allow_conversion=allow_conversion,
+        allow_compression=allow_compression,
     )
 
 
@@ -75,7 +87,9 @@ def test_organize_only_rejects_every_media_mutation(
     value: bool,
     capability: str,
 ) -> None:
-    config = Config(**{field: value})
+    # The field name is the parameter under test, so this construction is
+    # dynamic by design and cannot be keyword-checked.
+    config = Config(**{field: value})  # type: ignore[arg-type]
 
     with pytest.raises(MutationPolicyError) as error:
         authorize_config_mutations(config)

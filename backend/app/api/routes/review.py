@@ -10,21 +10,22 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config_fingerprint import config_fingerprint
-from app.core.duplicate_plans import BulkImpact, DecisionAction
+from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction, DuplicateGroup
 from app.core.library_profiles import CatalogPlacement
 from app.core.paths import resolve_app_paths
+from app.core.run_scope import apply_run_scope
 from app.services.catalog import MediaCatalog
 from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_location import open_catalog
 from app.services.catalog_views import CursorError, ViewQuery, aggregate, query_page
-from app.services.duplicate_grouping import exact_groups, similar_groups
+from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.keeper_policies import (
     HighConfidenceRule,
     PolicySettings,
@@ -47,6 +48,11 @@ from app.services.review_plan import (
 
 router = APIRouter()
 
+#: The perceptual distance the listing endpoint defaults to. The plan registers
+#: similar groups at the same distance, so a stack a user can see is a stack the
+#: plan has heard of.
+DEFAULT_SIMILAR_DISTANCE = 2
+
 #: Plans live for the life of the process and are persisted on every edit, so a
 #: crash costs nothing a reload cannot restore.
 _PLANS: dict[str, ReviewPlan] = {}
@@ -56,15 +62,43 @@ def _plans_directory() -> Path:
     return resolve_app_paths().data_dir / PLANS_DIRECTORY_NAME
 
 
-def _plan(plan_id: str, *, transfer_mode: str = "copy") -> ReviewPlan:
+def _plan(
+    plan_id: str,
+    *,
+    transfer_mode: str = "copy",
+    catalog_generation: int | None = None,
+) -> ReviewPlan:
+    """The plan for this id, discarded if it describes an older catalog.
+
+    A plan holds group ids that only mean anything against the generation they
+    were computed from. Carrying them past a rescan is what made every
+    per-group route 404 for the rest of the process's life, and what let a
+    stored ``default.json`` outlive the catalog it described.
+    """
     plan = _PLANS.get(plan_id)
     if plan is not None:
-        return plan
-    path = _plans_directory() / f"{plan_id}.json"
-    plan = ReviewPlan.load(path) if path.is_file() else ReviewPlan(plan_id=plan_id)
+        if catalog_generation is None or plan.catalog_generation == catalog_generation:
+            return plan
+        del _PLANS[plan_id]
+    if plan is None:
+        path = _plans_directory() / f"{plan_id}.json"
+        plan = ReviewPlan.load(path) if path.is_file() else ReviewPlan(plan_id=plan_id)
+    if catalog_generation is not None and plan.catalog_generation != catalog_generation:
+        plan = ReviewPlan(plan_id=plan_id, catalog_generation=catalog_generation)
     plan.transfer_mode = transfer_mode  # type: ignore[assignment]
     _PLANS[plan_id] = plan
     return plan
+
+
+async def _active_plan(
+    plan_id: str,
+    container: Any,
+    *,
+    transfer_mode: str = "copy",
+) -> ReviewPlan:
+    """Resolve a plan against the catalog generation that is live right now."""
+    generation = await asyncio.to_thread(_live_generation, container)
+    return _plan(plan_id, transfer_mode=transfer_mode, catalog_generation=generation)
 
 
 def _catalog(container: Any) -> MediaCatalog:
@@ -100,7 +134,8 @@ async def review_outcomes(
     fingerprint, outcomes = container.preview_service.latest_outcomes(body.paths)
     if fingerprint is None:
         raise HTTPException(status_code=404, detail="No completed preview is available")
-    if fingerprint != config_fingerprint(config):
+    scoped = apply_run_scope(config, container.preview_service.latest_excluded_root_ids)
+    if fingerprint != config_fingerprint(scoped.config):
         raise HTTPException(
             status_code=409,
             detail="Configuration changed after preview; generate it again",
@@ -117,25 +152,96 @@ async def review_outcomes(
 @router.get("/review/groups", response_model=GroupPage)
 async def list_groups(
     container: ContainerDep,
-    kind: str = Query(default="exact", pattern="^(exact|similar)$"),
+    config: ConfigDep,
+    kind: str = Query(default="exact", pattern="^(exact|similar|burst)$"),
     limit: int = Query(default=50, ge=1, le=500),
-    max_distance: int = Query(default=2, ge=0, le=16),
+    max_distance: int = Query(default=DEFAULT_SIMILAR_DISTANCE, ge=0, le=16),
+    excluded_roots: Annotated[list[str] | None, Query()] = None,
 ) -> GroupPage:
-    """A bounded page of groups; members come with them but the library does not."""
-    return await asyncio.to_thread(_list_groups, container, kind, limit, max_distance)
+    """A bounded page of groups; members come with them but the library does not.
+
+    Three kinds, one shape. A burst is not a second concept with its own
+    endpoints and its own decision vocabulary — it is a stack whose evidence
+    happens to include capture time and camera, and it resolves through the same
+    ``/review/decide`` and ``/review/policy/*`` routes as the other two.
+    """
+    return await asyncio.to_thread(
+        _list_groups,
+        container,
+        config,
+        kind,
+        limit,
+        max_distance,
+        excluded_roots or [],
+    )
 
 
-def _list_groups(container: Any, kind: str, limit: int, max_distance: int) -> GroupPage:
+def _list_groups(
+    container: Any,
+    config: Any,
+    kind: str,
+    limit: int,
+    max_distance: int,
+    excluded_roots: list[str],
+) -> GroupPage:
+    excluded_ids = frozenset(apply_run_scope(config, excluded_roots).excluded_root_ids)
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
+        generation = catalog.current_generation()
         if kind == "exact":
-            produced = list(exact_groups(catalog, index, limit=limit))
+            produced = exact_groups(catalog, index, generation=generation)
+        elif kind == "burst":
+            produced = burst_groups(
+                catalog,
+                index,
+                time_window_seconds=config.burst_time_window_seconds,
+                max_perceptual_distance=config.burst_perceptual_distance,
+                require_camera_identity=config.burst_require_camera_identity,
+                generation=generation,
+            )
         else:
-            produced = list(similar_groups(catalog, index, max_distance=max_distance, limit=limit))
+            produced = similar_groups(
+                catalog,
+                index,
+                max_distance=max_distance,
+                generation=generation,
+            )
+        scoped_groups = _take_scoped_groups(produced, excluded_ids, limit)
     return GroupPage(
-        groups=[group.model_dump(mode="json") for group in produced],
+        groups=[group.model_dump(mode="json") for group in scoped_groups],
         kind=kind,
     )
+
+
+def _take_scoped_groups(
+    groups: Any,
+    excluded_root_ids: frozenset[str],
+    limit: int,
+) -> list[DuplicateGroup]:
+    """Drop excluded-root members before they can influence a review decision."""
+    selected: list[DuplicateGroup] = []
+    for group in groups:
+        members = tuple(
+            member for member in group.members if member.root_id not in excluded_root_ids
+        )
+        if len(members) < 2:
+            continue
+        anchor = group.anchor_member_id
+        if anchor is not None and all(member.member_id != anchor for member in members):
+            anchor = members[0].member_id
+        selected.append(
+            group.model_copy(
+                update={
+                    "members": members,
+                    "member_count": len(members),
+                    "total_bytes": sum(member.facts.size_bytes for member in members),
+                    "anchor_member_id": anchor,
+                }
+            )
+        )
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 # --------------------------------------------------------------------------- #
@@ -154,7 +260,7 @@ class DecisionRequest(BaseModel):
 @router.post("/review/decide")
 async def decide(body: DecisionRequest, container: ContainerDep) -> dict[str, Any]:
     """Record one decision. A reference member is refused here, not later."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_group(plan, container, body.group_id)
     try:
         result = plan.decide(body.group_id, body.member_id, body.action, reason=body.reason)
@@ -174,7 +280,7 @@ class AllExceptRequest(BaseModel):
 
 @router.post("/review/quarantine-all-except")
 async def quarantine_all_except(body: AllExceptRequest, container: ContainerDep) -> dict[str, Any]:
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_group(plan, container, body.group_id)
     try:
         result = plan.quarantine_all_except(body.group_id, body.keep_member_ids)
@@ -190,8 +296,8 @@ class UndoRequest(BaseModel):
 
 
 @router.post("/review/undo")
-async def undo(body: UndoRequest) -> dict[str, Any]:
-    plan = _plan(body.plan_id)
+async def undo(body: UndoRequest, container: ContainerDep) -> dict[str, Any]:
+    plan = await _active_plan(body.plan_id, container)
     try:
         result = plan.undo_last(body.group_id)
     except PlanError as exc:
@@ -203,22 +309,31 @@ async def undo(body: UndoRequest) -> dict[str, Any]:
 class PolicyRequest(BaseModel):
     plan_id: str = "default"
     group_ids: list[str] = Field(default_factory=list)
-    policy_id: str = "largest"
+    # Omitted means "use the configured default keep rule", so a caller that
+    # does not care never has to restate the user's own preference.
+    policy_id: str | None = None
     preferred_roots: list[str] = Field(default_factory=list)
-    scope: str = Field(default="selected_groups")
+    # Typed here rather than as a bare string: an unrecognised scope used to
+    # reach `BulkImpact`, whose own validator rejected it *after* the work had
+    # started, and the caller got a 500 with a traceback instead of a 422
+    # naming the four scopes that exist.
+    scope: BulkScopeId = "selected_groups"
     filter_key: str = ""
 
 
 @router.post("/review/policy/preview", response_model=dict)
 async def preview_policy(body: PolicyRequest, container: ContainerDep) -> dict[str, Any]:
     """What a bulk policy would touch, frozen against the current scope."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_groups(plan, container)
-    impact = plan.preview_bulk(
-        body.scope,  # type: ignore[arg-type]
-        group_ids=body.group_ids,
-        filter_key=body.filter_key,
-    )
+    try:
+        impact = plan.preview_bulk(
+            body.scope,
+            group_ids=body.group_ids,
+            filter_key=body.filter_key,
+        )
+    except PlanError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return impact.model_dump(mode="json")
 
 
@@ -229,10 +344,10 @@ class ApplyPolicyRequest(PolicyRequest):
 @router.post("/review/policy/apply")
 async def apply_policy_route(body: ApplyPolicyRequest, container: ContainerDep) -> dict[str, Any]:
     """Apply a previewed policy, refusing a scope that moved since the preview."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     await _ensure_groups(plan, container)
     settings = PolicySettings(
-        policy_id=body.policy_id,  # type: ignore[arg-type]
+        policy_id=_policy_id(body, container),  # type: ignore[arg-type]
         preferred_roots=tuple(body.preferred_roots),
     )
 
@@ -324,7 +439,7 @@ class SnapshotRequest(BaseModel):
 @router.post("/review/snapshot")
 async def snapshot(body: SnapshotRequest, container: ContainerDep) -> dict[str, Any]:
     """Freeze the reviewed plan, after re-checking it against the catalog."""
-    plan = _plan(body.plan_id, transfer_mode=_transfer_mode(container))
+    plan = await _active_plan(body.plan_id, container, transfer_mode=_transfer_mode(container))
     current = await asyncio.to_thread(_current_groups, container)
     stale = plan.mark_stale(plan.detect_drift(current))
     try:
@@ -423,17 +538,71 @@ def _transfer_mode(container: Any) -> str:
     return str(getattr(profile, "transfer_mode", None) or "copy")
 
 
+def _policy_id(body: PolicyRequest, container: Any) -> str:
+    """The requested keep rule, or the configured default when none was sent."""
+    if body.policy_id:
+        return body.policy_id
+    return str(getattr(container.config, "duplicate_keeper_policy", None) or "newest")
+
+
+def _live_generation(container: Any) -> int:
+    with _catalog(container) as catalog:
+        return catalog.current_generation()
+
+
 def _current_groups(container: Any) -> list[Any]:
+    """Every stack Review can show, so every one of them can be decided.
+
+    All three kinds are registered, not only the exact ones. A plan that knows
+    a group is what makes ``/review/decide`` and the policy routes work on it;
+    a stack the surface renders but the plan has never heard of answers 404 to
+    every action taken on it.
+    """
+    config = container.config
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
-        return list(exact_groups(catalog, index))
+        generation = catalog.current_generation()
+        groups = list(exact_groups(catalog, index, generation=generation))
+        groups.extend(
+            similar_groups(
+                catalog,
+                index,
+                max_distance=DEFAULT_SIMILAR_DISTANCE,
+                generation=generation,
+            )
+        )
+        if getattr(config, "burst_detection_enabled", False):
+            groups.extend(
+                burst_groups(
+                    catalog,
+                    index,
+                    time_window_seconds=config.burst_time_window_seconds,
+                    max_perceptual_distance=config.burst_perceptual_distance,
+                    require_camera_identity=config.burst_require_camera_identity,
+                    generation=generation,
+                )
+            )
+        return groups
 
 
 async def _ensure_groups(plan: ReviewPlan, container: Any) -> None:
-    if plan.known_groups:
+    """Hold the groups of the current generation, and only those.
+
+    The generation is a cheap lookup; rebuilding the groups is not, so the
+    expensive half runs only when the plan is empty or genuinely out of date.
+    """
+    generation = await asyncio.to_thread(_live_generation, container)
+    if plan.known_groups and plan.catalog_generation == generation:
         return
-    for group in await asyncio.to_thread(_current_groups, container):
+    groups = await asyncio.to_thread(_current_groups, container)
+    plan.known_groups = {}
+    plan.catalog_generation = generation
+    for group in groups:
         plan.register(group)
+    # Decisions about groups this generation no longer has are not recoverable
+    # and must not reach a snapshot.
+    for group_id in set(plan.groups) - set(plan.known_groups):
+        del plan.groups[group_id]
 
 
 async def _ensure_group(plan: ReviewPlan, container: Any, group_id: str) -> None:

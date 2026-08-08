@@ -61,9 +61,9 @@ export function AiModelManager() {
   const total = task?.progress.bytes_total || pack.total_size;
   const percentage = total > 0 ? Math.min(100, (done / total) * 100) : undefined;
   const actionError = install.error
-    ? extractErrorMessage(install.error, t("config.ai.modelActionFailed"))
+    ? extractErrorMessage(install.error, t("config.ai.modelActionFailed")).message
     : remove.error
-      ? extractErrorMessage(remove.error, t("config.ai.modelActionFailed"))
+      ? extractErrorMessage(remove.error, t("config.ai.modelActionFailed")).message
       : null;
 
   return (
@@ -145,7 +145,7 @@ export function AiModelManager() {
 
           {downloading && (
             <div className="mt-3 space-y-1.5">
-              <ProgressBar value={percentage} />
+              <ProgressBar value={percentage} label={t("config.ai.modelDownloading")} />
               <div className="flex justify-between gap-2 text-xs text-muted-foreground">
                 <span>
                   {t(

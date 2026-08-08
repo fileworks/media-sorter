@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import os
 import tracemalloc
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -74,7 +76,7 @@ def _generate(
 
 
 @pytest.fixture(scope="module")
-def large_catalog(tmp_path_factory: pytest.TempPathFactory) -> MediaCatalog:
+def large_catalog(tmp_path_factory: pytest.TempPathFactory) -> Iterator[MediaCatalog]:
     path = tmp_path_factory.mktemp("scale") / "catalog.db"
     catalog = MediaCatalog(path)
     _generate(catalog, "input", DEFAULT_RECORDS)
@@ -158,7 +160,7 @@ class TestMemory:
         ]
         bind_calls = 0
 
-        def bind(*_args: object, **_kwargs: object):
+        def bind(*_args: object, **_kwargs: object) -> tuple[Any, list[Any]]:
             nonlocal bind_calls
             bind_calls += 1
             return units, []
@@ -316,7 +318,7 @@ class TestMemory:
 
 
 class TestQueryPlans:
-    def _plan(self, catalog: MediaCatalog, sql: str, parameters: tuple) -> str:
+    def _plan(self, catalog: MediaCatalog, sql: str, parameters: tuple[Any, ...]) -> str:
         rows = catalog._connection.execute(  # noqa: SLF001 - inspecting the plan is the test
             f"EXPLAIN QUERY PLAN {sql}", parameters
         ).fetchall()

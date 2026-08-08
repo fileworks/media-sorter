@@ -5,7 +5,7 @@ import io
 import json
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 from urllib.request import Request
 
 import pytest
@@ -29,7 +29,7 @@ class _Response(AbstractContextManager[BinaryIO]):
     def read(self, size: int = -1) -> bytes:
         return self._stream.read(size)
 
-    def __enter__(self) -> _Response:
+    def __enter__(self) -> _Response:  # type: ignore[override]  # a narrower stand-in than the ABC, which is the point of the double
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -59,7 +59,7 @@ def _pack(content: bytes = b"verified model") -> ModelPack:
 
 def _store(
     tmp_path: Path,
-    opener,
+    opener: Any,
     *,
     environment: dict[str, str] | None = None,
     content: bytes = b"verified model",

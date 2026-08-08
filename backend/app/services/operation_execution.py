@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,10 +21,13 @@ from app.core.integrity import (
     ActionOutcome,
     IntegrityReport,
     MutationActionKind,
+    MutationManifestAction,
     OperationOutcomeCode,
+    OutcomeCode,
     OutcomeCounts,
     PreservationProfile,
     SidecarEffect,
+    SourceSafetyState,
     utc_now,
 )
 from app.core.integrity_policy import MutationAuthorization
@@ -58,7 +62,7 @@ class OperationExecution:
     outcomes: list[ActionOutcome] = field(default_factory=list)
     bytes_read: int = 0
     bytes_written: int = 0
-    started_at: object = field(default_factory=utc_now)
+    started_at: datetime = field(default_factory=utc_now)
 
     @classmethod
     def start(
@@ -194,6 +198,12 @@ class OperationExecution:
             companion_role=companion_role,
             unit_primary_path=unit_primary_path,
             provenance=planned.provenance if planned is not None else provenance,
+            source_root=planned.source_root if planned is not None else None,
+            resolved_date=planned.resolved_date if planned is not None else None,
+            would_be_destination_path=(
+                planned.would_be_destination_path if planned is not None else None
+            ),
+            keeper_path=planned.keeper_path if planned is not None else None,
         )
         if self.journal is not None:
             self.journal.authorize(action)
@@ -206,7 +216,7 @@ class OperationExecution:
             destination_path=str(destination),
         )
         result = execute_transfer(action, journal=self.journal)
-        outcome = self.record(result)
+        outcome = self.record(result, action=action)
         self.emit(
             "action.outcome",
             action_id=action.action_id,
@@ -267,10 +277,16 @@ class OperationExecution:
                 source_safety="source_retained",
             )
 
-    def record(self, result: TransferResult, *, code: str | None = None) -> ActionOutcome:
+    def record(
+        self,
+        result: TransferResult,
+        *,
+        code: OutcomeCode | None = None,
+        action: MutationManifestAction | None = None,
+    ) -> ActionOutcome:
         outcome = ActionOutcome(
             action_id=result.action_id,
-            code=_outcome_code(result) if code is None else code,  # type: ignore[arg-type]
+            code=_outcome_code(result) if code is None else code,
             source_safety=result.source_safety,
             source_path=str(result.source_path),
             result_path=str(result.destination_path),
@@ -280,6 +296,12 @@ class OperationExecution:
             filesystem_metadata_observed=result.observed_metadata,
             warnings=result.warnings,
             diagnostic_code=result.reduced_guarantee,
+            source_root=action.source_root if action is not None else None,
+            resolved_date=action.resolved_date if action is not None else None,
+            would_be_destination_path=(
+                action.would_be_destination_path if action is not None else None
+            ),
+            keeper_path=action.keeper_path if action is not None else None,
         )
         self.outcomes.append(outcome)
         size = result.observed_metadata.size_bytes
@@ -293,15 +315,15 @@ class OperationExecution:
         *,
         action_id: str,
         source_path: Path,
-        code: str,
+        code: OutcomeCode,
         diagnostic_code: str | None,
-        source_safety: str = "source_retained",
+        source_safety: SourceSafetyState = "source_retained",
     ) -> None:
         self.outcomes.append(
             ActionOutcome(
                 action_id=action_id,
-                code=code,  # type: ignore[arg-type]
-                source_safety=source_safety,  # type: ignore[arg-type]
+                code=code,
+                source_safety=source_safety,
                 source_path=str(source_path),
                 diagnostic_code=diagnostic_code,
             )
@@ -317,7 +339,7 @@ class OperationExecution:
             operation_id=self.operation_id,
             manifest_id=self.operation_id,
             profile_id=self.preservation.profile_id,
-            started_at=self.started_at,  # type: ignore[arg-type]
+            started_at=self.started_at,
             finished_at=utc_now(),
             outcome=outcome,
             counts=self.counts(),
@@ -391,7 +413,7 @@ def _containing_root(candidate: Path, roots: Sequence[Path]) -> Path | None:
     return None
 
 
-def _outcome_code(result: TransferResult) -> str:
+def _outcome_code(result: TransferResult) -> OutcomeCode:
     return "success_with_metadata_limitation" if result.warnings else "verified_success"
 
 

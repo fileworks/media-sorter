@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatDuration, formatCount } from "@/lib/formatters";
+import { formatBytes, formatBytesShort, formatDuration, formatCount } from "@/lib/formatters";
 
 describe("formatBytes", () => {
   it("returns the placeholder for nullish / non-positive / non-finite input", () => {
@@ -116,5 +116,13 @@ describe("formatCount", () => {
 
   it("defaults to the runtime locale (matches toLocaleString)", () => {
     expect(formatCount(98765)).toBe((98765).toLocaleString());
+  });
+});
+
+describe("formatBytesShort", () => {
+  it("keeps small numbers readable and large ones short", () => {
+    expect(formatBytesShort(512)).toBe("512 B");
+    expect(formatBytesShort(1536)).toBe("1.5 KB");
+    expect(formatBytesShort(5 * 1024 * 1024 * 1024)).toBe("5 GB");
   });
 });

@@ -18,6 +18,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -38,6 +39,23 @@ export default {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        // Third text level, one step quieter than muted-foreground: counts,
+        // units, row meta. Still AA against every surface it is used on.
+        faint: "hsl(var(--faint))",
+        // The undimmed accents. Decoration only — rules, bars, dots, selected
+        // borders. Text and text-bearing fills use primary/success/warning.
+        brand: "hsl(var(--brand))",
+        decor: {
+          success: "hsl(var(--decor-success))",
+          warning: "hsl(var(--decor-warning))",
+        },
+        // Soft status washes for badges and callouts.
+        tint: {
+          primary: "hsl(var(--tint-primary))",
+          success: "hsl(var(--tint-success))",
+          warning: "hsl(var(--tint-warning))",
+          error: "hsl(var(--tint-error))",
+        },
         // Semantic status colours (theme-aware via CSS vars in index.css).
         success: "hsl(var(--color-success))",
         warning: "hsl(var(--color-warning))",
@@ -81,6 +99,14 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        sans: ["Geist Sans", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
+      boxShadow: {
+        // The one card elevation the design uses, warm and downward.
+        card: "var(--shadow-card)",
       },
     },
   },

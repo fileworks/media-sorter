@@ -8,7 +8,21 @@
  */
 
 export type RootRole = "input" | "reference" | "destination";
-export type RootState = "ready" | "offline" | "unreadable" | "unknown";
+/**
+ * What the last probe of this folder found.
+ *
+ * `unknown` has not been probed, `checking` is in flight. The rest are answers
+ * from `/api/fs/list`, which is also what validates a destination, so a card
+ * and the run can never disagree about whether a folder is usable.
+ */
+export type RootState =
+  | "unknown"
+  | "checking"
+  | "ready"
+  | "offline"
+  | "unreadable"
+  | "missing"
+  | "not_writable";
 
 export interface RootCard {
   rootId: string;
@@ -48,6 +62,10 @@ export type ConflictKind =
   | "no_input"
   | "no_destination"
   | "multiple_destinations"
+  | "no_readable_input"
+  | "destination_missing"
+  | "destination_unreadable"
+  | "destination_not_writable"
   | "offline";
 
 export interface Conflict {
@@ -141,7 +159,69 @@ export function validateRoots(cards: RootCard[]): Conflict[] {
     }
   }
 
+  // A run needs one folder it can actually read and one it can actually write.
+  // Without these the stage would open on a configuration the sort then refuses.
+  const usableInputs = inputs.filter(
+    (card) => card.state === "ready" || card.state === "unknown" || card.state === "checking",
+  );
+  if (inputs.length > 0 && usableInputs.length === 0) {
+    conflicts.push({
+      kind: "no_readable_input",
+      rootIds: inputs.map((card) => card.rootId),
+      message: "No input folder can be read.",
+      blocking: true,
+      remedy: "Reconnect the drive, or choose an input folder that exists and is readable.",
+    });
+  }
+
+  for (const destination of destinations) {
+    const name = destination.displayName ?? destination.path;
+    if (destination.state === "missing") {
+      conflicts.push({
+        kind: "destination_missing",
+        rootIds: [destination.rootId],
+        message: `The destination ${name} no longer exists.`,
+        blocking: true,
+        remedy: "Choose a destination folder that exists.",
+        params: { name },
+      });
+    } else if (destination.state === "unreadable") {
+      conflicts.push({
+        kind: "destination_unreadable",
+        rootIds: [destination.rootId],
+        message: `The destination ${name} cannot be read.`,
+        blocking: true,
+        remedy: "Fix its permissions, or choose a different destination.",
+        params: { name },
+      });
+    } else if (destination.state === "not_writable") {
+      conflicts.push({
+        kind: "destination_not_writable",
+        rootIds: [destination.rootId],
+        message: `The destination ${name} cannot be written to.`,
+        blocking: true,
+        remedy: "Fix its permissions, or choose a destination you can write to.",
+        params: { name },
+      });
+    }
+  }
+
   for (const card of cards) {
+    if (card.state === "missing" && card.role !== "destination") {
+      conflicts.push({
+        kind: "offline",
+        rootIds: [card.rootId],
+        message: `${card.displayName ?? card.path} no longer exists.`,
+        blocking: card.role !== "reference",
+        remedy:
+          card.role === "reference"
+            ? "Reconnect it, or remove it — comparisons will be less complete."
+            : "Reconnect the drive, or point this folder somewhere else.",
+        params: { name: card.displayName ?? card.path, state: card.state },
+      });
+      continue;
+    }
+    if (card.role === "destination" && card.state === "unreadable") continue;
     if (card.state === "offline" || card.state === "unreadable") {
       conflicts.push({
         kind: "offline",
@@ -300,6 +380,18 @@ export function cardStatus(card: RootCard, conflicts: Conflict[]): CardStatus {
   }
   if (own.length > 0) {
     return { tone: "warning", label: "Check this", detail: own[0].message };
+  }
+  if (card.state === "checking") {
+    return { tone: "warning", label: "Checking…", detail: "Looking at this folder." };
+  }
+  if (card.state === "missing") {
+    return { tone: "error", label: "Missing", detail: "This folder no longer exists." };
+  }
+  if (card.state === "not_writable") {
+    return { tone: "error", label: "Read-only", detail: "This folder cannot be written to." };
+  }
+  if (card.state === "unreadable") {
+    return { tone: "error", label: "Unreadable", detail: "This folder cannot be read." };
   }
   if (card.state === "unknown") {
     return {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,7 +38,7 @@ def validated_png(monkeypatch: pytest.MonkeyPatch) -> FormatContract:
     real registry untouched.
     """
     promoted = dataclasses.replace(load_contract(PNG_CONTRACT), status="validated")
-    monkeypatch.setitem(CONTRACTS, PNG_CONTRACT, promoted)  # type: ignore[arg-type]
+    monkeypatch.setitem(CONTRACTS, PNG_CONTRACT, promoted)
     return promoted
 
 
@@ -109,7 +110,7 @@ class _Encoder:
             source_bytes=source_bytes,
             candidate_path=destination,
             candidate_bytes=destination.stat().st_size,
-            measurements=dict(self.measurements),
+            measurements=dict(self.measurements),  # type: ignore[arg-type]
         )
 
 
@@ -122,7 +123,7 @@ def _optimize(
     quarantine: QuarantineStore,
     tmp_path: Path,
     destination: Path | None = None,
-):
+) -> Any:
     return optimize_file(
         source,
         profile=profile,

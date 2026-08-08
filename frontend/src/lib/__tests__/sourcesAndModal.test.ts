@@ -9,26 +9,6 @@ import {
   type PreflightInput,
 } from "@/lib/operationCenter";
 import {
-  IDENTITY_VIEWPORT,
-  MAX_ZOOM,
-  close,
-  comparisonAvailable,
-  isCurrent,
-  keyAction,
-  modalActions,
-  navigation,
-  openPair,
-  openSingle,
-  panBy,
-  presentation,
-  requestOriginal,
-  step,
-  withPartner,
-  zoomBy,
-  type MediaRef,
-  type ModalContext,
-} from "@/lib/mediaModal";
-import {
   activeCards,
   applyRemap,
   blockingConflicts,
@@ -260,140 +240,69 @@ describe("cardStatus", () => {
   });
 });
 
-// ── Media modal ──────────────────────────────────────────────────────────────
+describe("probe-driven blocking conflicts", () => {
+  const kindsOf = (cards: RootCard[]) =>
+    blockingConflicts(validateRoots(cards)).map((conflict) => conflict.kind);
 
-const CONTEXT: ModalContext = {
-  origin: "exact",
-  order: ["a", "b", "c"],
-  restore: { selectionId: "b", scrollTop: 480, focusId: "row-b" },
-};
+  it("blocks when no input folder can be read", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "missing" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
 
-function ref(overrides: Partial<MediaRef> = {}): MediaRef {
-  return { id: "a", path: "/library/a.jpg", available: true, ...overrides };
-}
-
-describe("modal navigation", () => {
-  it("follows the frozen order rather than recomputing one", () => {
-    const state = openSingle("a", CONTEXT);
-
-    expect(navigation(state)).toMatchObject({
-      hasPrevious: false,
-      hasNext: true,
-      position: 1,
-      total: 3,
-    });
-    expect(step(state, 1).primaryId).toBe("b");
+    expect(kinds).toContain("no_readable_input");
   });
 
-  it("stops at both ends", () => {
-    const first = openSingle("a", CONTEXT);
-    const last = openSingle("c", CONTEXT);
+  it("does not block while an input is still being probed", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "checking" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
 
-    expect(step(first, -1)).toBe(first);
-    expect(step(last, 1)).toBe(last);
+    expect(kinds).not.toContain("no_readable_input");
   });
 
-  it("supersedes an in-flight request on every step", () => {
-    const state = openSingle("a", CONTEXT);
-    const moved = step(state, 1);
+  it("counts a baseline as no substitute for a readable input", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", state: "missing" }),
+      card({ rootId: "ref", role: "reference", path: "/library/ref", state: "ready" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted" }),
+    ]);
 
-    expect(isCurrent(moved, state.requestToken)).toBe(false);
-    expect(isCurrent(moved, moved.requestToken)).toBe(true);
+    expect(kinds).toContain("no_readable_input");
   });
 
-  it("forgets an original request when the item changes", () => {
-    const state = requestOriginal(openSingle("a", CONTEXT));
+  it("blocks a destination that is missing, unreadable, or read-only", () => {
+    for (const [state, kind] of [
+      ["missing", "destination_missing"],
+      ["unreadable", "destination_unreadable"],
+      ["not_writable", "destination_not_writable"],
+    ] as const) {
+      const kinds = kindsOf([
+        card({ rootId: "in", role: "input", path: "/library/photos" }),
+        card({ rootId: "out", role: "destination", path: "/library/sorted", state }),
+      ]);
 
-    expect(state.originalRequested).toBe(true);
-    expect(step(state, 1).originalRequested).toBe(false);
+      expect(kinds, state).toContain(kind);
+    }
   });
 
-  it("pairs and unpairs without leaving the frozen order", () => {
-    const pair = openPair("a", "b", CONTEXT);
+  it("states an unreadable destination once, not twice", () => {
+    const kinds = kindsOf([
+      card({ rootId: "in", role: "input", path: "/library/photos" }),
+      card({ rootId: "out", role: "destination", path: "/library/sorted", state: "unreadable" }),
+    ]);
 
-    expect(pair.mode).toBe("pair");
-    expect(withPartner(pair, null).mode).toBe("single");
-    expect(navigation(pair).total).toBe(3);
-  });
-});
-
-describe("modal presentation", () => {
-  it("keeps facts and reveal when the file is gone", () => {
-    const view = presentation(
-      ref({ available: false, unavailableReason: "moved since the report" }),
-    );
-
-    expect(view.renderable).toBe(false);
-    expect(view.fallback).toMatch(/moved since the report/);
-    expect(view.showFacts).toBe(true);
-    expect(view.showRevealAction).toBe(true);
+    expect(kinds.filter((kind) => kind === "offline")).toEqual([]);
   });
 
-  it("keeps facts when decoding fails", () => {
-    const view = presentation(ref(), true);
-
-    expect(view.renderable).toBe(false);
-    expect(view.showFacts).toBe(true);
-  });
-
-  it("offers comparison only where it means something", () => {
-    expect(comparisonAvailable("exact", true)).toBe(true);
-    expect(comparisonAvailable("exact", false)).toBe(false);
-    expect(comparisonAvailable("quarantine", true)).toBe(false);
-    expect(comparisonAvailable("report", true)).toBe(false);
-  });
-
-  it("offers duplicate actions only from duplicate views", () => {
-    expect(modalActions("exact")).toContain("quarantine");
-    expect(modalActions("quarantine")).toEqual(["restore", "reveal"]);
-    expect(modalActions("report")).toEqual(["reveal"]);
-  });
-});
-
-describe("pan and zoom", () => {
-  it("is bounded at both ends", () => {
-    expect(zoomBy(IDENTITY_VIEWPORT, 0.5)).toEqual(IDENTITY_VIEWPORT);
-    expect(zoomBy(IDENTITY_VIEWPORT, 1000).zoom).toBe(MAX_ZOOM);
-  });
-
-  it("returns to identity when zoomed all the way out", () => {
-    const zoomed = panBy(zoomBy(IDENTITY_VIEWPORT, 4), 0.2, 0.2);
-
-    expect(zoomBy(zoomed, 0.001)).toEqual(IDENTITY_VIEWPORT);
-  });
-
-  it("cannot pan the image off screen", () => {
-    const zoomed = zoomBy(IDENTITY_VIEWPORT, 2);
-
-    const panned = panBy(zoomed, 99, -99);
-
-    expect(panned.offsetX).toBeCloseTo(0.5);
-    expect(panned.offsetY).toBeCloseTo(-0.5);
-  });
-
-  it("cannot pan at all when not zoomed", () => {
-    expect(panBy(IDENTITY_VIEWPORT, 5, 5)).toEqual(IDENTITY_VIEWPORT);
-  });
-});
-
-describe("closing", () => {
-  it("restores selection, scroll, and focus", () => {
-    const target = close(openPair("a", "b", CONTEXT));
-
-    expect(target).toMatchObject({ selectionId: "b", scrollTop: 480, focusId: "row-b" });
-  });
-
-  it("releases both panes of a comparison", () => {
-    expect(close(openPair("a", "b", CONTEXT)).release).toEqual(["a", "b"]);
-    expect(close(openSingle("a", CONTEXT)).release).toEqual(["a"]);
-  });
-
-  it("maps the keyboard identically everywhere", () => {
-    expect(keyAction("Escape")?.action).toBe("close");
-    expect(keyAction("ArrowRight")?.action).toBe("next");
-    expect(keyAction("0")?.action).toBe("reset");
-    expect(keyAction("d")?.action).toBe("toggle-difference");
-    expect(keyAction("q")).toBeNull();
+  it("opens the gate once every probe comes back ready", () => {
+    expect(
+      kindsOf([
+        card({ rootId: "in", role: "input", path: "/library/photos", state: "ready" }),
+        card({ rootId: "out", role: "destination", path: "/library/sorted", state: "ready" }),
+      ]),
+    ).toEqual([]);
   });
 });
 
@@ -488,6 +397,13 @@ describe("execute preflight", () => {
     );
   });
 
+  it("blocks a plan with no actionable work", () => {
+    const result = preflight({ ...base, actionableGroups: 0 });
+
+    expect(result.canExecute).toBe(false);
+    expect(result.blocking[0].messageKey).toBe("preflight.blocking.empty");
+  });
+
   it("blocks on stale review", () => {
     const result = preflight({ ...base, staleGroups: 2 });
 
@@ -495,11 +411,17 @@ describe("execute preflight", () => {
     expect(result.blocking[0].text).toMatch(/changed since you reviewed/i);
   });
 
-  it("blocks on insufficient space and says both numbers", () => {
+  it("blocks on insufficient space and says both sizes in human units", () => {
     const result = preflight({ ...base, freeBytes: 1, requiredBytes: 5_000 });
 
     expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/5,000 bytes needed, 1 available/);
+    // Sizes are formatted, not raw byte counts: "5,000 bytes" is a number to
+    // decode, "4.9 KB" is a number to read.
+    expect(result.blocking[0].text).toMatch(/4\.9 KB needed, 1 B available/);
+    expect(result.blocking[0].params).toMatchObject({
+      required: "4.9 KB",
+      available: "1 B",
+    });
   });
 
   it("blocks on an unwritable quarantine", () => {

@@ -4,6 +4,7 @@ import random
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -266,7 +267,7 @@ def _make_content_image(path: Path, size: int = 256) -> None:
     img.save(str(path), format="JPEG", quality=95)
 
 
-def _make_solid_image(path: Path, color: tuple, size: int = 64) -> None:
+def _make_solid_image(path: Path, color: tuple[Any, ...], size: int = 64) -> None:
     """Save a solid-colour JPEG to *path*."""
     PIL_Image = pytest.importorskip("PIL.Image")
     img = PIL_Image.new("RGB", (size, size), color=color)
@@ -790,7 +791,7 @@ def test_keeper_selection_does_not_cross_talk_between_groups(
 # ------------------------------------------------------------------ #
 
 
-def _hash256(value: int):
+def _hash256(value: int) -> Any:
     import imagehash
 
     return imagehash.hex_to_hash(f"{value:064x}")
@@ -830,7 +831,7 @@ def test_indexed_video_matching_agrees_with_failed_frames_and_color_checks() -> 
             None if number % 5 == 0 else (_hash256(rng.getrandbits(256)), None),
             (_hash256(rng.getrandbits(256)), (50.0, 60.0, 70.0)),
         ]
-        videos.append(_VideoSig(frames=frames, path=f"/{number}.mp4"))
+        videos.append(_VideoSig(frames=frames, path=f"/{number}.mp4"))  # type: ignore[arg-type]
     source = _VideoSig(frames=list(videos[12].frames), path="/source.mp4")
     registry = DuplicateRegistry(videos=videos)
     registry.build_perceptual_indexes()

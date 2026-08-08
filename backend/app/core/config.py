@@ -19,6 +19,7 @@ from app.core.concepts import Locale, bundled_labels
 from app.core.integrity import OptimizationProfile, PreservationProfile, utc_now
 from app.core.library_profiles import LibraryProfile
 from app.core.paths import resolve_app_paths
+from app.core.recipes import MAX_SAVED_RECIPES, SavedRecipe
 from app.core.rules import RuleSet, migrate_legacy_rules, normalized_key
 
 
@@ -55,8 +56,19 @@ class Config:
     # New and safely migrated configurations use strict Organize Only.
     preservation_profile: PreservationProfile = field(default_factory=PreservationProfile)
     optimization_profile: OptimizationProfile = field(default_factory=OptimizationProfile)
+    # The user's own named starting points, alongside the four built-in ones the
+    # UI ships. Ordered most-recently-saved first.
+    saved_recipes: list[SavedRecipe] = field(default_factory=list)
 
     # Sorting
+    #: What a run is for. "organize" places every file into the destination
+    #: structure. "deduplicate_only" leaves everything where it is and moves
+    #: only duplicates and junk into the review folders — the fourth use case,
+    #: which `sort=False` could never express because it meant "transfer
+    #: nothing" rather than "dedupe in place".
+    run_mode: Literal["organize", "deduplicate_only"] = "organize"
+    #: Always True. Kept because the preview and sort pipelines read it, but it
+    #: is no longer a user-facing choice: `run_mode` is.
     sort: bool = True
     sort_criteria: list[str] = field(default_factory=lambda: ["year"])
     # When True, recreate the source subfolder structure under each date folder
@@ -83,7 +95,7 @@ class Config:
     rename: bool = False
     rename_pattern: str = "TYPE_YYYY-MM-DD"
 
-    # Duplicates — always quarantined to _duplicates/, never deleted. (The old
+    # Duplicates — losing copies stay with their keeper under _copies/, never deleted. (The old
     # duplicate_action="delete" option was removed 2026-07-11; legacy config
     # files carrying that key load fine because from_dict drops unknown keys.)
     remove_duplicates: bool = True
@@ -91,8 +103,13 @@ class Config:
     # Conversion
     convert_videos: bool = False
     video_format: Literal["mp4", "mkv", "mov", "webm", "avi"] = "mp4"
+    # Re-encode quality for video conversion, mapped to a CRF by the converter.
+    video_quality: Literal["low", "medium", "high"] = "medium"
     convert_images: bool = False
     image_format: Literal["jpeg", "png", "webp", "tiff"] = "jpeg"
+    # Encoder quality for lossy image formats (JPEG/WebP). Ignored by PNG and
+    # TIFF, which are lossless. Bounded by IMAGE_QUALITY_MIN/MAX.
+    image_quality: int = 90
 
     # Repair / validation
     repair_enabled: bool = False
@@ -224,7 +241,6 @@ class Config:
     categorize_min_margin: float = 0.15  # required top1 - top2 separation
 
     # Analysis
-    analyze: bool = False
 
     # Folder exclusion (glob patterns relative to source root)
     exclude_patterns: list[str] = field(
@@ -251,6 +267,21 @@ class Config:
     duplicate_exact_enabled: bool = True
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
+    # Which copy a duplicate group keeps when nobody has chosen one by hand.
+    # A *default*, not a decision: Review can override it per group, in bulk, or
+    # not at all — an undecided group is quarantined for nothing, it just stays
+    # undecided. A protected reference member always wins regardless.
+    duplicate_keeper_policy: Literal[
+        "best_quality",
+        "newest",
+        "oldest",
+        "largest",
+        "smallest",
+        "highest_resolution",
+        "longest_filename",
+        "shortest_filename",
+        "manual",
+    ] = "best_quality"
     burst_detection_enabled: bool = False
     burst_time_window_seconds: float = 3.0
     burst_perceptual_distance: int = 4
@@ -327,6 +358,10 @@ class Config:
             self.source_directory = primary_input.path if primary_input is not None else ""
             self.target_directory = destination.path if destination is not None else ""
             self.copy_instead_of_move = self.library_profile.transfer_mode == "copy"
+        self.saved_recipes = [
+            recipe if isinstance(recipe, SavedRecipe) else SavedRecipe.model_validate(recipe)
+            for recipe in self.saved_recipes
+        ][:MAX_SAVED_RECIPES]
         if isinstance(self.rule_set, dict):
             self.rule_set = RuleSet.model_validate(self.rule_set)
         if self.rules and not self.rule_set.tag_rules and not self.rule_set.route_rules:
@@ -372,6 +407,11 @@ class Config:
             value = getattr(self, config_field.name)
             if isinstance(value, BaseModel):
                 value = value.model_dump(mode="json")
+            elif isinstance(value, list) and any(isinstance(item, BaseModel) for item in value):
+                value = [
+                    item.model_dump(mode="json") if isinstance(item, BaseModel) else item
+                    for item in value
+                ]
             result[config_field.name] = value
         if self.ai_tagging_labels_provenance == "bundled":
             result["ai_tagging_labels"] = self.resolved_ai_tagging_labels()
@@ -524,6 +564,11 @@ def coerce_config_update(body: dict[str, Any]) -> tuple[dict[str, Any], list[str
             continue
         if key == "ai_tagging_embed_in_files":
             key = "embed_tags_in_files"
+        if key in RETIRED_CONFIG_KEYS:
+            # A client that still sends a retired field is out of date, not
+            # wrong. `from_dict` already drops these when loading a stored
+            # config; this keeps an update carrying one from failing outright.
+            continue
         if key not in hints:
             errors.append(f"Unknown config field: {key!r}")
             continue
@@ -540,6 +585,12 @@ RENAME_TOKENS: frozenset[str] = frozenset({"YYYY", "MM", "DD", "NAME", "TYPE"})
 # Inclusive bounds for ``duplicate_perceptual_threshold`` (matches the UI slider).
 PERCEPTUAL_THRESHOLD_MIN = 85
 PERCEPTUAL_THRESHOLD_MAX = 100
+
+# Inclusive bounds for ``image_quality``. The floor is not 1: below roughly 60
+# the artefacts are visible on any photograph, and offering a setting that only
+# produces bad output is not a choice, it is a trap.
+IMAGE_QUALITY_MIN = 60
+IMAGE_QUALITY_MAX = 100
 
 # Smart Categorization limits.
 # There is no user-facing cap on the number of categories — more categories are
@@ -597,6 +648,18 @@ def validate_rename_pattern(pattern: str) -> str | None:
         return "Unknown tokens in rename pattern: " + ", ".join(unknown)
     return None
 
+
+#: Fields that were removed. A stored config carrying one loads fine —
+#: `from_dict` drops unknown keys — and an update carrying one is ignored rather
+#: than rejected, so a client that has not caught up still works.
+RETIRED_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        # Persisted since the first release and read by nothing.
+        "analyze",
+        # Duplicates are always quarantined, never deleted.
+        "duplicate_action",
+    }
+)
 
 CURRENT_CONFIG_SCHEMA = 3
 CONFIG_SCHEMA_PREFIX = "mediasort-config-v"

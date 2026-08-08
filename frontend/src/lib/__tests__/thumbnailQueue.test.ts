@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ThumbnailRequestQueue } from "@/lib/thumbnailQueue";
+import { ThumbnailHttpError, ThumbnailRequestQueue } from "@/lib/thumbnailQueue";
 
 function deferredResponse() {
   let finish!: () => void;
@@ -109,5 +109,19 @@ describe("ThumbnailRequestQueue", () => {
     expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
     expect(queue.inFlight).toBe(0);
     expect(queue.queued).toBe(0);
+  });
+
+  it("reports the status the server refused with, so 415 can be told from a fault", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 415 }));
+    const queue = new ThumbnailRequestQueue(1, fetcher as unknown as typeof fetch);
+
+    const request = queue.enqueue("a", "/a.heic", () => 0);
+    const error = await request.promise.catch((reason: unknown) => reason);
+
+    // A 415 is the backend's settled answer that this file has no thumbnail.
+    // A tile that drew it the same as a broken pipe told the user their library
+    // was failing to load.
+    expect(error).toBeInstanceOf(ThumbnailHttpError);
+    expect((error as ThumbnailHttpError).status).toBe(415);
   });
 });

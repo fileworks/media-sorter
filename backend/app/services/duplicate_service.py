@@ -251,7 +251,13 @@ class DuplicateService:
                 if already_there is not None:
                     return DuplicateMatch(True, "exact", 100, already_there, scope="destination")
             seen_this_run = registry.find_exact(h)
-            if seen_this_run is not None:
+            # A file is never a duplicate of itself. In an ordinary run the
+            # registry only ever holds files seen *before* this one, so the
+            # comparison is free — but a run whose registry was seeded with a
+            # reviewed keeper does meet that keeper again, and without this it
+            # was quarantined as a copy of itself. Every member of the set then
+            # became a set-aside copy and nothing reached the keeper location.
+            if seen_this_run is not None and seen_this_run != str(file_path):
                 return DuplicateMatch(True, "exact", 100, seen_this_run, scope="run")
 
         # 2. Perceptual

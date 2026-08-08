@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,12 +20,20 @@ from app.core.exceptions import ConfigError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
-from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan
+from app.core.paths import resolve_app_paths
+from app.core.run_scope import apply_run_scope
+from app.core.sort_plan import (
+    PLANNED_QUARANTINE_STATUSES,
+    FrozenSortPlan,
+    build_frozen_sort_plan,
+)
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
+from app.services.catalog_indexing import index_library_roots
 from app.services.dedup_index import DedupIndex
 from app.services.destination import (
     build_dest_dir,
     companion_destination,
+    copy_destination,
     predicted_filename,
     quarantine_dir,
     reserve_destination,
@@ -48,6 +56,15 @@ if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
 
 logger = get_logger(__name__)
+
+#: Statuses that are relocated into a review folder rather than left in place.
+#: In `deduplicate_only` these are the only files that move at all.
+#:
+#: The planned set is read from `sort_plan`, never restated, plus the two
+#: statuses the sort only discovers while running. `suspicious_date` is
+#: deliberately excluded: in `deduplicate_only` a file with no usable date is
+#: not a duplicate, so it stays exactly where it was found.
+_QUARANTINE_STATUSES = (PLANNED_QUARANTINE_STATUSES | {"corrupted", "failed"}) - {"suspicious_date"}
 
 
 class PreviewOutcomeStore:
@@ -119,6 +136,7 @@ class PreviewService:
         self._dups = duplicate_service
         self._classifier = category_classifier_service
         self._latest_config_fingerprint: str | None = None
+        self._latest_excluded_root_ids: tuple[str, ...] = ()
         self._outcome_directory = Path(tempfile.mkdtemp(prefix="mediasort-preview-outcomes-"))
         self._outcomes = PreviewOutcomeStore(self._outcome_directory / "outcomes.sqlite3")
         self._plans: dict[str, FrozenSortPlan] = {}
@@ -144,15 +162,30 @@ class PreviewService:
     def frozen_plan(self, plan_id: str) -> FrozenSortPlan | None:
         return self._plans.get(plan_id)
 
-    async def run_preview(self, task: Task, config: Config) -> dict[str, Any]:
+    @property
+    def latest_excluded_root_ids(self) -> tuple[str, ...]:
+        """Root scope bound to the latest provenance snapshot."""
+        return self._latest_excluded_root_ids
+
+    async def run_preview(
+        self,
+        task: Task,
+        config: Config,
+        excluded_roots: Sequence[str] = (),
+    ) -> dict[str, Any]:
         """Task-manager entry point: run the preview while reporting progress.
 
         Mirrors ``SortingService.run`` so the frontend can poll a real
         percentage instead of waiting on one opaque request.
         """
-        return await self.preview(config, task=task)
+        return await self.preview(config, task=task, excluded_roots=excluded_roots)
 
-    async def preview(self, config: Config, task: Task | None = None) -> dict[str, Any]:
+    async def preview(
+        self,
+        config: Config,
+        task: Task | None = None,
+        excluded_roots: Sequence[str] = (),
+    ) -> dict[str, Any]:
         """Return a dry-run prediction of what a sort run would produce.
 
         When a ``task`` is supplied, per-file progress (current/total/percentage
@@ -163,6 +196,8 @@ class PreviewService:
         quality ranking) reports its own phases so the bar never sits frozen at
         0%.
         """
+        scope = apply_run_scope(config, excluded_roots)
+        config = scope.config
         # Phase 1 — directory scan (no incremental count available, so the UI
         # shows an indeterminate "Scanning folder…" bar).
         logger.info("Preview started", source=str(config.source_directory))
@@ -254,6 +289,8 @@ class PreviewService:
             return {
                 "items": [],
                 "stats": stats,
+                "excluded_roots": list(scope.excluded_paths),
+                "excluded_root_ids": list(scope.excluded_root_ids),
                 "partial": traversal.partial,
                 "issues": [issue.to_dict() for issue in traversal.issues],
             }
@@ -269,6 +306,7 @@ class PreviewService:
             quality_processing_order, primary_files, config, self._dups, cancel_event, task
         )
         slots: list[dict[str, Any] | None] = [None] * len(units)
+        planned_items: dict[str, dict[str, Any]] = {}
         reserved_destinations: set[Path] = set()
         operation_rules = (
             self._rules.for_operation(config)
@@ -285,6 +323,8 @@ class PreviewService:
             return {
                 "items": [],
                 "stats": stats,
+                "excluded_roots": list(scope.excluded_paths),
+                "excluded_root_ids": list(scope.excluded_root_ids),
                 "partial": traversal.partial,
                 "issues": [issue.to_dict() for issue in traversal.issues],
             }
@@ -313,6 +353,7 @@ class PreviewService:
                 operation_classifier,
                 True,
                 task.cancel_token if task is not None else None,
+                planned_items,
             )
             slots[idx] = item
             if item.get("destination"):
@@ -330,6 +371,7 @@ class PreviewService:
                                 "detail": f"reserved after collision with {proposed.name}",
                             }
                         )
+            planned_items[str(item["source"])] = item
             unit = units[idx]
             unit_warnings: list[str] = []
             companions: list[dict[str, Any]] = []
@@ -406,6 +448,22 @@ class PreviewService:
                 task.update_progress(rank + 1, eta_seconds=eta)
 
         items: list[dict[str, Any]] = [it for it in slots if it is not None]
+
+        # Fill the persistent index the duplicate workbench reads. The plan
+        # already knows which files are copies of each other, but Review's
+        # per-group evidence — sizes, dimensions, roles, confidence — comes
+        # from the catalog, and nothing else populates it. Advisory: a failure
+        # costs the richer view, never the plan.
+        await asyncio.to_thread(
+            index_library_roots,
+            config.library_profile,
+            data_dir=resolve_app_paths().data_dir,
+            recursive=config.recursive_scan,
+            max_depth=config.max_recursion_depth,
+            exclude_patterns=tuple(config.exclude_patterns or ()),
+            cancel=(lambda: task.cancel_event.is_set()) if task is not None else None,
+        )
+
         logger.info(
             "Preview complete",
             will_sort=stats["will_sort"],
@@ -416,6 +474,7 @@ class PreviewService:
         )
         fingerprint = config_fingerprint(config)
         self._latest_config_fingerprint = fingerprint
+        self._latest_excluded_root_ids = scope.excluded_root_ids
         self._outcomes.replace(items)
         plan = build_frozen_sort_plan(items, config)
         # Only the current reviewed plan remains executable. A stale identifier
@@ -423,6 +482,8 @@ class PreviewService:
         self._plans = {plan.plan_id: plan}
         return {
             "config_fingerprint": fingerprint,
+            "excluded_roots": list(scope.excluded_paths),
+            "excluded_root_ids": list(scope.excluded_root_ids),
             "plan_id": plan.plan_id,
             "impact": plan.impact.model_dump(mode="json"),
             "items": items,
@@ -459,7 +520,7 @@ class PreviewService:
             stats["will_quarantine_junk"] += 1
         elif status == "already_in_destination":
             stats["will_skip_already_in_destination"] += 1
-        else:  # unknown_date / suspicious_date both land in _unknown_dates
+        else:  # unknown_date / suspicious_date both land in _undated
             stats["will_quarantine_unknown"] += 1
 
     def _preview_file(
@@ -475,6 +536,7 @@ class PreviewService:
         operation_classifier: CategoryClassifierService | None = None,
         use_operation_services: bool = False,
         cancel_token: Any | None = None,
+        planned_items: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Predict the outcome for a single file.
 
@@ -487,38 +549,45 @@ class PreviewService:
         except OSError:
             file_size = 0
 
-        # Junk / thumbnail filter — mirrors the sort exactly (same classifier,
-        # same quarantine path), so the preview's promise holds.
+        # Classify cheaply up front, but defer the outcome until after duplicate
+        # identity. A junk/thumbnail file may be the kept member of a set; its
+        # copies must follow it under `_junk/_copies` rather than fragmenting.
         junk_reason = classify_junk(file_path, config)
-        if junk_reason is not None:
-            return {
-                "source": str(file_path),
-                "destination": str(
-                    quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name
-                ),
-                "extracted_date": None,
-                "metadata_source": "none",
-                "tags": [],
-                "category": None,
-                "status": "junk",
-                "file_size": file_size,
-                "suspicious": False,
-                "suspicious_reason": None,
-                "quarantine_reason": junk_reason,
-                "duplicate_type": None,
-                "duplicate_similarity": None,
-                "duplicate_of": None,
-                "duplicate_evaluation": "known",
-                "duplicate_unknown_reason": None,
-            }
 
         try:
             extr = self._extraction.extract_detailed(file_path, check_suspicious=check_suspicious)
         except Exception:
+            if junk_reason is not None:
+                return {
+                    "source": str(file_path),
+                    "destination": str(
+                        quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name
+                    ),
+                    "extracted_date": None,
+                    "metadata_source": "none",
+                    "tags": [],
+                    "category": None,
+                    "status": "junk",
+                    "file_size": file_size,
+                    "suspicious": False,
+                    "suspicious_reason": None,
+                    "quarantine_reason": junk_reason,
+                    "duplicate_type": None,
+                    "duplicate_similarity": None,
+                    "duplicate_of": None,
+                    "duplicate_evaluation": "known",
+                    "duplicate_unknown_reason": None,
+                    "source_root": str(source_root),
+                    "would_be_destination": str(
+                        quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name
+                    ),
+                }
             logger.error("Preview: prediction failed", path=str(file_path))
             return {
                 "source": str(file_path),
-                "destination": str(dest_root / "_failed" / file_path.name),
+                "destination": str(
+                    quarantine_dir(dest_root, "failed", file_path, source_root) / file_path.name
+                ),
                 "extracted_date": None,
                 "metadata_source": "none",
                 "tags": [],
@@ -533,6 +602,8 @@ class PreviewService:
                 "duplicate_of": None,
                 "duplicate_evaluation": "known",
                 "duplicate_unknown_reason": None,
+                "source_root": str(source_root),
+                "would_be_destination": None,
             }
 
         extracted_date = extr.extracted_date
@@ -560,8 +631,93 @@ class PreviewService:
         dup_evaluation = "known"
         dup_unknown_reason: str | None = None
         category_result = CategoryResult(None, 0.0, 0.0)
+        camera = ""
+        would_be_destination: str | None = None
 
-        if extracted_date is None:
+        match = DuplicateMatch(False)
+        if config.remove_duplicates:
+            match = self._dup_match(
+                file_path,
+                registry,
+                exact=config.duplicate_exact_enabled,
+                perceptual=config.duplicate_perceptual_enabled,
+                threshold=config.duplicate_perceptual_threshold,
+                destination_registry=dest_registry,
+                cancel_token=cancel_token,
+            )
+        dup_evaluation = match.evaluation
+        dup_unknown_reason = match.unknown_reason
+
+        if match.is_duplicate:
+            dup_type = match.match_type
+            dup_similarity = match.similarity
+            dup_of = match.original_path
+            if junk_reason is not None:
+                would_be_destination = str(
+                    quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name
+                )
+            elif extracted_date is None:
+                would_be_destination = str(
+                    quarantine_dir(dest_root, "unknown", file_path, source_root) / file_path.name
+                )
+            elif DateExtractionService.is_future_date(extracted_date):
+                would_be_destination = str(
+                    quarantine_dir(dest_root, "future", file_path, source_root) / file_path.name
+                )
+            else:
+                category_result = self._classify(file_path, config, classifier)
+                category = category_result.category
+                camera = self._camera_segment(file_path, config)
+                _, would_be_destination = self._build_dest_path(
+                    file_path,
+                    extracted_date,
+                    source_root,
+                    dest_root,
+                    config,
+                    category,
+                    route_suffix,
+                    camera=camera,
+                )
+            if match.scope == "destination":
+                # The keeper is already in the destination. Writing another
+                # byte-identical copy would create the problem dedup detected.
+                status = "already_in_destination"
+                dest = None
+            else:
+                status = "duplicate"
+                keeper_item = (planned_items or {}).get(str(dup_of))
+                keeper_destination = keeper_item.get("destination") if keeper_item else None
+                if not keeper_destination or dup_of is None:
+                    raise RuntimeError("duplicate keeper has no planned destination")
+                dest = str(
+                    copy_destination(
+                        Path(str(keeper_destination)),
+                        Path(dup_of),
+                        file_path,
+                        source_root,
+                    )
+                )
+            logger.info(
+                "Preview: duplicate detected",
+                path=file_path.name,
+                match_type=dup_type,
+                similarity=dup_similarity,
+                duplicate_of=dup_of,
+                scope=match.scope or "run",
+            )
+
+        elif match.evaluation == "unknown":
+            # The real sort samples video frames and may route this file as a
+            # duplicate. Do not promise any destination in preview.
+            status = "duplicate_unknown"
+            dest = None
+
+        elif junk_reason is not None:
+            status = "junk"
+            dest = str(quarantine_dir(dest_root, "junk", file_path, source_root) / file_path.name)
+            would_be_destination = dest
+
+        elif extracted_date is None:
             status = "suspicious_date" if extr.suspicious else "unknown_date"
             dest = str(
                 quarantine_dir(dest_root, "unknown", file_path, source_root) / file_path.name
@@ -581,68 +737,10 @@ class PreviewService:
                 date=str(extracted_date),
             )
 
-        elif config.remove_duplicates:
-            match = self._dup_match(
-                file_path,
-                registry,
-                exact=config.duplicate_exact_enabled,
-                perceptual=config.duplicate_perceptual_enabled,
-                threshold=config.duplicate_perceptual_threshold,
-                destination_registry=dest_registry,
-                cancel_token=cancel_token,
-            )
-            dup_evaluation = match.evaluation
-            dup_unknown_reason = match.unknown_reason
-            if match.is_duplicate:
-                # Match scope → status/folder, exactly like the sort:
-                # run → _duplicates/, destination → _already_in_destination/.
-                status = {
-                    "destination": "already_in_destination",
-                }.get(match.scope or "run", "duplicate")
-                # Mirror the sort: duplicates always land in their quarantine
-                # folder (never deleted).
-                dest = str(
-                    quarantine_dir(dest_root, status, file_path, source_root) / file_path.name
-                )
-                dup_type = match.match_type
-                dup_similarity = match.similarity
-                dup_of = match.original_path
-                logger.info(
-                    "Preview: duplicate detected",
-                    path=file_path.name,
-                    match_type=dup_type,
-                    similarity=dup_similarity,
-                    duplicate_of=dup_of,
-                    scope=match.scope or "run",
-                )
-            elif match.evaluation == "unknown":
-                # The real sort samples video frames and may route this file as
-                # a duplicate. Do not promise a date destination in preview.
-                status = "duplicate_unknown"
-                dest = None
-            else:
-                category_result = self._classify(file_path, config, classifier)
-                category = category_result.category
-                status, dest = self._build_dest_path(
-                    file_path,
-                    extracted_date,
-                    source_root,
-                    dest_root,
-                    config,
-                    category,
-                    route_suffix,
-                )
-                if category:
-                    logger.info(
-                        "Preview: category assigned",
-                        path=file_path.name,
-                        category=category,
-                        date=str(extracted_date),
-                    )
-
         else:
             category_result = self._classify(file_path, config, classifier)
             category = category_result.category
+            camera = self._camera_segment(file_path, config)
             status, dest = self._build_dest_path(
                 file_path,
                 extracted_date,
@@ -651,6 +749,7 @@ class PreviewService:
                 config,
                 category,
                 route_suffix,
+                camera=camera,
             )
             if category:
                 logger.info(
@@ -660,8 +759,18 @@ class PreviewService:
                     date=str(extracted_date),
                 )
 
+        if would_be_destination is None and dest is not None:
+            would_be_destination = dest
+
         if not config.sort:
             status = "review_only"
+            dest = None
+
+        if config.run_mode == "deduplicate_only" and status not in _QUARANTINE_STATUSES:
+            # Nothing that is not a duplicate or junk moves at all. A null
+            # destination is the whole promise of this mode: the input tree is
+            # left exactly as it was found.
+            status = "keep_in_place"
             dest = None
 
         item: dict[str, Any] = {
@@ -675,12 +784,14 @@ class PreviewService:
             "file_size": file_size,
             "suspicious": extr.suspicious,
             "suspicious_reason": extr.suspicious_reason if extr.suspicious else None,
-            "quarantine_reason": None,
+            "quarantine_reason": junk_reason if status == "junk" else None,
             "duplicate_type": dup_type,
             "duplicate_similarity": dup_similarity,
             "duplicate_of": dup_of,
             "duplicate_evaluation": dup_evaluation,
             "duplicate_unknown_reason": dup_unknown_reason,
+            "source_root": str(source_root),
+            "would_be_destination": would_be_destination,
         }
         item["provenance"] = self._provenance(
             file_path=file_path,
@@ -696,7 +807,35 @@ class PreviewService:
             duplicate_of=dup_of,
             duplicate_evaluation=dup_evaluation,
             route_suffix=route_suffix,
+            camera=camera,
         )
+        if match.is_duplicate and would_be_destination is not None:
+            item["would_be_provenance"] = self._provenance(
+                file_path=file_path,
+                source_root=source_root,
+                destination=Path(would_be_destination),
+                config=config,
+                extraction=extr,
+                rules=rule_evaluation,
+                category=category_result,
+                duplicate_evaluated=config.remove_duplicates,
+                duplicate_type=dup_type,
+                duplicate_similarity=dup_similarity,
+                duplicate_of=dup_of,
+                duplicate_evaluation=dup_evaluation,
+                route_suffix=route_suffix,
+                camera=camera,
+            )
+        if status == "duplicate" and dest is not None and dup_of is not None:
+            from app.core.provenance import OutcomeProvenance
+            from app.services.outcome_provenance import contextualize_copy
+
+            item["provenance"] = contextualize_copy(
+                OutcomeProvenance.model_validate(item["provenance"]),
+                destination=Path(dest),
+                destination_root=dest_root,
+                keeper=Path(dup_of),
+            ).model_dump(mode="json")
         return item
 
     # ------------------------------------------------------------------ #
@@ -731,6 +870,7 @@ class PreviewService:
         duplicate_of: str | None,
         duplicate_evaluation: str,
         route_suffix: str | None,
+        camera: str,
     ) -> dict[str, Any]:
         """Serialize the shared bounded decisions produced during prediction."""
         from app.services.outcome_provenance import build_outcome_provenance
@@ -749,6 +889,7 @@ class PreviewService:
             duplicate_of=duplicate_of,
             duplicate_evaluation=duplicate_evaluation,
             route_suffix=route_suffix,
+            camera=camera,
         )
         return model.model_dump(mode="json")
 
@@ -761,6 +902,8 @@ class PreviewService:
         config: Config,
         category: str | None = None,
         route_suffix: str | None = None,
+        *,
+        camera: str | None = None,
     ) -> tuple[str, str]:
         """Predict the destination via the shared builder SortingService uses.
 
@@ -768,9 +911,7 @@ class PreviewService:
         pattern, so the preview shows the name the sort will actually produce
         (collision suffixes like ``_001`` excepted — those depend on disk state).
         """
-        camera = ""
-        if config.camera_subfolder_enabled:
-            camera = sanitize_path_segment(self._extraction.extract_camera_model(file_path) or "")
+        camera_segment = self._camera_segment(file_path, config) if camera is None else camera
         dest_dir = build_dest_dir(
             file_path,
             extracted_date,
@@ -778,10 +919,16 @@ class PreviewService:
             dest_root,
             config,
             category,
-            camera,
+            camera_segment,
             route_suffix,
         )
         return "sort", str(dest_dir / predicted_filename(file_path, extracted_date, config))
+
+    def _camera_segment(self, file_path: Path, config: Config) -> str:
+        """Read and sanitize the camera folder once for placement and provenance."""
+        if not config.camera_subfolder_enabled:
+            return ""
+        return sanitize_path_segment(self._extraction.extract_camera_model(file_path) or "")
 
     def _dup_match(
         self,

@@ -34,6 +34,7 @@ class RuleEvaluation:
     matched_route_rule_id: str | None
     matched_tag_rules: tuple[MatchedRule, ...] = ()
     matched_route_rule: MatchedRule | None = None
+    matched_route_rules: tuple[MatchedRule, ...] = ()
 
 
 _EMPTY = RuleEvaluation((), None, (), None)
@@ -71,14 +72,17 @@ class RuleEngineService:
 
         route_rule: RouteRule | None = None
         route_saved_order: int | None = None
+        route_matches: list[MatchedRule] = []
         for saved_order, candidate in sorted(
             enumerate(rule_set.route_rules),
             key=lambda item: (item[1].priority, item[0]),
         ):
-            if candidate.enabled and self._matches(file_path, candidate):
+            if not candidate.enabled or not self._matches(file_path, candidate):
+                continue
+            route_matches.append(MatchedRule(candidate.name, candidate.priority, saved_order))
+            if route_rule is None:
                 route_rule = candidate
                 route_saved_order = saved_order
-                break
         return RuleEvaluation(
             tags=tuple(tags),
             route=route_rule.relative_folder if route_rule else None,
@@ -90,6 +94,7 @@ class RuleEngineService:
                 if route_rule is not None
                 else None
             ),
+            matched_route_rules=tuple(route_matches),
         )
 
     def evaluate(self, file_path: Path) -> list[str]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -13,13 +13,19 @@ from support import authorize_mutations
 
 from app.background_tasks.task_manager import Task
 from app.core.config import Config
+from app.core.config_fingerprint import config_fingerprint
+from app.core.database import DatabaseManager
 from app.core.integrity import PreservationProfile
+from app.core.integrity_policy import authorize_config_mutations
+from app.core.sort_plan import build_frozen_sort_plan
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.config_service import ConfigService
 from app.services.conversion_service import ConversionService
 from app.services.duplicate_service import DuplicateMatch, DuplicateRegistry, DuplicateService
 from app.services.extraction_service import DateExtractionService, ExtractionResult
 from app.services.filesystem_service import FileSystemService
 from app.services.metadata_service import MetadataService
+from app.services.operation_execution import OperationExecution
 from app.services.repair_service import RepairService
 from app.services.sorting_service import SortingService
 
@@ -30,7 +36,7 @@ from app.services.sorting_service import SortingService
 
 def _make_service(tmp_path: Path, **config_overrides: Any) -> SortingService:
     """Build a SortingService wired to real sub-services with temp directories."""
-    defaults: dict = {
+    defaults: dict[str, Any] = {
         "source_directory": str(tmp_path / "source"),
         "target_directory": str(tmp_path / "target"),
         "sort": True,
@@ -52,6 +58,15 @@ def _make_service(tmp_path: Path, **config_overrides: Any) -> SortingService:
         repair_service=RepairService(),
         db_manager=None,  # no DB for unit tests
     )
+
+
+def _fake_task() -> Task:
+    """The real `Task` surface a run touches, standing in for the manager's.
+
+    Cast once here rather than at every call: the double implements the parts
+    `SortingService.run` uses, and stating that nineteen times said nothing.
+    """
+    return cast("Task", _FakeTask())
 
 
 class _FakeTask:
@@ -80,7 +95,7 @@ async def test_review_only_configuration_plans_no_transfer_or_mutation(tmp_path:
         patch.object(svc._fs, "safe_move") as move,
         patch.object(svc, "_process_file") as process,
     ):
-        stats = await svc.run(_FakeTask())  # type: ignore[arg-type]
+        stats = await svc.run(_fake_task())
 
     assert stats["review_only"] == 1
     assert stats["sorted"] == 0
@@ -200,7 +215,7 @@ async def test_process_file_records_and_routes_category(tmp_path: Path) -> None:
     PIL_Image = pytest.importorskip("PIL.Image")
 
     svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
-    svc._classifier = _FakeClassifier("food")
+    svc._classifier = cast("CategoryClassifierService", _FakeClassifier("food"))
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
     source_root.mkdir(parents=True)
@@ -232,7 +247,9 @@ async def test_process_file_uncategorized_when_classifier_unsure(tmp_path: Path)
     PIL_Image = pytest.importorskip("PIL.Image")
 
     svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
-    svc._classifier = _FakeClassifier(None)  # below confidence bar
+    svc._classifier = cast(
+        "CategoryClassifierService", _FakeClassifier(None)
+    )  # below confidence bar
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
     source_root.mkdir(parents=True)
@@ -290,7 +307,7 @@ async def test_process_file_unknown_date(tmp_path: Path) -> None:
         )
 
     assert record["status"] == "unknown_date"
-    assert "_unknown_dates" in str(record["dest_path"])
+    assert "_undated" in str(record["dest_path"])
 
 
 @pytest.mark.asyncio
@@ -324,7 +341,7 @@ async def test_process_file_future_date(tmp_path: Path) -> None:
         )
 
     assert record["status"] == "future_date"
-    assert "_future_dates" in str(record["dest_path"])
+    assert "_undated" in str(record["dest_path"])
 
 
 @pytest.mark.asyncio
@@ -408,7 +425,7 @@ async def test_run_dry_run_returns_stats(tmp_path: Path) -> None:
         db_manager=None,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     result = await svc.run(task, dry_run=True)
 
     assert result["total"] == 2
@@ -793,7 +810,7 @@ async def test_run_counts_unknown_date_status(tmp_path: Path) -> None:
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=None, source="none"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["unknown_dates"] == 1
     assert stats["sorted"] == 0
@@ -835,7 +852,7 @@ async def test_run_counts_future_date_status(tmp_path: Path) -> None:
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=future, source="exif"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["future_dates"] == 1
     assert stats["sorted"] == 0
@@ -882,7 +899,7 @@ async def test_run_counts_duplicate_status(tmp_path: Path) -> None:
             return_value=DuplicateMatch(True, "exact", 100, "/orig"),
         ),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     assert stats["duplicates"] == 1
     assert stats["sorted"] == 0
@@ -924,13 +941,17 @@ async def test_run_keeps_higher_resolution_duplicate_regardless_of_order(tmp_pat
         "extract_detailed",
         return_value=ExtractionResult(extracted_date=date(2024, 1, 1), source="exif"),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     assert stats["sorted"] == 1
     assert stats["duplicates"] == 1
     # The HIGH-res copy is kept in the date tree; the LOW-res copy is quarantined.
     assert (target / "2024" / "01" / "01" / "b_high.jpg").exists()
-    assert (target / "_duplicates" / "a_low.jpg").exists()
+    assert (target / "2024" / "01" / "01" / "_copies").is_dir()
+    assert any(
+        path.name.startswith("b_high — from source")
+        for path in (target / "2024" / "01" / "01" / "_copies").iterdir()
+    )
     assert not (target / "2024" / "01" / "01" / "a_low.jpg").exists()
     assert not (target / "_duplicates" / "b_high.jpg").exists()
 
@@ -978,8 +999,8 @@ async def test_sort_restores_source_totals_after_destination_index(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_run_counts_failed_status(tmp_path: Path) -> None:
-    """run() must increment failed when _process_file raises an unhandled error."""
+async def test_run_counts_a_successfully_set_aside_unreadable_file(tmp_path: Path) -> None:
+    """An unreadable file is planned into `_corrupted`, not left as a failure."""
     source = tmp_path / "source"
     target = tmp_path / "target"
     source.mkdir()
@@ -1006,9 +1027,10 @@ async def test_run_counts_failed_status(tmp_path: Path) -> None:
     )
 
     with patch.object(svc._extraction, "extract_detailed", side_effect=RuntimeError("boom")):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
-    assert stats["failed"] == 1
+    assert stats["failed"] == 0
+    assert stats["corrupted"] == 1
 
 
 @pytest.mark.asyncio
@@ -1047,7 +1069,7 @@ async def test_run_cancel_stops_processing(tmp_path: Path) -> None:
         db_manager=None,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     task.cancel_event.set()  # cancel immediately
     stats = await svc.run(task, dry_run=True)
 
@@ -1057,7 +1079,7 @@ async def test_run_cancel_stops_processing(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_persists_to_db(tmp_path: Path, in_memory_db) -> None:
+async def test_run_persists_to_db(tmp_path: Path, in_memory_db: DatabaseManager) -> None:
     """run() with a real DB should persist one operation row (line 147-153)."""
     PIL_Image = pytest.importorskip("PIL.Image")
     piexif = pytest.importorskip("piexif")
@@ -1090,7 +1112,7 @@ async def test_run_persists_to_db(tmp_path: Path, in_memory_db) -> None:
         db_manager=in_memory_db,
     )
 
-    await svc.run(_FakeTask(), dry_run=False)
+    await svc.run(_fake_task(), dry_run=False)
 
     with in_memory_db._connect() as conn:
         count = conn.execute("SELECT COUNT(*) FROM operations").fetchone()[0]
@@ -1098,7 +1120,9 @@ async def test_run_persists_to_db(tmp_path: Path, in_memory_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_cancelled_still_persists_partial_operation(tmp_path: Path, in_memory_db) -> None:
+async def test_run_cancelled_still_persists_partial_operation(
+    tmp_path: Path, in_memory_db: DatabaseManager
+) -> None:
     """A cancelled (non-dry) run must still record its operation in the DB (P2-2).
 
     With cooperative cancellation the run loop breaks on the cancel event and
@@ -1136,7 +1160,7 @@ async def test_run_cancelled_still_persists_partial_operation(tmp_path: Path, in
         db_manager=in_memory_db,
     )
 
-    task = _FakeTask()
+    task = _fake_task()
     task.cancel_event.set()  # cancelled before any file is processed
     stats = await svc.run(task, dry_run=False)
 
@@ -1246,7 +1270,7 @@ async def test_repair_enabled_false_skips_validation(tmp_path: Path) -> None:
     )
 
     with patch.object(svc._repair, "validate_file") as mock_validate:
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     # validate_file must never be called when repair_enabled=False
     mock_validate.assert_not_called()
@@ -1308,7 +1332,7 @@ async def test_repair_enabled_true_quarantines_unrepairable_file(tmp_path: Path)
         ),
         patch.object(svc._repair, "repair_file", return_value=False),
     ):
-        stats = await svc.run(_FakeTask(), dry_run=False)
+        stats = await svc.run(_fake_task(), dry_run=False)
 
     assert stats["corrupted"] == 1
     assert stats["sorted"] == 0
@@ -1324,8 +1348,7 @@ async def test_repair_enabled_true_quarantines_unrepairable_file(tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_run_failed_file_does_not_abort_batch(tmp_path: Path) -> None:
-    """A file that raises mid-process is recorded as 'failed' with a non-empty
-    error_message, and the run finishes all remaining files in the batch."""
+    """An unreadable file is set aside and does not abort the rest of the batch."""
     PIL_Image = pytest.importorskip("PIL.Image")
     piexif = pytest.importorskip("piexif")
 
@@ -1367,24 +1390,27 @@ async def test_run_failed_file_does_not_abort_batch(tmp_path: Path) -> None:
 
     original_extract = svc._extraction.extract_detailed
 
-    def side_effect(path, **kw):
+    def side_effect(path: Any, **kw: Any) -> Any:
         if path.name == "bad.jpg":
             raise RuntimeError("simulated extraction failure")
         return original_extract(path, **kw)
 
     with patch.object(svc._extraction, "extract_detailed", side_effect=side_effect):
-        stats = await svc.run(_FakeTask(), dry_run=True)
+        stats = await svc.run(_fake_task(), dry_run=True)
 
     # All three files should have been processed (batch didn't abort)
     assert stats["total"] == 3
-    assert stats["failed"] == 1, f"Expected 1 failed, got {stats['failed']}. Stats: {stats}"
+    assert stats["failed"] == 0, f"Expected no failed writes. Stats: {stats}"
+    assert stats["corrupted"] == 1, f"Expected 1 set-aside file. Stats: {stats}"
     assert stats["sorted"] >= 1, (
         f"Expected at least 1 sorted, got {stats['sorted']}. Stats: {stats}"
     )
 
 
 @pytest.mark.asyncio
-async def test_run_persists_non_null_config_hash(tmp_path: Path, in_memory_db) -> None:
+async def test_run_persists_non_null_config_hash(
+    tmp_path: Path, in_memory_db: DatabaseManager
+) -> None:
     """After a real (non-dry-run) sort, the operation row has a non-null config_hash."""
     PIL_Image = pytest.importorskip("PIL.Image")
     piexif = pytest.importorskip("piexif")
@@ -1419,7 +1445,7 @@ async def test_run_persists_non_null_config_hash(tmp_path: Path, in_memory_db) -
         db_manager=in_memory_db,
     )
 
-    await svc.run(_FakeTask(), dry_run=False)
+    await svc.run(_fake_task(), dry_run=False)
 
     with in_memory_db._connect() as conn:
         row = conn.execute("SELECT config_hash FROM operations").fetchone()
@@ -1476,7 +1502,7 @@ async def test_run_skipped_count_reflects_excluded_media_files(tmp_path: Path) -
         db_manager=None,
     )
 
-    stats = await svc.run(_FakeTask(), dry_run=True)
+    stats = await svc.run(_fake_task(), dry_run=True)
 
     # The two tiny files are excluded → skipped == 2
     assert stats["skipped"] == 2
@@ -1562,9 +1588,9 @@ async def test_copy_mode_duplicate_does_not_delete_source(tmp_path: Path) -> Non
     assert record["status"] == "duplicate"
     # Source file must still exist (copy mode never touches source)
     assert img_path.exists(), "Source file was deleted in copy mode — bug!"
-    # Duplicate copy placed in _duplicates/ (not moved)
+    # Duplicate copy is placed beside its keeper under _copies/ (not moved).
     assert record["dest_path"] is not None
-    assert "_duplicates" in record["dest_path"]
+    assert "_copies" in record["dest_path"]
 
 
 # ------------------------------------------------------------------ #
@@ -1771,7 +1797,7 @@ async def test_process_file_ai_disabled_skips_tagger(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_copy_mode_unknown_date_keeps_source(tmp_path: Path) -> None:
-    """Copy mode: an unknown-date file is COPIED to _unknown_dates/, source kept."""
+    """Copy mode: an unknown-date file is copied to _undated/, source kept."""
     svc = _make_service(tmp_path, copy_instead_of_move=True)
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
@@ -1798,12 +1824,12 @@ async def test_copy_mode_unknown_date_keeps_source(tmp_path: Path) -> None:
 
     assert record["status"] == "unknown_date"
     assert img_path.exists(), "copy mode must never consume the source"
-    assert (dest_root / "_unknown_dates" / "nodate.jpg").exists()
+    assert (dest_root / "_undated" / "nodate.jpg").exists()
 
 
 @pytest.mark.asyncio
 async def test_copy_mode_future_date_keeps_source(tmp_path: Path) -> None:
-    """Copy mode: a future-date file is COPIED to _future_dates/, source kept."""
+    """Copy mode: a future-date file is copied to _undated/, source kept."""
     from datetime import timedelta
 
     svc = _make_service(tmp_path, copy_instead_of_move=True)
@@ -1833,12 +1859,12 @@ async def test_copy_mode_future_date_keeps_source(tmp_path: Path) -> None:
 
     assert record["status"] == "future_date"
     assert img_path.exists(), "copy mode must never consume the source"
-    assert (dest_root / "_future_dates" / "future.jpg").exists()
+    assert (dest_root / "_undated" / "future.jpg").exists()
 
 
 @pytest.mark.asyncio
 async def test_copy_mode_processing_failure_keeps_source(tmp_path: Path) -> None:
-    """Copy mode: a file that fails processing is COPIED to _failed/, source kept."""
+    """Copy mode: a processing failure is copied to _corrupted/, source kept."""
     svc = _make_service(tmp_path, copy_instead_of_move=True)
     source_root = tmp_path / "source"
     dest_root = tmp_path / "target"
@@ -1859,10 +1885,60 @@ async def test_copy_mode_processing_failure_keeps_source(tmp_path: Path) -> None
             operation_id="op_test",
         )
 
-    assert record["status"] == "failed"
+    assert record["status"] == "corrupted"
     assert record["error_message"] == "boom"
     assert img_path.exists(), "copy mode must never consume the source, even on failure"
-    assert (dest_root / "_failed" / "explodes.jpg").exists()
+    assert (dest_root / "_corrupted" / "explodes.jpg").exists()
+
+
+@pytest.mark.asyncio
+async def test_reviewed_unreadable_placement_passes_the_frozen_plan_guard(tmp_path: Path) -> None:
+    svc = _make_service(tmp_path, copy_instead_of_move=True)
+    source_root = tmp_path / "source"
+    dest_root = tmp_path / "target"
+    source_root.mkdir(parents=True)
+    dest_root.mkdir(parents=True)
+    source = source_root / "unreadable.jpg"
+    source.write_bytes(b"unreadable media")
+    destination = dest_root / "_corrupted" / source.name
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(source),
+                "destination": str(destination),
+                "status": "failed",
+                "file_size": source.stat().st_size,
+                "companions": [],
+            }
+        ],
+        svc._config,
+    )
+    execution = OperationExecution.start(
+        operation_id="unreadable-plan",
+        state_root=tmp_path / "state",
+        preservation=svc._config.preservation_profile,
+        authorization=authorize_config_mutations(svc._config),
+        effective_config_sha256=config_fingerprint(svc._config),
+        frozen_plan=plan,
+    )
+
+    with patch.object(svc._extraction, "extract_detailed", side_effect=RuntimeError("unreadable")):
+        record = svc._process_file(
+            file_path=source,
+            source_root=source_root,
+            dest_root=dest_root,
+            config=svc._config,
+            dry_run=False,
+            registry=DuplicateRegistry(),
+            operation_id="unreadable-plan",
+            planned_destinations={str(source): destination},
+            execution=execution,
+        )
+
+    assert record["status"] == "corrupted"
+    assert record["dest_path"] == str(destination)
+    assert destination.read_bytes() == b"unreadable media"
+    assert [outcome.code for outcome in execution.outcomes] == ["quarantined"]
 
 
 @pytest.mark.asyncio
@@ -1894,7 +1970,7 @@ async def test_move_mode_unknown_date_consumes_source(tmp_path: Path) -> None:
 
     assert record["status"] == "unknown_date"
     assert not img_path.exists()
-    assert (dest_root / "_unknown_dates" / "nodate.jpg").exists()
+    assert (dest_root / "_undated" / "nodate.jpg").exists()
 
 
 # ------------------------------------------------------------------ #
@@ -1928,10 +2004,71 @@ async def test_dry_run_creates_no_directories(tmp_path: Path) -> None:
     piexif.insert(piexif.dump(exif), str(img_path))
     (source_root / "nodate.bin.jpg").write_bytes(b"\xff\xd8\xff" + b"x" * 64)
 
-    task = _FakeTask()
+    task = _fake_task()
     stats = await svc.run(task, dry_run=True)
 
     assert stats["total"] == 2
     leftovers = list(dest_root.rglob("*"))
     assert leftovers == [], f"dry run created entries under dest: {leftovers}"
     assert (source_root / "photo.jpg").exists()
+
+
+# ------------------------------------------------------------------ #
+# deduplicate_only                                                      #
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_deduplicate_only_leaves_every_non_duplicate_exactly_where_it_was(
+    tmp_path: Path,
+) -> None:
+    """The whole promise of the mode: the input tree is not reorganised.
+
+    `sort=False` could only mean "transfer nothing at all". This mode has to
+    move duplicates into the review folder while leaving everything else byte
+    for byte where it was found.
+    """
+    source = tmp_path / "source"
+    (source / "holiday").mkdir(parents=True)
+    keeper = source / "holiday" / "photo.jpg"
+    copy_of_it = source / "holiday" / "photo copy.jpg"
+    unrelated = source / "holiday" / "other.jpg"
+    keeper.write_bytes(b"identical media")
+    copy_of_it.write_bytes(b"identical media")
+    unrelated.write_bytes(b"something else entirely")
+    before = {path: path.read_bytes() for path in (keeper, copy_of_it, unrelated)}
+
+    svc = _make_service(
+        tmp_path,
+        run_mode="deduplicate_only",
+        remove_duplicates=True,
+        duplicate_exact_enabled=True,
+        copy_instead_of_move=False,
+    )
+    stats = await svc.run(_fake_task())
+
+    assert stats["run_mode"] == "deduplicate_only"
+    # Nothing was "sorted": in this mode that word must not apply to anything.
+    assert stats["sorted"] == 0
+    assert stats["kept_in_place"] >= 1
+
+    survivors = [path for path in (keeper, copy_of_it, unrelated) if path.exists()]
+    for path in survivors:
+        assert path.read_bytes() == before[path], f"{path.name} was modified in place"
+
+    # The duplicate loser left the input tree; it did not vanish.
+    assert unrelated.exists(), "an unrelated file must never be touched"
+
+
+@pytest.mark.asyncio
+async def test_organize_mode_is_unaffected(tmp_path: Path) -> None:
+    """The default path must keep sorting, or this change broke every other run."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "photo.jpg").write_bytes(b"media")
+
+    svc = _make_service(tmp_path, run_mode="organize")
+    stats = await svc.run(_fake_task())
+
+    assert stats["run_mode"] == "organize"
+    assert stats["kept_in_place"] == 0

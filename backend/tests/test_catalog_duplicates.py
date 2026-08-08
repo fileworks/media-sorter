@@ -9,7 +9,9 @@ least selective.
 from __future__ import annotations
 
 import random
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,7 +26,7 @@ from app.services.duplicate_service import DuplicateRegistry
 
 
 @pytest.fixture()
-def catalog(tmp_path: Path) -> MediaCatalog:
+def catalog(tmp_path: Path) -> Iterator[MediaCatalog]:
     with MediaCatalog(tmp_path / "catalog.db") as opened:
         opened.register_root("input", Path("/library"), role="input")
         opened.register_root("dest", Path("/destination"), role="destination")
@@ -40,7 +42,7 @@ def _add(
     sha256: str | None = None,
     signature: str | None = None,
     size: int = 100,
-):
+) -> Any:
     generation = catalog.begin_generation(root_id)
     [record] = catalog.observe(
         root_id,
@@ -57,7 +59,9 @@ def _add(
     return record
 
 
-def _brute_force(index: CatalogDuplicateIndex, signature: str, max_distance: int, roles):
+def _brute_force(
+    index: CatalogDuplicateIndex, signature: str, max_distance: int, roles: Any
+) -> list[Any]:
     """The answer the index must agree with, computed the slow, obvious way."""
     matches = []
     for row in index._scan_signatures("phash", roles):  # noqa: SLF001 - the reference implementation

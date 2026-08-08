@@ -7,11 +7,13 @@ import threading
 import time
 from datetime import date
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 
 from app.core.config import Config
+from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.extraction_service import DateExtractionService, ExtractionResult
 from app.services.filesystem_service import FileSystemService
 from app.services.preview_service import PreviewService
@@ -190,7 +192,9 @@ async def test_preview_stats_counts_undatable_files(tmp_path: Path) -> None:
 
     # Create 3 fake JPEG files
     for i in range(3):
-        (source / f"photo_{i}.jpg").write_bytes(b"\xff\xd8\xff")
+        # Distinct bytes: this test is about date handling, not the now-valid
+        # case where an undated duplicate follows its keeper into `_copies`.
+        (source / f"photo_{i}.jpg").write_bytes(b"\xff\xd8\xff" + bytes([i]))
 
     cfg = _make_config(source, target)
     svc = _make_preview_service(cfg)
@@ -402,7 +406,7 @@ async def test_preview_item_and_path_carry_category(tmp_path: Path) -> None:
 
     cfg = _make_config(source, target, remove_duplicates=False, categorize_enabled=True)
     svc = _make_preview_service(cfg)
-    svc._classifier = _FakePreviewClassifier("nature")
+    svc._classifier = cast("CategoryClassifierService", _FakePreviewClassifier("nature"))
 
     with patch.object(
         svc._extraction,
@@ -427,7 +431,9 @@ async def test_preview_counts_uncategorized(tmp_path: Path) -> None:
 
     cfg = _make_config(source, target, remove_duplicates=False, categorize_enabled=True)
     svc = _make_preview_service(cfg)
-    svc._classifier = _FakePreviewClassifier(None)  # below confidence bar
+    svc._classifier = cast(
+        "CategoryClassifierService", _FakePreviewClassifier(None)
+    )  # below confidence bar
 
     with patch.object(
         svc._extraction,
@@ -465,6 +471,38 @@ async def test_preview_path_matches_sort_path_for_category(tmp_path: Path) -> No
     real = svc._build_dest(file_path, date(2024, 3, 10), source, target, cfg, "food")
 
     assert Path(predicted) == real
+
+
+@pytest.mark.asyncio
+async def test_preview_records_the_camera_segment_used_by_its_real_plan(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    file_path = source / "p.jpg"
+    file_path.write_bytes(b"\xff\xd8\xff")
+
+    cfg = _make_config(
+        source,
+        target,
+        remove_duplicates=False,
+        camera_subfolder_enabled=True,
+    )
+    service = _make_preview_service(cfg)
+    with (
+        patch.object(
+            service._extraction,
+            "extract_detailed",
+            return_value=ExtractionResult(extracted_date=date(2024, 3, 10), source="exif"),
+        ),
+        patch.object(service._extraction, "extract_camera_model", return_value="Nikon Z"),
+    ):
+        result = await service.preview(cfg)
+
+    item = result["items"][0]
+    camera = next(part for part in item["provenance"]["path"] if part["decision"] == "camera")
+    assert camera["segment"] == "Nikon Z"
+    assert camera["segment"] in item["destination"]
 
 
 # ------------------------------------------------------------------ #
@@ -653,7 +691,7 @@ async def test_per_file_worker_observes_cancellation_and_finishes_in_flight_item
     worker_threads: list[int] = []
     main_thread = threading.get_ident()
 
-    def finish_current_item(*args, **kwargs) -> dict[str, object]:
+    def finish_current_item(*args: Any, **kwargs: Any) -> dict[str, object]:
         worker_threads.append(threading.get_ident())
         entered.set()
         while not task.cancel_token.is_set():
