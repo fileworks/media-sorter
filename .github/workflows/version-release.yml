@@ -64,6 +64,11 @@ jobs:
             echo "::warning title=No SEMANTIC_RELEASE_TOKEN::Releasing with the default GITHUB_TOKEN — the pushed tag will NOT trigger release.yml, so no installers are built automatically. Add a fine-grained PAT (contents: read/write) as the SEMANTIC_RELEASE_TOKEN repo secret, or build manually: gh workflow run release.yml --ref <new v* tag>."
           fi
 
+      - name: Configure release commit identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Set up Node 24
         uses: actions/setup-node@v7
         with:
