@@ -30,13 +30,17 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 
-export type ModalSize = "sm" | "md" | "lg" | "xl";
+export type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-lg",
   lg: "max-w-3xl",
   xl: "max-w-5xl",
+  // For a layer whose content *is* the point — a photograph being judged
+  // against another. Still the same shell, so it portals, traps focus, stacks
+  // and answers Escape exactly like every other dialog.
+  full: "max-w-none h-[calc(100dvh-2rem)]",
 };
 
 interface ModalContextValue {
@@ -147,7 +151,9 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "animate-fade-in my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
+          // Opacity fades temporarily blend every line with the backdrop and
+          // make otherwise compliant dialog text fail contrast while opening.
+          "my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
           "rounded-2xl border border-border bg-card shadow-card outline-none",
           SIZE_CLASS[size],
           className,

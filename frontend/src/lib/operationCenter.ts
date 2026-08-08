@@ -100,12 +100,6 @@ export function centerBadge(state: CenterState): CenterBadge {
 export interface PreflightInput {
   /** Groups whose decisions would run. */
   actionableGroups: number;
-  /**
-   * Files Review took out of this run. Distinguishes "you have not decided
-   * anything yet" from "you decided to leave everything out" — two states that
-   * both count zero and need opposite advice.
-   */
-  excludedCount?: number;
   quarantineCount: number;
   quarantineBytes: number;
   copyCount: number;
@@ -156,22 +150,12 @@ export function preflight(input: PreflightInput): Preflight {
 
   if (input.actionableGroups === 0) {
     // A run with no actions is not started: it would write an empty report and
-    // teach the user that Execute sometimes does nothing. What the message must
-    // not do is misdiagnose a deliberate "exclude everything" as indecision.
-    blocking.push(
-      (input.excludedCount ?? 0) > 0
-        ? {
-            text: "Every file is excluded, so this run would do nothing.",
-            tone: "warning",
-            messageKey: "preflight.blocking.allExcluded",
-            params: { count: input.excludedCount ?? 0 },
-          }
-        : {
-            text: "Nothing has been decided yet — there is no work to run.",
-            tone: "warning",
-            messageKey: "preflight.blocking.empty",
-          },
-    );
+    // teach the user that Execute sometimes does nothing.
+    blocking.push({
+      text: "Nothing has been decided yet — there is no work to run.",
+      tone: "warning",
+      messageKey: "preflight.blocking.empty",
+    });
   }
   if (input.staleGroups > 0) {
     blocking.push({

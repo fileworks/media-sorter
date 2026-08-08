@@ -94,6 +94,29 @@ describe("task transport", () => {
     });
   });
 
+  it("sends one root scope through every enumerating request", async () => {
+    mocks.post.mockResolvedValue({ data: { task_id: "scoped" } });
+    mocks.get.mockResolvedValue({ data: { groups: [], next_cursor: null, kind: "exact" } });
+    const client = new MediaSorterApiClient();
+
+    await client.startScan(["camera"]);
+    await client.startAnalysis(["camera"]);
+    await client.startPreview(["camera"]);
+    await client.planImpact("plan", ["camera"], []);
+    await client.startSort(false, undefined, "fingerprint", "plan", {
+      excludedRoots: ["camera"],
+    });
+    await client.listReviewGroups("exact", { excludedRoots: ["camera"] });
+
+    for (const call of mocks.post.mock.calls) {
+      expect(call[1].excluded_roots).toEqual(["camera"]);
+    }
+    expect(mocks.get).toHaveBeenCalledWith(
+      "/api/review/groups",
+      expect.objectContaining({ params: expect.objectContaining({ excluded_roots: ["camera"] }) }),
+    );
+  });
+
   it("does not retry a terminal validation response", async () => {
     const validation = new AxiosError("invalid", "ERR_BAD_REQUEST", undefined, undefined, {
       status: 422,

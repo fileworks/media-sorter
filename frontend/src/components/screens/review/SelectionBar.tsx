@@ -5,8 +5,6 @@ import type { ReviewRow, SelectionActions } from "@/lib/reviewRows";
 interface SelectionBarProps {
   selected: ReviewRow[];
   actions: SelectionActions;
-  onExclude: () => void;
-  onInclude: () => void;
   onKeepOnlyThis: () => void;
   onCompare: () => void;
   onClear: () => void;
@@ -15,15 +13,12 @@ interface SelectionBarProps {
 /**
  * What can be done with the current selection, and why not when it cannot.
  *
- * Excluding is deliberately not confirmed: the row stays visible, struck
- * through, and one click puts it back. A dialog in front of a visibly
- * reversible action teaches people to dismiss dialogs.
+ * Selection acts on duplicate decisions and comparison only. Run scope is
+ * directory-level and is chosen on Sources before files are scanned.
  */
 export function SelectionBar({
   selected,
   actions,
-  onExclude,
-  onInclude,
   onKeepOnlyThis,
   onCompare,
   onClear,
@@ -41,6 +36,8 @@ export function SelectionBar({
       <button
         type="button"
         disabled={!enabled}
+        aria-label={label}
+        aria-description={!enabled ? reason : undefined}
         onClick={onClick}
         className="rounded-lg px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -57,8 +54,6 @@ export function SelectionBar({
       <span className="text-xs font-semibold text-foreground">
         {t("review.selected", { count: selected.length.toLocaleString(locale) })}
       </span>
-      {button(t("review.exclude"), actions.canExclude, actions.reasons.exclude, onExclude)}
-      {button(t("review.include"), actions.canInclude, actions.reasons.include, onInclude)}
       {button(
         t("review.keepOnlyThis"),
         actions.canKeepOnlyThis,

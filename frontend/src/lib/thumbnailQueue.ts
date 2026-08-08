@@ -249,9 +249,10 @@ export function useAuthorizedMedia(url: string | null): {
   objectUrl: string | null;
   loading: boolean;
   errored: boolean;
+  unavailable: boolean;
 } {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  const [state, setState] = useState<"loading" | "loaded" | "error" | "unavailable">("loading");
 
   useEffect(() => {
     if (!url) {
@@ -268,7 +269,7 @@ export function useAuthorizedMedia(url: string | null): {
     void api
       .mediaFetch(url, { signal: controller.signal })
       .then((response) => {
-        if (!response.ok) throw new Error(`media HTTP ${response.status}`);
+        if (!response.ok) throw new ThumbnailHttpError(response.status);
         return response.blob();
       })
       .then((blob) => {
@@ -279,7 +280,9 @@ export function useAuthorizedMedia(url: string | null): {
       })
       .catch((error: unknown) => {
         if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
-        setState("error");
+        setState(
+          error instanceof ThumbnailHttpError && error.status === 415 ? "unavailable" : "error",
+        );
       });
 
     return () => {
@@ -289,5 +292,10 @@ export function useAuthorizedMedia(url: string | null): {
     };
   }, [url]);
 
-  return { objectUrl, loading: state === "loading", errored: state === "error" };
+  return {
+    objectUrl,
+    loading: state === "loading",
+    errored: state === "error",
+    unavailable: state === "unavailable",
+  };
 }

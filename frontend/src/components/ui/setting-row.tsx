@@ -8,10 +8,17 @@
  *
  * The description is not optional help text hidden behind an icon. If a setting
  * needs explaining, it is explained where it is read.
+ *
+ * The description says what the setting *is*, and never moves: a sentence that
+ * rewrites itself as its own value changes is one the reader stops trusting
+ * mid-sentence. Anything that follows from the current value — what "move" will
+ * do to the originals, which copy the selected keep rule keeps, why a row cannot
+ * be touched right now — goes on the `consequence` line under the control, and
+ * anything a setting *reveals* goes in the indented `sub` block under the row.
  */
 
 import { Fragment, useId, type ReactNode } from "react";
-import { FiRotateCcw } from "react-icons/fi";
+import { FiLock, FiRotateCcw } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSettingsDiff } from "@/context/settings-diff-context";
@@ -25,7 +32,24 @@ export type SettingField = keyof Config | readonly (keyof Config)[];
 
 interface SettingRowProps {
   label: ReactNode;
+  /**
+   * What the setting is. Invariant: it must read the same whatever the value,
+   * whatever an async probe reports, and whether or not the row is disabled.
+   */
   description?: ReactNode;
+  /**
+   * What follows from the current value, on its own line under the control.
+   * This is where per-value guidance, figures from a probe, and any other text
+   * that moves with the setting belong — never in `description`.
+   */
+  consequence?: ReactNode;
+  /**
+   * Settings this row reveals, as an indented block beneath it. Each one
+   * carries its own label — use `SubSetting`. Revealed controls do not go in
+   * `children`, where they wrap into the parent's control container and read as
+   * part of the parent's own control.
+   */
+  sub?: ReactNode;
   /** Rendered right of the label — the control itself. */
   children: ReactNode;
   /** Associates the label with a control that has this id. */
@@ -35,7 +59,7 @@ interface SettingRowProps {
   /** Last row in a group draws no bottom rule. */
   last?: boolean;
   disabled?: boolean;
-  /** Shown instead of the description while disabled, when there is a reason. */
+  /** Why the row cannot be changed. Rendered on the consequence line, locked. */
   disabledReason?: string | null;
   /** Anchor target so the rail can jump to this row. */
   id?: string;
@@ -85,10 +109,18 @@ function ChangedMarker({ field }: { field: SettingField }) {
 
   const dot = <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />;
 
+  // Named, not implied. The baseline is the recipe in force, so "changed" here
+  // means "you have taken this away from Safe sort" — a different and far more
+  // useful claim than "this differs from what the product shipped with".
+  const named = { value: defaultValue, baseline: diff.baselineLabel };
+
   if (diff.locked) {
     return (
-      <Tooltip label={t("config.changed.default", { value: defaultValue })}>
-        <span className="inline-flex items-center" aria-label={t("config.changed.marker")}>
+      <Tooltip label={t("config.changed.default", named)}>
+        <span
+          className="inline-flex items-center"
+          aria-label={t("config.changed.marker", { baseline: diff.baselineLabel })}
+        >
           {dot}
         </span>
       </Tooltip>
@@ -96,11 +128,11 @@ function ChangedMarker({ field }: { field: SettingField }) {
   }
 
   return (
-    <Tooltip label={t("config.changed.revert", { value: defaultValue })}>
+    <Tooltip label={t("config.changed.revert", named)}>
       <button
         type="button"
         onClick={() => diff.revert(fields)}
-        aria-label={t("config.changed.revert", { value: defaultValue })}
+        aria-label={t("config.changed.revert", named)}
         className="group/revert inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-primary transition-colors hover:bg-tint-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {dot}
@@ -116,6 +148,8 @@ function ChangedMarker({ field }: { field: SettingField }) {
 export function SettingRow({
   label,
   description,
+  consequence,
+  sub,
   children,
   htmlFor,
   badge,
@@ -127,12 +161,12 @@ export function SettingRow({
   field,
 }: SettingRowProps) {
   const Label = htmlFor ? "label" : "div";
+  const reason = disabled ? (disabledReason ?? null) : null;
   return (
     <div
       id={id}
       className={cn(
-        "flex flex-col gap-3 px-5 py-3.5",
-        !stacked && "sm:flex-row sm:items-center sm:gap-5",
+        "px-5 py-3.5",
         !last && "border-b border-border",
         disabled && "opacity-60",
         // The rail scrolls a row into view; leave it clear of the sticky group
@@ -140,61 +174,98 @@ export function SettingRow({
         id && "scroll-mt-[4.5rem]",
       )}
     >
-      <div className="min-w-0 flex-1">
-        {/* The marker sits beside the label rather than inside it: a `<label>`
-            forwards every click to its control, so a revert button nested in
-            one would also flip the toggle it is meant to put back. */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Label
-            {...(htmlFor ? { htmlFor } : {})}
-            className={cn(
-              "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
-              htmlFor && !disabled && "cursor-pointer",
-            )}
-          >
-            {label}
-            {badge}
-          </Label>
-          {field !== undefined && <ChangedMarker field={field} />}
-        </div>
-        {(disabled && disabledReason ? disabledReason : description) && (
-          <p className="mt-0.5 text-xs leading-relaxed text-faint">
-            {disabled && disabledReason ? disabledReason : description}
-          </p>
-        )}
-      </div>
       <div
-        className={cn(
-          "flex min-w-0 flex-wrap items-center gap-2.5",
-          stacked ? "w-full" : "sm:shrink-0",
-        )}
+        className={cn("flex flex-col gap-3", !stacked && "sm:flex-row sm:items-center sm:gap-5")}
       >
-        {children}
+        <div className="min-w-0 flex-1">
+          {/* The marker sits beside the label rather than inside it: a `<label>`
+              forwards every click to its control, so a revert button nested in
+              one would also flip the toggle it is meant to put back. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Label
+              {...(htmlFor ? { htmlFor } : {})}
+              className={cn(
+                "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
+                htmlFor && !disabled && "cursor-pointer",
+              )}
+            >
+              {label}
+              {badge}
+            </Label>
+            {field !== undefined && <ChangedMarker field={field} />}
+          </div>
+          {description && (
+            <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>
+          )}
+        </div>
+        <div
+          className={cn(
+            "flex min-w-0 flex-wrap items-center gap-2.5",
+            stacked ? "w-full" : "sm:shrink-0",
+          )}
+        >
+          {children}
+        </div>
       </div>
+
+      {/* Why it cannot be changed comes before what it currently does: a reader
+          who cannot act needs that fact first, and the padlock says it without
+          a sentence. */}
+      {reason && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-faint">
+          <FiLock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+          <span className="min-w-0">{reason}</span>
+        </p>
+      )}
+      {consequence && <p className="mt-2 text-xs leading-relaxed text-faint">{consequence}</p>}
+
+      {sub && <div className="mt-3 space-y-3 border-l-2 border-border pl-4">{sub}</div>}
     </div>
   );
 }
 
 /**
- * A full-width strip under a row, showing the concrete result of the settings
- * above it — the example path, the example filename. Reading an example beats
- * reading a description of one.
+ * One setting revealed by the row above it.
+ *
+ * It gets its own label for the same reason the parent has one: a slider that
+ * appears beside a format dropdown when conversion is switched on is not "part
+ * of" conversion to anybody reading it — it is the quality, and saying so is
+ * one word.
  */
-export function SettingPreview({
+export function SubSetting({
+  label,
   children,
-  last = false,
+  htmlFor,
+  description,
+  field,
 }: {
+  label: ReactNode;
   children: ReactNode;
-  last?: boolean;
+  htmlFor?: string;
+  description?: ReactNode;
+  /**
+   * The field this sub-setting writes. It carries its own marker rather than
+   * folding into the parent's: reverting "how similar counts as similar" must
+   * not also reset whether near-duplicates are detected at all.
+   */
+  field?: SettingField;
 }) {
+  const Label = htmlFor ? "label" : "div";
   return (
-    <div
-      className={cn(
-        "bg-muted px-5 py-2.5 text-xs",
-        last ? "rounded-b-xl" : "border-b border-border",
-      )}
-    >
-      {children}
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Label
+            {...(htmlFor ? { htmlFor } : {})}
+            className={cn("block text-xs font-medium text-foreground", htmlFor && "cursor-pointer")}
+          >
+            {label}
+          </Label>
+          {field !== undefined && <ChangedMarker field={field} />}
+        </div>
+        {description && <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:shrink-0">{children}</div>
     </div>
   );
 }

@@ -4,13 +4,18 @@
  * This used to be one line — `Sorted / 2025 / 07 — July / IMG_4382.jpg` — sitting
  * *above* half the rows that determine it, and it could not show the thing
  * people get wrong: the review folders are siblings of the date hierarchy, not
- * children of it. It now sits at the foot of the group, below every row that
- * feeds it, and updates as any of them changes.
+ * children of it.
+ *
+ * It is now a card of its own beside the Sort group rather than the last row
+ * inside it. As the group's final child it read as the output of the row above
+ * it — renaming — when every row in the group feeds it; a card with its own
+ * heading says whose result it is, and at the wide breakpoint it sticks, so the
+ * setting being changed and the tree it changes are visible at once.
  */
 
+import { useId } from "react";
 import { FiFile, FiFolder } from "react-icons/fi";
 
-import { SettingPreview } from "@/components/ui/setting-row";
 import { useI18n } from "@/i18n/I18nContext";
 import { folderPreviewTree, type FolderPreviewNode, type SampleFile } from "@/lib/configSummary";
 import { cn } from "@/lib/utils";
@@ -59,19 +64,27 @@ export function FolderTreePreview({
   invented: boolean;
 }) {
   const { t, locale } = useI18n();
+  const headingId = useId();
   const nodes = folderPreviewTree(config, t, locale, samples);
   const deduplicateOnly = config.run_mode === "deduplicate_only";
 
   return (
-    <SettingPreview last>
-      <div className="mb-1.5 flex flex-wrap items-baseline gap-2">
-        <span className="text-3xs font-semibold uppercase tracking-[0.1em] text-faint">
+    <section
+      aria-labelledby={headingId}
+      className="rounded-xl border border-border bg-card p-4 xl:sticky xl:top-4"
+    >
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h2
+          id={headingId}
+          className="text-3xs font-semibold uppercase tracking-[0.1em] text-foreground"
+        >
           {t("config.folder.previewTitle")}
-        </span>
+        </h2>
         {invented && !deduplicateOnly && (
           <span className="text-3xs text-faint">{t("config.folder.previewExample")}</span>
         )}
       </div>
+      <p className="mb-2.5 text-xs text-faint">{t("config.folder.previewAttribution")}</p>
       <ul className="font-mono text-xs">
         <li>
           <span className="flex items-center gap-1.5 py-px font-semibold text-foreground">
@@ -85,9 +98,9 @@ export function FolderTreePreview({
           </ul>
         </li>
       </ul>
-      <p className="mt-1.5 text-xs text-faint">
+      <p className="mt-2 text-xs text-faint">
         {deduplicateOnly ? t("config.folder.previewStaysInPlace") : t("config.folder.fallbackNote")}
       </p>
-    </SettingPreview>
+    </section>
   );
 }

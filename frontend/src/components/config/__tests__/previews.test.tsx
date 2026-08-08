@@ -12,10 +12,12 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { FolderTreePreview } from "@/components/config/fields/FolderTreePreview";
 import { RenameBuilder } from "@/components/config/fields/RenameBuilder";
-import { I18nProvider } from "@/i18n/I18nContext";
+import { SortGroup } from "@/components/config/groups/SortGroup";
+import { I18nProvider, translate } from "@/i18n/I18nContext";
 import { INVENTED_SAMPLES } from "@/lib/configSummary";
 import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
 import type { Config } from "@/types/api";
@@ -33,18 +35,60 @@ function renderTree(config: Config) {
 afterEach(cleanup);
 
 describe("folder tree preview", () => {
+  it("is a card of its own, attributed to the whole Sort group", () => {
+    renderTree(ORGANIZE);
+
+    // A heading rather than a caption inside somebody else's card: it is the
+    // result of every row in the group, not of the rename setting above it.
+    const heading = screen.getByRole("heading", {
+      name: translate("en", "config.folder.previewTitle"),
+    });
+    const card = heading.closest("section");
+    expect(card).not.toBeNull();
+    expect((card as HTMLElement).getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(within(card as HTMLElement).getByText(/result of every setting in Sort/i)).toBeTruthy();
+  });
+
+  it("sits beside the Sort group rather than as its last row", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider initialLocale="en">
+          <SortGroup
+            config={ORGANIZE}
+            updateConfig={() => undefined}
+            fieldErrors={new Map()}
+            samples={INVENTED_SAMPLES}
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const group = document.getElementById("group-sort");
+    const preview = screen
+      .getByRole("heading", { name: translate("en", "config.folder.previewTitle") })
+      .closest("section");
+    expect(group).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(group?.contains(preview as HTMLElement)).toBe(false);
+  });
+
   it("draws the date hierarchy with the review folders as its siblings", () => {
     renderTree(ORGANIZE);
 
     expect(screen.getByText("2025/")).toBeTruthy();
     expect(screen.getByText("07 — July/")).toBeTruthy();
-    expect(screen.getByText("_duplicates/")).toBeTruthy();
+    expect(screen.getByText("_copies/")).toBeTruthy();
+    expect(screen.getByText("_undated/")).toBeTruthy();
 
-    // The review folder is a sibling of the year, not nested inside it: the
-    // one thing about the layout people get wrong.
+    // Copies sit with the keeper; conditions with no library location stay at
+    // the root as siblings of the dated hierarchy.
     const year = screen.getByText("2025/").closest("li");
     expect(year).not.toBeNull();
-    expect(within(year as HTMLElement).queryByText("_duplicates/")).toBeNull();
+    expect(within(year as HTMLElement).getByText("_copies/")).toBeTruthy();
+    expect(within(year as HTMLElement).queryByText("_undated/")).toBeNull();
   });
 
   it("follows each setting that feeds it", () => {
@@ -70,16 +114,16 @@ describe("folder tree preview", () => {
     renderTree({ ...ORGANIZE, run_mode: "deduplicate_only" });
 
     expect(screen.queryByText("2025/")).toBeNull();
-    expect(screen.getByText("_duplicates/")).toBeTruthy();
+    expect(screen.getByText("_corrupted/")).toBeTruthy();
     expect(screen.getByText(/Everything else stays exactly where it is/)).toBeTruthy();
   });
 
   it("omits a review folder the settings cannot produce", () => {
     renderTree({ ...ORGANIZE, remove_duplicates: false, junk_filter_enabled: false });
 
-    expect(screen.queryByText("_duplicates/")).toBeNull();
+    expect(screen.queryByText("_copies/")).toBeNull();
     expect(screen.queryByText("_junk/")).toBeNull();
-    expect(screen.getByText("_failed/")).toBeTruthy();
+    expect(screen.getByText("_corrupted/")).toBeTruthy();
   });
 });
 

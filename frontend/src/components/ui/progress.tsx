@@ -3,10 +3,12 @@ import { cn } from "@/lib/utils";
 interface ProgressBarProps {
   /** 0–100 for a determinate bar; omit or pass `undefined` for indeterminate. */
   value?: number;
+  /** Short accessible name describing the operation being measured. */
+  label: string;
   className?: string;
 }
 
-export function ProgressBar({ value, className = "" }: ProgressBarProps) {
+export function ProgressBar({ value, label, className = "" }: ProgressBarProps) {
   const isIndeterminate = value === undefined;
   const clamped = isIndeterminate ? 0 : Math.min(100, Math.max(0, value));
 
@@ -18,6 +20,7 @@ export function ProgressBar({ value, className = "" }: ProgressBarProps) {
         className,
       )}
       role="progressbar"
+      aria-label={label}
       aria-valuenow={isIndeterminate ? undefined : clamped}
       aria-valuemin={0}
       aria-valuemax={100}

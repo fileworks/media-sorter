@@ -16,10 +16,20 @@ import type { Config } from "@/types/api";
  * exactly as they did before, with no marker.
  */
 export interface SettingsDiffValue {
-  /** Config keys whose live value differs from the factory default. */
+  /** Config keys whose live value differs from the baseline. */
   changed: ReadonlySet<string>;
-  /** The factory defaults, as served by `GET /api/config/defaults`. */
+  /**
+   * What "unchanged" means here: the recipe in force, over the factory defaults
+   * for every field it does not claim. With no recipe matching, the factory
+   * defaults as served by `GET /api/config/defaults`.
+   */
   defaults: Partial<Config>;
+  /**
+   * The baseline's name, already translated — "recipe Safe sort", or "the
+   * application defaults". A marker that says "changed" without saying changed
+   * *from what* is a fact the reader cannot use.
+   */
+  baselineLabel: string;
   /**
    * Put these fields back to their defaults — after showing what that would
    * change. Never writes without confirmation.

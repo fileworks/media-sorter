@@ -8,47 +8,128 @@
  */
 
 import type { Config, PreviewItem, PreviewResult } from "@/types/api";
+import { isWithin } from "@/lib/sourcesStage";
 
 // ── Headline figures ─────────────────────────────────────────────────────────
 
 export interface PlanTotals {
   scanned: number;
   ready: number;
+  /** Copies the run would set aside — every member of a set but the one kept. */
   duplicates: number;
+  /** Sets those copies belong to. Reported beside the copies, never instead of them. */
+  duplicateSets: number;
   duplicatesResolved: number;
   duplicatesUnresolved: number;
+  /** Sets this run does not act on, stated separately rather than folded in. */
+  duplicatesOutOfScope: number;
   junk: number;
   warnings: number;
   /** Share of the scan each band occupies, as percentages summing to ≤ 100. */
   share: { ready: number; duplicates: number; junk: number };
 }
 
-/** What the duplicate workbench itself found, when it has loaded. */
+/**
+ * Duplicates as the one number every surface reports.
+ *
+ * Three places used to answer this question and gave three answers, none of
+ * which was what the run would do. This derivation fixes all three properties
+ * that were wrong:
+ *
+ * - **Sets and copies, not members.** "How many duplicate sets are there" and
+ *   "how many copies would be set aside" are the two questions people ask; the
+ *   sum of group sizes answers neither. Five sets of three is `5 sets · 10
+ *   copies`, never `15`.
+ * - **Run-scoped.** A set counts when at least two of its members are files
+ *   this run acts on. That is what makes the figure checkable by counting the
+ *   result — the reported symptom was 14 against a screen showing 5.
+ * - **Counted once.** A file in both an exact and a similar set is one file.
+ *   The groups arrive from three independent queries, flat-mapped, so without
+ *   this the overlap is counted twice.
+ */
 export interface DuplicateTally {
-  /** Files in a duplicate group, across every group. */
-  files: number;
+  /** Sets with at least two members this run acts on. */
+  sets: number;
+  /** Copies inside those sets that the run would set aside — every member but the keeper. */
+  copies: number;
+  /** Sets whose keeper the user has chosen. */
   resolved: number;
+  /** Sets still waiting on a decision, which the run will skip. */
   unresolved: number;
+  /** Sets the run does not touch at all, stated separately rather than hidden. */
+  outOfScope: number;
+}
+
+/** One duplicate set, reduced to what the tally needs. */
+export interface TallyGroup {
+  id: string;
+  /** Strongest first: an overlap is attributed to the stronger evidence. */
+  kind: "exact" | "similar" | "burst";
+  memberPaths: readonly string[];
+  decided: boolean;
+}
+
+const KIND_STRENGTH: Record<TallyGroup["kind"], number> = { exact: 0, similar: 1, burst: 2 };
+
+/**
+ * The single duplicate derivation. Every surface reads this and only this.
+ *
+ * *inScope* is the set of source paths the run acts on — `result.items`. A set
+ * needs two of its members in there before it is a duplicate *of this run*:
+ * one member alone has nothing to be a duplicate of.
+ */
+export function duplicateTally(
+  groups: readonly TallyGroup[],
+  inScope: ReadonlySet<string>,
+  excludedRoots: readonly string[] = [],
+): DuplicateTally {
+  const ordered = [...groups].sort((a, b) => KIND_STRENGTH[a.kind] - KIND_STRENGTH[b.kind]);
+  const claimed = new Set<string>();
+  let sets = 0;
+  let copies = 0;
+  let resolved = 0;
+  let outOfScope = 0;
+
+  for (const group of ordered) {
+    // A member already counted under stronger evidence is not counted again,
+    // but it still belongs to this set — it just cannot add a second copy.
+    const present = group.memberPaths.filter((path) => inScope.has(path));
+    if (present.length < 2) {
+      const omittedByScope = group.memberPaths.some(
+        (path) => !inScope.has(path) && excludedRoots.some((root) => isWithin(path, root)),
+      );
+      if (omittedByScope) continue;
+      outOfScope += 1;
+      continue;
+    }
+    const fresh = present.filter((path) => !claimed.has(path));
+    if (fresh.length < 2) continue;
+    for (const path of fresh) claimed.add(path);
+    sets += 1;
+    // Every member but the one that stays: that is what "set aside" means.
+    copies += fresh.length - 1;
+    if (group.decided) resolved += 1;
+  }
+
+  return { sets, copies, resolved, unresolved: sets - resolved, outOfScope };
 }
 
 export function planTotals(
   result: PreviewResult,
   warningCount: number,
-  // The dry run counts the copies it would *skip*; the workbench counts the
-  // groups it found in the catalog, which is not the same number and, on a
-  // library already in its destination, is often 0 against a screen full of
-  // groups. The tile has to agree with the tab it links to, so the workbench
-  // wins whenever it has an answer.
-  duplicateTally?: DuplicateTally | null,
+  // The one derivation, from `duplicateTally`. The dry run counts copies it
+  // would skip and the catalog counts groups it holds; those are different
+  // numbers, and on a library already in its destination the first is often 0
+  // against a screen full of groups. Every surface now reads the same tally, so
+  // there is nothing left to disagree.
+  tally?: DuplicateTally | null,
 ): PlanTotals {
   const stats = result.stats;
   const scanned = stats.total;
   const planDuplicates = stats.will_skip_duplicate + (stats.duplicate_unknown ?? 0);
-  const duplicates = duplicateTally ? duplicateTally.files : planDuplicates;
-  const unresolved = duplicateTally ? duplicateTally.unresolved : result.impact.unresolved_count;
-  const resolved = duplicateTally
-    ? duplicateTally.resolved
-    : Math.max(0, planDuplicates - unresolved);
+  const duplicates = tally ? tally.copies : planDuplicates;
+  const unresolved = tally ? tally.unresolved : result.impact.unresolved_count;
+  const resolved = tally ? tally.resolved : Math.max(0, planDuplicates - unresolved);
   const junk = stats.will_quarantine_junk;
   const ready = stats.will_sort;
 
@@ -58,8 +139,10 @@ export function planTotals(
     scanned,
     ready,
     duplicates,
+    duplicateSets: tally ? tally.sets : 0,
     duplicatesResolved: resolved,
     duplicatesUnresolved: unresolved,
+    duplicatesOutOfScope: tally ? tally.outOfScope : 0,
     junk,
     warnings: warningCount,
     share: { ready: pct(ready), duplicates: pct(duplicates), junk: pct(junk) },
@@ -200,21 +283,25 @@ export interface TreeNode {
  * The folders a run may create for files a person has to look at.
  *
  * Defined once and exported, because this set was wrong in a way nothing
- * caught: `_unknown_date` and `_future_date` were singular where the sort
- * writes `_unknown_dates` and `_future_dates`, and `_corrupted` was missing
- * entirely — so three of the folders the run actually produces were rendered
- * as ordinary date folders. `reviewFolders.test.ts` now fails if this drifts
- * from the backend's QUARANTINE_FOLDERS again.
+ * caught. It contains both the current names and read-only legacy names: old
+ * destinations remain understandable, while new runs only create the current
+ * set. `reviewFolders.test.ts` pins both halves to the backend declarations.
  */
 export const REVIEW_FOLDER_NAMES = [
-  "_duplicates",
+  "_undated",
+  "_corrupted",
   "_junk",
+  "_copies",
+  // Retired names are recognised but never proposed for a new run.
   "_unknown_dates",
   "_future_dates",
-  "_corrupted",
+  "_duplicates",
   "_failed",
   "_already_in_destination",
 ] as const;
+
+/** Folders a current run may write, including contextual copy leaves. */
+export const CURRENT_REVIEW_FOLDER_NAMES = ["_undated", "_corrupted", "_junk", "_copies"] as const;
 
 const REVIEW_FOLDERS = new Set<string>(REVIEW_FOLDER_NAMES);
 
@@ -328,13 +415,13 @@ export interface TabCounts {
 export function tabCounts(
   result: PreviewResult,
   warnings: PlanWarning[],
-  duplicateTally?: DuplicateTally | null,
+  tally?: DuplicateTally | null,
 ): TabCounts {
   return {
-    // Same rule as `planTotals`: the badge and the tile must not disagree.
+    // Same derivation as `planTotals`: the badge and the tile cannot disagree
+    // when neither of them does its own arithmetic.
     duplicates:
-      duplicateTally?.files ??
-      result.stats.will_skip_duplicate + (result.stats.duplicate_unknown ?? 0),
+      tally?.copies ?? result.stats.will_skip_duplicate + (result.stats.duplicate_unknown ?? 0),
     junk: result.stats.will_quarantine_junk,
     changes: result.stats.will_sort,
     warnings: warningTotal(warnings),

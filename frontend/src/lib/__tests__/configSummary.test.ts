@@ -150,7 +150,11 @@ describe("folder preview tree", () => {
     expect(dates).toMatchObject({ name: "2025", kind: "folder" });
     const month = dates.children?.[0];
     expect(month).toMatchObject({ name: "07 — July", kind: "folder" });
-    expect(month?.children?.map((node) => node.name)).toEqual(["IMG_4382.JPG", "VID_0042.mp4"]);
+    expect(month?.children?.map((node) => node.name)).toEqual([
+      "IMG_4382.JPG",
+      "VID_0042.mp4",
+      "_copies",
+    ]);
   });
 
   it("draws the review folders beside the date hierarchy, never inside it", () => {
@@ -158,24 +162,23 @@ describe("folder preview tree", () => {
     const review = nodes.filter((node) => node.kind === "review").map((node) => node.name);
 
     expect(nodes[0]).toMatchObject({ name: "2025", kind: "folder" });
-    expect(review).toContain("_duplicates");
-    expect(review).toContain("_unknown_dates");
+    expect(review).toContain("_undated");
+    expect(review).toContain("_corrupted");
+    expect(review).not.toContain("_copies");
   });
 
   it("offers only the review folders the settings can actually produce", () => {
-    expect(possibleReviewFolders({ ...BASE, remove_duplicates: false })).not.toContain(
-      "_duplicates",
-    );
+    expect(possibleReviewFolders(BASE)).not.toContain("_copies");
     expect(possibleReviewFolders({ ...BASE, junk_filter_enabled: true })).toContain("_junk");
     // A file can always defeat a read, whatever the settings say.
-    expect(possibleReviewFolders(BASE)).toContain("_failed");
+    expect(possibleReviewFolders(BASE)).toContain("_corrupted");
   });
 
   it("shows only the review folders in deduplicate-only, because nothing is placed", () => {
     const nodes = folderPreviewTree({ ...BASE, run_mode: "deduplicate_only" }, t, "en", invented);
 
     expect(nodes.every((node) => node.kind === "review")).toBe(true);
-    expect(nodes.map((node) => node.name)).not.toContain("_unknown_dates");
+    expect(nodes.map((node) => node.name)).not.toContain("_undated");
   });
 
   it("puts the files at the root when nothing is filed by date", () => {

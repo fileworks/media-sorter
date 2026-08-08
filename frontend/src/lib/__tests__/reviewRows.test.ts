@@ -1,21 +1,53 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyFilters,
+  catalogGroupsForRun,
   comparePair,
-  expandExclusion,
-  groupIntoStacks,
-  isStack,
-  reconcileExclusions,
-  rowCounts,
-  seedExclusions,
   selectionActions,
   toReviewRows,
-  treeFromRows,
   type ReviewRow,
 } from "@/lib/reviewRows";
-import type { DuplicateGroup } from "@/lib/reviewWorkbench";
+import type { DuplicateGroup, GroupMember } from "@/lib/reviewWorkbench";
 import type { PreviewItem, PreviewResult } from "@/types/api";
+
+function provenance(
+  pathDecision: NonNullable<PreviewItem["provenance"]>["path"][number]["decision"] | null = "date",
+  overrides: Partial<NonNullable<PreviewItem["provenance"]>> = {},
+): NonNullable<PreviewItem["provenance"]> {
+  return {
+    date: {
+      resolved_date: "2025-07-04",
+      winning_source: "filename",
+      candidates: [],
+    },
+    rules: {
+      matched_tags: [],
+      matched_routes: [],
+      winning_route: null,
+      route_folder: null,
+    },
+    categorization: {
+      enabled: false,
+      label: null,
+      confidence: null,
+      threshold: null,
+      passed: null,
+    },
+    duplicate: {
+      evaluated: false,
+      status: "not_evaluated",
+      match_kind: null,
+      matched_path: null,
+      perceptual_distance: null,
+    },
+    unit: null,
+    path:
+      pathDecision === null
+        ? []
+        : [{ segment: "2025", decision: pathDecision, detail: "recorded by the plan" }],
+    ...overrides,
+  };
+}
 
 function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
   return {
@@ -34,15 +66,32 @@ function result(...items: PreviewItem[]): PreviewResult {
   return { items, impact: { required_bytes: 0 } } as unknown as PreviewResult;
 }
 
-function member(id: string, path: string, role = "input") {
+function member(id: string, path: string, role: "input" | "reference" = "input"): GroupMember {
   return {
     member_id: id,
     root_id: "input-a",
     role,
     relative_path: path,
     observed_path: path,
-    facts: { size_bytes: 10 },
-    evidence: {},
+    facts: {
+      size_bytes: 10,
+      modified_at: { known: false, value: null, issue: null },
+      captured_at: { known: false, value: null, issue: null },
+      width: { known: false, value: null, issue: null },
+      height: { known: false, value: null, issue: null },
+      duration_seconds: { known: false, value: null, issue: null },
+      codec: { known: false, value: null, issue: null },
+      media_kind: "image",
+    },
+    evidence: {
+      algorithm: "sha256",
+      sha256: null,
+      signature: null,
+      distance: null,
+      threshold: null,
+      confidence: "high",
+      extraction_issues: [],
+    },
   };
 }
 
@@ -70,6 +119,61 @@ describe("toReviewRows", () => {
     expect(rows[0].folder).toBe("/in");
     expect(rows[0].status).toBe("organize");
   });
+
+  it("carries the plan explanation into the row and derives its date reason from it", () => {
+    const recorded = provenance();
+    const rows = toReviewRows(
+      result(
+        item({
+          extracted_date: "1999-01-01",
+          metadata_source: "filesystem",
+          provenance: recorded,
+        }),
+      ),
+    );
+
+    expect(rows[0].provenance).toBe(recorded);
+    expect(rows[0].reason).toEqual({
+      key: "review.reason.date.filename",
+      params: { date: "2025-07-04" },
+    });
+  });
+
+  it.each([
+    ["sort", "date", "review.reason.date.filename"],
+    ["unknown_date", "quarantine", "review.reason.noDate"],
+    ["future_date", "quarantine", "review.reason.futureDate"],
+    ["suspicious_date", "quarantine", "review.reason.suspiciousDate"],
+    ["duplicate", "quarantine", "review.reason.duplicatePlain"],
+    ["junk", "quarantine", "review.reason.junk"],
+    ["already_in_destination", "quarantine", "review.reason.alreadyThere"],
+    ["keep_in_place", null, "review.reason.keepInPlace"],
+  ] as const)(
+    "keeps the %s summary aligned with its recorded %s outcome",
+    (status, decision, reasonKey) => {
+      const recorded = provenance(decision, {
+        date: {
+          resolved_date: status === "unknown_date" ? null : "2025-07-04",
+          winning_source: status === "unknown_date" ? null : "filename",
+          candidates: [],
+        },
+      });
+      const row = toReviewRows(
+        result(
+          item({
+            status,
+            destination: status === "keep_in_place" ? null : "/out/_held/photo.jpg",
+            provenance: recorded,
+          }),
+        ),
+      )[0];
+
+      expect(row.reason.key).toBe(reasonKey);
+      expect(row.provenance?.path.map((part) => part.decision)).toEqual(
+        decision === null ? [] : [decision],
+      );
+    },
+  );
 
   it("maps each preview status to what will actually happen", () => {
     const rows = toReviewRows(
@@ -130,11 +234,46 @@ describe("toReviewRows", () => {
     expect(rows[1].stack?.keptInstead).toBe("/in/a.jpg");
   });
 
+  it("does not turn a library-wide group with one current member into a one-copy set", () => {
+    const catalog = stack({
+      members: [member("m1", "/in/a.jpg"), member("m2", "/another-run/b.jpg")],
+    });
+    const current = result(item({ source: "/in/a.jpg" }));
+    const rows = toReviewRows(current, [catalog]);
+
+    expect(catalogGroupsForRun(current.items, [catalog])).toEqual([]);
+    expect(rows[0].stack).toBeNull();
+  });
+
+  it("keeps a catalog set actionable when two current copies remain but its anchor is outside", () => {
+    const catalog = stack({
+      member_count: 3,
+      total_bytes: 30,
+      anchor_member_id: "outside",
+      members: [
+        member("outside", "/another-run/kept.jpg"),
+        member("m1", "/in/a.jpg"),
+        member("m2", "/in/b.jpg"),
+      ],
+    });
+    const current = result(item({ source: "/in/a.jpg" }), item({ source: "/in/b.jpg" }));
+    const scoped = catalogGroupsForRun(current.items, [catalog]);
+    const rows = toReviewRows(current, [catalog]);
+
+    expect(scoped[0]).toMatchObject({
+      member_count: 2,
+      total_bytes: 20,
+      anchor_member_id: "m1",
+    });
+    expect(rows.map((row) => row.stack?.size)).toEqual([2, 2]);
+    expect(rows.map((row) => row.stack?.isKeeper)).toEqual([true, false]);
+  });
+
   it("lets a review decision override the anchor as keeper", () => {
     const rows = toReviewRows(
       result(item({ source: "/in/a.jpg" }), item({ source: "/in/b.jpg" })),
       [stack()],
-      { g1: { keeper_member_id: "m2" } as never },
+      new Map([["g1", "m2"]]),
     );
 
     expect(rows[1].stack?.isKeeper).toBe(true);
@@ -155,214 +294,33 @@ describe("toReviewRows", () => {
     expect(rows[0].stack?.hasBaseline).toBe(true);
   });
 
-  it("marks an excluded row as excluded whatever it would otherwise have been", () => {
-    const rows = toReviewRows(result(item()), [], {}, new Set(["/in/photo.jpg"]));
-
-    expect(rows[0].status).toBe("excluded");
-    expect(rows[0].excluded).toBe(true);
-  });
-});
-
-describe("groupIntoStacks", () => {
-  it("emits a stack for grouped rows and leaves loose rows in place", () => {
-    const rows = toReviewRows(
-      result(
-        item({ source: "/in/a.jpg" }),
-        item({ source: "/in/b.jpg" }),
-        item({ source: "/in/c.jpg" }),
-      ),
-      [stack()],
-    );
-
-    const entries = groupIntoStacks(rows);
-
-    expect(entries).toHaveLength(2);
-    expect(isStack(entries[0])).toBe(true);
-    expect(isStack(entries[0]) && entries[0].rows).toHaveLength(2);
-    expect(isStack(entries[1])).toBe(false);
-  });
-
-  it("identifies the stack's keeper", () => {
-    const rows = toReviewRows(
-      result(item({ source: "/in/a.jpg" }), item({ source: "/in/b.jpg" })),
-      [stack()],
-    );
-
-    const [first] = groupIntoStacks(rows);
-    expect(isStack(first) && first.keeper?.source).toBe("/in/a.jpg");
-  });
-});
-
-describe("groupIntoStacks — excluding the keeper", () => {
-  const three = stack({
-    member_count: 3,
-    anchor_member_id: "m1",
-    members: [member("m1", "/in/a.jpg"), member("m2", "/in/b.jpg"), member("m3", "/in/c.jpg")],
-  } as Partial<DuplicateGroup>);
-  const plan = result(
-    item({ source: "/in/a.jpg", destination: "/out/a.jpg", status: "duplicate" }),
-    item({ source: "/in/b.jpg", destination: "/out/b.jpg", status: "duplicate" }),
-    item({ source: "/in/c.jpg", destination: "/out/c.jpg", status: "duplicate" }),
-  );
-  const stacksFor = (excluded: string[]) =>
-    groupIntoStacks(toReviewRows(plan, [three], {}, new Set(excluded))).filter(isStack);
-
-  it("promotes the next copy when the keeper is excluded", () => {
-    const [only] = stacksFor(["/in/a.jpg"]);
-
-    expect(only.keeper?.source).toBe("/in/b.jpg");
-    expect(only.keeperPromoted).toBe(true);
-  });
-
-  it("keeps the chosen keeper when it is not excluded", () => {
-    const [only] = stacksFor(["/in/b.jpg"]);
-
-    expect(only.keeper?.source).toBe("/in/a.jpg");
-    expect(only.keeperPromoted).toBe(false);
-  });
-
-  it("keeps nothing when every copy is excluded, rather than keeping an excluded one", () => {
-    const [only] = stacksFor(["/in/a.jpg", "/in/b.jpg", "/in/c.jpg"]);
-
-    expect(only.keeper).toBeNull();
-    expect(only.keeperPromoted).toBe(false);
-  });
-});
-
-describe("applyFilters", () => {
-  const rows = toReviewRows(
-    result(
-      item({ source: "/in/keep.jpg" }),
-      item({ source: "/in/trash.jpg", status: "junk" }),
-      item({ source: "/in/nodate.jpg", status: "unknown_date", extracted_date: null }),
-    ),
-  );
-
-  it("composes chip, tree and search with AND", () => {
-    expect(applyFilters(rows, { filter: "all", search: "", treePath: null })).toHaveLength(3);
-    expect(applyFilters(rows, { filter: "junk", search: "", treePath: null })).toHaveLength(1);
-    expect(applyFilters(rows, { filter: "all", search: "keep", treePath: null })).toHaveLength(1);
-    expect(applyFilters(rows, { filter: "junk", search: "keep", treePath: null })).toHaveLength(0);
-  });
-
-  it("matches search against name, source folder and destination", () => {
-    expect(applyFilters(rows, { filter: "all", search: "/in", treePath: null })).toHaveLength(3);
-    expect(applyFilters(rows, { filter: "all", search: "sorted", treePath: null })).toHaveLength(3);
-  });
-
-  it("filters by a destination-tree path", () => {
-    // The paths the tree emits are rooted, so those are the ones asserted here:
-    // a bare "2025/07" is not a node any click can produce.
-    expect(
-      applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2025/07" }),
-    ).toHaveLength(3);
-    expect(applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted" })).toHaveLength(
-      3,
-    );
-    expect(applyFilters(rows, { filter: "all", search: "", treePath: "out/1999" })).toHaveLength(0);
-  });
-});
-
-describe("rowCounts", () => {
-  it("counts every chip from the same rows the list draws", () => {
-    const rows = toReviewRows(
-      result(
-        item({ source: "/in/a.jpg" }),
-        item({ source: "/in/b.jpg", status: "junk" }),
-        item({ source: "/in/c.jpg", status: "unknown_date", extracted_date: null }),
-      ),
-    );
-
-    const counts = rowCounts(rows);
-
-    // The bug this prevents: a tile reading "0 duplicates" beside four groups.
-    expect(counts.all).toBe(3);
-    expect(counts.junk).toBe(1);
-    expect(counts.no_date).toBe(1);
-    // An undated file is still organised — into `_unknown_dates/`. "No date" is
-    // a chip over a file that moves, not a separate destiny, so the chips
-    // deliberately overlap and only `all` is the sum.
-    expect(counts.organize).toBe(2);
-  });
-});
-
-describe("treeFromRows", () => {
-  it("counts folders from the rows themselves", () => {
-    const rows = toReviewRows(
-      result(
-        item({ source: "/in/a.jpg", destination: "/out/2025/07/a.jpg" }),
-        item({ source: "/in/b.jpg", destination: "/out/2025/08/b.jpg" }),
-      ),
-    );
-
-    const tree = treeFromRows(rows);
-
-    expect(tree.count).toBe(2);
-    const out = tree.children[0];
-    expect(out.name).toBe("out");
-    expect(out.count).toBe(2);
-    expect(out.children.map((child) => child.name)).toEqual(["2025"]);
-  });
-
-  it("marks review folders so they read differently from date folders", () => {
-    const rows = toReviewRows(result(item({ destination: "/out/_duplicates/a.jpg" })));
-
-    const duplicates = treeFromRows(rows).children[0].children[0];
-    expect(duplicates.name).toBe("_duplicates");
-    expect(duplicates.isReview).toBe(true);
-  });
-
-  it("ignores rows with no destination", () => {
-    const rows = toReviewRows(result(item({ destination: null })));
-
-    expect(treeFromRows(rows).count).toBe(0);
-  });
-});
-
-describe("expandExclusion", () => {
-  it("expands any excluded member to its whole unit", () => {
-    const rows = toReviewRows(
-      result(
-        item({ source: "/in/shot.raw", unit_id: "u1" }),
-        item({ source: "/in/shot.jpg", unit_id: "u1" }),
-        item({ source: "/in/other.jpg", unit_id: "u2" }),
-      ),
-    );
-
-    const expanded = expandExclusion(rows, ["/in/shot.jpg"]);
-
-    expect(expanded).toEqual(new Set(["/in/shot.jpg", "/in/shot.raw"]));
-  });
-
-  it("leaves a file with no unit alone", () => {
-    const rows = toReviewRows(result(item({ source: "/in/a.jpg" })));
-
-    expect(expandExclusion(rows, ["/in/a.jpg"])).toEqual(new Set(["/in/a.jpg"]));
-  });
-});
-
-describe("seedExclusions", () => {
-  it("starts unreadable and undated files excluded", () => {
+  it("keeps unreadable and undated files visible at their planned review folders", () => {
     const rows = toReviewRows(
       result(
         item({ source: "/in/ok.jpg" }),
-        item({ source: "/in/broken.jpg", status: "failed" }),
-        item({ source: "/in/nodate.jpg", status: "unknown_date", extracted_date: null }),
+        item({
+          source: "/in/broken.jpg",
+          destination: "/out/_corrupted/broken.jpg",
+          status: "failed",
+        }),
+        item({
+          source: "/in/nodate.jpg",
+          destination: "/out/_undated/nodate.jpg",
+          status: "unknown_date",
+          extracted_date: null,
+        }),
       ),
     );
 
-    expect(seedExclusions(rows)).toEqual(new Set(["/in/broken.jpg", "/in/nodate.jpg"]));
-  });
-});
-
-describe("reconcileExclusions", () => {
-  it("keeps exclusions whose file is still in the plan and reports the rest", () => {
-    const rows = toReviewRows(result(item({ source: "/in/a.jpg" })));
-
-    const { kept, dropped } = reconcileExclusions(rows, new Set(["/in/a.jpg", "/in/gone.jpg"]));
-
-    expect(kept).toEqual(new Set(["/in/a.jpg"]));
-    expect(dropped).toBe(1);
+    expect(rows[1]).toMatchObject({
+      status: "unreadable",
+      destination: "/out/_corrupted/broken.jpg",
+      setAsideCategory: "corrupted",
+    });
+    expect(rows[2]).toMatchObject({
+      destination: "/out/_undated/nodate.jpg",
+      setAsideCategory: "undated",
+    });
   });
 });
 
@@ -374,27 +332,13 @@ describe("selectionActions", () => {
   it("states a reason for every action it will not offer", () => {
     const actions = selectionActions([]);
 
-    expect(actions.canExclude).toBe(false);
-    expect(actions.reasons.exclude).toMatch(/select a file/i);
+    expect(actions.reasons.keepOnlyThis).toMatch(/select exactly one/i);
     expect(actions.reasons.compare).toMatch(/exactly two/i);
   });
 
   it("enables Compare only with exactly two selected", () => {
     expect(selectionActions(rows.slice(0, 1)).canCompare).toBe(false);
     expect(selectionActions(rows).canCompare).toBe(true);
-  });
-
-  it("refuses to exclude a baseline and says why", () => {
-    const baselineRows = toReviewRows(result(item({ source: "/in/a.jpg" })), [
-      stack({
-        members: [member("m1", "/in/a.jpg", "reference"), member("m2", "/in/b.jpg")],
-      } as Partial<DuplicateGroup>),
-    ]);
-
-    const actions = selectionActions(baselineRows);
-
-    expect(actions.canExclude).toBe(false);
-    expect(actions.reasons.exclude).toMatch(/never changed/i);
   });
 
   it("offers Keep only this for exactly one member of a stack", () => {
@@ -422,52 +366,5 @@ describe("comparePair", () => {
   it("refuses anything that is not exactly two", () => {
     expect(comparePair([rows[0]])).toBeNull();
     expect(comparePair(rows)).toBeNull();
-  });
-});
-
-describe("the destination tree and the list it filters", () => {
-  /**
-   * Clicking a folder must show that folder's files and no others. The filter
-   * matched the tree path as a *substring* of the destination, so selecting
-   * `sorted/2019` also listed `sorted/2019-backup`, and — because the match ran
-   * over the whole path including the file name — anything merely containing
-   * the digits. The tree's own count stayed right, so the two disagreed.
-   */
-  const rows = toReviewRows(
-    result(
-      item({ source: "/in/a.jpg", destination: "/out/sorted/2019/a.jpg" }),
-      item({ source: "/in/b.jpg", destination: "/out/sorted/2019-backup/b.jpg" }),
-      item({ source: "/in/c.jpg", destination: "/out/sorted/2019/07/c.jpg" }),
-      item({ source: "/in/d.jpg", destination: "/out/sorted/2020/2019-reunion.jpg" }),
-    ),
-  );
-
-  function nodeCount(path: string): number {
-    const segments = path.split("/");
-    let node = treeFromRows(rows);
-    for (const segment of segments) {
-      const child = node.children.find((candidate) => candidate.name === segment);
-      if (child === undefined) throw new Error(`no tree node at ${path}`);
-      node = child;
-    }
-    return node.count;
-  }
-
-  it("shows exactly what the selected folder's count promised", () => {
-    for (const path of ["out/sorted/2019", "out/sorted/2019-backup", "out/sorted/2020"]) {
-      expect(applyFilters(rows, { filter: "all", search: "", treePath: path })).toHaveLength(
-        nodeCount(path),
-      );
-    }
-  });
-
-  it("does not treat a sibling folder with a shared prefix as a match", () => {
-    const selected = applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2019" });
-    expect(selected.map((row) => row.source).sort()).toEqual(["/in/a.jpg", "/in/c.jpg"]);
-  });
-
-  it("does not match the folder name inside a file name", () => {
-    const selected = applyFilters(rows, { filter: "all", search: "", treePath: "out/sorted/2020" });
-    expect(selected.map((row) => row.source)).toEqual(["/in/d.jpg"]);
   });
 });

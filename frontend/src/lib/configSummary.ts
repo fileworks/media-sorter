@@ -10,7 +10,7 @@
  */
 
 import { renderPattern } from "@/lib/renamePattern";
-import { REVIEW_FOLDER_NAMES } from "@/lib/reviewPlan";
+import { CURRENT_REVIEW_FOLDER_NAMES } from "@/lib/reviewPlan";
 import type { Config } from "@/types/api";
 
 /** The date every example on the Configure screen is drawn against. */
@@ -230,12 +230,13 @@ export function exampleFilename(config: Config, sample: SampleFile): string {
  */
 export function possibleReviewFolders(config: Config): string[] {
   const placing = config.run_mode !== "deduplicate_only";
-  return REVIEW_FOLDER_NAMES.filter((folder) => {
-    if (folder === "_duplicates") return config.remove_duplicates;
+  return CURRENT_REVIEW_FOLDER_NAMES.filter((folder) => {
+    // Copies are contextual leaves, rendered beside the example keeper below,
+    // never a top-level review branch.
+    if (folder === "_copies") return false;
     if (folder === "_junk") return config.junk_filter_enabled;
-    if (folder === "_unknown_dates" || folder === "_future_dates") return placing;
-    if (folder === "_already_in_destination") return placing;
-    return true; // _corrupted and _failed: a file can always defeat a read.
+    if (folder === "_undated") return placing;
+    return true; // _corrupted: a file can always defeat a read.
   });
 }
 
@@ -276,9 +277,12 @@ export function folderPreviewTree(
     kind: "file",
   }));
 
+  const contextualContents: FolderPreviewNode[] = config.remove_duplicates
+    ? [...files, { name: "_copies", kind: "review" }]
+    : files;
   const nested = exampleSegments(config, t, locale).reduceRight<FolderPreviewNode[]>(
     (children, name) => [{ name, kind: "folder", children }],
-    files,
+    contextualContents,
   );
 
   return [...nested, ...review];

@@ -28,9 +28,9 @@ interface MediaImageProps {
 
 export function MediaImage({ src, alt, className, fallback }: MediaImageProps) {
   const { t } = useI18n();
-  const { objectUrl, loading, errored } = useAuthorizedMedia(src);
+  const { objectUrl, loading, errored, unavailable } = useAuthorizedMedia(src);
 
-  if (errored) {
+  if (unavailable) {
     return (
       <>
         {fallback ?? (
@@ -42,11 +42,26 @@ export function MediaImage({ src, alt, className, fallback }: MediaImageProps) {
     );
   }
 
+  if (errored) {
+    return (
+      <p role="alert" className="px-6 py-10 text-center text-xs text-error">
+        {t("preview.thumbnailFailed")}
+      </p>
+    );
+  }
+
   return (
     <>
       {loading && (
-        <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
+        <span
+          className="absolute inset-0 flex items-center justify-center"
+          role="status"
+          aria-label={t("preview.thumbnailLoading")}
+        >
+          <span
+            aria-hidden
+            className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-muted-foreground"
+          />
         </span>
       )}
       <img

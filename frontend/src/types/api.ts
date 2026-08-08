@@ -35,6 +35,8 @@ export type {
   AiModelTaskStatus,
   SortingStatus,
   PreviewItem,
+  OutcomeProvenance,
+  ProvenanceDecision,
   PlanImpact,
   PreviewResult,
   PreviewStatus,
@@ -73,6 +75,8 @@ export interface SortTaskResult {
   /** Files skipped because they already exist in the destination (0 when off). */
   already_in_destination?: number;
   operation_id: string;
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
 }
 
 export interface LogEntry {

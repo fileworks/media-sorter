@@ -100,7 +100,12 @@ export interface RecipeSettings {
   run_mode: RunMode;
   sort: boolean;
   sort_criteria: string[];
+  recursive_scan: boolean;
+  max_recursion_depth: number | null;
+  preserve_subfolders: boolean;
+  override_metadata?: boolean;
   copy_instead_of_move: boolean;
+  companion_handling: Config["companion_handling"];
   rename: boolean;
   rename_pattern: string;
   remove_duplicates: boolean;
@@ -108,8 +113,17 @@ export interface RecipeSettings {
   duplicate_perceptual_enabled: boolean;
   duplicate_perceptual_threshold: number;
   duplicate_keeper_policy: KeeperPolicyId;
+  burst_detection_enabled: boolean;
+  burst_time_window_seconds: number;
+  burst_perceptual_distance: number;
+  burst_require_camera_identity: boolean;
   junk_filter_enabled: boolean;
+  junk_min_file_size_kb: number;
+  junk_min_image_dimension: number;
+  junk_filename_patterns: string[];
   categorize_enabled: boolean;
+  categorize_confidence_threshold: number;
+  categorize_min_margin: number;
   convert_images: boolean;
   image_format: Config["image_format"];
   image_quality: number;
@@ -119,7 +133,14 @@ export interface RecipeSettings {
   repair_enabled: boolean;
   rules_enabled: boolean;
   ai_tagging_enabled: boolean;
+  ai_tagging_confidence_threshold: number;
+  ai_tagging_max_tags: number;
   embed_tags_in_files: boolean;
+  exclude_patterns: string[];
+  min_file_size_kb: number | null;
+  max_file_size_mb: number | null;
+  camera_subfolder_enabled: boolean;
+  exif_sanity_check_enabled: boolean;
   ai_model_tier: AiModelTier;
 }
 
@@ -140,6 +161,20 @@ export type TransferMode = "copy" | "move";
  * automatic and always wins, and `preferred_root` depends on a root order the
  * interface no longer lets anyone set.
  */
+/**
+ * One duplicate set's decision, as the run receives it.
+ *
+ * Both halves are needed. `keep` alone cannot express the change, because
+ * promoting a copy also demotes whichever copy the plan was going to place —
+ * two actions, not one.
+ */
+export interface ReviewedSet {
+  keep: string;
+  demote: string[];
+  /** Every member is independent; duplicate detection must not collapse them. */
+  keep_all?: boolean;
+}
+
 export type KeeperPolicyId =
   | "best_quality"
   | "newest"
@@ -586,6 +621,62 @@ export interface AiModelInventory {
 
 export type AiModelTaskStatus = TaskStatus<Record<string, unknown>>;
 
+export const PROVENANCE_DECISION_KINDS = [
+  "date",
+  "category",
+  "source_subfolder",
+  "camera",
+  "route",
+  "rename",
+  "conversion",
+  "collision",
+  "quarantine",
+  "original_name",
+] as const;
+
+export type ProvenanceDecision = (typeof PROVENANCE_DECISION_KINDS)[number];
+
+export interface OutcomeProvenance {
+  date: {
+    resolved_date: string | null;
+    winning_source: string | null;
+    candidates: Array<{
+      source: string;
+      value: string | null;
+      accepted: boolean;
+      rejection_reason:
+        | "absent"
+        | "unparseable"
+        | "sentinel_value"
+        | "suspicious"
+        | "overridden"
+        | null;
+    }>;
+  };
+  rules: {
+    matched_tags: Array<{ name: string; priority: number; saved_order: number }>;
+    matched_routes: Array<{ name: string; priority: number; saved_order: number }>;
+    winning_route: { name: string; priority: number; saved_order: number } | null;
+    route_folder: string | null;
+  };
+  categorization: {
+    enabled: boolean;
+    label: string | null;
+    confidence: number | null;
+    threshold: number | null;
+    passed: boolean | null;
+  };
+  duplicate: {
+    evaluated: boolean;
+    status: "unique" | "duplicate" | "unknown" | "not_evaluated";
+    match_kind: string | null;
+    matched_path: string | null;
+    perceptual_distance: number | null;
+  };
+  unit: { unit_id: string; role: string; members: string[] } | null;
+  path: Array<{ segment: string; decision: ProvenanceDecision; detail: string }>;
+}
+
 export interface PreviewItem {
   source: string;
   destination: string | null;
@@ -615,6 +706,10 @@ export interface PreviewItem {
   duplicate_of?: string | null;
   duplicate_evaluation?: "known" | "unknown";
   duplicate_unknown_reason?: "video_perceptual_not_computed" | null;
+  /** Input root this item came from, retained for contextual-copy audit. */
+  source_root?: string;
+  /** Its own predicted path before it follows a duplicate keeper. */
+  would_be_destination?: string | null;
   unit_id?: string;
   unit_primary?: boolean;
   companions?: Array<{
@@ -627,55 +722,15 @@ export interface PreviewItem {
     placement_date_source?: string;
   }>;
   unit_warnings?: string[];
-  provenance?: {
-    date: {
-      resolved_date: string | null;
-      winning_source: string | null;
-      candidates: Array<{
-        source: string;
-        value: string | null;
-        accepted: boolean;
-        rejection_reason:
-          | "absent"
-          | "unparseable"
-          | "sentinel_value"
-          | "suspicious"
-          | "overridden"
-          | null;
-      }>;
-    };
-    rules: {
-      matched_tags: Array<{ name: string; priority: number; saved_order: number }>;
-      winning_route: { name: string; priority: number; saved_order: number } | null;
-      route_folder: string | null;
-    };
-    categorization: {
-      enabled: boolean;
-      label: string | null;
-      confidence: number | null;
-      threshold: number | null;
-      passed: boolean | null;
-    };
-    duplicate: {
-      evaluated: boolean;
-      status: "unique" | "duplicate" | "unknown" | "not_evaluated";
-      match_kind: string | null;
-      matched_path: string | null;
-      perceptual_distance: number | null;
-    };
-    unit: { unit_id: string; role: string; members: string[] } | null;
-    path: Array<{ segment: string; decision: string; detail: string }>;
-  };
+  provenance?: OutcomeProvenance;
 }
 
 /**
  * Displayable metadata for a single local file, from GET /api/media/info.
  *
- * No screen calls this today: the hover card and comparison view that did were
- * replaced by the Review rework. The endpoint and this method are kept because
- * they work and are tested, not because something is using them.
- * Used to show resolution everywhere and to fill in a duplicate original's
- * details (date/source/size), which the preview item itself doesn't carry.
+ * Read by Review's detail view, one open file at a time. It carries the facts
+ * the plan does not: a preview item knows where a file goes, not how many pixels
+ * it has.
  */
 export interface MediaInfo {
   width: number | null;
@@ -684,6 +739,34 @@ export interface MediaInfo {
   extracted_date: string | null;
   metadata_source: string;
   media_type: "image" | "video" | "other";
+}
+
+/** One candidate date the preview considered, and what became of it. */
+export interface DateCandidate {
+  source: string;
+  value: string | null;
+  accepted: boolean;
+  rejection_reason:
+    | "absent"
+    | "unparseable"
+    | "sentinel_value"
+    | "suspicious"
+    | "overridden"
+    | null;
+}
+
+/** Provenance for one file, as `POST /api/review/outcomes` records it. */
+export interface ReviewOutcome {
+  source: string;
+  resolved_date: string | null;
+  candidates: DateCandidate[];
+  provenance?: OutcomeProvenance;
+}
+
+export interface ReviewOutcomeResponse {
+  config_fingerprint: string;
+  outcomes: ReviewOutcome[];
+  unavailable_paths: string[];
 }
 
 export interface AnalysisResult {
@@ -711,6 +794,9 @@ export interface AnalysisResult {
   media_units?: number;
   companion_files?: number;
   unmatched_companions?: number;
+  /** Configured folders deliberately omitted from this run. */
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
 }
 
 export interface AuditFinding {
@@ -798,6 +884,8 @@ export interface PreviewResult {
   config_fingerprint: string;
   /** Identity of the immutable reviewed plan accepted by the executor. */
   plan_id: string;
+  excluded_roots?: string[];
+  excluded_root_ids?: string[];
   impact: PlanImpact;
   items: PreviewItem[];
   stats: {
@@ -843,6 +931,8 @@ export type ScanStatus = TaskStatus<
     excluded_files: number;
     partial: boolean;
     issues: Array<Record<string, unknown>>;
+    excluded_roots?: string[];
+    excluded_root_ids?: string[];
   } & Record<string, unknown>
 >;
 
@@ -895,6 +985,7 @@ export interface OperationReport {
   execution_date: string;
   source_path: string;
   dest_path: string;
+  excluded_roots?: string[];
   duration_seconds: number | null;
   summary: {
     total: number;
@@ -1272,8 +1363,18 @@ export class MediaSorterApiClient {
 
   // ── Analysis ─────────────────────────────────────────────────────────────────
 
-  async startAnalysis(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/analysis/start", {}, idempotencyKey);
+  async startAnalysis(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/analysis/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getAnalysisStatus(taskId: string, afterSequence = 0): Promise<AnalysisStatus> {
@@ -1286,8 +1387,18 @@ export class MediaSorterApiClient {
 
   // ── Source scan ──────────────────────────────────────────────────────────────
 
-  async startScan(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/scan/start", {}, idempotencyKey);
+  async startScan(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/scan/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getScanStatus(taskId: string, afterSequence = 0): Promise<ScanStatus> {
@@ -1300,8 +1411,18 @@ export class MediaSorterApiClient {
 
   // ── Preview (background task + progress polling) ──────────────────────────────
 
-  async startPreview(idempotencyKey?: string): Promise<string> {
-    return this.startTask("/api/preview/start", {}, idempotencyKey);
+  async startPreview(
+    excludedRootsOrIdempotencyKey: string[] | string = [],
+    idempotencyKey?: string,
+  ): Promise<string> {
+    const excludedRoots = Array.isArray(excludedRootsOrIdempotencyKey)
+      ? excludedRootsOrIdempotencyKey
+      : [];
+    const requestKey =
+      typeof excludedRootsOrIdempotencyKey === "string"
+        ? excludedRootsOrIdempotencyKey
+        : idempotencyKey;
+    return this.startTask("/api/preview/start", { excluded_roots: excludedRoots }, requestKey);
   }
 
   async getPreviewStatus(taskId: string, afterSequence = 0): Promise<PreviewStatus> {
@@ -1317,16 +1438,20 @@ export class MediaSorterApiClient {
   /**
    * Start a run.
    *
-   * `excludedSources` and `reviewedKeepers` are Review's decisions for this run
-   * only. The server derives a new frozen plan from them and never edits the
-   * stored one, so running the same plan again is unaffected.
+   * `excludedRoots` is the Sources-stage scope and `reviewedSets` contains the
+   * duplicate confirmations. Both belong to this run only.
+   *
+   * A decision is set-level — `{ keep, demote }` — rather than a `{hash: path}`
+   * map, because promoting a copy changes the planned action of every *other*
+   * copy too. A map could name the winner but not the losers, and the plan
+   * guard would then abort the run on the first action it did not recognise.
    */
   async startSort(
     dryRun = false,
     idempotencyKey?: string,
     expectedConfigFingerprint?: string,
     planId?: string,
-    decisions: { excludedSources?: string[]; reviewedKeepers?: Record<string, string> } = {},
+    decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
   ): Promise<string> {
     return this.startTask(
       "/api/sorting/start",
@@ -1334,8 +1459,8 @@ export class MediaSorterApiClient {
         dry_run: dryRun,
         expected_config_fingerprint: expectedConfigFingerprint,
         plan_id: planId,
-        excluded_sources: decisions.excludedSources ?? [],
-        reviewed_keepers: decisions.reviewedKeepers ?? {},
+        excluded_roots: decisions.excludedRoots ?? [],
+        reviewed_sets: decisions.reviewedSets ?? [],
       },
       idempotencyKey,
     );
@@ -1381,18 +1506,18 @@ export class MediaSorterApiClient {
   }
 
   /**
-   * What a run carrying these exclusions would actually do.
-   *
-   * The plan is the only thing that knows — it holds the companion actions a
-   * reviewed file drags with it — so it is asked rather than second-guessed.
-   * Execute used to subtract a per-reviewed-file tally from the stored plan's
-   * action-level totals, which counted two different things.
+   * What a run carrying this scope and these duplicate decisions would do.
    */
-  async planImpact(planId: string, excludedSources: string[]): Promise<PlanImpact> {
+  async planImpact(
+    planId: string,
+    excludedRoots: string[],
+    reviewedSets: ReviewedSet[] = [],
+  ): Promise<PlanImpact> {
     await this.ensureReady();
     const { data } = await this.http.post<PlanImpact>("/api/sorting/impact", {
       plan_id: planId,
-      excluded_sources: excludedSources,
+      excluded_roots: excludedRoots,
+      reviewed_sets: reviewedSets,
     });
     return data;
   }
@@ -1401,7 +1526,7 @@ export class MediaSorterApiClient {
 
   async listReviewGroups(
     kind: GroupKind = "exact",
-    options: { limit?: number; maxDistance?: number } = {},
+    options: { limit?: number; maxDistance?: number; excludedRoots?: string[] } = {},
   ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
     await this.ensureReady();
     const { data } = await this.http.get<{
@@ -1409,7 +1534,12 @@ export class MediaSorterApiClient {
       next_cursor: string | null;
       kind: string;
     }>("/api/review/groups", {
-      params: { kind, limit: options.limit ?? 50, max_distance: options.maxDistance ?? 2 },
+      params: {
+        kind,
+        limit: options.limit ?? 50,
+        max_distance: options.maxDistance ?? 2,
+        excluded_roots: options.excludedRoots ?? [],
+      },
     });
     return data;
   }
@@ -1659,6 +1789,22 @@ export class MediaSorterApiClient {
     await this.ensureReady();
     const { data } = await this.http.get<MediaInfo>("/api/media/info", {
       params: { path },
+    });
+    return data;
+  }
+
+  /**
+   * What the last completed preview recorded about how each date was chosen.
+   *
+   * The candidates it considered, which one won, and why the others were
+   * rejected — the provenance behind the one-sentence reason every row carries.
+   * Capped at 500 paths by the endpoint, and asked for one file at a time by the
+   * only caller that needs it.
+   */
+  async reviewOutcomes(paths: string[]): Promise<ReviewOutcomeResponse> {
+    await this.ensureReady();
+    const { data } = await this.http.post<ReviewOutcomeResponse>("/api/review/outcomes", {
+      paths,
     });
     return data;
   }

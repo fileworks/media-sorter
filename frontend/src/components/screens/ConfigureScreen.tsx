@@ -1,5 +1,10 @@
 /**
- * Screen 2 — fine-tune the recipe.
+ * Screen 3 — fine-tune the recipe.
+ *
+ * The heading names the recipe being fine-tuned and links back to it, because
+ * every setting below is read against that recipe: the "you changed this" marker
+ * measures from the recipe, not from what the product shipped with, and a reader
+ * who cannot see which recipe is in force cannot read the markers at all.
  *
  * The rail on the left is not navigation for its own sake: each entry carries
  * the *current value* of the setting it jumps to, so reading the rail top to
@@ -12,7 +17,14 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { FiAlertCircle, FiChevronDown, FiLock, FiRotateCcw, FiSave } from "react-icons/fi";
+import {
+  FiAlertCircle,
+  FiArrowLeft,
+  FiChevronDown,
+  FiLock,
+  FiRotateCcw,
+  FiSave,
+} from "react-icons/fi";
 
 import { CleanGroup } from "@/components/config/groups/CleanGroup";
 import { EnrichGroup } from "@/components/config/groups/EnrichGroup";
@@ -25,12 +37,11 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SettingsDiffContext, type SettingsDiffValue } from "@/context/settings-diff-context";
 import { useConfig } from "@/hooks/useConfig";
-import { useConfigDefaults } from "@/hooks/useConfigDefaults";
+import { useConfigDefaults, useSettingsBaseline } from "@/hooks/useConfigDefaults";
 import { useConfigSections } from "@/hooks/useConfigSections";
 import { useScrollSpy } from "@/hooks/useScrollSpy";
 import { useI18n } from "@/i18n/I18nContext";
-import { RecipeGrid } from "@/components/screens/RecipeGrid";
-import { ResetDialog, type ResetRow } from "@/components/config/ResetDialog";
+import { ResetDialog, type ResetDestination, type ResetRow } from "@/components/config/ResetDialog";
 import { changedKeys, configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import { INVENTED_SAMPLES, summariesFor, type SampleFile } from "@/lib/configSummary";
 import { captureRecipeSettings } from "@/lib/configRecipes";
@@ -42,13 +53,10 @@ interface ConfigureScreenProps {
   disabled?: boolean;
   onSaveConfig: (patch: Partial<Config>) => void;
   onSaveRecipe: (name: string, settings: RecipeSettings) => Promise<void>;
-  /** Bumped by the caller to remount the bodies after a discarded edit. */
-  bodyKey?: number;
+  /** Takes the reader back to the Recipe stage the settings started from. */
+  onEditRecipe: () => void;
+  /** Needed to resolve which recipe the current configuration corresponds to. */
   savedRecipes: SavedRecipe[];
-  onApplyConfig: (patch: Partial<Config>) => void;
-  onDeleteRecipe: (recipeId: string) => void;
-  /** A computed plan exists, so applying a recipe discards it. */
-  planExists?: boolean;
   /**
    * Files from the last dry run. The folder and rename previews are drawn with
    * these where there are any, so the examples are the user's own filenames
@@ -77,11 +85,8 @@ export function ConfigureScreen({
   disabled = false,
   onSaveConfig,
   onSaveRecipe,
-  bodyKey = 0,
+  onEditRecipe,
   savedRecipes,
-  onApplyConfig,
-  onDeleteRecipe,
-  planExists = false,
   samples,
 }: ConfigureScreenProps) {
   const { t } = useI18n();
@@ -96,15 +101,22 @@ export function ConfigureScreen({
   const summaries = useMemo(() => (config ? summariesFor(config, t) : {}), [config, t]);
   const [pendingReset, setPendingReset] = useState<{
     title: string;
-    rows: ResetRow[];
-    patch: Partial<Config>;
+    destinations: ResetDestination[];
   } | null>(null);
 
-  // "Deviates from the factory default" is answered by the backend's own
-  // defaults, never by a mirror in the frontend that would silently drift.
+  // The recipe in force, over the factory defaults for everything it does not
+  // claim. Both halves come from the backend or from the recipe definitions —
+  // never from a mirror in the frontend that would silently drift.
+  const baseline = useSettingsBaseline(config, savedRecipes);
+  const baselineLabel = baseline.origin
+    ? t("config.baseline.recipe", {
+        name: baseline.origin.custom ? baseline.origin.labelKey : t(baseline.origin.labelKey),
+      })
+    : t("config.baseline.defaults");
+
   const changed = useMemo(
-    () => (config && defaults ? changedKeys(config, defaults) : null),
-    [config, defaults],
+    () => (config && baseline.values ? changedKeys(config, baseline.values) : null),
+    [config, baseline.values],
   );
 
   const sectionFields = useCallback(
@@ -113,54 +125,95 @@ export function ConfigureScreen({
     [sectionMeta],
   );
 
-  const groupPatch = useCallback(
-    (group: GroupId): Partial<Config> => {
+  /** Every `Config` field a group owns, so a reset can aim at any destination. */
+  const groupFields = useCallback(
+    (group: GroupId): (keyof Config)[] => {
       const sections = CONFIG_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
-      const patch: Partial<Config> = {};
-      for (const section of sections) {
-        if (defaults) {
-          for (const field of sectionFields(section)) {
-            if (field in defaults)
-              patch[field as keyof Config] = defaults[field as keyof Config] as never;
-          }
-        } else {
-          Object.assign(patch, SECTION_DEFAULTS[section]);
-        }
-      }
-      return patch;
+      return sections.flatMap((section) =>
+        defaults
+          ? (sectionFields(section) as (keyof Config)[])
+          : (Object.keys(SECTION_DEFAULTS[section] ?? {}) as (keyof Config)[]),
+      );
     },
     [defaults, sectionFields],
   );
 
+  const allFields = useCallback(
+    (): (keyof Config)[] => CONFIG_GROUPS.flatMap((group) => groupFields(group.id)),
+    [groupFields],
+  );
+
   /**
-   * A reset states what it would change before changing it.
+   * A reset states what it would change before changing it — and now says where
+   * "back" is, because there are two answers.
    *
    * Only settings that would actually move are listed, and the values are run
-   * through the same formatters the settings use — never a raw identifier.
+   * through the same formatters the settings use — never a raw identifier. A
+   * destination with nothing to change is offered and disabled with the reason,
+   * rather than silently doing nothing, which is the behaviour users reported as
+   * a broken button elsewhere on this screen.
    */
-  const askToReset = useCallback(
-    (title: string, patch: Partial<Config>) => {
-      if (!config) return;
+  const destinationFor = useCallback(
+    (
+      id: string,
+      label: string,
+      values: Partial<Config> | undefined,
+      fields: readonly (keyof Config)[],
+    ): ResetDestination | null => {
+      if (!config || !values) return null;
+      const patch: Partial<Config> = {};
+      for (const field of fields) {
+        if (field in values) patch[field] = values[field] as never;
+      }
       const rows: ResetRow[] = (Object.keys(patch) as (keyof Config)[])
         .filter((key) => JSON.stringify(config[key]) !== JSON.stringify(patch[key]))
         .map((key) => ({
+          key: String(key),
           setting: configFieldLabel(key),
           current: formatConfigValue(config[key]),
-          default: formatConfigValue(patch[key]),
+          result: formatConfigValue(patch[key]),
         }))
         .sort((a, b) => a.setting.localeCompare(b.setting));
-      if (rows.length === 0) return;
-      setPendingReset({ title, rows, patch });
+      return {
+        id,
+        label,
+        rows,
+        patch,
+        unavailable:
+          rows.length === 0 ? t("config.reset.alreadyThere", { target: label }) : undefined,
+      };
     },
-    [config],
+    [config, t],
+  );
+
+  const askToReset = useCallback(
+    (title: string, fields: readonly (keyof Config)[]) => {
+      const destinations = [
+        // The recipe first: it is the baseline every marker on the screen is
+        // measured against, so it is the "back" the reader has in mind. The
+        // factory defaults stay reachable — a recipe-relative baseline must not
+        // hide the product's own opinion — but they are the second answer.
+        baseline.origin ? destinationFor("baseline", baselineLabel, baseline.values, fields) : null,
+        destinationFor("defaults", t("config.baseline.defaults"), defaults, fields),
+      ].filter((destination): destination is ResetDestination => destination !== null);
+
+      if (destinations.length === 0) return;
+      setPendingReset({ title, destinations });
+    },
+    [baseline.origin, baseline.values, baselineLabel, defaults, destinationFor, t],
   );
 
   const resetGroup = useCallback(
     (group: GroupId) => {
       const groupLabel = t(`config.group.${group}.label`);
-      askToReset(t("config.reset.groupTitle", { group: groupLabel }), groupPatch(group));
+      askToReset(t("config.reset.groupTitle", { group: groupLabel }), groupFields(group));
     },
-    [askToReset, groupPatch, t],
+    [askToReset, groupFields, t],
+  );
+
+  const resetAll = useCallback(
+    () => askToReset(t("config.reset.allTitle"), allFields()),
+    [allFields, askToReset, t],
   );
 
   /**
@@ -169,21 +222,22 @@ export function ConfigureScreen({
    * "what would this change?" has one answer shape everywhere on this screen.
    */
   const revertFields = useCallback(
-    (fields: readonly (keyof Config)[]) => {
-      if (!defaults) return;
-      const patch: Partial<Config> = {};
-      for (const field of fields) {
-        if (field in defaults) patch[field] = defaults[field] as never;
-      }
-      askToReset(t("config.reset.rowTitle"), patch);
-    },
-    [askToReset, defaults, t],
+    (fields: readonly (keyof Config)[]) => askToReset(t("config.reset.rowTitle"), fields),
+    [askToReset, t],
   );
 
   const settingsDiff = useMemo<SettingsDiffValue | null>(
     () =>
-      changed && defaults ? { changed, defaults, revert: revertFields, locked: disabled } : null,
-    [changed, defaults, revertFields, disabled],
+      changed && baseline.values
+        ? {
+            changed,
+            defaults: baseline.values,
+            baselineLabel,
+            revert: revertFields,
+            locked: disabled,
+          }
+        : null,
+    [changed, baseline.values, baselineLabel, revertFields, disabled],
   );
 
   // A server-side validation error can land on a field the user is not looking
@@ -264,7 +318,24 @@ export function ConfigureScreen({
 
   return (
     <div>
-      <ScreenHeader title={t("config.title")} subtitle={t("config.subtitle")} />
+      <ScreenHeader
+        title={
+          baseline.origin
+            ? t("config.title.recipe", {
+                recipe: baseline.origin.custom
+                  ? baseline.origin.labelKey
+                  : t(baseline.origin.labelKey),
+              })
+            : t("config.title.custom")
+        }
+        subtitle={baseline.origin ? t("config.subtitle") : t("config.subtitle.custom")}
+        actions={
+          <Button variant="outline" size="sm" onClick={onEditRecipe}>
+            <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            {t("config.changeRecipe")}
+          </Button>
+        }
+      />
 
       {disabled && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-warning/40 bg-tint-warning px-3.5 py-2.5 text-xs text-warning">
@@ -408,6 +479,16 @@ export function ConfigureScreen({
                   {t("recipes.saveAs")}
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={resetAll}
+                disabled={disabled}
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              >
+                <FiRotateCcw className="h-3.5 w-3.5" aria-hidden />
+                {t("config.reset.all")}
+              </button>
             </div>
           </div>
         </nav>
@@ -420,24 +501,9 @@ export function ConfigureScreen({
             two or three settings can never be scrolled to the top of the pane,
             so the rail could never mark them as the one being read. */}
         <div
-          key={bodyKey}
           className={cn("min-w-0 space-y-4 pb-[55dvh]", disabled && "select-none opacity-60")}
           inert={disabled}
         >
-          {config && (
-            // The recipes live here now, above the settings they write, rather
-            // than on Sources where they were nowhere near their effect.
-            <RecipeGrid
-              config={config}
-              savedRecipes={savedRecipes}
-              onApply={onApplyConfig}
-              onDelete={onDeleteRecipe}
-              planExists={planExists}
-              disabled={disabled}
-              defaults={defaults}
-            />
-          )}
-
           <SettingsDiffContext.Provider value={settingsDiff}>
             {CONFIG_GROUPS.map((group) => {
               const Body = GROUP_BODIES[group.id];
@@ -458,10 +524,10 @@ export function ConfigureScreen({
       <ResetDialog
         open={pendingReset !== null}
         title={pendingReset?.title ?? ""}
-        rows={pendingReset?.rows ?? []}
+        destinations={pendingReset?.destinations ?? []}
         onClose={() => setPendingReset(null)}
-        onConfirm={() => {
-          if (pendingReset) onSaveConfig(pendingReset.patch);
+        onConfirm={(destination) => {
+          onSaveConfig(destination.patch);
           setPendingReset(null);
         }}
       />

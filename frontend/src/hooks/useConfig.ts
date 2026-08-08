@@ -85,7 +85,10 @@ export function useConfig() {
   return {
     config,
     isLoading,
-    isValid: validationResult?.valid ?? false,
+    // Deliberately no aggregate `valid` flag: the flow gates Sources and
+    // Configure separately, and one boolean for the whole config is what let a
+    // settings error present itself as a folder error. Route the errors through
+    // `splitValidation` instead.
     validationErrors: validationResult?.errors ?? [],
     validationWarnings: validationResult?.warnings ?? [],
     fieldErrors,

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/services/api";
+import { api, type ReviewedSet } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { useI18n } from "@/i18n/I18nContext";
@@ -239,7 +239,7 @@ export function useSorting() {
       planId?: string,
       // Review's decisions for this run. Not configuration: they are sent with
       // the run and forgotten.
-      decisions: { excludedSources?: string[]; reviewedKeepers?: Record<string, string> } = {},
+      decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
     ) => {
       // Clear old task id before the async call so the stale ["sorting", oldId]
       // query is never polled during the API round-trip.

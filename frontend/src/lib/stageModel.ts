@@ -1,36 +1,46 @@
 /**
- * Four stages, several views, and one rule about going backwards.
+ * Five stages, several views, and one rule about going backwards.
  *
- * Sources → Configure → Review → Execute. Each stage has an entry condition, and
- * moving back to an earlier one invalidates what depended on it — which is the
- * whole reason the model is typed rather than a string in a component: "can I
- * press Execute?" must have exactly one answer, and it must be the same answer
- * everywhere.
+ * Sources → Recipe → Configure → Review → Execute. Each stage has an entry
+ * condition, and moving back to an earlier one invalidates what depended on it —
+ * which is the whole reason the model is typed rather than a string in a
+ * component: "can I press Execute?" must have exactly one answer, and it must be
+ * the same answer everywhere.
  *
  * Configure is its own stage rather than a panel inside Sources because the two
  * ask different questions. Sources asks *where*, and its answer decides whether
  * anything can run at all; Configure asks *how*, and every one of its answers
  * already has a safe default. Splitting them is what lets Sources stay a screen
  * somebody can finish in fifteen seconds.
+ *
+ * Recipe is its own stage for the mirror-image reason. Picking one writes
+ * fifteen settings in a single click — the largest decision in the flow — and it
+ * used to be the first card *inside* Configure, visually a peer of the smallest
+ * decisions and below the screen's own heading. A stage names it in the stepper,
+ * lets Configure say which recipe it is fine-tuning, and makes it revisitable
+ * without hunting. It shares Configure's entry condition: both are about *how*,
+ * and neither can be answered before there are folders.
  */
 
-export type Stage = "sources" | "configure" | "review" | "execute";
-
-/** Views only exist inside Review, where they are the design's four tabs. */
-export type View = "overview" | "duplicates" | "junk" | "changes" | "warnings";
+export type Stage = "sources" | "recipe" | "configure" | "review" | "execute";
 
 /**
- * The views Review can be entered *at*, in order.
+ * A stage's sub-view. Every stage now has exactly one.
  *
- * These are no longer tabs — Review is one surface — but a summary tile still
- * navigates by naming one, and `readiness` still gates entry on them.
+ * Review used to be entered *at* one of four tabs, and the summary tiles
+ * navigated by naming one. The rework replaced the tabs with two modes held by
+ * the screen itself — Browse and Resolve are renderings of one set of rows, not
+ * places the flow can land — so the four entry points describe a surface that
+ * no longer exists. The concept is kept because a stage that grows sub-views
+ * again should not have to reinvent it.
  */
-export const PRIMARY_REVIEW_VIEWS: View[] = ["duplicates", "junk", "changes", "warnings"];
+export type View = "overview";
 
 export const VIEWS_BY_STAGE: Record<Stage, View[]> = {
   sources: ["overview"],
+  recipe: ["overview"],
   configure: ["overview"],
-  review: [...PRIMARY_REVIEW_VIEWS],
+  review: ["overview"],
   execute: ["overview"],
 };
 
@@ -62,6 +72,9 @@ export interface StageInputs {
   /** A dry run exists: every proposed change has been calculated. */
   planned: boolean;
   plannedReason: string | null;
+  /** Review has no proposed or undecided duplicate sets left. */
+  duplicateReviewReady: boolean;
+  duplicateReviewReason: string | null;
   /** Startup recovery or drift is holding new work. */
   blocked: boolean;
   blockedReason: string | null;
@@ -74,9 +87,10 @@ export interface StageInputs {
  * because "finish reviewing the interrupted run" is more actionable than "pick a
  * destination folder" when both are true.
  *
- * Review and Execute share the same gate — a calculated plan — because in this
- * flow Review *is* the plan. There is nothing to review before one exists, and
- * nothing to execute either.
+ * Review is where a plan is computed as well as read, so usable roots are its
+ * entry condition. Execute needs a finished plan and every duplicate proposal
+ * to have become an explicit decision: proposals describe intent but
+ * deliberately do not bind a run.
  */
 export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
   if (inputs.blocked) {
@@ -91,21 +105,51 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
       reason: inputs.rootsReason ?? "Choose at least one input folder and a destination.",
     };
   }
-  if (stage === "configure") {
+  // Recipe and Configure share the gate: usable folders and nothing else. Both
+  // ask how the run should behave, and neither needs a scan to be answerable.
+  if (stage === "recipe" || stage === "configure") {
     return { canEnter: true, reason: null };
   }
-  return inputs.planned
-    ? { canEnter: true, reason: null }
-    : {
-        canEnter: false,
-        reason: inputs.plannedReason ?? "Preview the changes first — nothing has been calculated.",
-      };
+  if (stage === "review") {
+    return { canEnter: true, reason: null };
+  }
+  if (!inputs.planned) {
+    return {
+      canEnter: false,
+      reason: inputs.plannedReason ?? "Preview the changes first — nothing has been calculated.",
+    };
+  }
+  if (stage === "execute" && !inputs.duplicateReviewReady) {
+    return {
+      canEnter: false,
+      reason:
+        inputs.duplicateReviewReason ??
+        "Decide every duplicate proposal before continuing to Execute.",
+    };
+  }
+  return { canEnter: true, reason: null };
 }
 
+/** The flow, in the order it is walked. The stepper and every index use it. */
+const ORDER: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+
 export function availableStages(inputs: StageInputs): Stage[] {
-  return (["sources", "configure", "review", "execute"] as Stage[]).filter(
-    (stage) => readiness(stage, inputs).canEnter,
-  );
+  return ORDER.filter((stage) => readiness(stage, inputs).canEnter);
+}
+
+/**
+ * The stages a calculated plan makes readable rather than editable.
+ *
+ * Every one of them feeds the plan, so editing any of them makes it wrong. The
+ * old answer was a modal per patch — six edits, six identical questions, and the
+ * plan destroyed on the first answer while the remaining five asked about a plan
+ * that no longer existed. The lock asks once, at the moment the intent appears.
+ */
+const LOCKED_BY_PLAN: readonly Stage[] = ["sources", "recipe", "configure"];
+
+/** Whether standing on this stage with a plan means reading rather than editing. */
+export function isStageLocked(stage: Stage, planExists: boolean): boolean {
+  return planExists && LOCKED_BY_PLAN.includes(stage);
 }
 
 export interface Transition {
@@ -113,8 +157,6 @@ export interface Transition {
   /** What the move invalidated, in plain language. Empty when nothing did. */
   invalidated: string[];
 }
-
-const ORDER: Stage[] = ["sources", "configure", "review", "execute"];
 
 export function stageIndex(stage: Stage): number {
   return ORDER.indexOf(stage);
@@ -151,11 +193,10 @@ export function goTo(current: StageState, stage: Stage, view?: View): Transition
     if (stage === "sources") {
       invalidated.push("Changing folders makes the current review stale.");
     }
-    if (stage === "configure") {
+    // Recipe reports what Configure reports: a recipe writes settings, so
+    // going back to it threatens the plan in exactly the same way.
+    if (stage === "recipe" || stage === "configure") {
       invalidated.push("Changing settings makes the current review stale.");
-    }
-    if (current.stage === "execute") {
-      invalidated.push("The frozen plan for this run is discarded; a new one will be taken.");
     }
   }
 
@@ -245,6 +286,11 @@ export interface StageLabel {
 
 export const STAGE_LABELS: StageLabel[] = [
   { stage: "sources", label: "Sources", description: "Which folders, and what each one is for" },
+  {
+    stage: "recipe",
+    label: "Recipe",
+    description: "The starting point everything else adjusts",
+  },
   {
     stage: "configure",
     label: "Configure",

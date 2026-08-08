@@ -126,7 +126,9 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
             className={cn(
               "z-[200] max-w-[18rem] rounded-lg border border-border bg-popover px-2.5 py-1.5",
               "text-2xs leading-snug text-popover-foreground shadow-card",
-              "animate-fade-in pointer-events-none",
+              // Opacity fades blend the text with the page and briefly take
+              // this small copy below AA contrast as the bubble appears.
+              "pointer-events-none",
             )}
           >
             {label}

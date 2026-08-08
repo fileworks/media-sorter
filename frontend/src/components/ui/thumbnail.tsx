@@ -68,13 +68,26 @@ export function Thumbnail({
   ) : (
     <>
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground" />
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          role="status"
+          aria-label={t("preview.thumbnailLoading")}
+        >
+          <div
+            aria-hidden
+            className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-muted-foreground"
+          />
         </div>
       )}
       {/* Waiting is not loading: an off-screen tile must not animate, or a long
           list spins in every direction at once. */}
-      {waiting && <div className="absolute inset-0 bg-muted" aria-hidden />}
+      {waiting && (
+        <div
+          className="absolute inset-0 bg-muted"
+          role="status"
+          aria-label={t("preview.thumbnailWaiting")}
+        />
+      )}
       <img
         src={objectUrl ?? undefined}
         alt=""

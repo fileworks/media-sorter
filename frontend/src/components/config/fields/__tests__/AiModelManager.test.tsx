@@ -88,7 +88,7 @@ describe("AiModelManager", () => {
     fireEvent.click(within(region).getByRole("button", { name: "Install model" }));
 
     await waitFor(() => expect(install).toHaveBeenCalledWith("clip-lite-v1"));
-    await view.findByRole("progressbar");
+    await view.findByRole("progressbar", { name: "Downloading" });
   });
 
   it("requires a second action before removing verified files", async () => {

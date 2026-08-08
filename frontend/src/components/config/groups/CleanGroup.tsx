@@ -14,7 +14,13 @@ import { ExcludePatternTags } from "@/components/config/fields/ExcludePatternTag
 import { PerceptualSlider } from "@/components/config/fields/PerceptualSlider";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
-import { MonoValue, Segmented, SettingGroup, SettingRow } from "@/components/ui/setting-row";
+import {
+  MonoValue,
+  Segmented,
+  SettingGroup,
+  SettingRow,
+  SubSetting,
+} from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n/I18nContext";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
@@ -58,6 +64,20 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
             field={["duplicate_exact_enabled", "duplicate_perceptual_enabled"]}
             label={t("config.duplicates.matching")}
             description={t("config.duplicates.matchingHelp")}
+            sub={
+              config.duplicate_perceptual_enabled ? (
+                <SubSetting
+                  field="duplicate_perceptual_threshold"
+                  label={t("config.duplicates.threshold")}
+                  description={t("config.duplicates.thresholdHelp")}
+                >
+                  <PerceptualSlider
+                    value={config.duplicate_perceptual_threshold ?? 95}
+                    onChange={(value) => updateConfig({ duplicate_perceptual_threshold: value })}
+                  />
+                </SubSetting>
+              ) : undefined
+            }
           >
             <Segmented
               name="duplicate-detection"
@@ -76,32 +96,16 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
             />
           </SettingRow>
 
-          {config.duplicate_perceptual_enabled && (
-            <SettingRow
-              field="duplicate_perceptual_threshold"
-              label={t("config.duplicates.threshold")}
-              description={t("config.duplicates.thresholdHelp")}
-            >
-              <PerceptualSlider
-                value={config.duplicate_perceptual_threshold ?? 95}
-                onChange={(value) => updateConfig({ duplicate_perceptual_threshold: value })}
-              />
-            </SettingRow>
-          )}
-
           {/* Each rule explains itself under the row. A native `<option>`
               cannot carry a tooltip that a keyboard or screen-reader user
               would ever reach, so the explanation follows the selection
-              instead of hiding behind nine of them. */}
+              instead of hiding behind nine of them — on the consequence line,
+              because it is the selected rule speaking, not the setting. */}
           <SettingRow
             field="duplicate_keeper_policy"
             label={t("config.duplicates.keepRule")}
-            description={
-              <>
-                {t(`config.keeper.${config.duplicate_keeper_policy}.help`)}{" "}
-                <span className="text-muted-foreground">{t("config.duplicates.keepRuleHelp")}</span>
-              </>
-            }
+            description={t("config.duplicates.keepRuleHelp")}
+            consequence={t(`config.keeper.${config.duplicate_keeper_policy}.help`)}
             htmlFor="keeper-policy"
           >
             <Select
@@ -124,7 +128,7 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
             label={t("config.duplicates.setAside")}
             description={t("config.duplicates.setAsideHelp")}
           >
-            <MonoValue>_duplicates/</MonoValue>
+            <MonoValue>&lt;keeper&gt;/_copies/</MonoValue>
           </SettingRow>
         </>
       )}
@@ -135,6 +139,53 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
         label={t("config.filters.junk")}
         description={t("config.filters.junkHelp")}
         htmlFor="junk-filter"
+        sub={
+          config.junk_filter_enabled ? (
+            <>
+              <SubSetting
+                field="junk_min_file_size_kb"
+                label={t("config.filters.junkSize")}
+                description={t("config.filters.junkSizeHelp")}
+                htmlFor="junk-min-size"
+              >
+                <Input
+                  id="junk-min-size"
+                  type="number"
+                  min={0}
+                  max={MAX_FILE_SIZE_INPUT}
+                  value={config.junk_min_file_size_kb ?? 8}
+                  onChange={(event) =>
+                    updateConfig({ junk_min_file_size_kb: clampFileSize(event.target.value) ?? 0 })
+                  }
+                  className="w-28"
+                />
+                <span className="text-xs text-faint">{t("config.unit.kb")}</span>
+              </SubSetting>
+
+              <SubSetting
+                field="junk_min_image_dimension"
+                label={t("config.filters.resolution")}
+                description={t("config.filters.resolutionHelp")}
+                htmlFor="junk-min-dimension"
+              >
+                <Input
+                  id="junk-min-dimension"
+                  type="number"
+                  min={0}
+                  max={MAX_FILE_SIZE_INPUT}
+                  value={config.junk_min_image_dimension ?? 200}
+                  onChange={(event) =>
+                    updateConfig({
+                      junk_min_image_dimension: clampFileSize(event.target.value) ?? 0,
+                    })
+                  }
+                  className="w-28"
+                />
+                <span className="text-xs text-faint">{t("config.unit.px")}</span>
+              </SubSetting>
+            </>
+          ) : undefined
+        }
       >
         <Toggle
           id="junk-filter"
@@ -146,48 +197,6 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
 
       {config.junk_filter_enabled && (
         <>
-          <SettingRow
-            field="junk_min_file_size_kb"
-            label={t("config.filters.junkSize")}
-            description={t("config.filters.junkSizeHelp")}
-            htmlFor="junk-min-size"
-          >
-            <Input
-              id="junk-min-size"
-              type="number"
-              min={0}
-              max={MAX_FILE_SIZE_INPUT}
-              value={config.junk_min_file_size_kb ?? 8}
-              onChange={(event) =>
-                updateConfig({ junk_min_file_size_kb: clampFileSize(event.target.value) ?? 0 })
-              }
-              className="w-28"
-            />
-            <span className="text-xs text-faint">{t("config.unit.kb")}</span>
-          </SettingRow>
-
-          <SettingRow
-            field="junk_min_image_dimension"
-            label={t("config.filters.resolution")}
-            description={t("config.filters.resolutionHelp")}
-            htmlFor="junk-min-dimension"
-          >
-            <Input
-              id="junk-min-dimension"
-              type="number"
-              min={0}
-              max={MAX_FILE_SIZE_INPUT}
-              value={config.junk_min_image_dimension ?? 200}
-              onChange={(event) =>
-                updateConfig({
-                  junk_min_image_dimension: clampFileSize(event.target.value) ?? 0,
-                })
-              }
-              className="w-28"
-            />
-            <span className="text-xs text-faint">{t("config.unit.px")}</span>
-          </SettingRow>
-
           <SettingRow
             stacked
             field="junk_filename_patterns"
@@ -220,8 +229,56 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
       <SettingRow
         field="burst_detection_enabled"
         label={t("config.bursts.detect")}
-        description={t("config.bursts.detectHelp")}
+        description={
+          <>
+            {t("config.bursts.detectHelp")} {t("config.bursts.reviewFirst")}
+          </>
+        }
         htmlFor="detect-bursts"
+        sub={
+          config.burst_detection_enabled ? (
+            <>
+              <SubSetting
+                field="burst_time_window_seconds"
+                label={t("config.bursts.window")}
+                htmlFor="burst-window"
+              >
+                <Input
+                  id="burst-window"
+                  type="number"
+                  min={0.1}
+                  max={30}
+                  step={0.1}
+                  value={config.burst_time_window_seconds}
+                  onChange={(event) =>
+                    updateConfig({ burst_time_window_seconds: Number(event.target.value) })
+                  }
+                  className="w-24"
+                />
+                <span className="text-xs text-faint">{t("config.unit.seconds")}</span>
+              </SubSetting>
+
+              <SubSetting
+                field="burst_perceptual_distance"
+                label={t("config.bursts.distance")}
+                htmlFor="burst-distance"
+              >
+                <Input
+                  id="burst-distance"
+                  type="number"
+                  min={0}
+                  max={16}
+                  value={config.burst_perceptual_distance}
+                  onChange={(event) =>
+                    updateConfig({ burst_perceptual_distance: Number(event.target.value) })
+                  }
+                  className="w-24"
+                />
+                <span className="text-xs text-faint">{t("config.unit.distance")}</span>
+              </SubSetting>
+            </>
+          ) : undefined
+        }
       >
         <Toggle
           id="detect-bursts"
@@ -230,40 +287,6 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
           onChange={(value) => updateConfig({ burst_detection_enabled: value })}
         />
       </SettingRow>
-
-      {config.burst_detection_enabled && (
-        <SettingRow
-          field={["burst_time_window_seconds", "burst_perceptual_distance"]}
-          label={t("config.bursts.tuning")}
-          description={t("config.bursts.reviewFirst")}
-        >
-          <Input
-            type="number"
-            min={0.1}
-            max={30}
-            step={0.1}
-            aria-label={t("config.bursts.window")}
-            value={config.burst_time_window_seconds}
-            onChange={(event) =>
-              updateConfig({ burst_time_window_seconds: Number(event.target.value) })
-            }
-            className="w-24"
-          />
-          <span className="text-xs text-faint">{t("config.unit.seconds")}</span>
-          <Input
-            type="number"
-            min={0}
-            max={16}
-            aria-label={t("config.bursts.distance")}
-            value={config.burst_perceptual_distance}
-            onChange={(event) =>
-              updateConfig({ burst_perceptual_distance: Number(event.target.value) })
-            }
-            className="w-24"
-          />
-          <span className="text-xs text-faint">{t("config.unit.distance")}</span>
-        </SettingRow>
-      )}
 
       <SettingRow
         id="setting-scan"

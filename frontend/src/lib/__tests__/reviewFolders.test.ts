@@ -12,24 +12,30 @@ import { REVIEW_FOLDER_NAMES } from "@/lib/reviewPlan";
  * to `_unknown_dates`, `_future_dates` and `_corrupted`.
  */
 describe("review folder names", () => {
-  function backendQuarantineFolders(): string[] {
+  function backendReviewFolders(): string[] {
     const block = destinationSource.match(/QUARANTINE_FOLDERS: dict\[str, str\] = \{([\s\S]*?)\}/);
     if (!block) throw new Error("QUARANTINE_FOLDERS not found — did the backend move it?");
-    return [...block[1].matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((match) => match[2]);
+    const current = [...block[1].matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((match) => match[2]);
+    const retiredBlock = destinationSource.match(
+      /RETIRED_QUARANTINE_FOLDERS = frozenset\(\s*\{([\s\S]*?)\}\s*\)/,
+    );
+    if (!retiredBlock) throw new Error("RETIRED_QUARANTINE_FOLDERS not found");
+    const retired = [...retiredBlock[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+    const copies = destinationSource.match(/CONTEXTUAL_COPY_FOLDER = "([^"]+)"/)?.[1];
+    if (!copies) throw new Error("CONTEXTUAL_COPY_FOLDER not found");
+    return [...new Set([...current, ...retired, copies])];
   }
 
-  it("matches the folders the sort actually writes", () => {
-    expect([...REVIEW_FOLDER_NAMES].sort()).toEqual(backendQuarantineFolders().sort());
+  it("matches the current and retired folders the backend recognises", () => {
+    expect([...REVIEW_FOLDER_NAMES].sort()).toEqual(backendReviewFolders().sort());
   });
 
-  it("uses the plural forms the backend writes", () => {
+  it("recognises the merged current names and the retired layout", () => {
+    expect(REVIEW_FOLDER_NAMES).toContain("_undated");
+    expect(REVIEW_FOLDER_NAMES).toContain("_copies");
     expect(REVIEW_FOLDER_NAMES).toContain("_unknown_dates");
     expect(REVIEW_FOLDER_NAMES).toContain("_future_dates");
-    expect(REVIEW_FOLDER_NAMES).not.toContain("_unknown_date");
-    expect(REVIEW_FOLDER_NAMES).not.toContain("_future_date");
-  });
-
-  it("includes the corrupted folder that was missing", () => {
     expect(REVIEW_FOLDER_NAMES).toContain("_corrupted");
+    expect(REVIEW_FOLDER_NAMES).toContain("_failed");
   });
 });

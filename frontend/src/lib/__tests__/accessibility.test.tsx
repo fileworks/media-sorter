@@ -6,7 +6,7 @@ import axe from "axe-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import type { PreviewResult } from "@/types/api";
-import type { GroupMember } from "@/lib/reviewWorkbench";
+import { comparableFromMember, type GroupMember } from "@/lib/reviewWorkbench";
 
 import { CompareModal } from "@/components/screens/review/CompareModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -19,8 +19,9 @@ import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { RunLog } from "@/components/screens/RunLog";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
 import { PlanSummary } from "@/components/screens/review/PlanSummary";
-import { destinationTree, type PlanTotals } from "@/lib/reviewPlan";
-import { RecipeGrid } from "@/components/screens/RecipeGrid";
+import { destinationTree } from "@/lib/reviewPlan";
+import type { ReviewStats } from "@/lib/reviewBrowse";
+import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { StageShell } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
@@ -148,7 +149,7 @@ function renderWithProviders(element: ReactElement, locale: Locale) {
   );
 }
 
-function renderShell(locale: Locale) {
+function renderShell(locale: Locale, planExists = false) {
   return renderWithProviders(
     <StageShell
       inputs={{
@@ -157,6 +158,8 @@ function renderShell(locale: Locale) {
         scanned: true,
         planned: true,
         plannedReason: null,
+        duplicateReviewReady: true,
+        duplicateReviewReason: null,
         blocked: false,
         blockedReason: null,
       }}
@@ -167,6 +170,8 @@ function renderShell(locale: Locale) {
         taskId: null,
       }}
       titleBar={<div />}
+      planExists={planExists}
+      onUnlock={() => undefined}
     >
       {(state: StageState) => (
         <StateView
@@ -182,15 +187,18 @@ function renderShell(locale: Locale) {
   );
 }
 
-const PLAN_TOTALS: PlanTotals = {
+const REVIEW_STATS: ReviewStats = {
   scanned: 1000,
-  ready: 900,
-  duplicates: 80,
-  duplicatesResolved: 50,
-  duplicatesUnresolved: 30,
-  junk: 20,
-  warnings: 3,
-  share: { ready: 90, duplicates: 8, junk: 2 },
+  organized: 900,
+  setAside: 80,
+  staysPut: 20,
+  sets: 40,
+  copies: 80,
+  copyBytes: 1_200_000,
+  undecided: 30,
+  proposed: 0,
+  outstanding: 30,
+  share: { organized: 90, setAside: 8, staysPut: 2 },
 };
 
 /** A dry run with one ordinary file, one duplicate stack and one warning. */
@@ -299,7 +307,28 @@ const DIALOG_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
       <ResetDialog
         open
         title="Reset Sort to defaults"
-        rows={[{ setting: "Copy instead of move", current: "On", default: "Off" }]}
+        destinations={[
+          {
+            id: "baseline",
+            label: "recipe Safe sort",
+            rows: [
+              {
+                key: "copy_instead_of_move",
+                setting: "Copy instead of move",
+                current: "On",
+                result: "Off",
+              },
+            ],
+            patch: { copy_instead_of_move: false },
+          },
+          {
+            id: "defaults",
+            label: "the application defaults",
+            rows: [],
+            patch: {},
+            unavailable: "Nothing to do — everything here already matches the defaults.",
+          },
+        ]}
         onClose={() => undefined}
         onConfirm={() => undefined}
       />
@@ -321,9 +350,10 @@ const DIALOG_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
     "compare",
     () => (
       <CompareModal
-        a={COMPARE_MEMBER("m1", "a.jpg")}
-        b={COMPARE_MEMBER("m2", "b.jpg")}
+        a={comparableFromMember(COMPARE_MEMBER("m1", "a.jpg"))}
+        b={comparableFromMember(COMPARE_MEMBER("m2", "b.jpg"))}
         keeperId="m1"
+        setId="set-1"
         onKeep={() => undefined}
         onKeepBoth={() => undefined}
         onClose={() => undefined}
@@ -338,10 +368,10 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
     "plan summary",
     () => (
       <PlanSummary
-        totals={PLAN_TOTALS}
-        sizeLabel="68.4 GB"
+        stats={REVIEW_STATS}
+        requiredBytes={68_400_000_000}
         rootCount={3}
-        onOpen={() => undefined}
+        onResolve={() => undefined}
       />
     ),
   ],
@@ -363,6 +393,9 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
           "Sorted",
           { rootPath: "/out" },
         )}
+        selectedPath={null}
+        onSelect={() => undefined}
+        outOfScopeSets={2}
       />
     ),
   ],
@@ -447,7 +480,6 @@ describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
       <ReviewScreen
         result={PREVIEW_RESULT}
         config={ACCESSIBILITY_CONFIG}
-        onSelectView={() => undefined}
         onOpenSetting={() => undefined}
         onRerunPreview={() => undefined}
       />,
@@ -469,7 +501,6 @@ describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
         <ReviewScreen
           result={PREVIEW_RESULT}
           config={ACCESSIBILITY_CONFIG}
-          onSelectView={() => undefined}
           onOpenSetting={() => undefined}
           onRerunPreview={() => undefined}
         />
@@ -507,7 +538,7 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
     const rendered = renderShell(locale);
     await expectNoViolations(rendered.container);
 
-    for (const stage of ["configure", "review", "execute"] as const) {
+    for (const stage of ["recipe", "configure", "review", "execute"] as const) {
       fireEvent.click(
         within(rendered.container).getByRole("button", {
           name: new RegExp(`^${translate(locale, `stage.${stage}.label`)}`),
@@ -517,9 +548,24 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
     }
   });
 
-  it("has no automated violations in the recipe grid", async () => {
+  it("keeps the lock banner and its action reachable while the stages are locked", async () => {
+    const rendered = renderShell(locale, true);
+
+    // Standing on a locked stage: the banner explains, and its action is the
+    // one control the inert region does not swallow.
+    const unlock = within(rendered.container).getByRole("button", {
+      name: translate(locale, "stage.locked.action"),
+    });
+    expect(unlock.closest("[inert]")).toBeNull();
+    unlock.focus();
+    expect(document.activeElement).toBe(unlock);
+
+    await expectNoViolations(rendered.container);
+  });
+
+  it("has no automated violations on the recipe stage", async () => {
     const rendered = renderWithProviders(
-      <RecipeGrid
+      <RecipeScreen
         config={ACCESSIBILITY_CONFIG}
         savedRecipes={[]}
         onApply={() => undefined}
@@ -537,8 +583,7 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
         onSaveConfig={() => undefined}
         onSaveRecipe={async () => undefined}
         savedRecipes={[]}
-        onApplyConfig={() => undefined}
-        onDeleteRecipe={() => undefined}
+        onEditRecipe={() => undefined}
       />,
       locale,
     );

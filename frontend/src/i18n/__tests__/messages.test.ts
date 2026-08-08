@@ -9,6 +9,7 @@ import compareModalSource from "@/components/screens/review/CompareModal.tsx?raw
 import destinationTreeSource from "@/components/screens/review/DestinationTree.tsx?raw";
 import planSummarySource from "@/components/screens/review/PlanSummary.tsx?raw";
 import recipeGridSource from "@/components/screens/RecipeGrid.tsx?raw";
+import recipeScreenSource from "@/components/screens/RecipeScreen.tsx?raw";
 import runLogSource from "@/components/screens/RunLog.tsx?raw";
 import titleBarSource from "@/components/shell/TitleBar.tsx?raw";
 import stageStepperSource from "@/components/shell/StageStepper.tsx?raw";
@@ -194,6 +195,7 @@ describe("English/German resources", () => {
       "DestinationTree.tsx": destinationTreeSource,
       "PlanSummary.tsx": planSummarySource,
       "RecipeGrid.tsx": recipeGridSource,
+      "RecipeScreen.tsx": recipeScreenSource,
       "RunLog.tsx": runLogSource,
       "TitleBar.tsx": titleBarSource,
       "StageStepper.tsx": stageStepperSource,

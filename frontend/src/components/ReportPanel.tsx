@@ -663,6 +663,21 @@ export function ReportPanel({ report }: ReportPanelProps) {
           </span>
         </div>
 
+        {(report.excluded_roots?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
+              {t("report.excludedRoots", { count: report.excluded_roots?.length ?? 0 })}
+            </p>
+            <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+              {report.excluded_roots?.map((path) => (
+                <li key={path} className="break-all font-mono">
+                  {path}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Export buttons */}
         <div className="mt-3 flex gap-2">
           <Button

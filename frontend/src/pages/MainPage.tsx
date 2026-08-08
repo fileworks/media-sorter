@@ -19,15 +19,16 @@ import { FiArrowLeft } from "react-icons/fi";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
 import { ExecutePreflight } from "@/components/OperationCenter";
-import { PreviewProgressCard } from "@/components/PreviewProgressCard";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { StageShell, type StageNav } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
 import { UpdateBanner } from "@/components/UpdateBanner";
-import { ActionBar } from "@/components/shell/ActionBar";
+import { StageFooter } from "@/components/shell/StageFooter";
 import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
+import { RecipeScreen } from "@/components/screens/RecipeScreen";
+import { ReviewPlanLifecycle } from "@/components/screens/ReviewPlanLifecycle";
 import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RunLog } from "@/components/screens/RunLog";
@@ -37,6 +38,7 @@ import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
+import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
 import { useLogs } from "@/hooks/useLogs";
 import { useRootProbes } from "@/hooks/useRootProbes";
@@ -45,26 +47,56 @@ import { useSorting } from "@/hooks/useSorting";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useI18n, type Locale } from "@/i18n/I18nContext";
+import { splitValidation } from "@/lib/configGates";
 import { sampleFiles } from "@/lib/configSummary";
 import { extractErrorMessage } from "@/lib/errorUtils";
-import { formatBytes, formatDuration } from "@/lib/formatters";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
-import { blockingConflicts, validateRoots } from "@/lib/sourcesStage";
+import { activeCards, blockingConflicts, validateRoots } from "@/lib/sourcesStage";
 import type { StageInputs, StageKey, StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
-import { api } from "@/services/api";
-import type { Config, OperationReport, RecipeSettings } from "@/types/api";
+import { api, type ReviewedSet } from "@/services/api";
+import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
   import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
 );
-const ReportPanel = lazy(() =>
-  import("@/components/ReportPanel").then((module) => ({ default: module.ReportPanel })),
+const FinishedRun = lazy(() =>
+  import("@/components/screens/FinishedRun").then((module) => ({ default: module.FinishedRun })),
 );
 
 /** What a folder request is for: a new root in a role, or an existing one. */
 type FolderTarget = { kind: "add"; role: RootRole } | { kind: "change"; rootId: string };
+
+interface RunDecisions {
+  planId: string | null;
+  reviewedSets: ReviewedSet[];
+  outstandingSets: number | null;
+  proposedSets: number;
+  undecidedSets: number;
+}
+
+type ReviewDecisionUpdate = Omit<RunDecisions, "planId">;
+
+function sameReviewedSets(left: ReviewedSet[], right: ReviewedSet[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  return left.every(
+    (set, index) =>
+      set.keep === right[index]?.keep &&
+      set.keep_all === right[index]?.keep_all &&
+      set.demote.length === right[index]?.demote.length &&
+      set.demote.every((path, pathIndex) => path === right[index]?.demote[pathIndex]),
+  );
+}
+
+const EMPTY_RUN_DECISIONS: RunDecisions = {
+  planId: null,
+  reviewedSets: [],
+  outstandingSets: null,
+  proposedSets: 0,
+  undecidedSets: 0,
+};
 
 /** The library profile's roots, presented as the cards the Sources screen draws. */
 function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: number): RootCard[] {
@@ -119,13 +151,11 @@ export default function MainPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { theme, toggle: toggleTheme } = useTheme();
-  const { config, isValid, updateConfig, saveError, retrySave } = useConfig();
+  const { config, validationErrors, updateConfig, saveError, retrySave } = useConfig();
   const { setLocale, locale, t } = useI18n();
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [pendingConfigPatch, setPendingConfigPatch] = useState<Partial<Config> | null>(null);
-  const [bodyKey, setBodyKey] = useState(0);
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
   const [stage, setStage] = useState<StageState["stage"]>("sources");
@@ -133,10 +163,9 @@ export default function MainPage() {
   const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
-  const [runDecisions, setRunDecisions] = useState<{ excludedSources: string[] }>({
-    excludedSources: [],
-  });
+  const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
 
+  const configDefaults = useConfigDefaults();
   const analysis = useAnalysis();
   const preview = usePreview();
   const sorting = useSorting();
@@ -204,32 +233,32 @@ export default function MainPage() {
     [preview.result?.items],
   );
 
-  const handleConfigSave = useCallback(
-    (patch: Partial<Config>) => {
-      // Changing settings after a plan exists invalidates it, so the change is
-      // confirmed rather than applied behind the user's back.
-      if (analysis.result || preview.result) {
-        setPendingConfigPatch(patch);
-        return;
-      }
-      updateConfig(patch);
-    },
-    [analysis.result, preview.result, updateConfig],
-  );
-
   /**
-   * Applying a recipe has already been confirmed in the recipe panel's own
-   * footer, which states the same consequence. Routing it through
-   * `handleConfigSave` would raise the generic modal on top of that and ask
-   * twice for one decision.
+   * Settings are written straight through.
+   *
+   * This used to intercept every patch while a plan existed and raise a modal
+   * asking whether to discard it — a per-field answer to a per-session question.
+   * Six edits meant six identical dialogs, and the plan was destroyed on the
+   * first answer, so the remaining five asked about a plan that was already
+   * gone. The stage lock replaces all of it: while a plan exists the settings
+   * cannot be reached at all, and unlocking asks once.
    */
+  const handleConfigSave = updateConfig;
+
+  /** Discard the plan, which is what makes the earlier stages editable again. */
+  const discardPlan = useCallback(() => {
+    analysis.clear();
+    preview.clear();
+    setRunDecisions(EMPTY_RUN_DECISIONS);
+  }, [analysis, preview]);
+
+  /** Applying a recipe rewrites the settings the plan was built from. */
   const handleRecipeApply = useCallback(
     (patch: Partial<Config>) => {
       updateConfig(patch);
-      analysis.clear();
-      preview.clear();
+      discardPlan();
     },
-    [analysis, preview, updateConfig],
+    [discardPlan, updateConfig],
   );
 
   const handleRootsChange = useCallback(
@@ -340,6 +369,38 @@ export default function MainPage() {
     onError: () => toast(t("recipes.deleteFailed"), "error"),
   });
 
+  // ── Gates ──────────────────────────────────────────────────────────────────
+
+  /** A validation issue as the one sentence the user reads. */
+  const issueText = useCallback(
+    (issue: ConfigIssue) => t(issue.message_key, issue.params, issue.message),
+    [t],
+  );
+
+  // Two gates, not one. A folder problem stops the flow at Sources, where it can
+  // be fixed; a settings problem stops it at Configure, for the same reason.
+  // Reporting either as the other is how somebody ends up on a screen that says
+  // to choose folders they have already chosen.
+  const { roots: rootIssues, settings: settingIssues } = useMemo(
+    () => splitValidation(validationErrors),
+    [validationErrors],
+  );
+  const activeRootCards = useMemo(
+    () => activeCards(cards, excludedForRun),
+    [cards, excludedForRun],
+  );
+  const rootConflicts = useMemo(() => validateRoots(activeRootCards), [activeRootCards]);
+  // The client-side conflict is named first: it is computed from the cards on
+  // screen, so it is both more specific and never a round-trip behind them.
+  const rootBlocker = blockingConflicts(rootConflicts)[0];
+  // Saved-profile validation still sees roots deliberately omitted from this
+  // run. Once scope is narrowed, active-card validation and the scoped backend
+  // operation are authoritative; otherwise an offline skipped drive would keep
+  // blocking the very escape hatch intended for it.
+  const rootIssue = excludedForRun.length === 0 ? (rootIssues[0] ?? null) : null;
+  const settingIssue = settingIssues[0] ?? null;
+  const rootsReady = !rootBlocker && rootIssue === null;
+
   // ── The run ────────────────────────────────────────────────────────────────
 
   /**
@@ -358,18 +419,41 @@ export default function MainPage() {
       toast(recoveryBlock.reason ?? t("stage.recovery.blocked"), "warning");
       return false;
     }
-    if (!isValid) {
-      toast(t("analysis.requiredFolders"), "warning");
+    // Whichever gate is closed, the toast says which one — the backend would
+    // refuse the plan for exactly this reason, and repeating a generic folder
+    // warning for a settings problem sends the user to the wrong screen.
+    const blocker = rootIssue ?? settingIssue;
+    if (rootBlocker) {
+      toast(
+        t(`sources.conflict.${rootBlocker.kind}`, rootBlocker.params, rootBlocker.message),
+        "warning",
+      );
+      return false;
+    }
+    if (blocker) {
+      toast(issueText(blocker), "warning");
       return false;
     }
     if (!analysis.result) {
       preview.clear();
-      // A failure or cancellation is already surfaced through `analysis.error`;
-      // pressing on would plan on nothing.
-      if (!(await analysis.runAnalysis())) return false;
+      // A failure or cancellation is surfaced on Review; pressing on would
+      // plan on nothing.
+      if (!(await analysis.runAnalysis(excludedForRun))) return false;
     }
-    return (await preview.generatePreview()) !== null;
-  }, [analysis, isValid, preview, recoveryBlock, t, toast]);
+    setRunDecisions(EMPTY_RUN_DECISIONS);
+    return (await preview.generatePreview(excludedForRun)) !== null;
+  }, [
+    analysis,
+    excludedForRun,
+    issueText,
+    preview,
+    recoveryBlock,
+    rootBlocker,
+    rootIssue,
+    settingIssue,
+    t,
+    toast,
+  ]);
 
   const cancellableOperation = analysis.loading
     ? "analysis"
@@ -399,44 +483,60 @@ export default function MainPage() {
     analysis.clear();
     preview.clear();
     setExcludedForRun([]);
-    setRunDecisions({ excludedSources: [] });
+    setRunDecisions(EMPTY_RUN_DECISIONS);
     setImpactAcknowledged(false);
     setStage("sources");
-    setBodyKey((key) => key + 1);
   }, [analysis, preview, sorting]);
 
   const startRun = useCallback(() => {
-    void sorting.startSorting(
-      false,
-      preview.result?.config_fingerprint,
-      preview.result?.plan_id,
-      runDecisions,
-    );
-  }, [preview.result, runDecisions, sorting]);
+    if (runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets !== 0) {
+      return;
+    }
+    void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id, {
+      excludedRoots: excludedForRun,
+      reviewedSets: runDecisions.reviewedSets,
+    });
+  }, [excludedForRun, preview.result, runDecisions, sorting]);
 
   // ── Stage wiring ───────────────────────────────────────────────────────────
-
-  const rootConflicts = useMemo(() => validateRoots(cards), [cards]);
-  const rootBlocker = blockingConflicts(rootConflicts)[0];
 
   // Both objects are read by `StageShell` from an effect and a memo, so their
   // identity is load-bearing: rebuilding them every render re-ran reconciliation
   // on every render, which is a re-render loop, not a re-render.
   const stageInputs = useMemo<StageInputs>(
     () => ({
-      rootsReady: isValid && !rootBlocker,
+      rootsReady,
       rootsReason: rootBlocker
         ? t(`sources.conflict.${rootBlocker.kind}`, rootBlocker.params, rootBlocker.message)
-        : isValid
-          ? null
-          : t("stage.gate.roots"),
+        : rootIssue
+          ? issueText(rootIssue)
+          : null,
       scanned,
       planned,
       plannedReason: t("stage.gate.plan"),
+      duplicateReviewReady:
+        runDecisions.planId === preview.result?.plan_id && runDecisions.outstandingSets === 0,
+      duplicateReviewReason:
+        runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets === null
+          ? t("stage.gate.duplicateLoading")
+          : t("stage.gate.duplicates", { count: runDecisions.outstandingSets }),
       blocked: recoveryBlock.blocked,
       blockedReason: recoveryBlock.reason,
     }),
-    [isValid, planned, recoveryBlock.blocked, recoveryBlock.reason, rootBlocker, scanned, t],
+    [
+      issueText,
+      planned,
+      recoveryBlock.blocked,
+      recoveryBlock.reason,
+      rootBlocker,
+      rootIssue,
+      rootsReady,
+      runDecisions.outstandingSets,
+      runDecisions.planId,
+      scanned,
+      t,
+      preview.result?.plan_id,
+    ],
   );
 
   const stageKey = useMemo<StageKey>(
@@ -449,19 +549,36 @@ export default function MainPage() {
     [config?.library_profile.profile_id, planned, scanned],
   );
 
-  // The preflight asks for an acknowledgement of what is about to happen, so it
-  // describes the plan *after* Review's exclusions. It is fetched, not derived:
-  // subtracting a per-reviewed-file tally from action-level totals counted two
-  // different things, because a companion is an action but not a reviewed file.
-  const runImpact = usePlanImpact(preview.result?.plan_id, runDecisions.excludedSources);
+  // The preflight asks the scoped plan for exactly what will happen after the
+  // duplicate confirmations on Review.
+  const runImpact = usePlanImpact(
+    preview.result?.plan_id,
+    excludedForRun,
+    runDecisions.reviewedSets,
+  );
   const impact = runImpact.data ?? preview.result?.impact;
-  const wholePlan = preview.result?.impact;
+
+  // Review publishes its derived decision wire from an effect. Keep this
+  // boundary stable and ignore a byte-identical publication; an inline
+  // callback made the effect publish, rerender MainPage, receive a new callback
+  // and publish forever in a real run.
+  const publishRunDecisions = useCallback(
+    (decisions: ReviewDecisionUpdate) => {
+      const planId = preview.result?.plan_id ?? null;
+      setRunDecisions((current) =>
+        current.planId === planId &&
+        current.outstandingSets === decisions.outstandingSets &&
+        current.proposedSets === decisions.proposedSets &&
+        current.undecidedSets === decisions.undecidedSets &&
+        sameReviewedSets(current.reviewedSets, decisions.reviewedSets)
+          ? current
+          : { ...decisions, planId },
+      );
+    },
+    [preview.result?.plan_id],
+  );
   const preflightInput = {
     actionableGroups: impact?.actionable_groups ?? 0,
-    excludedCount: Math.max(
-      0,
-      (wholePlan?.actionable_groups ?? 0) - (impact?.actionable_groups ?? 0),
-    ),
     quarantineCount: impact?.quarantine_count ?? 0,
     quarantineBytes: impact?.quarantine_bytes ?? 0,
     copyCount: impact?.copy_count ?? 0,
@@ -612,69 +729,33 @@ export default function MainPage() {
         stageKey={stageKey}
         titleBar={titleBar}
         banners={banners}
+        planExists={planExists}
+        onUnlock={discardPlan}
         onStateChange={(state) => setStage(state.stage)}
-        footer={(state, nav) => {
-          if (state.stage === "execute") return null;
-          if (state.stage === "sources") {
-            return (
-              <ActionBar
-                message={t("footer.sources")}
-                primary={{
-                  label: t("footer.toConfigure"),
-                  onClick: () => nav.go("configure"),
-                  disabled: !nav.canEnter("configure"),
-                  disabledReason: nav.reasonFor("configure"),
-                }}
-              />
-            );
-          }
-          if (state.stage === "configure") {
-            const estimate = analysis.result
-              ? t("footer.estimate", {
-                  files: analysis.result.total_files.toLocaleString(locale),
-                  duration: formatDuration(analysis.result.estimated_duration_seconds, {
-                    style: "long",
-                    locale,
-                  }),
-                  size: formatBytes(analysis.result.total_size_bytes, { locale }),
-                })
-              : t("footer.estimateUnknown");
-            return (
-              <ActionBar
-                tone="estimate"
-                message={estimate}
-                back={{ label: t("common.back"), onClick: () => nav.go("sources") }}
-                primary={{
-                  label: t("footer.preview"),
-                  busy: analysis.loading || preview.loading,
-                  onClick: () => {
-                    void buildPlan().then((ok) => ok && nav.go("review"));
-                  },
-                  disabled: !stageInputs.rootsReady || isAnyRunning,
-                  // A button disabled because something is already running has
-                  // to say so; `rootsReason` is null in exactly that case.
-                  disabledReason: stageInputs.rootsReady
-                    ? isAnyRunning
-                      ? t("footer.busy")
-                      : null
-                    : stageInputs.rootsReason,
-                }}
-              />
-            );
-          }
-          return (
-            <ActionBar
-              message={t("footer.review")}
-              back={{ label: t("common.back"), onClick: () => nav.go("configure") }}
-              primary={{
-                label: t("footer.toExecute"),
-                onClick: () => nav.go("execute"),
-                disabled: !nav.canEnter("execute"),
-                disabledReason: nav.reasonFor("execute"),
-              }}
-            />
-          );
-        }}
+        footer={(state, nav) => (
+          <StageFooter
+            stage={state.stage}
+            nav={nav}
+            analysis={analysis.result}
+            busy={analysis.loading || preview.loading}
+            previewReady={{
+              ok: rootsReady && settingIssue === null && !isAnyRunning,
+              reason: !rootsReady
+                ? stageInputs.rootsReason
+                : settingIssue
+                  ? issueText(settingIssue)
+                  : isAnyRunning
+                    ? t("footer.busy")
+                    : null,
+            }}
+            onPreview={() => {
+              // Review owns both the computation and its result. Move first so
+              // the first visible state is progress, then replace it in place.
+              nav.go("review");
+              void buildPlan();
+            }}
+          />
+        )}
       >
         {(state, nav) => {
           if (state.stage === "sources") {
@@ -686,10 +767,32 @@ export default function MainPage() {
                 config={config}
                 disabled={isAnyRunning}
                 onChange={handleRootsChange}
-                onExcludeForRun={setExcludedForRun}
+                onExcludeForRun={(next) => {
+                  setExcludedForRun(next);
+                  analysis.clear();
+                  preview.clear();
+                  setRunDecisions(EMPTY_RUN_DECISIONS);
+                  setImpactAcknowledged(false);
+                }}
                 onAddFolder={(role) => void requestFolder({ kind: "add", role })}
                 onChangeFolder={(rootId) => void requestFolder({ kind: "change", rootId })}
                 onRemove={removeFolder}
+              />
+            ) : (
+              <StateView variant="loading" layout="page" title={t("state.loading")} />
+            );
+          }
+
+          if (state.stage === "recipe") {
+            return config ? (
+              <RecipeScreen
+                config={config}
+                savedRecipes={savedRecipes}
+                onApply={handleRecipeApply}
+                onDelete={(recipeId: string) => deleteRecipe.mutate(recipeId)}
+                disabled={isAnyRunning}
+                planExists={planExists}
+                defaults={configDefaults}
               />
             ) : (
               <StateView variant="loading" layout="page" title={t("state.loading")} />
@@ -700,59 +803,39 @@ export default function MainPage() {
             return (
               <ConfigureScreen
                 disabled={isAnyRunning}
-                bodyKey={bodyKey}
                 onSaveConfig={handleConfigSave}
                 onSaveRecipe={async (name, settings) => {
                   await saveRecipe.mutateAsync({ name, settings });
                 }}
                 savedRecipes={savedRecipes}
-                onApplyConfig={handleRecipeApply}
-                planExists={planExists}
-                onDeleteRecipe={(recipeId: string) => deleteRecipe.mutate(recipeId)}
+                onEditRecipe={() => nav.go("recipe")}
                 samples={configureSamples}
               />
             );
           }
 
           if (state.stage === "review") {
-            if (preview.loading) {
-              return <PreviewProgressCard progress={preview.progress} elapsed={preview.elapsed} />;
-            }
-            if (preview.error) {
-              return (
-                <StateView
-                  variant="error"
-                  layout="page"
-                  title={t("preview.failed")}
-                  detail={preview.error}
-                  onRetry={() => void preview.generatePreview()}
-                />
-              );
-            }
-            if (!preview.result || !config) {
-              return (
-                <StateView
-                  variant="blocked"
-                  layout="page"
-                  title={t("stage.review.planNeeded")}
-                  detail={t("stage.gate.plan")}
-                  action={
-                    <Button size="sm" onClick={() => void buildPlan()}>
-                      {t("preview.action")}
-                    </Button>
-                  }
-                />
-              );
-            }
             return (
-              <ReviewScreen
-                result={preview.result}
-                config={config}
-                onSelectView={nav.selectView}
-                onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
-                onRerunPreview={() => void preview.generatePreview()}
-                onDecisionsChange={setRunDecisions}
-              />
+              <ReviewPlanLifecycle
+                analysis={analysis}
+                preview={preview}
+                ready={Boolean(preview.result && config)}
+                onCancel={() => setCancelConfirmOpen(true)}
+                onRetry={() => void buildPlan()}
+              >
+                {preview.result && config ? (
+                  <ReviewScreen
+                    result={preview.result}
+                    config={config}
+                    onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
+                    onRerunPreview={() => {
+                      setRunDecisions(EMPTY_RUN_DECISIONS);
+                      void preview.generatePreview(excludedForRun);
+                    }}
+                    onDecisionsChange={publishRunDecisions}
+                  />
+                ) : null}
+              </ReviewPlanLifecycle>
             );
           }
 
@@ -818,24 +901,6 @@ export default function MainPage() {
       />
 
       <ConfirmDialog
-        open={pendingConfigPatch !== null}
-        title={t("dialog.applyReset.title")}
-        description={t("dialog.applyReset.description")}
-        confirmLabel={t("dialog.applyReset.confirm")}
-        cancelLabel={t("common.cancel")}
-        onClose={() => {
-          setPendingConfigPatch(null);
-          setBodyKey((key) => key + 1);
-        }}
-        onConfirm={() => {
-          if (pendingConfigPatch) updateConfig(pendingConfigPatch);
-          setPendingConfigPatch(null);
-          analysis.clear();
-          preview.clear();
-        }}
-      />
-
-      <ConfirmDialog
         open={cancelConfirmOpen}
         title={t(
           cancellableOperation === "analysis"
@@ -857,43 +922,5 @@ export default function MainPage() {
         onConfirm={() => void cancelCurrent()}
       />
     </>
-  );
-}
-
-/** The run is over: the celebration, then the report it produced. */
-function FinishedRun({
-  report,
-  onStartNewRun,
-}: {
-  report: OperationReport;
-  onStartNewRun: () => void;
-}) {
-  const { t, locale } = useI18n();
-  return (
-    <div className="space-y-4">
-      <div className="animate-fade-in rounded-2xl border border-success/40 bg-tint-success px-5 py-4">
-        <p className="text-sm font-bold text-foreground">
-          {t(
-            report.summary.sorted === 1
-              ? report.duration_seconds
-                ? "report.organizedIn.one"
-                : "report.organized.one"
-              : report.duration_seconds
-                ? "report.organizedIn"
-                : "report.organized",
-            {
-              count: report.summary.sorted.toLocaleString(locale),
-              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
-            },
-          )}
-        </p>
-      </div>
-      <ReportPanel report={report} />
-      {/* A finished run used to be a dead end: `clearReport()` existed and
-          nothing called it, so the only way to run again was to reload. */}
-      <div className="flex justify-center">
-        <Button onClick={onStartNewRun}>{t("report.startNewRun")}</Button>
-      </div>
-    </div>
   );
 }

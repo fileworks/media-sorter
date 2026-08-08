@@ -25,7 +25,7 @@ import { BlurCommitInput } from "@/components/ui/blur-commit-input";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Disclosure } from "@/components/ui/disclosure";
-import { Segmented, SettingGroup, SettingRow } from "@/components/ui/setting-row";
+import { Segmented, SettingGroup, SettingRow, SubSetting } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useAiModels } from "@/hooks/useAiModels";
 import { useHardware } from "@/hooks/useHardware";
@@ -72,10 +72,32 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
     >
       <SettingRow
         id="setting-conversion"
-        field={["convert_images", "image_format", "image_quality"]}
+        field={["convert_images", "image_format"]}
         label={t("config.conversion.images")}
         description={t("config.conversion.imagesHelp")}
         htmlFor="convert-images"
+        sub={
+          config.convert_images && lossyFormat ? (
+            <SubSetting
+              field="image_quality"
+              label={t("config.conversion.quality")}
+              htmlFor="image-quality"
+            >
+              <input
+                id="image-quality"
+                type="range"
+                min={60}
+                max={100}
+                value={config.image_quality}
+                onChange={(event) => updateConfig({ image_quality: Number(event.target.value) })}
+                className="w-32"
+              />
+              <span className="w-7 text-right font-mono text-xs text-foreground">
+                {config.image_quality}
+              </span>
+            </SubSetting>
+          ) : undefined
+        }
       >
         <Toggle
           id="convert-images"
@@ -95,29 +117,30 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           <SelectItem value="webp">WebP</SelectItem>
           <SelectItem value="tiff">TIFF</SelectItem>
         </Select>
-        {config.convert_images && lossyFormat && (
-          <>
-            <input
-              type="range"
-              min={60}
-              max={100}
-              value={config.image_quality}
-              aria-label={t("config.conversion.quality")}
-              onChange={(event) => updateConfig({ image_quality: Number(event.target.value) })}
-              className="w-32"
-            />
-            <span className="w-7 text-right font-mono text-xs text-foreground">
-              {config.image_quality}
-            </span>
-          </>
-        )}
       </SettingRow>
 
       <SettingRow
-        field={["convert_videos", "video_format", "video_quality"]}
+        field={["convert_videos", "video_format"]}
         label={t("config.conversion.videos")}
         description={t("config.conversion.videosHelp")}
         htmlFor="convert-videos"
+        sub={
+          config.convert_videos ? (
+            <SubSetting field="video_quality" label={t("config.conversion.videoQuality")}>
+              <Segmented
+                name="video-quality"
+                label={t("config.conversion.videoQuality")}
+                value={config.video_quality}
+                options={[
+                  { value: "low", label: t("config.quality.low") },
+                  { value: "medium", label: t("config.quality.medium") },
+                  { value: "high", label: t("config.quality.high") },
+                ]}
+                onChange={(value) => updateConfig({ video_quality: value })}
+              />
+            </SubSetting>
+          ) : undefined
+        }
       >
         <Toggle
           id="convert-videos"
@@ -138,19 +161,6 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           <SelectItem value="webm">WebM</SelectItem>
           <SelectItem value="avi">AVI</SelectItem>
         </Select>
-        {config.convert_videos && (
-          <Segmented
-            name="video-quality"
-            label={t("config.conversion.videoQuality")}
-            value={config.video_quality}
-            options={[
-              { value: "low", label: t("config.quality.low") },
-              { value: "medium", label: t("config.quality.medium") },
-              { value: "high", label: t("config.quality.high") },
-            ]}
-            onChange={(value) => updateConfig({ video_quality: value })}
-          />
-        )}
       </SettingRow>
 
       <SettingRow
@@ -553,11 +563,38 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
       </SettingRow>
 
       <SettingRow
-        field={["thumbnail_cache_enabled", "thumbnail_cache_budget_bytes"]}
+        field="thumbnail_cache_enabled"
         label={t("config.thumbnailCache.label")}
         description={t("config.thumbnailCache.help")}
         htmlFor="thumbnail-cache-enabled"
         last
+        sub={
+          config.thumbnail_cache_enabled ? (
+            <SubSetting
+              field="thumbnail_cache_budget_bytes"
+              label={t("config.thumbnailCache.budget")}
+              description={t("config.thumbnailCache.budgetHelp")}
+              htmlFor="thumbnail-cache-budget"
+            >
+              <Input
+                id="thumbnail-cache-budget"
+                type="number"
+                min={16}
+                max={16384}
+                step={16}
+                value={Math.round(config.thumbnail_cache_budget_bytes / (1024 * 1024))}
+                onChange={(event) =>
+                  updateConfig({
+                    thumbnail_cache_budget_bytes:
+                      Math.max(16, Number(event.target.value) || 16) * 1024 * 1024,
+                  })
+                }
+                className="w-28"
+              />
+              <span className="text-xs text-faint">{t("config.unit.mb")}</span>
+            </SubSetting>
+          ) : undefined
+        }
       >
         <Toggle
           id="thumbnail-cache-enabled"
@@ -565,26 +602,6 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
           checked={config.thumbnail_cache_enabled}
           onChange={(value) => updateConfig({ thumbnail_cache_enabled: value })}
         />
-        {config.thumbnail_cache_enabled && (
-          <>
-            <Input
-              type="number"
-              min={16}
-              max={16384}
-              step={16}
-              aria-label={t("config.thumbnailCache.budget")}
-              value={Math.round(config.thumbnail_cache_budget_bytes / (1024 * 1024))}
-              onChange={(event) =>
-                updateConfig({
-                  thumbnail_cache_budget_bytes:
-                    Math.max(16, Number(event.target.value) || 16) * 1024 * 1024,
-                })
-              }
-              className="w-28"
-            />
-            <span className="text-xs text-faint">{t("config.unit.mb")}</span>
-          </>
-        )}
       </SettingRow>
     </SettingGroup>
   );

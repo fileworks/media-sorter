@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { useI18n } from "@/i18n/I18nContext";
-import { extractErrorMessage, userFacingError } from "@/lib/errorUtils";
+import { extractErrorMessage, userFacingError, type ExtractedError } from "@/lib/errorUtils";
 import type { PreviewResult, TaskProgress } from "@/types/api";
 
 /**
@@ -15,7 +15,8 @@ export function usePreview() {
 
   const [taskId, setTaskId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ExtractedError | null>(null);
+  const [cancelled, setCancelled] = useState(false);
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [elapsed, setElapsed] = useState(0);
   // Guard so we handle the terminal status exactly once.
@@ -68,20 +69,27 @@ export function usePreview() {
     if (status.status === "completed") {
       handledRef.current = true;
       setLoading(false);
+      setCancelled(false);
+      setError(null);
       releaseLoader();
       if (status.result) setResult(status.result);
-      else setError(t("preview.noResult"));
+      else setError({ message: t("preview.noResult"), code: "PREVIEW_NO_RESULT" });
       settle(status.result ?? null);
     } else if (status.status === "failed") {
       handledRef.current = true;
       setLoading(false);
       releaseLoader();
-      setError(userFacingError(status.failure?.message ?? status.error ?? t("preview.failed")));
+      setError({
+        message: userFacingError(status.failure?.message ?? status.error ?? t("preview.failed")),
+        code: status.failure?.code ?? "PREVIEW_FAILED",
+      });
       settle(null);
     } else if (status.status === "cancelled") {
       handledRef.current = true;
       setLoading(false);
+      setError(null);
       releaseLoader();
+      setCancelled(true);
       settle(null);
     }
   }, [status, releaseLoader, settle, t]);
@@ -91,7 +99,8 @@ export function usePreview() {
     handledRef.current = true;
     setLoading(false);
     releaseLoader();
-    setError(extractErrorMessage(statusError, t("preview.statusFailed")).message);
+    const extracted = extractErrorMessage(statusError, t("preview.statusFailed"));
+    setError({ ...extracted, code: extracted.code ?? "PREVIEW_STATUS_UNAVAILABLE" });
     settle(null);
   }, [statusError, releaseLoader, settle, t]);
 
@@ -103,39 +112,45 @@ export function usePreview() {
     [releaseLoader, settle],
   );
 
-  const generatePreview = useCallback(async (): Promise<PreviewResult | null> => {
-    settle(null);
-    // Clear the old task id *before* setting loading so the stale query key
-    // (`["preview", oldId]`) is never polled during the async startPreview call.
-    setTaskId(null);
-    void queryClient.removeQueries({ queryKey: ["preview"] });
-    setError(null);
-    setResult(null);
-    setElapsed(0);
-    handledRef.current = false;
-    lastEventSequenceRef.current = 0;
-    releaseLoader();
-    releaseLoaderRef.current = api.beginOperation();
-    setLoading(true);
-    const settled = new Promise<PreviewResult | null>((resolve) => {
-      settleRef.current = resolve;
-    });
-    try {
-      const id = await api.startPreview();
-      setTaskId(id);
-    } catch (err) {
-      handledRef.current = true;
-      releaseLoader();
-      setError(extractErrorMessage(err, t("preview.failed")).message);
-      setLoading(false);
+  const generatePreview = useCallback(
+    async (excludedRoots: string[] = []): Promise<PreviewResult | null> => {
       settle(null);
-    }
-    return settled;
-  }, [queryClient, releaseLoader, settle, t]);
+      // Clear the old task id *before* setting loading so the stale query key
+      // (`["preview", oldId]`) is never polled during the async startPreview call.
+      setTaskId(null);
+      void queryClient.removeQueries({ queryKey: ["preview"] });
+      setError(null);
+      setCancelled(false);
+      setResult(null);
+      setElapsed(0);
+      handledRef.current = false;
+      lastEventSequenceRef.current = 0;
+      releaseLoader();
+      releaseLoaderRef.current = api.beginOperation();
+      setLoading(true);
+      const settled = new Promise<PreviewResult | null>((resolve) => {
+        settleRef.current = resolve;
+      });
+      try {
+        const id = await api.startPreview(excludedRoots);
+        setTaskId(id);
+      } catch (err) {
+        handledRef.current = true;
+        releaseLoader();
+        const extracted = extractErrorMessage(err, t("preview.failed"));
+        setError({ ...extracted, code: extracted.code ?? "PREVIEW_START_FAILED" });
+        setLoading(false);
+        settle(null);
+      }
+      return settled;
+    },
+    [queryClient, releaseLoader, settle, t],
+  );
 
   const clear = useCallback(() => {
     setResult(null);
     setError(null);
+    setCancelled(false);
     setElapsed(0);
     setTaskId(null);
     setLoading(false);
@@ -154,7 +169,8 @@ export function usePreview() {
         // terminal cancelled state; that is also when the global loader ends.
         return;
       } catch (cancelError) {
-        setError(extractErrorMessage(cancelError, t("preview.cancelFailed")).message);
+        const extracted = extractErrorMessage(cancelError, t("preview.cancelFailed"));
+        setError({ ...extracted, code: extracted.code ?? "PREVIEW_CANCEL_FAILED" });
       }
     }
   }, [taskId, t]);
@@ -162,5 +178,15 @@ export function usePreview() {
   // Live progress only while the run is in flight.
   const progress: TaskProgress | null = loading ? (status?.progress ?? null) : null;
 
-  return { loading, error, result, elapsed, progress, generatePreview, cancelPreview, clear };
+  return {
+    loading,
+    error,
+    cancelled,
+    result,
+    elapsed,
+    progress,
+    generatePreview,
+    cancelPreview,
+    clear,
+  };
 }

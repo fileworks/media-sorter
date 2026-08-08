@@ -11,7 +11,7 @@
  * column" must not require deleting and re-adding a folder.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { IconType } from "react-icons";
 import {
   FiCheck,
@@ -66,8 +66,7 @@ interface SourcesScreenProps {
   onRemap?: (rootId: string) => void;
 }
 
-/** The two or three lines of figures under a card's path. */
-function cardFacts(
+function factLines(
   card: RootCard,
   analysis: AnalysisResult | null,
   primaryInput: boolean,
@@ -77,7 +76,12 @@ function cardFacts(
 ): string[] {
   if (card.role === "destination") {
     const disk = analysis?.disk_space;
-    if (!disk) return [t("sources.facts.destinationUnscanned")];
+    // Both lines, not one: the second is true before a scan as well, and a card
+    // that states one fact where its neighbour states two is the card whose
+    // buttons sit a line higher than everything beside it.
+    if (!disk) {
+      return [t("sources.facts.destinationUnscanned"), t("sources.facts.moveNeedsNothing")];
+    }
     const lines: string[] = [];
     if (disk.free_space_known === false) {
       lines.push(t("sources.facts.freeUnknown"));
@@ -106,11 +110,20 @@ function cardFacts(
 
   // Input. The scan reports one aggregate, not a per-root split, so the totals
   // belong to the first input card and the rest state only what they indexed.
-  if (!analysis) return [t("sources.facts.inputUnscanned")];
+  //
+  // The unscanned card names the scan rather than describing its own emptiness.
+  // Counting the media here instead was asked for and declined: over the drives
+  // this is built for, a recursive walk is minutes, and the scan already
+  // produces the figure.
+  const unscanned = [t("sources.facts.inputUnscanned"), t("sources.facts.scanToCount")];
+  if (!analysis) return unscanned;
   if (!primaryInput) {
     return card.indexedFiles === null
-      ? [t("sources.facts.inputUnscanned")]
-      : [t("sources.facts.indexed", { count: card.indexedFiles.toLocaleString(locale) })];
+      ? unscanned
+      : [
+          t("sources.facts.indexed", { count: card.indexedFiles.toLocaleString(locale) }),
+          t("sources.facts.inputPurpose"),
+        ];
   }
   const byType = analysis.by_type ?? {};
   const kinds = Object.entries(byType)
@@ -124,8 +137,8 @@ function cardFacts(
       count: analysis.total_files.toLocaleString(locale),
       size: formatBytes(analysis.total_size_bytes, { locale }),
     }),
-    kinds,
-  ].filter(Boolean);
+    kinds || t("sources.facts.inputPurpose"),
+  ];
 }
 
 function FolderCard({
@@ -134,6 +147,7 @@ function FolderCard({
   conflicts,
   excluded,
   disabled,
+  rolePanel,
   onToggleBaseline,
   onChangeFolder,
   onRemove,
@@ -146,6 +160,8 @@ function FolderCard({
   conflicts: Conflict[];
   excluded: boolean;
   disabled: boolean;
+  /** The role-change conflict panel, when this card is the one being changed. */
+  rolePanel: ReactNode;
   /** Absent on the destination, which cannot be a baseline. */
   onToggleBaseline: ((baseline: boolean) => void) | undefined;
   onChangeFolder: () => void;
@@ -171,97 +187,132 @@ function FolderCard({
   };
 
   return (
-    <li
-      className={cn(
-        "rounded-xl border bg-card p-4",
-        status.tone === "error" ? "border-error/50" : "border-border",
-        excluded && "opacity-55",
-      )}
-    >
-      <p className="truncate text-sm font-semibold text-foreground" title={card.path}>
-        {card.displayName ?? card.path.split(/[\\/]/).filter(Boolean).pop() ?? card.path}
-      </p>
-      <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={card.path}>
-        {card.path}
-      </p>
-
-      <div className="mt-2.5 space-y-0.5 text-xs text-muted-foreground">
-        {facts.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-      </div>
-
-      {ownConflict && (
-        <p
-          className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
-          role={ownConflict.blocking ? "alert" : "status"}
-        >
-          {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
+    <li>
+      <div
+        className={cn(
+          "rounded-xl border bg-card p-4",
+          status.tone === "error" ? "border-error/50" : "border-border",
+          // The chip carries the state in words. Dimming the whole card made
+          // every fact and control fail contrast in a real browser, so use a
+          // structural treatment that leaves its contents fully readable.
+          excluded && "border-dashed bg-surface-muted",
+        )}
+      >
+        <div className="flex h-5 min-w-0 items-center gap-1.5">
+          <p
+            className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
+            title={card.path}
+          >
+            {card.displayName ?? card.path.split(/[\\/]/).filter(Boolean).pop() ?? card.path}
+          </p>
+          {excluded && (
+            <span className="shrink-0 rounded-full border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold leading-none text-warning">
+              {t("sources.excludedThisRun")}
+            </span>
+          )}
+          {ownConflict && (
+            <span
+              className={cn(
+                "shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold leading-none",
+                ownConflict.blocking
+                  ? "border-error/40 bg-tint-error text-error"
+                  : "border-warning/40 bg-tint-warning text-warning",
+              )}
+            >
+              {t("sources.conflictChip")}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={card.path}>
+          {card.path}
         </p>
-      )}
-      {excluded && <p className="mt-2 text-xs text-warning">{t("sources.excludedThisRun")}</p>}
 
-      <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onChangeFolder}
-          disabled={disabled}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          {t("sources.change")}
-        </button>
-        {onRemove && (
+        {/* Facts render only what they have to say. Every ordinary card has two
+            truthful facts; no invisible paragraph stands in for a future one. */}
+        <div className="mt-2.5 space-y-0.5 text-xs text-muted-foreground">
+          {facts.map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+        </div>
+
+        {/* A conflict needs the sentence a chip cannot carry, so that one card
+            grows. Ordinary and merely skipped cards spend no row on absence. */}
+        {ownConflict && (
+          <p
+            className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
+            role={ownConflict.blocking ? "alert" : "status"}
+          >
+            {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
+          </p>
+        )}
+
+        <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            onClick={onRemove}
+            onClick={onChangeFolder}
             disabled={disabled}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            {t("sources.remove")}
+            {t("sources.change")}
           </button>
-        )}
-      </div>
-
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {onToggleBaseline && (
-          <label className="flex min-w-0 items-start gap-2 py-1">
-            <input
-              type="checkbox"
-              checked={card.role === "reference"}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
               disabled={disabled}
-              onChange={(event) => onToggleBaseline(event.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <span className="min-w-0">
-              <span className="block text-xs font-medium text-foreground">
-                {t("sources.baseline")}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {t("sources.baselineHelp")}
-              </span>
-            </span>
-          </label>
-        )}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              {t("sources.remove")}
+            </button>
+          )}
+        </div>
 
-        <span className="flex-1" />
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {onToggleBaseline && (
+            <label className="flex min-w-0 items-start gap-2 py-1">
+              <input
+                type="checkbox"
+                checked={card.role === "reference"}
+                disabled={disabled}
+                onChange={(event) => onToggleBaseline(event.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-foreground">
+                  {t("sources.baseline")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("sources.baselineHelp")}
+                </span>
+              </span>
+            </label>
+          )}
 
-        <IconButton
-          label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
-          onClick={() => void copyPath()}
-          icon={copied ? FiCheck : FiClipboard}
-        />
-        {onToggleExcluded && (
+          <span className="flex-1" />
+
           <IconButton
-            label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
-            disabled={disabled}
-            onClick={onToggleExcluded}
-            icon={excluded ? FiEye : FiEyeOff}
+            label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
+            onClick={() => void copyPath()}
+            icon={copied ? FiCheck : FiClipboard}
           />
-        )}
-        {offline && onRemap && (
-          <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
-        )}
+          {onToggleExcluded && (
+            <IconButton
+              label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
+              disabled={disabled}
+              onClick={onToggleExcluded}
+              icon={excluded ? FiEye : FiEyeOff}
+            />
+          )}
+          {offline && onRemap && (
+            <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
+          )}
+        </div>
       </div>
+
+      {/* Attached to the card whose role was changed rather than to the foot of
+          the page: an explanation of a conflict a screenful away from the
+          control that caused it is one the reader has to go looking for. */}
+      {rolePanel}
     </li>
   );
 }
@@ -335,14 +386,62 @@ export function SourcesScreen({
 
   const globalConflicts = conflicts.filter((conflict) => conflict.rootIds.length === 0);
 
+  const rolePanelFor = (rootId: string): ReactNode => {
+    if (!preview || !pendingRole || pendingRole.rootId !== rootId) return null;
+    return (
+      <div className="mt-2 rounded-xl border border-error/40 bg-tint-error p-3.5" role="alert">
+        <div className="flex items-start gap-2">
+          <p className="min-w-0 flex-1 text-xs font-semibold text-error">
+            {t("sources.roleChangeConflict")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setPendingRole(null)}
+            aria-label={t("common.cancel")}
+            className="shrink-0 rounded p-0.5 text-faint hover:text-foreground"
+          >
+            <FiX className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+        <ul className="mt-1.5 space-y-1 text-xs text-foreground">
+          {previewBlocking.map((conflict) => (
+            <li key={conflict.kind}>
+              {t(`sources.conflict.${conflict.kind}`, conflict.params, conflict.message)}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onChange(preview.cards);
+              setPendingRole(null);
+            }}
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          >
+            {t("sources.roleChangeAnyway")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingRole(null)}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const cardFor = (card: RootCard, isDestination: boolean) => (
     <FolderCard
       key={card.rootId}
       card={card}
-      facts={cardFacts(card, analysis, false, config.copy_instead_of_move, t, locale)}
+      facts={factLines(card, analysis, false, config.copy_instead_of_move, t, locale)}
       conflicts={conflicts}
       excluded={excludedForRun.includes(card.rootId)}
       disabled={disabled}
+      rolePanel={rolePanelFor(card.rootId)}
       onToggleBaseline={
         isDestination
           ? undefined
@@ -496,50 +595,6 @@ export function SourcesScreen({
               </li>
             ))}
           </ul>
-        )}
-
-        {preview && pendingRole && (
-          <div className="mt-4 rounded-xl border border-error/40 bg-tint-error p-3.5" role="alert">
-            <div className="flex items-start gap-2">
-              <p className="min-w-0 flex-1 text-xs font-semibold text-error">
-                {t("sources.roleChangeConflict")}
-              </p>
-              <button
-                type="button"
-                onClick={() => setPendingRole(null)}
-                aria-label={t("common.cancel")}
-                className="shrink-0 rounded p-0.5 text-faint hover:text-foreground"
-              >
-                <FiX className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </div>
-            <ul className="mt-1.5 space-y-1 text-xs text-foreground">
-              {previewBlocking.map((conflict) => (
-                <li key={conflict.kind}>
-                  {t(`sources.conflict.${conflict.kind}`, conflict.params, conflict.message)}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onChange(preview.cards);
-                  setPendingRole(null);
-                }}
-                className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
-              >
-                {t("sources.roleChangeAnyway")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingRole(null)}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
         )}
       </div>
     </div>

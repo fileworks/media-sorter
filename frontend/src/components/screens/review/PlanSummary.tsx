@@ -1,161 +1,146 @@
 /**
- * The five figures that answer "did this go how I expected?" at a glance.
+ * What this plan is, at a glance, and the one thing to do about it.
  *
- * Three of the tiles are also navigation: a tile with somewhere to go says so
- * and behaves like a link, because a number the user cares about should not
- * make them hunt for the tab that explains it. The bar underneath restates the
- * same three bands proportionally — the counts say how many, the bar says how
- * much of the library, and those are different questions.
+ * It was five tiles, then three sentences. The tiles read as a dashboard — five
+ * numbers of apparently equal weight — and a dashboard is the wrong shape for a
+ * screen with a task. The sentences fixed the weighting and lost the scanning:
+ * four figures buried mid-paragraph are four figures nobody reads.
+ *
+ * So the figures are figures again, but ranked rather than equal. The three
+ * outcomes carry the colour of the band they occupy in the distribution bar
+ * below them, which is what ties the two halves together without a legend doing
+ * the work. Everything else stays prose, and exactly one thing on the card is a
+ * control.
+ *
+ * Every figure comes from `reviewStats`, the one derivation Browse and Resolve
+ * also read, so the band cannot claim a number the screen below it contradicts.
  */
 
 import { FiArrowRight } from "react-icons/fi";
 
 import { useI18n } from "@/i18n/I18nContext";
+import { formatBytes } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import type { PlanTotals } from "@/lib/reviewPlan";
-import type { View } from "@/lib/stageModel";
+import type { ReviewStats } from "@/lib/reviewBrowse";
 
 interface PlanSummaryProps {
-  totals: PlanTotals;
-  sizeLabel: string;
+  stats: ReviewStats;
+  /** Bytes the run needs at the destination, as the plan reports them. */
+  requiredBytes: number;
   rootCount: number;
-  onOpen: (view: View) => void;
+  /** Open Resolve at the first set still waiting on a decision. */
+  onResolve: () => void;
 }
 
-function Tile({
+function Figure({
   value,
   label,
-  detail,
-  tone = "neutral",
-  action,
+  swatch,
+  muted,
 }: {
   value: string;
   label: string;
-  detail?: string;
-  tone?: "neutral" | "ok" | "brand" | "warn";
-  action?: { label: string; onClick: () => void };
+  /** The distribution band this figure belongs to, or none for the total. */
+  swatch?: string;
+  muted?: boolean;
 }) {
-  const body = (
-    <>
-      <span
+  return (
+    <div className="min-w-0">
+      <p
         className={cn(
-          "text-xl font-bold tracking-tight",
-          tone === "ok" && "text-success",
-          tone === "brand" && "text-primary",
-          tone === "warn" && "text-warning",
-          tone === "neutral" && "text-foreground",
+          "text-xl font-semibold tabular-nums leading-none",
+          muted ? "text-muted-foreground" : "text-foreground",
         )}
       >
         {value}
-      </span>
-      <span className="text-xs font-semibold text-foreground">{label}</span>
-      {detail && <span className="text-xs text-faint">{detail}</span>}
-      {action && (
-        <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-primary">
-          {action.label}
-          <FiArrowRight className="h-3 w-3" aria-hidden />
-        </span>
-      )}
-    </>
-  );
-
-  const shell = cn(
-    "flex min-w-0 flex-col gap-0.5 rounded-xl border p-3.5 text-left",
-    tone === "warn" ? "border-warning bg-tint-warning" : "border-border bg-card",
-  );
-
-  if (!action) {
-    return <div className={shell}>{body}</div>;
-  }
-  return (
-    <button
-      type="button"
-      onClick={action.onClick}
-      className={cn(
-        shell,
-        "transition-colors hover:border-faint hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-    >
-      {body}
-    </button>
+      </p>
+      <p className="mt-1 flex items-center gap-1.5 text-3xs uppercase tracking-[0.08em] text-faint">
+        {swatch && <span className={cn("h-2 w-2 shrink-0 rounded-sm", swatch)} aria-hidden />}
+        <span className="min-w-0 truncate">{label}</span>
+      </p>
+    </div>
   );
 }
 
-export function PlanSummary({ totals, sizeLabel, rootCount, onOpen }: PlanSummaryProps) {
+export function PlanSummary({ stats, requiredBytes, rootCount, onResolve }: PlanSummaryProps) {
   const { t, locale } = useI18n();
   const n = (value: number) => value.toLocaleString(locale);
-  const readyShare = totals.scanned > 0 ? Math.round((totals.ready / totals.scanned) * 100) : 0;
+  const bytes = (value: number) => formatBytes(value, { locale });
 
   return (
-    <section aria-label={t("review.summary")} className="space-y-3">
-      {/* A grid, not wrapped flex: the last tile of a wrapped row would stretch
-          to the full width and read as more important than the four above it. */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <Tile
-          value={n(totals.scanned)}
-          label={t("review.tile.scanned")}
-          detail={t("review.tile.scannedDetail", { size: sizeLabel, count: rootCount })}
+    <section aria-label={t("review.summary")} className="rounded-xl border border-border bg-card">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 sm:grid-cols-4">
+        <Figure value={n(stats.scanned)} label={t("review.figure.scanned")} muted />
+        <Figure
+          value={n(stats.organized)}
+          label={t("review.legend.organized")}
+          swatch="bg-decor-success"
         />
-        <Tile
-          value={n(totals.ready)}
-          label={t("review.tile.ready")}
-          detail={t("review.tile.readyDetail", { percent: readyShare })}
-          tone="ok"
+        <Figure value={n(stats.setAside)} label={t("review.legend.setAside")} swatch="bg-brand" />
+        <Figure
+          value={n(stats.staysPut)}
+          label={t("review.legend.stays")}
+          swatch="bg-decor-warning"
         />
-        <Tile
-          value={n(totals.duplicates)}
-          label={t("review.tile.duplicates")}
-          detail={t("review.tile.duplicatesDetail", {
-            resolved: n(totals.duplicatesResolved),
-            unresolved: n(totals.duplicatesUnresolved),
-          })}
-          tone="brand"
-          action={{ label: t("review.tile.openDuplicates"), onClick: () => onOpen("duplicates") }}
-        />
-        <Tile
-          value={n(totals.junk)}
-          label={t("review.tile.junk")}
-          detail={t("review.tile.junkDetail")}
-          action={{ label: t("review.tile.openJunk"), onClick: () => onOpen("junk") }}
-        />
-        {totals.warnings > 0 && (
-          <Tile
-            value={n(totals.warnings)}
-            label={t("review.tile.warnings")}
-            tone="warn"
-            action={{ label: t("review.tile.openWarnings"), onClick: () => onOpen("warnings") }}
-          />
-        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* The bar is the same three figures as proportions. It carries the
+          legend's job, so the swatches sit on the figures instead. */}
+      <div className="px-4">
         <div
-          className="flex h-2 min-w-[12rem] flex-1 overflow-hidden rounded-full bg-muted"
+          className="flex h-1.5 overflow-hidden rounded-full bg-muted"
           role="img"
           aria-label={t("review.distribution", {
-            ready: n(totals.ready),
-            duplicates: n(totals.duplicates),
-            junk: n(totals.junk),
+            ready: n(stats.organized),
+            duplicates: n(stats.setAside),
+            junk: n(stats.staysPut),
           })}
         >
-          <span className="bg-decor-success" style={{ width: `${totals.share.ready}%` }} />
-          <span className="bg-brand" style={{ width: `${totals.share.duplicates}%` }} />
-          <span className="bg-decor-warning" style={{ width: `${totals.share.junk}%` }} />
+          <span className="bg-decor-success" style={{ width: `${stats.share.organized}%` }} />
+          <span className="bg-brand" style={{ width: `${stats.share.setAside}%` }} />
+          <span className="bg-decor-warning" style={{ width: `${stats.share.staysPut}%` }} />
         </div>
-        <ul className="flex shrink-0 gap-3.5 text-3xs text-faint">
-          {(
-            [
-              ["bg-decor-success", t("review.legend.organized")],
-              ["bg-brand", t("review.legend.duplicates")],
-              ["bg-decor-warning", t("review.legend.junk")],
-            ] as const
-          ).map(([colour, label]) => (
-            <li key={label} className="flex items-center gap-1.5">
-              <span className={cn("h-2 w-2 rounded-sm", colour)} aria-hidden />
-              {label}
-            </li>
-          ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
+        <ul className="min-w-0 flex-1 space-y-1 text-xs leading-relaxed text-muted-foreground">
+          <li>
+            {t("review.band.from", {
+              folders: n(rootCount),
+              size: bytes(requiredBytes),
+            })}
+          </li>
+          <li>
+            {stats.sets === 0
+              ? t("review.band.noSets")
+              : t("review.band.sets", {
+                  sets: n(stats.sets),
+                  copies: n(stats.copies),
+                  size: bytes(stats.copyBytes),
+                })}
+          </li>
         </ul>
+
+        {/* The one actionable figure. Zero is a statement, not a button — a
+            control that does nothing when pressed is worse than its absence. */}
+        {stats.outstanding === 0 ? (
+          <p className="shrink-0 text-xs font-medium text-success">{t("review.band.allDecided")}</p>
+        ) : (
+          <button
+            type="button"
+            onClick={onResolve}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-tint-primary px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-tint-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {stats.proposed === 0
+              ? t("review.band.undecided", { count: n(stats.undecided) })
+              : t("review.band.outstanding", {
+                  count: n(stats.outstanding),
+                  proposed: n(stats.proposed),
+                  undecided: n(stats.undecided),
+                })}
+            <FiArrowRight className="h-3 w-3" aria-hidden />
+          </button>
+        )}
       </div>
     </section>
   );
