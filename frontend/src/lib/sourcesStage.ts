@@ -16,13 +16,7 @@ export type RootRole = "input" | "reference" | "destination";
  * and the run can never disagree about whether a folder is usable.
  */
 export type RootState =
-  | "unknown"
-  | "checking"
-  | "ready"
-  | "offline"
-  | "unreadable"
-  | "missing"
-  | "not_writable";
+  "unknown" | "checking" | "ready" | "offline" | "unreadable" | "missing" | "not_writable";
 
 export interface RootCard {
   rootId: string;

@@ -645,12 +645,7 @@ export interface OutcomeProvenance {
       value: string | null;
       accepted: boolean;
       rejection_reason:
-        | "absent"
-        | "unparseable"
-        | "sentinel_value"
-        | "suspicious"
-        | "overridden"
-        | null;
+        "absent" | "unparseable" | "sentinel_value" | "suspicious" | "overridden" | null;
     }>;
   };
   rules: {
@@ -747,12 +742,7 @@ export interface DateCandidate {
   value: string | null;
   accepted: boolean;
   rejection_reason:
-    | "absent"
-    | "unparseable"
-    | "sentinel_value"
-    | "suspicious"
-    | "overridden"
-    | null;
+    "absent" | "unparseable" | "sentinel_value" | "suspicious" | "overridden" | null;
 }
 
 /** Provenance for one file, as `POST /api/review/outcomes` records it. */
