@@ -172,6 +172,18 @@ function showContents(folder: string) {
 }
 
 beforeEach(() => {
+  // Review intentionally remembers its mode in the browser. Give every test a
+  // fresh browser profile so one test ending in Resolve cannot make the next
+  // test start there. Node versions differ on whether jsdom's localStorage is
+  // available, so relying on the runner's implementation made this file pass
+  // locally and fail in CI.
+  const stored = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => stored.set(key, value),
+    removeItem: (key: string) => stored.delete(key),
+    clear: () => stored.clear(),
+  });
   vi.stubGlobal(
     "ResizeObserver",
     class {
