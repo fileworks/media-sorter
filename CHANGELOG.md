@@ -3,6 +3,16 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.3.0](https://github.com/fileworks/media-sorter/compare/v1.2.5...v1.3.0) (2026-08-08)
+
+### Features
+
+* complete the reviewed five-stage lifecycle ([#59](https://github.com/fileworks/media-sorter/issues/59)) ([977e2d6](https://github.com/fileworks/media-sorter/commit/977e2d6e4fa4de7ab5b3e85bf8d01c1fe5d9faeb))
+
+### Bug Fixes
+
+* **release:** configure automated commit identity ([#60](https://github.com/fileworks/media-sorter/issues/60)) ([804aa73](https://github.com/fileworks/media-sorter/commit/804aa7382360fad889146c20717d8c4e57da550e))
+
 ## [1.2.5](https://github.com/fileworks/media-sorter/compare/v1.2.4...v1.2.5) (2026-08-02)
 
 
