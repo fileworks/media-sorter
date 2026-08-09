@@ -52,9 +52,10 @@ import { sampleFiles } from "@/lib/configSummary";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
 import { activeCards, blockingConflicts, validateRoots } from "@/lib/sourcesStage";
-import type { StageInputs, StageKey, StageState } from "@/lib/stageModel";
+import { stageComplete, type StageInputs, type StageKey, type StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
+import { invalidationForConfigPatch } from "@/lib/workflowInvalidation";
 import { api, type ReviewedSet } from "@/services/api";
 import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
 
@@ -159,6 +160,7 @@ export default function MainPage() {
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
   const [stage, setStage] = useState<StageState["stage"]>("sources");
+  const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
   const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
   // What Review decided for this run. Lifted here so Execute sends it, and so
@@ -200,7 +202,7 @@ export default function MainPage() {
     if (config?.language) setLocale(config.language);
   }, [config?.language, setLocale]);
 
-  useEffect(() => setImpactAcknowledged(false), [preview.result, config]);
+  useEffect(() => setImpactAcknowledged(false), [preview.result]);
 
   const scanned = analysis.result !== null && analysis.error === null;
   const planned = preview.result !== null && preview.error === null;
@@ -223,7 +225,7 @@ export default function MainPage() {
 
   // ── Configuration ──────────────────────────────────────────────────────────
 
-  const planExists = analysis.result !== null || preview.result !== null;
+  const planExists = preview.result !== null;
 
   // The Configure previews are drawn with the user's own files once a dry run
   // has produced any. A scan reports totals but no filenames, so the dry run is
@@ -243,22 +245,35 @@ export default function MainPage() {
    * gone. The stage lock replaces all of it: while a plan exists the settings
    * cannot be reached at all, and unlocking asks once.
    */
-  const handleConfigSave = updateConfig;
-
-  /** Discard the plan, which is what makes the earlier stages editable again. */
+  /** Invalidate only artifacts downstream of a still-valid scan. */
   const discardPlan = useCallback(() => {
-    analysis.clear();
     preview.clear();
     setRunDecisions(EMPTY_RUN_DECISIONS);
-  }, [analysis, preview]);
+    setImpactAcknowledged(false);
+  }, [preview]);
+
+  /** Source scope and traversal changes also invalidate the scan itself. */
+  const discardScan = useCallback(() => {
+    analysis.clear();
+    discardPlan();
+  }, [analysis, discardPlan]);
+
+  const handleConfigSave = useCallback(
+    (patch: Partial<Config>) => {
+      const invalidation = invalidationForConfigPatch(patch);
+      if (invalidation === "scan") discardScan();
+      else if (invalidation === "preview") discardPlan();
+      updateConfig(patch);
+    },
+    [discardPlan, discardScan, updateConfig],
+  );
 
   /** Applying a recipe rewrites the settings the plan was built from. */
   const handleRecipeApply = useCallback(
     (patch: Partial<Config>) => {
-      updateConfig(patch);
-      discardPlan();
+      handleConfigSave(patch);
     },
-    [discardPlan, updateConfig],
+    [handleConfigSave],
   );
 
   const handleRootsChange = useCallback(
@@ -485,7 +500,7 @@ export default function MainPage() {
     setExcludedForRun([]);
     setRunDecisions(EMPTY_RUN_DECISIONS);
     setImpactAcknowledged(false);
-    setStage("sources");
+    setRequestedStage("sources");
   }, [analysis, preview, sorting]);
 
   const startRun = useCallback(() => {
@@ -542,11 +557,20 @@ export default function MainPage() {
   const stageKey = useMemo<StageKey>(
     () => ({
       profileId: config?.library_profile.profile_id ?? "",
-      catalogGeneration: scanned ? 1 : 0,
-      planVersion: planned ? 1 : 0,
-      taskId: null,
+      catalogGeneration: scanned ? analysis.generation : 0,
+      planVersion: planned ? preview.generation : 0,
+      taskId: sorting.taskId ?? preview.taskId ?? analysis.taskId,
     }),
-    [config?.library_profile.profile_id, planned, scanned],
+    [
+      analysis.generation,
+      analysis.taskId,
+      config?.library_profile.profile_id,
+      planned,
+      preview.generation,
+      preview.taskId,
+      scanned,
+      sorting.taskId,
+    ],
   );
 
   // The preflight asks the scoped plan for exactly what will happen after the
@@ -643,7 +667,7 @@ export default function MainPage() {
       locale={locale}
       onLocaleChange={(next: Locale) => {
         setLocale(next);
-        updateConfig({ language: next });
+        handleConfigSave({ language: next });
       }}
       historyCount={historyMeta?.total ?? 0}
       onOpenHistory={() => setHistoryOpen(true)}
@@ -727,11 +751,16 @@ export default function MainPage() {
       <StageShell
         inputs={stageInputs}
         stageKey={stageKey}
+        requestedStage={requestedStage}
         titleBar={titleBar}
         banners={banners}
         planExists={planExists}
         onUnlock={discardPlan}
-        onStateChange={(state) => setStage(state.stage)}
+        complete={(candidate) => stageComplete(candidate, stageInputs, sorting.report !== null)}
+        onStateChange={(state) => {
+          setStage(state.stage);
+          if (state.stage === requestedStage) setRequestedStage(null);
+        }}
         footer={(state, nav) => (
           <StageFooter
             stage={state.stage}
@@ -769,10 +798,7 @@ export default function MainPage() {
                 onChange={handleRootsChange}
                 onExcludeForRun={(next) => {
                   setExcludedForRun(next);
-                  analysis.clear();
-                  preview.clear();
-                  setRunDecisions(EMPTY_RUN_DECISIONS);
-                  setImpactAcknowledged(false);
+                  discardScan();
                 }}
                 onAddFolder={(role) => void requestFolder({ kind: "add", role })}
                 onChangeFolder={(rootId) => void requestFolder({ kind: "change", rootId })}
@@ -828,6 +854,7 @@ export default function MainPage() {
                     result={preview.result}
                     config={config}
                     onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
+                    onOpenSources={() => nav.go("sources")}
                     onRerunPreview={() => {
                       setRunDecisions(EMPTY_RUN_DECISIONS);
                       void preview.generatePreview(excludedForRun);

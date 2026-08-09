@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
 import { I18nProvider, translate } from "@/i18n/I18nContext";
@@ -18,7 +18,7 @@ const EMPTY_TREE: TreeNode = {
 
 afterEach(cleanup);
 
-function renderTree(outOfScopeSets: number) {
+function renderTree(outOfScopeSets: number, onOpenSources?: () => void) {
   render(
     <I18nProvider initialLocale="en">
       <DestinationTree
@@ -26,6 +26,7 @@ function renderTree(outOfScopeSets: number) {
         selectedPath={null}
         onSelect={() => undefined}
         outOfScopeSets={outOfScopeSets}
+        onOpenSources={onOpenSources}
       />
     </I18nProvider>,
   );
@@ -46,5 +47,25 @@ describe("out-of-scope duplicate disclosure", () => {
     expect(
       screen.getByText(translate("en", "review.browse.alsoInLibrary", { count: 2 })),
     ).toBeTruthy();
+  });
+
+  it("explains the actual exclusion and provides a keyboard-operable path to Sources", () => {
+    const onOpenSources = vi.fn();
+    renderTree(2, onOpenSources);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: translate("en", "review.browse.alsoInLibrary", { count: 2 }),
+      }),
+    );
+
+    expect(screen.getByText(translate("en", "review.browse.alsoInLibrary.rule"))).toBeTruthy();
+    const action = screen.getByRole("button", {
+      name: translate("en", "review.browse.openSources"),
+    });
+    action.focus();
+    fireEvent.keyDown(action, { key: "Enter" });
+    fireEvent.click(action);
+    expect(onOpenSources).toHaveBeenCalledOnce();
   });
 });

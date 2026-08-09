@@ -10,6 +10,7 @@ import {
   readiness,
   reconcile,
   selectView,
+  stageComplete,
   stageIndex,
   type Stage,
   type StageInputs,
@@ -130,6 +131,24 @@ describe("stage readiness", () => {
       "review",
     ]);
     expect(availableStages({ ...READY, rootsReady: false })).toEqual(["sources"]);
+  });
+});
+
+describe("stage completion", () => {
+  it("keeps valid completion visible when navigating backward", () => {
+    expect(stageComplete("sources", READY)).toBe(true);
+    expect(stageComplete("recipe", READY)).toBe(true);
+    expect(stageComplete("configure", READY)).toBe(true);
+    expect(stageComplete("review", READY)).toBe(true);
+    expect(stageComplete("execute", READY, true)).toBe(true);
+  });
+
+  it("removes only completion whose artifact was invalidated", () => {
+    const previewInvalidated = { ...READY, planned: false, duplicateReviewReady: false };
+    expect(stageComplete("sources", previewInvalidated)).toBe(true);
+    expect(stageComplete("recipe", previewInvalidated)).toBe(true);
+    expect(stageComplete("configure", previewInvalidated)).toBe(false);
+    expect(stageComplete("review", previewInvalidated)).toBe(false);
   });
 });
 
@@ -291,6 +310,24 @@ describe("stage reconciliation", () => {
     const transition = reconcile(state, { ...key, planVersion: 0 });
 
     expect(transition.state.stage).toBe("configure");
+  });
+
+  it("does not pull a user forward after they navigated back before invalidation", () => {
+    const atSources = { ...INITIAL_STATE, stage: "sources" as const, key };
+    const transition = reconcile(atSources, {
+      ...key,
+      catalogGeneration: 0,
+      planVersion: 0,
+    });
+
+    expect(transition.state.stage).toBe("sources");
+  });
+
+  it("keeps Review stable while its first scan completes", () => {
+    const fresh = { profileId: "p1", catalogGeneration: 0, planVersion: 0, taskId: null };
+    const atReview = { ...INITIAL_STATE, stage: "review" as const, key: fresh };
+
+    expect(reconcile(atReview, { ...fresh, catalogGeneration: 1 }).state.stage).toBe("review");
   });
 
   it("notices a different profile", () => {

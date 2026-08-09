@@ -55,6 +55,10 @@ interface StageShellProps {
    * rather than editable until it is deliberately discarded.
    */
   planExists?: boolean;
+  /** Whether each stage still has a valid completed artifact. */
+  complete?: (stage: Stage) => boolean;
+  /** An explicit lifecycle action such as “start a new run” may request a stage. */
+  requestedStage?: Stage | null;
   /** Discard the plan, which is the one way out of the lock. */
   onUnlock?: () => void;
   /** Rendered for the current stage and view. `locked` is read-only-ness. */
@@ -78,6 +82,8 @@ export function StageShell({
   titleBar,
   banners,
   planExists = false,
+  complete = () => false,
+  requestedStage = null,
   onUnlock,
   children,
   footer,
@@ -138,6 +144,10 @@ export function StageShell({
     [commitMove, inputs, planExists, state],
   );
 
+  useEffect(() => {
+    if (requestedStage) commitMove(requestedStage);
+  }, [commitMove, requestedStage]);
+
   const nav = useMemo<StageNav>(
     () => ({
       go: requestMove,
@@ -161,6 +171,7 @@ export function StageShell({
       <StageStepper
         current={state.stage}
         gate={(stage) => readiness(stage, inputs)}
+        complete={complete}
         onSelect={(stage) => requestMove(stage)}
       />
 

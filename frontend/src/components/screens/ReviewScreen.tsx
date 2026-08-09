@@ -77,6 +77,7 @@ interface ReviewScreenProps {
   /** Jump to Configure, scrolled to a specific setting row. */
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
+  onOpenSources?: () => void;
   /** Run-scoped decisions, lifted so Execute can send them with the run. */
   onDecisionsChange?: (decisions: {
     reviewedSets: { keep: string; demote: string[]; keep_all?: boolean }[];
@@ -98,6 +99,7 @@ export function ReviewScreen({
   config,
   onOpenSetting,
   onRerunPreview,
+  onOpenSources,
   onDecisionsChange,
 }: ReviewScreenProps) {
   const { t, locale } = useI18n();
@@ -602,6 +604,7 @@ export function ReviewScreen({
               selectedPath={surface.treePath}
               onSelect={surface.setTreePath}
               outOfScopeSets={groups.tally?.outOfScope ?? 0}
+              onOpenSources={onOpenSources}
               query={treeSearch}
               onQueryChange={setTreeSearch}
             />

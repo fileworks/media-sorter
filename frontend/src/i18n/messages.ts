@@ -835,6 +835,7 @@ export const en = {
   "preflight.running": "Running…",
   "preflight.execute": "Execute the reviewed plan",
   "stage.navigation": "Stages",
+  "stage.complete": "complete",
   "stage.sources.label": "Sources",
   "stage.sources.description": "Which folders, and what each one is for",
   "stage.recipe.label": "Recipe",
@@ -1308,6 +1309,7 @@ export const en = {
   "review.browse.alsoInLibrary": "{count} sets have copies outside this run",
   "review.browse.alsoInLibrary.rule":
     "Your library holds these copies in folders this run is not reading, so it cannot compare them and leaves them alone. To decide them, add those folders on the Sources screen and preview again.",
+  "review.browse.openSources": "Open Sources",
   "review.resolve.position": "Set {index} of {total}",
   "review.resolve.previous": "Previous set",
   "review.resolve.next": "Next set",
@@ -2416,6 +2418,7 @@ export const de: Record<MessageKey, string> = {
   "preflight.running": "Wird ausgeführt…",
   "preflight.execute": "Geprüften Plan ausführen",
   "stage.navigation": "Phasen",
+  "stage.complete": "abgeschlossen",
   "stage.sources.label": "Quellen",
   "stage.sources.description": "Welche Ordner verwendet werden und wofür",
   "stage.recipe.label": "Rezept",
@@ -2909,6 +2912,7 @@ export const de: Record<MessageKey, string> = {
   "review.browse.alsoInLibrary": "{count} Sätze haben Kopien außerhalb dieses Durchlaufs",
   "review.browse.alsoInLibrary.rule":
     "Deine Sammlung hält diese Kopien in Ordnern, die dieser Durchlauf nicht liest — er kann sie nicht vergleichen und lässt sie in Ruhe. Um sie zu entscheiden, füge diese Ordner auf der Quellen-Seite hinzu und erstelle die Vorschau neu.",
+  "review.browse.openSources": "Quellen öffnen",
   "review.resolve.position": "Satz {index} von {total}",
   "review.resolve.previous": "Vorheriger Satz",
   "review.resolve.next": "Nächster Satz",

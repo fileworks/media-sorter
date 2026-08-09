@@ -9,6 +9,8 @@ import { useI18n } from "@/i18n/I18nContext";
 export type { AnalysisResult };
 
 export interface UseAnalysisReturn {
+  taskId: string | null;
+  generation: number;
   result: AnalysisResult | null;
   loading: boolean;
   error: ExtractedError | null;
@@ -27,6 +29,7 @@ export function useAnalysis(): UseAnalysisReturn {
   const queryClient = useQueryClient();
   const [taskId, setTaskId] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [generation, setGeneration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ExtractedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
@@ -79,8 +82,10 @@ export function useAnalysis(): UseAnalysisReturn {
       setCancelled(false);
       setError(null);
       releaseLoader();
-      if (status.result) setResult(status.result);
-      else setError({ message: t("analysis.noResult"), code: "ANALYSIS_NO_RESULT" });
+      if (status.result) {
+        setResult(status.result);
+        setGeneration((current) => current + 1);
+      } else setError({ message: t("analysis.noResult"), code: "ANALYSIS_NO_RESULT" });
       settle(status.result ?? null);
     } else if (status.status === "failed") {
       handledRef.current = true;
@@ -178,6 +183,8 @@ export function useAnalysis(): UseAnalysisReturn {
   const progress = loading ? (status?.progress ?? null) : null;
 
   return {
+    taskId,
+    generation,
     result,
     loading,
     error,

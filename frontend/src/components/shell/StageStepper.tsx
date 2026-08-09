@@ -15,17 +15,17 @@ import { FiCheck } from "react-icons/fi";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
-import { STAGE_LABELS, stageIndex, type Stage, type StageReadiness } from "@/lib/stageModel";
+import { STAGE_LABELS, type Stage, type StageReadiness } from "@/lib/stageModel";
 
 interface StageStepperProps {
   current: Stage;
   gate: (stage: Stage) => StageReadiness;
+  complete: (stage: Stage) => boolean;
   onSelect: (stage: Stage) => void;
 }
 
-export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
+export function StageStepper({ current, gate, complete, onSelect }: StageStepperProps) {
   const { t } = useI18n();
-  const currentIndex = stageIndex(current);
 
   return (
     <nav
@@ -35,7 +35,7 @@ export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
       <ol className="flex min-w-max items-center gap-1 px-4 py-2.5 sm:px-5">
         {STAGE_LABELS.map((entry, index) => {
           const active = entry.stage === current;
-          const complete = index < currentIndex;
+          const isComplete = complete(entry.stage);
           const readiness = gate(entry.stage);
           const reachable = readiness.canEnter || active;
           return (
@@ -46,7 +46,9 @@ export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
                   type="button"
                   disabled={!reachable}
                   aria-current={active ? "step" : undefined}
-                  aria-label={t(`stage.${entry.stage}.label`)}
+                  aria-label={`${t(`stage.${entry.stage}.label`)}${
+                    isComplete ? `, ${t("stage.complete")}` : ""
+                  }`}
                   onClick={() => onSelect(entry.stage)}
                   className={cn(
                     "flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 transition-colors",
@@ -60,12 +62,12 @@ export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
                     className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-3xs font-bold",
                       active && "bg-primary text-primary-foreground",
-                      complete && !active && "bg-tint-success text-success",
-                      !active && !complete && "border border-border text-faint",
+                      isComplete && !active && "bg-tint-success text-success",
+                      !active && !isComplete && "border border-border text-faint",
                     )}
                     aria-hidden
                   >
-                    {complete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
+                    {isComplete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
                   </span>
                   <span
                     aria-hidden
@@ -73,7 +75,7 @@ export function StageStepper({ current, gate, onSelect }: StageStepperProps) {
                       "whitespace-nowrap text-xs",
                       active
                         ? "font-semibold text-primary"
-                        : complete
+                        : isComplete
                           ? "text-muted-foreground"
                           : "text-faint",
                     )}

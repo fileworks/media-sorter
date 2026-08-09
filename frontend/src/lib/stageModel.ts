@@ -80,6 +80,19 @@ export interface StageInputs {
   blockedReason: string | null;
 }
 
+/** Completion is based on a still-valid artifact, not screen position. */
+export function stageComplete(
+  stage: Stage,
+  inputs: StageInputs,
+  executionComplete = false,
+): boolean {
+  if (stage === "sources") return inputs.rootsReady;
+  if (stage === "recipe") return inputs.scanned;
+  if (stage === "configure") return inputs.planned;
+  if (stage === "review") return inputs.planned && inputs.duplicateReviewReady;
+  return executionComplete;
+}
+
 /**
  * Whether a stage may be entered, and if not, the one sentence that says why.
  *
@@ -244,6 +257,15 @@ export function reconcile(state: StageState, key: StageKey): Transition {
   if (!isStale(state, key)) {
     return { state: { ...state, key }, invalidated: [] };
   }
+  const firstScanArrived =
+    state.key.catalogGeneration === 0 &&
+    key.catalogGeneration > 0 &&
+    state.key.planVersion === key.planVersion;
+  // A scan finishing underneath Review is progress, not invalidation. Keep the
+  // screen stable while the preview starts instead of bouncing to Configure.
+  if (firstScanArrived) {
+    return { state: { ...state, key }, invalidated: [] };
+  }
   const invalidated: string[] = [];
   if (state.key.profileId !== key.profileId) {
     invalidated.push("A different library profile is active.");
@@ -261,7 +283,15 @@ export function reconcile(state: StageState, key: StageKey): Transition {
   // A plan that no longer exists cannot be reviewed. Landing on Configure —
   // the last stage whose entry condition still holds — beats landing on an
   // empty Review and having to work out why it is empty.
-  const landing: Stage = key.planVersion > 0 ? "review" : "configure";
+  const fallback: Stage = key.planVersion > 0 ? "review" : "configure";
+  // Reconciliation may move a stale downstream screen back to the last valid
+  // stage, but never pulls somebody forward after deliberate back navigation.
+  const firstPlanArrived = state.key.planVersion === 0 && key.planVersion > 0;
+  const landing = firstPlanArrived
+    ? "review"
+    : stageIndex(state.stage) < stageIndex(fallback)
+      ? state.stage
+      : fallback;
   return {
     state: {
       stage: landing,

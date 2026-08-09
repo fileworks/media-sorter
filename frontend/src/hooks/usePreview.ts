@@ -18,6 +18,7 @@ export function usePreview() {
   const [error, setError] = useState<ExtractedError | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [result, setResult] = useState<PreviewResult | null>(null);
+  const [generation, setGeneration] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   // Guard so we handle the terminal status exactly once.
   const handledRef = useRef(false);
@@ -72,8 +73,10 @@ export function usePreview() {
       setCancelled(false);
       setError(null);
       releaseLoader();
-      if (status.result) setResult(status.result);
-      else setError({ message: t("preview.noResult"), code: "PREVIEW_NO_RESULT" });
+      if (status.result) {
+        setResult(status.result);
+        setGeneration((current) => current + 1);
+      } else setError({ message: t("preview.noResult"), code: "PREVIEW_NO_RESULT" });
       settle(status.result ?? null);
     } else if (status.status === "failed") {
       handledRef.current = true;
@@ -179,6 +182,8 @@ export function usePreview() {
   const progress: TaskProgress | null = loading ? (status?.progress ?? null) : null;
 
   return {
+    taskId,
+    generation,
     loading,
     error,
     cancelled,

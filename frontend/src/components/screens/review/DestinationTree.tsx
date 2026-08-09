@@ -30,6 +30,8 @@ interface DestinationTreeProps {
   onSelect: (path: string | null) => void;
   /** Duplicate sets this run does not act on, stated rather than hidden. */
   outOfScopeSets: number;
+  /** Return to the screen that can bring omitted folders into this run. */
+  onOpenSources?: () => void;
   /** Controlled when Review coordinates the global Escape stack. */
   query?: string;
   onQueryChange?: (query: string) => void;
@@ -199,6 +201,7 @@ export function DestinationTree({
   selectedPath,
   onSelect,
   outOfScopeSets,
+  onOpenSources,
   query: controlledQuery,
   onQueryChange,
 }: DestinationTreeProps) {
@@ -325,9 +328,20 @@ export function DestinationTree({
             {t("review.browse.alsoInLibrary", { count: outOfScopeSets })}
           </button>
           {alsoOpen && (
-            <p className="mt-1.5 pl-4 text-xs leading-relaxed text-faint">
-              {t("review.browse.alsoInLibrary.rule")}
-            </p>
+            <div className="mt-1.5 space-y-2 pl-4">
+              <p className="text-xs leading-relaxed text-faint">
+                {t("review.browse.alsoInLibrary.rule")}
+              </p>
+              {onOpenSources && (
+                <button
+                  type="button"
+                  onClick={onOpenSources}
+                  className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t("review.browse.openSources")}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

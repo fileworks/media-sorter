@@ -325,6 +325,7 @@ export function useSorting() {
   }, [queryClient, releaseLoader]);
 
   return {
+    taskId,
     progress,
     report,
     operationId,
