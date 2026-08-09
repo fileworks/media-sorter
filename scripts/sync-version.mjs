@@ -13,7 +13,7 @@
 //   • backend/app/_version.py  → backend version; pyproject.toml reads it via
 //     hatchling's dynamic-version hook, so it is NOT patched separately.
 //   • frontend/src-tauri/tauri.conf.json → names the .dmg / .msi / .exe and is the
-//     version Tauri v1 stamps into the app.
+//     root-level version Tauri v2 stamps into the app.
 //   • frontend/package.json (+ lockfile) → keep the npm manifest valid for `npm ci`.
 //   • frontend/src-tauri/Cargo.toml (+ Cargo.lock) → the Rust crate version, kept in
 //     lockstep so the workspace metadata doesn't drift. Patched textually (no cargo
@@ -67,7 +67,12 @@ patchText(
 
 // Names the bundled installer (.dmg / .msi / .exe) and the Tauri app version.
 patchJson("frontend/src-tauri/tauri.conf.json", (d) => {
-  d.package.version = version;
+  if (typeof d.version !== "string") {
+    throw new Error(
+      "sync-version: expected the Tauri v2 root-level version in frontend/src-tauri/tauri.conf.json",
+    );
+  }
+  d.version = version;
 });
 
 // Keep the frontend npm manifest + lockfile in lockstep so `npm ci` stays valid.
