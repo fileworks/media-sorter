@@ -211,7 +211,7 @@ jobs:
           pip install jsonschema --quiet --disable-pip-version-check
           python3 - <<'EOF'
           import json, jsonschema, sys
-          schema = json.load(open("node_modules/@tauri-apps/cli/schema.json"))
+          schema = json.load(open("node_modules/@tauri-apps/cli/config.schema.json"))
           config = json.load(open("src-tauri/tauri.conf.json"))
           try:
               jsonschema.validate(config, schema)
@@ -231,7 +231,7 @@ jobs:
     env:
       # Source compilation must not depend on release-sized generated payloads.
       # Release jobs use the canonical config after creating every resource.
-      TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
+      TAURI_CONFIG: '{"bundle":{"resources":[]}}'
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust toolchain

@@ -1,6 +1,6 @@
 import "./index.css";
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import MainPage from "@/pages/MainPage";
 import { ToastProvider } from "@/context/ToastContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";

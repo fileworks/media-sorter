@@ -5,7 +5,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from "axios";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import type { RecoveryOperation } from "@/lib/startupRecovery";
 
 // ── Types ──────────────────────────────────────────────────────────────────────

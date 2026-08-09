@@ -1,0 +1,18 @@
+{
+  "identifier": "default",
+  "description": "Default capability for MediaSorter desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    "fs:allow-home-write-recursive",
+    "fs:allow-desktop-write-recursive",
+    "fs:allow-download-write-recursive",
+    "fs:allow-document-write-recursive",
+    "clipboard-manager:allow-write-text",
+    "notification:default"
+  ]
+}
