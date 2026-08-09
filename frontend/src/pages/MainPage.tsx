@@ -50,13 +50,19 @@ import { useI18n, type Locale } from "@/i18n/I18nContext";
 import { splitValidation } from "@/lib/configGates";
 import { sampleFiles } from "@/lib/configSummary";
 import { extractErrorMessage } from "@/lib/errorUtils";
+import {
+  EMPTY_RUN_DECISIONS,
+  sameReviewedSets,
+  type ReviewDecisionUpdate,
+  type RunDecisions,
+} from "@/lib/runDecisions";
 import type { RootCard, RootRole } from "@/lib/sourcesStage";
-import { activeCards, blockingConflicts, validateRoots } from "@/lib/sourcesStage";
+import { activeCards, blockingConflicts, rootCards, validateRoots } from "@/lib/sourcesStage";
 import { stageComplete, type StageInputs, type StageKey, type StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { invalidationForConfigPatch } from "@/lib/workflowInvalidation";
-import { api, type ReviewedSet } from "@/services/api";
+import { api } from "@/services/api";
 import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
@@ -68,85 +74,6 @@ const FinishedRun = lazy(() =>
 
 /** What a folder request is for: a new root in a role, or an existing one. */
 type FolderTarget = { kind: "add"; role: RootRole } | { kind: "change"; rootId: string };
-
-interface RunDecisions {
-  planId: string | null;
-  reviewedSets: ReviewedSet[];
-  outstandingSets: number | null;
-  proposedSets: number;
-  undecidedSets: number;
-}
-
-type ReviewDecisionUpdate = Omit<RunDecisions, "planId">;
-
-function sameReviewedSets(left: ReviewedSet[], right: ReviewedSet[]): boolean {
-  if (left === right) return true;
-  if (left.length !== right.length) return false;
-  return left.every(
-    (set, index) =>
-      set.keep === right[index]?.keep &&
-      set.keep_all === right[index]?.keep_all &&
-      set.demote.length === right[index]?.demote.length &&
-      set.demote.every((path, pathIndex) => path === right[index]?.demote[pathIndex]),
-  );
-}
-
-const EMPTY_RUN_DECISIONS: RunDecisions = {
-  planId: null,
-  reviewedSets: [],
-  outstandingSets: null,
-  proposedSets: 0,
-  undecidedSets: 0,
-};
-
-/** The library profile's roots, presented as the cards the Sources screen draws. */
-function rootCards(config: Config | undefined, scanned: boolean, indexedFiles: number): RootCard[] {
-  if (!config) return [];
-  const profileRoots =
-    config.library_profile.roots.length > 0
-      ? config.library_profile.roots
-      : [
-          ...(config.source_directory
-            ? [
-                {
-                  root_id: "legacy-input",
-                  role: "input" as const,
-                  path: config.source_directory,
-                  display_name: null,
-                  priority: 0,
-                  exclusions: [],
-                  identity: null,
-                },
-              ]
-            : []),
-          ...(config.target_directory
-            ? [
-                {
-                  root_id: "legacy-destination",
-                  role: "destination" as const,
-                  path: config.target_directory,
-                  display_name: null,
-                  priority: 1,
-                  exclusions: [],
-                  identity: null,
-                },
-              ]
-            : []),
-        ];
-  return profileRoots.map((root) => ({
-    rootId: root.root_id,
-    role: root.role,
-    path: root.path,
-    displayName: root.display_name,
-    priority: root.priority,
-    exclusions: root.exclusions,
-    state: scanned ? "ready" : "unknown",
-    volume: root.identity?.volume_id ?? null,
-    freshness: scanned ? "fresh" : "unknown",
-    indexedFiles: scanned && root.role === "input" ? indexedFiles : null,
-    issueCount: 0,
-  }));
-}
 
 export default function MainPage() {
   const { toast } = useToast();

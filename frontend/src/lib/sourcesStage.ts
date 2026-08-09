@@ -7,6 +7,8 @@
  * conflict, and blocks rather than warns when the combination is unsafe.
  */
 
+import type { Config } from "@/types/api";
+
 export type RootRole = "input" | "reference" | "destination";
 /**
  * What the last probe of this folder found.
@@ -32,6 +34,59 @@ export interface RootCard {
   /** Files the last completed scan saw, when there was one. */
   indexedFiles: number | null;
   issueCount: number;
+}
+
+/** Present the persisted library profile as the cards owned by Sources. */
+export function rootCards(
+  config: Config | undefined,
+  scanned: boolean,
+  indexedFiles: number,
+): RootCard[] {
+  if (!config) return [];
+  const profileRoots =
+    config.library_profile.roots.length > 0
+      ? config.library_profile.roots
+      : [
+          ...(config.source_directory
+            ? [
+                {
+                  root_id: "legacy-input",
+                  role: "input" as const,
+                  path: config.source_directory,
+                  display_name: null,
+                  priority: 0,
+                  exclusions: [],
+                  identity: null,
+                },
+              ]
+            : []),
+          ...(config.target_directory
+            ? [
+                {
+                  root_id: "legacy-destination",
+                  role: "destination" as const,
+                  path: config.target_directory,
+                  display_name: null,
+                  priority: 1,
+                  exclusions: [],
+                  identity: null,
+                },
+              ]
+            : []),
+        ];
+  return profileRoots.map((root) => ({
+    rootId: root.root_id,
+    role: root.role,
+    path: root.path,
+    displayName: root.display_name,
+    priority: root.priority,
+    exclusions: root.exclusions,
+    state: scanned ? "ready" : "unknown",
+    volume: root.identity?.volume_id ?? null,
+    freshness: scanned ? "fresh" : "unknown",
+    indexedFiles: scanned && root.role === "input" ? indexedFiles : null,
+    issueCount: 0,
+  }));
 }
 
 export const ROLE_LABEL: Record<RootRole, string> = {
