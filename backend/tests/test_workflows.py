@@ -1,5 +1,6 @@
 """Static checks for the supported GitHub Actions baseline."""
 
+import json
 import re
 from pathlib import Path
 
@@ -68,12 +69,14 @@ def test_release_native_gate_runs_on_a_shipped_platform() -> None:
 def test_frozen_backend_bundles_runtime_resources() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
-    tauri = (ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    tauri = json.loads(
+        (ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )
 
     assert "--collect-all=app.resources" in makefile
     assert "bundle-clip" not in makefile
     assert "bundle-clip" not in release
-    # `resources/**` is correct here, and the previous assertion that it must be
+    # A recursive resources glob is correct here, and the previous assertion that it must be
     # absent is what broke four releases.
     #
     # It was split into `resources/backend/**` + `resources/ffmpeg/**` to keep
@@ -87,15 +90,15 @@ def test_frozen_backend_bundles_runtime_resources() -> None:
     # into. And splitting changed the bundled layout, so the backend landed
     # somewhere other than Contents/Resources/resources/backend/ and packaging
     # verification failed on a missing artifact.
-    assert '"resources/**"' in tauri
+    assert tauri["bundle"]["resources"] == ["resources/**/*"]
 
 
 def test_model_packs_are_never_bundled_into_the_installer() -> None:
-    """The reason `resources/**` is safe, asserted rather than assumed.
+    """The reason a recursive resources glob is safe, asserted rather than assumed.
 
     Packs are rooted at the PlatformDirs data directory and written at runtime,
     so no glob over the source tree can sweep them into the bundle. If that ever
-    changes, `resources/**` stops being safe and this fails first.
+    changes, the recursive resources glob stops being safe and this fails first.
     """
     installer = (ROOT / "backend" / "app" / "services" / "ai" / "model_installation.py").read_text(
         encoding="utf-8"
@@ -114,25 +117,19 @@ def test_every_bundled_resource_glob_matches_something() -> None:
     trailing `**` had nothing to descend into. `resources/backend/**` was fine
     only because that tree happens to contain a subdirectory.
 
-    The declaration deliberately does not use `resources/**` — on-demand AI model
-    packs land under `resources/` and must not ship inside the installer — so the
-    globs have to be right rather than broad.
+    Tauri v2 requires the trailing `*` in `resources/**/*` to include files at
+    every depth, so the glob has to be right rather than merely broad.
     """
-    import json
-
     config = json.loads(
         (ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     )
     tauri_root = ROOT / "frontend" / "src-tauri"
 
-    for pattern in config["tauri"]["bundle"]["resources"]:
-        directory, _, tail = pattern.rpartition("/")
-        target = tauri_root / directory
+    for pattern in config["bundle"]["resources"]:
+        static_prefix = pattern.split("*", maxsplit=1)[0].rstrip("/")
+        target = tauri_root / static_prefix
         if not target.is_dir():
             continue  # not built in this checkout; the release job builds it
-        if tail == "**":
-            # `**` descends into directories, so it needs at least one.
-            assert any(child.is_dir() for child in target.iterdir()), (
-                f"{pattern} uses ** but {directory} holds no directory to descend into"
-            )
-        assert any(target.iterdir()), f"{pattern} matches nothing"
+        assert any(path.is_file() for path in tauri_root.glob(pattern)), (
+            f"{pattern} matches no files"
+        )
