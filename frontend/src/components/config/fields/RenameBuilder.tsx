@@ -8,7 +8,7 @@
  * now rows in a before-and-after table rather than sentences somewhere else.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { FiCamera, FiCopy, FiFilm } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
@@ -90,6 +90,7 @@ export function RenameBuilder({
   const [local, setLocal] = useState(configPattern);
   const prevConfigRef = useRef(configPattern);
   const inputRef = useRef<HTMLInputElement>(null);
+  const feedbackId = useId();
 
   useEffect(() => {
     if (configPattern !== prevConfigRef.current) {
@@ -124,12 +125,17 @@ export function RenameBuilder({
 
   return (
     <div className="space-y-2">
+      <label htmlFor="rename-pattern" className="block text-xs font-medium text-foreground">
+        {t("config.rename.patternLabel")}
+      </label>
       <input
         ref={inputRef}
         id="rename-pattern"
         value={local}
         onChange={(event) => commit(event.target.value)}
         placeholder="TYPE_YYYY-MM-DD"
+        aria-invalid={val.error ? true : undefined}
+        aria-describedby={val.error || val.warning ? feedbackId : undefined}
         className={cn(
           "block w-full rounded-md border border-input bg-background px-3 py-2",
           "font-mono text-sm text-foreground placeholder:text-muted-foreground",
@@ -157,11 +163,18 @@ export function RenameBuilder({
         ))}
       </div>
 
-      {val.error && (
-        <ValidationBadge message={t(val.errorKey ?? "", {}, val.error)} severity="error" />
-      )}
-      {val.warning && (
-        <ValidationBadge message={t(val.warningKey ?? "", {}, val.warning)} severity="warning" />
+      {(val.error || val.warning) && (
+        <div id={feedbackId}>
+          {val.error && (
+            <ValidationBadge message={t(val.errorKey ?? "", {}, val.error)} severity="error" />
+          )}
+          {val.warning && (
+            <ValidationBadge
+              message={t(val.warningKey ?? "", {}, val.warning)}
+              severity="warning"
+            />
+          )}
+        </div>
       )}
 
       {!val.error && local && (

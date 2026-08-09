@@ -402,6 +402,17 @@ def test_validate_config_accepts_known_rename_pattern(client: TestClient, tmp_pa
     assert data["errors"] == []
 
 
+@pytest.mark.parametrize("pattern", ["../NAME", r"folder\\NAME", "NAME?", "CON", "x" * 181])
+def test_validate_config_rejects_unsafe_rename_pattern(
+    client: TestClient, tmp_path: Path, pattern: str
+) -> None:
+    _post_valid_dirs(client, tmp_path, rename=True, rename_pattern=pattern)
+    data = client.post("/api/config/validate").json()
+    assert data["valid"] is False
+    issue = next(error for error in data["errors"] if error["field"] == "rename_pattern")
+    assert issue["message_key"] == "config.rename.unsafe_pattern"
+
+
 def test_validate_config_ignores_rename_pattern_when_rename_off(
     client: TestClient, tmp_path: Path
 ) -> None:

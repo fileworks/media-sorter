@@ -43,6 +43,36 @@ export const RENAME_TOKENS: readonly RenameToken[] = [
 // Tokens ordered longest-first so the regex never matches a prefix of a longer
 // token (here all are distinct, but this keeps it robust if tokens are added).
 const TOKEN_RE = /YYYY|MM|DD|NAME|TYPE/g;
+const INVALID_FILENAME_CHARS_RE = /[<>:"/\\|?*]/g;
+const RESERVED_FILENAME_STEMS = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i;
+export const MAX_FILENAME_STEM_BYTES = 180;
+
+function utf8Length(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/** Mirror the backend's cross-platform filename sanitization for live previews. */
+export function sanitizeFilenameStem(value: string): string {
+  let safe = [...value]
+    .filter((character) => character.charCodeAt(0) > 31)
+    .join("")
+    .trim()
+    .replace(INVALID_FILENAME_CHARS_RE, "");
+  safe = safe
+    .replace(/\.\./g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[ .]+|[ .]+$/g, "");
+  if (!safe || RESERVED_FILENAME_STEMS.test(safe)) return "";
+  let limited = "";
+  let usedBytes = 0;
+  for (const character of safe) {
+    const characterBytes = utf8Length(character);
+    if (usedBytes + characterBytes > MAX_FILENAME_STEM_BYTES) break;
+    limited += character;
+    usedBytes += characterBytes;
+  }
+  return limited.replace(/[ .]+$/g, "");
+}
 
 /**
  * Validate a rename pattern for the UI. Returns at most one of `error`
@@ -54,11 +84,22 @@ export function validateRenamePattern(pattern: string): {
   warning?: string;
   warningKey?: string;
 } {
-  if (!pattern) return { error: "Enter a pattern.", errorKey: "config.rename.error.empty" };
+  if (!pattern || !pattern.trim())
+    return { error: "Enter a pattern.", errorKey: "config.rename.error.empty" };
+  if (utf8Length(pattern) > MAX_FILENAME_STEM_BYTES)
+    return {
+      error: `Keep the pattern within ${MAX_FILENAME_STEM_BYTES} UTF-8 bytes.`,
+      errorKey: "config.rename.error.length",
+    };
   if (pattern.includes("/") || pattern.includes("\\"))
     return {
       error: "A pattern can't contain slashes.",
       errorKey: "config.rename.error.slashes",
+    };
+  if (sanitizeFilenameStem(pattern) !== pattern)
+    return {
+      error: "Remove characters that are not portable in filenames.",
+      errorKey: "config.rename.error.unsafe",
     };
   const hasVar = RENAME_TOKENS.some((t) => pattern.includes(t.token));
   if (!hasVar)
@@ -106,6 +147,20 @@ export function renderPatternParts(
     last = m.index + m[0].length;
   }
   if (last < pattern.length) parts.push({ text: pattern.slice(last), isToken: false });
+  const renderedStem = parts.map((part) => part.text).join("");
+  const sanitizedStem =
+    sanitizeFilenameStem(renderedStem) ||
+    sanitizeFilenameStem(originalName) ||
+    `${type}_${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate(),
+    ).padStart(2, "0")}`;
+  // Keep token highlighting when sanitization was a no-op. If a source name
+  // needed correction, show the exact final stem instead of implying that
+  // removed characters survive execution.
+  if (sanitizedStem !== renderedStem) {
+    parts.length = 0;
+    parts.push({ text: sanitizedStem, isToken: false });
+  }
   if (ext) parts.push({ text: ext, isToken: false });
   return parts;
 }

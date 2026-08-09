@@ -11,6 +11,7 @@ from app.core.config import (
     ConfigLoader,
     validate_categories,
     validate_rename_pattern,
+    validate_rename_pattern_safety,
 )
 from app.core.integrity import PreservationProfile
 from app.core.library_profiles import LibraryProfile, LibraryRoot
@@ -256,6 +257,30 @@ def test_validate_rename_pattern_flags_unknown_tokens(pattern: str, needle: str)
     msg = validate_rename_pattern(pattern)
     assert msg is not None
     assert needle in msg
+
+
+@pytest.mark.parametrize(
+    "pattern, needle",
+    [
+        ("", "Enter"),
+        ("../NAME", "separators"),
+        (r"folder\\NAME", "separators"),
+        ("NAME?", "portable"),
+        ("NAME..YYYY", "portable"),
+        (" NAME", "portable"),
+        ("CON", "portable"),
+        ("x" * 181, "180"),
+        ("😀" * 46, "180"),
+    ],
+)
+def test_validate_rename_pattern_safety_rejects_unsafe_leaf(pattern: str, needle: str) -> None:
+    message = validate_rename_pattern_safety(pattern)
+    assert message is not None
+    assert needle in message
+
+
+def test_validate_rename_pattern_safety_accepts_portable_template() -> None:
+    assert validate_rename_pattern_safety("TYPE_YYYY-MM-DD_NAME") is None
 
 
 # ------------------------------------------------------------------ #

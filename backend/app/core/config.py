@@ -649,6 +649,32 @@ def validate_rename_pattern(pattern: str) -> str | None:
     return None
 
 
+def validate_rename_pattern_safety(pattern: str) -> str | None:
+    """Return corrective guidance when *pattern* is not one filename stem.
+
+    The execution path also sanitizes the resolved value as defence in depth,
+    but rejecting unsafe literals here prevents a saved configuration from
+    silently changing what the user typed.
+    """
+    from app.utils.path_utils import MAX_FILENAME_STEM_BYTES, sanitize_filename_stem
+
+    if not pattern or not pattern.strip():
+        return "Enter a rename pattern."
+    if len(pattern.encode("utf-8")) > MAX_FILENAME_STEM_BYTES:
+        return (
+            f"Shorten the rename pattern to {MAX_FILENAME_STEM_BYTES} UTF-8 bytes or fewer "
+            "so the resulting filename has room for its extension."
+        )
+    if "/" in pattern or "\\" in pattern:
+        return "Rename pattern cannot contain folder separators; remove '/' and '\\'."
+    if sanitize_filename_stem(pattern) != pattern:
+        return (
+            "Rename pattern must be one portable filename: remove '<>:\"|?*', control "
+            "characters, '..', repeated whitespace, and leading or trailing dots or spaces."
+        )
+    return None
+
+
 #: Fields that were removed. A stored config carrying one loads fine —
 #: `from_dict` drops unknown keys — and an update carrying one is ignored rather
 #: than rejected, so a client that has not caught up still works.

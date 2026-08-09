@@ -16,7 +16,7 @@ from app.core.config import UNCATEGORIZED_FOLDER, Config
 from app.core.rules import append_contained_route
 from app.services.conversion_service import predicted_image_suffix, predicted_video_suffix
 from app.utils.media_utils import is_image, is_video
-from app.utils.path_utils import sanitize_path_segment
+from app.utils.path_utils import sanitize_filename_stem, sanitize_path_segment
 
 # A single-pass re.sub is used so a token value that happens to contain
 # another token name is never double-substituted.
@@ -151,7 +151,13 @@ def reserve_destination(path: Path, reserved: set[Path]) -> Path:
 
 
 def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:
-    """Substitute the rename tokens (YYYY, MM, DD, NAME, TYPE) into *pattern*."""
+    """Substitute rename tokens and return one safe, portable filename stem.
+
+    Configuration validation gives users corrective guidance for unsafe
+    literals. This final sanitization is defence in depth for hand-edited or
+    legacy configuration and for original filenames containing characters the
+    destination filesystem cannot represent.
+    """
     tokens = {
         "YYYY": str(d.year),
         "MM": f"{d.month:02d}",
@@ -159,7 +165,13 @@ def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:
         "NAME": stem,
         "TYPE": file_type,
     }
-    return _RENAME_TOKEN_RE.sub(lambda m: tokens[m.group(0)], pattern)
+    rendered = _RENAME_TOKEN_RE.sub(lambda m: tokens[m.group(0)], pattern)
+    safe = sanitize_filename_stem(rendered)
+    if safe:
+        return safe
+    # A pathological pattern (or a reserved original name such as ``CON``)
+    # must never turn into an empty leaf or escape the destination directory.
+    return sanitize_filename_stem(stem) or f"{file_type}_{d:%Y-%m-%d}"
 
 
 def predicted_filename(file_path: Path, extracted_date: date, config: Config) -> str:

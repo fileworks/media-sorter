@@ -256,6 +256,8 @@ export const en = {
   "config.validation.invalid": "This setting is invalid.",
   "config.validation.warning": "Review this setting.",
   "config.rename.unknown_tokens": "Review unknown uppercase tokens in “{pattern}”.",
+  "config.rename.unsafe_pattern":
+    "Use one filename only: remove folder separators, unsupported characters, and trailing dots or spaces.",
   "config.filters.minimum_negative": "Minimum file size cannot be negative.",
   "config.filters.maximum_negative": "Maximum file size cannot be negative.",
   "config.duplicates.threshold_range":
@@ -703,8 +705,13 @@ export const en = {
   "config.rename.token.day": "Day",
   "config.rename.token.name": "Original filename",
   "config.rename.token.type": "File type — IMG or VID",
+  "config.rename.patternLabel": "Filename pattern",
   "config.rename.error.empty": "Enter a pattern.",
   "config.rename.error.slashes": "A pattern can't contain slashes.",
+  "config.rename.error.unsafe":
+    "Remove < > : \" | ? *, control characters, repeated spaces, '..', and leading or trailing dots or spaces.",
+  "config.rename.error.length":
+    "Shorten the pattern to 180 UTF-8 bytes or fewer (letters such as ä and emoji can use more than one).",
   "config.rename.warning.static": "No variables — every file would get the same name.",
   "config.ai.machineWeak":
     "This machine is below the minimum for local AI. Smart categorization is unavailable; use a cloud provider for AI tagging.",
@@ -1870,6 +1877,8 @@ export const de: Record<MessageKey, string> = {
   "config.validation.warning": "Diese Einstellung bitte prüfen.",
   "config.rename.unknown_tokens":
     "Unbekannte großgeschriebene Platzhalter in „{pattern}“ bitte prüfen.",
+  "config.rename.unsafe_pattern":
+    "Nur einen Dateinamen verwenden: Ordnertrennzeichen, nicht unterstützte Zeichen sowie Punkte oder Leerzeichen am Ende entfernen.",
   "config.filters.minimum_negative": "Die minimale Dateigröße darf nicht negativ sein.",
   "config.filters.maximum_negative": "Die maximale Dateigröße darf nicht negativ sein.",
   "config.duplicates.threshold_range":
@@ -2328,8 +2337,13 @@ export const de: Record<MessageKey, string> = {
   "config.rename.token.day": "Tag",
   "config.rename.token.name": "Ursprünglicher Dateiname",
   "config.rename.token.type": "Dateityp — IMG oder VID",
+  "config.rename.patternLabel": "Dateinamensmuster",
   "config.rename.error.empty": "Ein Muster eingeben.",
   "config.rename.error.slashes": "Ein Muster darf keine Schrägstriche enthalten.",
+  "config.rename.error.unsafe":
+    "< > : \" | ? *, Steuerzeichen, wiederholte Leerzeichen, '..' sowie Punkte oder Leerzeichen am Anfang oder Ende entfernen.",
+  "config.rename.error.length":
+    "Das Muster auf höchstens 180 UTF-8-Bytes kürzen (Zeichen wie ä und Emojis können mehr als ein Byte benötigen).",
   "config.rename.warning.static": "Keine Variablen — jede Datei würde denselben Namen erhalten.",
   "config.ai.machineWeak":
     "Dieser Rechner unterschreitet die Mindestanforderungen für lokale KI. Intelligente Kategorisierung ist nicht verfügbar; für KI-Tagging einen Cloud-Anbieter verwenden.",

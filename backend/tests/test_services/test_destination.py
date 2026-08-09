@@ -69,6 +69,21 @@ def test_rename_stem_single_pass_no_double_substitution() -> None:
     assert out == "SUMMER"
 
 
+def test_rename_stem_contains_traversal_and_forbidden_source_characters() -> None:
+    assert rename_stem("../../NAME?", date(2023, 5, 7), "summer:trip", "IMG") == "summertrip"
+
+
+def test_rename_stem_uses_stable_fallback_for_empty_or_reserved_result() -> None:
+    assert rename_stem("***", date(2023, 5, 7), "CON", "IMG") == "IMG_2023-05-07"
+
+
+def test_rename_stem_caps_leaf_length() -> None:
+    assert len(rename_stem("NAME", date(2023, 5, 7), "x" * 240, "IMG")) == 180
+    unicode_stem = rename_stem("NAME", date(2023, 5, 7), "😀" * 100, "IMG")
+    assert unicode_stem == "😀" * 45
+    assert len(unicode_stem.encode("utf-8")) == 180
+
+
 def test_predicted_filename_reflects_rename_and_conversion() -> None:
     cfg = _cfg(rename=True, rename_pattern="YYYY_NAME", convert_images=True, image_format="jpeg")
     name = predicted_filename(Path("/src/photo.png"), date(2022, 8, 1), cfg)

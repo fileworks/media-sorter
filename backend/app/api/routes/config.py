@@ -23,6 +23,7 @@ from app.core.config import (
     coerce_config_update,
     validate_categories,
     validate_rename_pattern,
+    validate_rename_pattern_safety,
 )
 from app.core.config_sections import SECTIONS
 from app.core.exceptions import ConfigValidationError, MediaSortException
@@ -364,7 +365,20 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             },
         )
 
-    # Rename pattern: surface unknown/typo'd tokens as a *warning*, not an error.
+    # Rename patterns must resolve to one portable filename. The shared
+    # destination builder sanitizes again as defence in depth, but a config
+    # that would be changed silently is blocked here with corrective guidance.
+    if config.rename:
+        pattern_error = validate_rename_pattern_safety(config.rename_pattern)
+        if pattern_error:
+            err(
+                "rename_pattern",
+                pattern_error,
+                "config.rename.unsafe_pattern",
+                {"pattern": config.rename_pattern},
+            )
+
+    # Surface unknown/typo'd tokens as a *warning*, not an error.
     # SortingService._apply_rename substitutes only the known tokens and leaves
     # everything else as a literal, so a pattern like "IMG_YYYY" is perfectly
     # valid — "IMG" is just a literal prefix. Blocking the save would stop a

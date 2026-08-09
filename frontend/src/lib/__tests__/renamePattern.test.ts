@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   RENAME_TOKENS,
+  MAX_FILENAME_STEM_BYTES,
   renderPattern,
   renderPatternParts,
   validateRenamePattern,
@@ -16,6 +17,15 @@ describe("validateRenamePattern", () => {
   it("rejects slashes (would create subfolders)", () => {
     expect(validateRenamePattern("YYYY/MM").error).toMatch(/slash/i);
     expect(validateRenamePattern("a\\b").error).toMatch(/slash/i);
+  });
+
+  it("rejects other non-portable filename literals and overlong patterns", () => {
+    expect(validateRenamePattern("NAME?").error).toBeTruthy();
+    expect(validateRenamePattern("NAME\u0001").error).toBeTruthy();
+    expect(validateRenamePattern("NAME..YYYY").error).toBeTruthy();
+    expect(validateRenamePattern("CON").error).toBeTruthy();
+    expect(validateRenamePattern("x".repeat(MAX_FILENAME_STEM_BYTES + 1)).error).toMatch(/180/);
+    expect(validateRenamePattern("😀".repeat(46)).error).toMatch(/180/);
   });
 
   it("warns when there are no variables (all files would collide)", () => {
@@ -54,6 +64,20 @@ describe("renderPatternParts", () => {
 
   it("treats unknown uppercase runs as literals", () => {
     expect(renderPattern("FOO_YYYY", DATE, "x", ".jpg", "IMG")).toBe("FOO_2024.jpg");
+  });
+
+  it("previews the same portable source-name sanitization as execution", () => {
+    expect(renderPattern("NAME", DATE, "summer:trip?", ".jpg", "IMG")).toBe("summertrip.jpg");
+  });
+
+  it("caps resolved stems and falls back when no safe name remains", () => {
+    expect(renderPattern("NAME", DATE, "x".repeat(240), ".jpg", "IMG")).toHaveLength(
+      MAX_FILENAME_STEM_BYTES + 4,
+    );
+    expect(renderPattern("NAME", DATE, "😀".repeat(100), ".jpg", "IMG")).toBe(
+      `${"😀".repeat(45)}.jpg`,
+    );
+    expect(renderPattern("***", DATE, "CON", ".jpg", "IMG")).toBe("IMG_2024-03-15.jpg");
   });
 });
 

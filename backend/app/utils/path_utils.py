@@ -25,6 +25,12 @@ _RESERVED_SEGMENT_NAMES: frozenset[str] = frozenset(
 # filesystem name limits (255 is the common max; 64 is generous for a label).
 _MAX_SEGMENT_LENGTH = 64
 
+# Leave ample room for an extension and collision suffix below the common
+# 255-character filename limit. Full path limits are filesystem-dependent and
+# are still handled as per-file execution failures; this bound prevents a
+# user-supplied rename pattern from creating an overlong leaf by itself.
+MAX_FILENAME_STEM_BYTES = 180
+
 
 def sanitize_path_segment(name: str, max_length: int = _MAX_SEGMENT_LENGTH) -> str:
     """Return a filesystem-safe single path segment derived from *name*, or ``""``.
@@ -56,6 +62,22 @@ def sanitize_path_segment(name: str, max_length: int = _MAX_SEGMENT_LENGTH) -> s
     if s.split(".", 1)[0].upper() in _RESERVED_SEGMENT_NAMES:
         return ""
     return s[:max_length].strip(" .")
+
+
+def sanitize_filename_stem(name: str) -> str:
+    """Return a portable, contained filename stem derived from *name*.
+
+    Rename templates can include both user-authored literals and an original
+    filename. Apply the same cross-platform rules used for generated folders,
+    but retain a larger bound suitable for a filename leaf.
+    """
+    safe = sanitize_path_segment(name, max_length=MAX_FILENAME_STEM_BYTES)
+    # POSIX filesystems commonly impose the leaf limit in bytes, while Python
+    # slicing counts Unicode code points. Trim whole characters until the UTF-8
+    # representation satisfies the same portable budget the UI previews.
+    while len(safe.encode("utf-8")) > MAX_FILENAME_STEM_BYTES:
+        safe = safe[:-1]
+    return safe.rstrip(" .")
 
 
 def is_excluded_by_pattern(path: Path, source_root: Path, patterns: list[str]) -> bool:

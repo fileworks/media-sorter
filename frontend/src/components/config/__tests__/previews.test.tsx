@@ -184,4 +184,15 @@ describe("rename preview", () => {
     const row = screen.getByText("IMG_4382.JPG").closest("tr");
     expect((row as HTMLElement).textContent).toContain("2025_IMG_4382.JPG");
   });
+
+  it("labels the pattern and links invalid guidance to the input", () => {
+    renderRename({ rename_pattern: "NAME" });
+
+    const input = screen.getByRole("textbox", { name: "Filename pattern" });
+    fireEvent.change(input, { target: { value: "../NAME" } });
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    const feedback = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+    expect(feedback?.textContent).toMatch(/slashes/i);
+  });
 });
