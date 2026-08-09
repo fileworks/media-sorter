@@ -945,6 +945,13 @@ export interface DiagnosticsResponse {
   rollout_gates: Record<string, boolean>;
   rollout_summary: string;
   thumbnail_cache: Record<string, unknown>;
+  active_task: {
+    task_id: string;
+    operation_kind:
+      "analysis" | "scan" | "preview" | "sort" | "audit" | "reconcile" | "model_download";
+    status: "pending" | "running";
+    started_at: string | null;
+  } | null;
 }
 
 export interface FileOperationRecord {
@@ -968,12 +975,30 @@ export interface FileOperationRecord {
   duplicate_type?: "exact" | "perceptual" | null;
   duplicate_similarity?: number | null;
   duplicate_of?: string | null;
+  source_root?: string | null;
+  would_be_destination?: string | null;
+}
+
+export type OperationOutcome =
+  "completed" | "completed_with_warnings" | "partial" | "cancelled" | "failed" | "unknown";
+
+export interface OperationSourceReference {
+  root_id: string;
+  role: "input" | "reference";
+  path: string;
+  display_name: string | null;
 }
 
 export interface OperationReport {
   operation_id: string;
   execution_date: string;
+  started_at: string | null;
+  finished_at: string;
+  outcome: OperationOutcome;
+  run_mode: "organize" | "deduplicate_only" | "unknown";
+  transfer_mode: "copy" | "move" | "unknown";
   source_path: string;
+  source_roots: OperationSourceReference[];
   dest_path: string;
   excluded_roots?: string[];
   duration_seconds: number | null;
@@ -981,6 +1006,8 @@ export interface OperationReport {
     total: number;
     sorted: number;
     failed: number;
+    skipped: number;
+    remaining: number;
     duplicates: number;
     future_dates: number;
     unknown_dates: number;
@@ -989,6 +1016,9 @@ export interface OperationReport {
     junk?: number;
     /** Files skipped because they already exist in the destination (0 when off). */
     already_in_destination?: number;
+    companions?: number;
+    incomplete_units?: number;
+    unmatched_companions?: number;
   };
   files: FileOperationRecord[];
   /** Aggregate breakdowns for the report dashboard (always present). */
@@ -1003,12 +1033,27 @@ export interface OperationReport {
 export interface OperationListItem {
   id: string;
   execution_date: string;
+  started_at: string | null;
+  finished_at: string | null;
+  outcome: OperationOutcome;
+  run_mode: "organize" | "deduplicate_only" | "unknown";
+  transfer_mode: "copy" | "move" | "unknown";
   source_path: string;
+  source_roots: OperationSourceReference[];
   dest_path: string;
   total_files: number;
   files_sorted: number;
   files_failed: number;
+  files_skipped: number;
   duplicates_found: number;
+  future_dates: number;
+  unknown_dates: number;
+  corrupted_files: number;
+  junk_files: number;
+  already_in_destination: number;
+  incomplete_units: number;
+  unmatched_companions: number;
+  remaining_files: number;
   duration_seconds: number | null;
 }
 

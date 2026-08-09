@@ -6,19 +6,25 @@ import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { ReportPanel } from "@/components/ReportPanel";
+import { StateView } from "@/components/StateView";
 import { triggerDownload } from "@/lib/download";
 import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { FiTrash2, FiAlertTriangle, FiSearch } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
-import type { OperationReport } from "@/types/api";
+import type { OperationOutcome, OperationReport } from "@/types/api";
 
 // ── Report Modal ──────────────────────────────────────────────────────────────
 
 function ReportModal({ operationId, onClose }: { operationId: string; onClose: () => void }) {
   const { t } = useI18n();
 
-  const { data: report, isLoading } = useQuery<OperationReport>({
+  const {
+    data: report,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery<OperationReport>({
     queryKey: ["report", operationId],
     queryFn: () => api.getReport(operationId),
     staleTime: 60_000,
@@ -40,6 +46,12 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
             <div className="h-48 rounded-xl bg-muted" />
             <div className="h-64 rounded-xl bg-muted" />
           </div>
+        ) : isError ? (
+          <StateView
+            variant="error"
+            title={t("history.loadFailed")}
+            onRetry={() => void refetch()}
+          />
         ) : report ? (
           <ReportPanel report={report} />
         ) : (
@@ -120,6 +132,15 @@ function ClearHistoryButton() {
 
 const PAGE_SIZE = 10;
 
+const OUTCOME_CLASSES: Record<OperationOutcome, string> = {
+  completed: "border-success/40 bg-success/10 text-success",
+  completed_with_warnings: "border-warning/40 bg-warning/10 text-warning",
+  partial: "border-warning/40 bg-warning/10 text-warning",
+  cancelled: "border-info/40 bg-info/10 text-info",
+  failed: "border-error/40 bg-error/10 text-error",
+  unknown: "border-border bg-muted text-muted-foreground",
+};
+
 export function HistoryPanel() {
   const { t, locale, formatNumber } = useI18n();
   const { toast } = useToast();
@@ -127,14 +148,25 @@ export function HistoryPanel() {
   const [search, setSearch] = useState("");
   const [modalId, setModalId] = useState<string | null>(null);
 
-  const { operations, total, isLoading } = useReportHistory(PAGE_SIZE, page * PAGE_SIZE);
+  const { operations, total, isLoading, error, refetch } = useReportHistory(
+    PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
 
   const filteredOps = useMemo(() => {
     if (!search.trim()) return operations;
     const q = search.trim().toLowerCase();
-    return operations.filter(
-      (op) => op.source_path.toLowerCase().includes(q) || op.dest_path.toLowerCase().includes(q),
-    );
+    return operations.filter((op) => {
+      const sources = op.source_roots
+        .flatMap((root) => [root.path, root.display_name ?? ""])
+        .join(" ")
+        .toLowerCase();
+      return (
+        op.source_path.toLowerCase().includes(q) ||
+        op.dest_path.toLowerCase().includes(q) ||
+        sources.includes(q)
+      );
+    });
   }, [operations, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -160,6 +192,12 @@ export function HistoryPanel() {
           <div key={i} className="h-16 rounded-xl bg-muted" />
         ))}
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <StateView variant="error" title={t("history.listFailed")} onRetry={() => void refetch()} />
     );
   }
 
@@ -204,53 +242,73 @@ export function HistoryPanel() {
         <>
           {/* Operations list */}
           <div className="divide-y divide-border rounded-xl border border-border bg-card">
-            {filteredOps.map((op) => (
-              <div
-                key={op.id}
-                className="flex flex-wrap items-center justify-between gap-4 px-4 py-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-sm font-medium text-foreground"
-                    title={`${op.source_path} → ${op.dest_path}`}
-                  >
-                    {op.source_path} → {op.dest_path}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {t(
-                      op.total_files === 1
-                        ? "history.operationSummary.one"
-                        : "history.operationSummary",
-                      {
-                        date: formatDate(op.execution_date, { locale }),
-                        total: formatNumber(op.total_files),
-                        sorted: formatNumber(op.files_sorted),
-                        percentage: new Intl.NumberFormat(locale, {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        }).format((op.files_sorted / Math.max(op.total_files, 1)) * 100),
+            {filteredOps.map((op) => {
+              const roots = op.source_roots.length
+                ? op.source_roots
+                : [{ root_id: "legacy", path: op.source_path, display_name: null }];
+              const sourceLabel = roots.map((root) => root.display_name ?? root.path).join(", ");
+              const changed =
+                op.files_sorted +
+                op.duplicates_found +
+                op.future_dates +
+                op.unknown_dates +
+                op.corrupted_files +
+                op.junk_files;
+              const skipped = op.files_skipped + op.already_in_destination;
+              const attention = op.files_failed + op.incomplete_units + op.unmatched_companions;
+              return (
+                <div
+                  key={op.id}
+                  className="flex flex-wrap items-center justify-between gap-4 px-4 py-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p
+                        className="min-w-0 truncate text-sm font-medium text-foreground"
+                        title={`${sourceLabel} → ${op.dest_path}`}
+                      >
+                        {sourceLabel} → {op.dest_path}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold ${OUTCOME_CLASSES[op.outcome]}`}
+                      >
+                        {t(`report.outcome.${op.outcome}`)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t("history.operationWhen", {
+                        date: formatDate(op.finished_at ?? op.execution_date, { locale }),
                         duration: formatDuration(op.duration_seconds, { locale }),
-                      },
-                    )}
-                  </p>
+                        mode: t(`report.runMode.${op.run_mode}`),
+                      })}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t("history.operationCounts", {
+                        changed: formatNumber(changed),
+                        skipped: formatNumber(skipped),
+                        attention: formatNumber(attention),
+                        remaining: formatNumber(op.remaining_files),
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={exportReport.isPending && exportReport.variables === op.id}
+                      onClick={() => void handleExport(op.id)}
+                    >
+                      {exportReport.isPending && exportReport.variables === op.id
+                        ? "…"
+                        : t("history.export")}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setModalId(op.id)}>
+                      {t("history.view")}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={exportReport.isPending && exportReport.variables === op.id}
-                    onClick={() => void handleExport(op.id)}
-                  >
-                    {exportReport.isPending && exportReport.variables === op.id
-                      ? "…"
-                      : t("history.export")}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setModalId(op.id)}>
-                    {t("history.view")}
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}

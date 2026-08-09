@@ -126,7 +126,13 @@ class ReportService:
         return {
             "operation_id": op["id"],
             "execution_date": op["execution_date"],
+            "started_at": op.get("started_at"),
+            "finished_at": op.get("finished_at") or op["execution_date"],
+            "outcome": op.get("outcome") or "unknown",
+            "run_mode": op.get("run_mode") or "unknown",
+            "transfer_mode": op.get("transfer_mode") or "unknown",
             "source_path": op["source_path"],
+            "source_roots": _json_objects(op.get("source_roots")),
             "dest_path": op["dest_path"],
             "excluded_roots": _json_list(op.get("excluded_roots")),
             "duration_seconds": op.get("duration_seconds"),
@@ -134,6 +140,8 @@ class ReportService:
                 "total": op["total_files"],
                 "sorted": op["files_sorted"],
                 "failed": op["files_failed"],
+                "skipped": op.get("files_skipped", 0) or 0,
+                "remaining": op.get("remaining_files", 0) or 0,
                 "duplicates": op["duplicates_found"],
                 "future_dates": op.get("future_dates", 0) or 0,
                 "unknown_dates": op.get("unknown_dates", 0) or 0,
@@ -142,6 +150,7 @@ class ReportService:
                 "already_in_destination": op.get("already_in_destination", 0) or 0,
                 "companions": op.get("companion_files", 0) or 0,
                 "incomplete_units": op.get("incomplete_units", 0) or 0,
+                "unmatched_companions": op.get("unmatched_companions", 0) or 0,
             },
             "statistics": statistics,
             "files": files,
@@ -223,9 +232,14 @@ class ReportService:
         with self._db._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT id, execution_date, source_path, dest_path,
-                       total_files, files_sorted, files_failed,
-                       duplicates_found, duration_seconds
+                SELECT id, execution_date, started_at, finished_at, outcome,
+                       run_mode, transfer_mode,
+                       source_path, source_roots, dest_path,
+                       total_files, files_sorted, files_failed, files_skipped,
+                       duplicates_found, future_dates, unknown_dates, corrupted_files,
+                       junk_files, already_in_destination,
+                       incomplete_units, unmatched_companions,
+                       remaining_files, duration_seconds
                 FROM operations
                 ORDER BY execution_date DESC
                 LIMIT ? OFFSET ?
@@ -234,8 +248,14 @@ class ReportService:
             ).fetchall()
             total = conn.execute("SELECT COUNT(*) FROM operations").fetchone()[0]
 
+        operations = []
+        for row in rows:
+            operation = dict(row)
+            operation["source_roots"] = _json_objects(operation.get("source_roots"))
+            operations.append(operation)
+
         return {
-            "operations": [dict(r) for r in rows],
+            "operations": operations,
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -265,3 +285,15 @@ def _json_list(value: Any) -> list[str]:
     except (TypeError, ValueError):
         return []
     return [str(item) for item in decoded] if isinstance(decoded, list) else []
+
+
+def _json_objects(value: Any) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    try:
+        decoded = json.loads(str(value))
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(decoded, list):
+        return []
+    return [item for item in decoded if isinstance(item, dict)]

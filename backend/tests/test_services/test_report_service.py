@@ -58,6 +58,51 @@ async def test_get_report_names_the_roots_deliberately_skipped_for_the_run(
 
 
 @pytest.mark.asyncio
+async def test_get_report_preserves_outcome_timing_sources_and_remaining_work(
+    db_with_operation: tuple[str, DatabaseManager],
+) -> None:
+    operation_id, test_db = db_with_operation
+    sources = [
+        {"root_id": "camera", "role": "input", "path": "/media/camera", "display_name": "Camera"},
+        {
+            "root_id": "archive",
+            "role": "reference",
+            "path": "/media/archive",
+            "display_name": None,
+        },
+    ]
+    with test_db._connect() as conn:
+        conn.execute(
+            """
+            UPDATE operations
+               SET outcome = ?, source_roots = ?, started_at = ?, finished_at = ?,
+                   files_skipped = ?, remaining_files = ?, unmatched_companions = ?
+             WHERE id = ?
+            """,
+            (
+                "cancelled",
+                json.dumps(sources),
+                "2026-08-09T10:00:00+00:00",
+                "2026-08-09T10:01:00+00:00",
+                3,
+                7,
+                2,
+                operation_id,
+            ),
+        )
+
+    report = await ReportService(test_db).get_report(operation_id)
+
+    assert report["outcome"] == "cancelled"
+    assert report["source_roots"] == sources
+    assert report["started_at"] == "2026-08-09T10:00:00+00:00"
+    assert report["finished_at"] == "2026-08-09T10:01:00+00:00"
+    assert report["summary"]["skipped"] == 3
+    assert report["summary"]["remaining"] == 7
+    assert report["summary"]["unmatched_companions"] == 2
+
+
+@pytest.mark.asyncio
 async def test_get_report_returns_summary(report_service: tuple[ReportService, str]) -> None:
     svc, operation_id = report_service
     report = await svc.get_report(operation_id)
@@ -294,3 +339,8 @@ async def test_list_operations_includes_inserted_operation(
 
     ids = [op["id"] for op in result["operations"]]
     assert operation_id in ids
+    operation = next(op for op in result["operations"] if op["id"] == operation_id)
+    assert operation["outcome"] == "unknown"
+    assert operation["source_roots"] == []
+    assert operation["files_skipped"] == 2
+    assert operation["remaining_files"] == 0

@@ -46,9 +46,13 @@ interface ExecuteScreenProps {
   error: string | null;
   config: Config;
   reportPath: string | null;
+  reportLoading?: boolean;
   onPause?: () => void;
   onCancel: () => void;
-  onRetry: () => void;
+  onRetry?: () => void;
+  onRetryReport?: () => void;
+  onStartNewRun?: () => void;
+  onOpenHistory?: () => void;
   /** Rendered under the cards — the live log. */
   children?: React.ReactNode;
 }
@@ -60,8 +64,12 @@ export function ExecuteScreen({
   error,
   config,
   reportPath,
+  reportLoading = false,
   onCancel,
   onRetry,
+  onRetryReport,
+  onStartNewRun,
+  onOpenHistory,
   children,
 }: ExecuteScreenProps) {
   const { t, locale } = useI18n();
@@ -222,9 +230,24 @@ export function ExecuteScreen({
                 {t("execute.cancelRun")}
               </Button>
             )}
-            {(failed || cancelled) && (
+            {(failed || cancelled) && onRetry && (
               <Button size="sm" onClick={onRetry}>
                 {t("execute.retry")}
+              </Button>
+            )}
+            {onRetryReport && (
+              <Button size="sm" onClick={onRetryReport}>
+                {t("execute.retryReport")}
+              </Button>
+            )}
+            {settled && onOpenHistory && (
+              <Button variant="outline" size="sm" onClick={onOpenHistory}>
+                {t("execute.openHistory")}
+              </Button>
+            )}
+            {settled && onStartNewRun && (
+              <Button variant="outline" size="sm" onClick={onStartNewRun}>
+                {t("report.startNewRun")}
               </Button>
             )}
             <span className="text-xs text-muted-foreground">
@@ -264,7 +287,7 @@ export function ExecuteScreen({
           <div className="flex-1" />
 
           <p className="border-t border-border pt-3 text-xs leading-relaxed text-faint">
-            {t("execute.reportNote")}
+            {reportLoading ? t("execute.reportLoading") : t("execute.reportNote")}
             {reportPath && (
               <>
                 <br />

@@ -5,6 +5,11 @@ import { useToast } from "@/context/toast-context";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { useI18n } from "@/i18n/I18nContext";
 import type { OperationReport } from "@/types/api";
+import {
+  canRetryExecutionStart,
+  hasPersistedTerminalReport,
+  terminalOperationId,
+} from "@/lib/executionLifecycle";
 
 // Outer attempts at loading the report after a sort completes. Each attempt is
 // itself a 3-try back-off (see fetchReportWithRetry), so this bounds the total
@@ -93,7 +98,7 @@ export function useSorting() {
     !!taskId &&
     (uiStatus === "pending" ||
       uiStatus === "running" ||
-      (uiStatus === "completed" && report === null && !reportSettled));
+      (hasPersistedTerminalReport(uiStatus) && report === null && !reportSettled));
 
   const { data: progress, error: progressError } = useQuery({
     queryKey: ["sorting", taskId],
@@ -156,14 +161,14 @@ export function useSorting() {
       }
     }
 
-    if (s === "completed") {
+    if (hasPersistedTerminalReport(s)) {
       releaseLoader();
       // `result` is optional and loosely typed — read every field defensively
       // with runtime checks rather than an unsafe `as` cast.
       const result = progress.result;
 
       // Fire the system notification + counts exactly once for this sort.
-      if (!notifiedRef.current) {
+      if (s === "completed" && !notifiedRef.current) {
         notifiedRef.current = true;
         const sorted = typeof result?.sorted === "number" ? result.sorted : 0;
         const failed = typeof result?.failed === "number" ? result.failed : 0;
@@ -176,11 +181,12 @@ export function useSorting() {
         );
       }
 
-      const opId = typeof result?.operation_id === "string" ? result.operation_id : null;
+      const opId = terminalOperationId(progress);
       if (!opId) {
         // No operation record to fetch — surface once and stop polling.
         if (!reportSettled) {
           setReportSettled(true);
+          setError(t("sort.reportMissing"));
           toast(t("sort.reportMissing"), "warning");
         }
         return;
@@ -198,12 +204,14 @@ export function useSorting() {
         void fetchReportWithRetry(opId)
           .then((data) => {
             setReport(data);
+            setError(null);
             setReportSettled(true);
-            toast(t("sort.reportReady"), "success");
+            toast(t(s === "completed" ? "sort.reportReady" : "sort.cancelledReportReady"), "info");
           })
           .catch(() => {
             if (attempt >= MAX_REPORT_ATTEMPTS) {
               setReportSettled(true);
+              setError(t("sort.reportLoadFailed"));
               toast(t("sort.reportLoadFailed"), "warning");
             }
           })
@@ -215,9 +223,9 @@ export function useSorting() {
 
     if (s === "failed") {
       releaseLoader();
-      toast(progress.failure?.message ?? progress.error ?? t("sort.failedDetails"), "error");
-    } else if (s === "cancelled") {
-      releaseLoader();
+      const message = progress.failure?.message ?? progress.error ?? t("sort.failedDetails");
+      setError(message);
+      toast(message, "error");
     }
   }, [progress, toast, report, reportSettled, releaseLoader, t, formatNumber]);
 
@@ -300,13 +308,41 @@ export function useSorting() {
     }
   }, [taskId, toast, progress, t]);
 
-  // Invalidate report-history cache whenever a sort completes so HistoryPanel
+  const resumeSorting = useCallback(
+    (activeTaskId: string, activeStatus: "pending" | "running") => {
+      if (taskId === activeTaskId && (uiStatus === "pending" || uiStatus === "running")) return;
+      setReport(null);
+      setOperationId(null);
+      setError(null);
+      setReportSettled(false);
+      notifiedRef.current = false;
+      milestonesRef.current = new Set();
+      reportInFlightRef.current = false;
+      reportAttemptsRef.current = 0;
+      lastEventSequenceRef.current = 0;
+      releaseLoader();
+      releaseLoaderRef.current = api.beginOperation();
+      setTaskId(activeTaskId);
+      setUiStatus(activeStatus);
+    },
+    [releaseLoader, taskId, uiStatus],
+  );
+
+  // Invalidate report-history cache whenever a persisted terminal run settles so HistoryPanel
   // automatically shows the new operation without a manual refresh.
   useEffect(() => {
-    if (uiStatus === "completed") {
+    if (hasPersistedTerminalReport(uiStatus)) {
       void queryClient.invalidateQueries({ queryKey: ["reports"] });
     }
   }, [uiStatus, queryClient]);
+
+  const retryReport = useCallback(() => {
+    if (!operationId) return;
+    setError(null);
+    reportAttemptsRef.current = 0;
+    reportInFlightRef.current = false;
+    setReportSettled(false);
+  }, [operationId]);
 
   const clearReport = useCallback(() => {
     setReport(null);
@@ -331,8 +367,12 @@ export function useSorting() {
     operationId,
     status: uiStatus,
     error,
+    reportLoading: hasPersistedTerminalReport(uiStatus) && report === null && !reportSettled,
+    canRetryStart: canRetryExecutionStart(uiStatus, taskId),
     startSorting,
+    resumeSorting,
     cancelSorting,
     clearReport,
+    retryReport,
   };
 }

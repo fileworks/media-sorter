@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -27,7 +28,7 @@ from app.services.filesystem_service import FileSystemService
 from app.services.metadata_service import MetadataService
 from app.services.operation_execution import OperationExecution
 from app.services.repair_service import RepairService
-from app.services.sorting_service import SortingService
+from app.services.sorting_service import SortingService, _operation_outcome
 
 # ------------------------------------------------------------------ #
 # Helpers                                                               #
@@ -81,6 +82,20 @@ class _FakeTask:
     def __init__(self) -> None:
         self.progress = self._Progress()
         self.cancel_event = asyncio.Event()
+
+
+def test_unmatched_companions_make_the_terminal_outcome_actionable() -> None:
+    stats = {
+        "failed": 0,
+        "sorted": 1,
+        "incomplete_units": 0,
+        "corrupted": 0,
+        "issues": [],
+        "partial": False,
+        "unmatched_companions": 1,
+    }
+
+    assert _operation_outcome(stats, cancelled=False) == "completed_with_warnings"
 
 
 @pytest.mark.asyncio
@@ -1165,9 +1180,25 @@ async def test_run_cancelled_still_persists_partial_operation(
     stats = await svc.run(task, dry_run=False)
 
     assert stats["sorted"] == 0
+    assert stats["outcome"] == "cancelled"
+    # Cancellation happened before discovery, so the service does not invent a
+    # remaining count for files it never enumerated.
+    assert stats["remaining"] == 0
     with in_memory_db._connect() as conn:
+        row = conn.execute(
+            """
+            SELECT outcome, remaining_files, source_roots, started_at, finished_at
+              FROM operations
+            """
+        ).fetchone()
         count = conn.execute("SELECT COUNT(*) FROM operations").fetchone()[0]
     assert count == 1
+    assert row is not None
+    assert row["outcome"] == "cancelled"
+    assert row["remaining_files"] == 0
+    assert json.loads(row["source_roots"])[0]["path"] == str(source)
+    assert row["started_at"]
+    assert row["finished_at"]
 
 
 @pytest.mark.asyncio

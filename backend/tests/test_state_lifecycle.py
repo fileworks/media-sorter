@@ -462,8 +462,16 @@ def test_database_unversioned_schema_migrates_with_verified_backup(tmp_path: Pat
     with manager._connect() as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == CURRENT_DATABASE_SCHEMA
         operation_columns = {row[1] for row in conn.execute("PRAGMA table_info(operations)")}
-        assert {"future_dates", "junk_files", "already_in_destination"} <= operation_columns
+        assert {
+            "future_dates",
+            "junk_files",
+            "already_in_destination",
+            "outcome",
+            "source_roots",
+            "remaining_files",
+        } <= operation_columns
         assert conn.execute("SELECT id FROM operations").fetchone()[0] == "legacy"
+        assert conn.execute("SELECT outcome FROM operations").fetchone()[0] == "unknown"
     backups = list(tmp_path.glob("*.pre-migration-*.bak"))
     assert len(backups) == 1
     with closing(sqlite3.connect(backups[0])) as backup:

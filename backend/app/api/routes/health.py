@@ -1,7 +1,7 @@
 """Health, system-info, and runtime-diagnostics routes."""
 
 import asyncio
-from typing import Any
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
@@ -48,6 +48,21 @@ async def hardware(container: ContainerDep) -> HardwareResponse:
     )
 
 
+class ActiveTaskResponse(BaseModel):
+    task_id: str
+    operation_kind: Literal[
+        "analysis",
+        "scan",
+        "preview",
+        "sort",
+        "audit",
+        "reconcile",
+        "model_download",
+    ]
+    status: Literal["pending", "running"]
+    started_at: str | None
+
+
 class DiagnosticsResponse(BaseModel):
     """Where diagnostics go and what has degraded, without exposing content."""
 
@@ -59,6 +74,7 @@ class DiagnosticsResponse(BaseModel):
     rollout_gates: dict[str, bool]
     rollout_summary: str
     thumbnail_cache: dict[str, Any]
+    active_task: ActiveTaskResponse | None
 
 
 @router.get("/diagnostics", response_model=DiagnosticsResponse)
@@ -69,6 +85,7 @@ async def diagnostics(request: Request, container: ContainerDep) -> DiagnosticsR
     logging degraded or that an operation needs review, never what was logged.
     """
     health_snapshot = await asyncio.to_thread(logging_health)
+    active = container.task_manager.active_task()
     return DiagnosticsResponse(
         version=__version__,
         logging=health_snapshot,
@@ -79,6 +96,18 @@ async def diagnostics(request: Request, container: ContainerDep) -> DiagnosticsR
         ),
         recovery_operations=list(getattr(request.app.state, "recovery_operations", []) or []),
         thumbnail_cache=await asyncio.to_thread(container.thumbnail_cache.diagnostics),
+        active_task=(
+            None
+            if active is None
+            else ActiveTaskResponse(
+                task_id=active.id,
+                operation_kind=active.operation_kind,
+                # ``TaskManager.active_task`` only returns non-terminal tasks;
+                # reflect that runtime invariant in the narrower response type.
+                status=cast(Literal["pending", "running"], active.status),
+                started_at=active.started_at.isoformat() if active.started_at else None,
+            )
+        ),
     )
 
 

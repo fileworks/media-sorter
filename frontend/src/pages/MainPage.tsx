@@ -12,7 +12,7 @@
  * and then "preview" as two separate acts was asking them to know why.
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FiArrowLeft } from "react-icons/fi";
 
@@ -166,6 +166,7 @@ export default function MainPage() {
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
+  const resumedTaskRef = useRef<string | null>(null);
 
   const configDefaults = useConfigDefaults();
   const analysis = useAnalysis();
@@ -207,9 +208,47 @@ export default function MainPage() {
   const scanned = analysis.result !== null && analysis.error === null;
   const planned = preview.result !== null && preview.error === null;
   const isSorting = sorting.status === "running" || sorting.status === "pending";
-  const isAnyRunning = analysis.loading || preview.loading || isSorting;
+  const activeTask = diagnostics?.active_task ?? null;
+  const externalTaskActive =
+    activeTask !== null && !["analysis", "preview", "sort"].includes(activeTask.operation_kind);
+  const isAnyRunning = analysis.loading || preview.loading || isSorting || externalTaskActive;
   const recoveryOperations = useMemo(() => diagnostics?.recovery_operations ?? [], [diagnostics]);
   const recoveryBlock = startBlock(recoveryOperations);
+
+  // Background work belongs to the backend process, not this component. A UI
+  // reload reattaches to the task identity reported by diagnostics and resumes
+  // the ordinary status transport instead of presenting a fresh, executable
+  // workflow over work that is still running.
+  useEffect(() => {
+    if (!activeTask) {
+      resumedTaskRef.current = null;
+      return;
+    }
+    if (
+      resumedTaskRef.current === activeTask.task_id ||
+      analysis.taskId === activeTask.task_id ||
+      preview.taskId === activeTask.task_id ||
+      sorting.taskId === activeTask.task_id ||
+      analysis.loading ||
+      preview.loading ||
+      isSorting
+    ) {
+      return;
+    }
+    if (activeTask.operation_kind === "analysis") {
+      resumedTaskRef.current = activeTask.task_id;
+      analysis.resumeAnalysis(activeTask.task_id);
+      setRequestedStage("review");
+    } else if (activeTask.operation_kind === "preview") {
+      resumedTaskRef.current = activeTask.task_id;
+      preview.resumePreview(activeTask.task_id);
+      setRequestedStage("review");
+    } else if (activeTask.operation_kind === "sort") {
+      resumedTaskRef.current = activeTask.task_id;
+      sorting.resumeSorting(activeTask.task_id, activeTask.status);
+      setRequestedStage("execute");
+    }
+  }, [activeTask, analysis, analysis.loading, isSorting, preview, preview.loading, sorting]);
 
   const configuredCards = useMemo(
     () => rootCards(config, scanned, analysis.result?.total_files ?? 0),
@@ -535,11 +574,14 @@ export default function MainPage() {
         runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets === null
           ? t("stage.gate.duplicateLoading")
           : t("stage.gate.duplicates", { count: runDecisions.outstandingSets }),
+      executionActive: isSorting || activeTask?.operation_kind === "sort",
       blocked: recoveryBlock.blocked,
       blockedReason: recoveryBlock.reason,
     }),
     [
       issueText,
+      activeTask?.operation_kind,
+      isSorting,
       planned,
       recoveryBlock.blocked,
       recoveryBlock.reason,
@@ -713,6 +755,9 @@ export default function MainPage() {
           onRetry={retrySave}
         />
       )}
+      {externalTaskActive && (
+        <StateView variant="loading" compact title={t("app.activeBackgroundTask")} />
+      )}
     </>
   );
 
@@ -874,7 +919,11 @@ export default function MainPage() {
               <Suspense
                 fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
               >
-                <FinishedRun report={sorting.report} onStartNewRun={startNewRun} />
+                <FinishedRun
+                  report={sorting.report}
+                  onStartNewRun={startNewRun}
+                  onOpenHistory={() => setHistoryOpen(true)}
+                />
               </Suspense>
             );
           }
@@ -902,8 +951,16 @@ export default function MainPage() {
               error={sorting.error}
               config={config}
               reportPath={null}
+              reportLoading={sorting.reportLoading}
               onCancel={() => setCancelConfirmOpen(true)}
-              onRetry={startRun}
+              onRetry={sorting.canRetryStart ? startRun : undefined}
+              onRetryReport={
+                sorting.operationId && sorting.error && !sorting.reportLoading
+                  ? sorting.retryReport
+                  : undefined
+              }
+              onStartNewRun={startNewRun}
+              onOpenHistory={() => setHistoryOpen(true)}
             >
               <RunLog entries={logs} running={isSorting} />
             </ExecuteScreen>

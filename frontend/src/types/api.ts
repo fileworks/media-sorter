@@ -48,6 +48,8 @@ export type {
   HealthResponse,
   FileOperationRecord,
   OperationReport,
+  OperationOutcome,
+  OperationSourceReference,
   OperationListItem,
   OperationListResponse,
 } from "@/services/api";

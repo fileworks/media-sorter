@@ -25,6 +25,7 @@ const PLANNED: StageInputs = {
   plannedReason: null,
   duplicateReviewReady: true,
   duplicateReviewReason: null,
+  executionActive: false,
   blocked: false,
   blockedReason: null,
 };

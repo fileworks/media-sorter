@@ -164,6 +164,24 @@ export function usePreview() {
     void queryClient.removeQueries({ queryKey: ["preview"] });
   }, [queryClient, releaseLoader, settle]);
 
+  const resumePreview = useCallback(
+    (activeTaskId: string) => {
+      if (taskId === activeTaskId && loading) return;
+      settle(null);
+      setResult(null);
+      setError(null);
+      setCancelled(false);
+      setElapsed(0);
+      handledRef.current = false;
+      lastEventSequenceRef.current = 0;
+      releaseLoader();
+      releaseLoaderRef.current = api.beginOperation();
+      setTaskId(activeTaskId);
+      setLoading(true);
+    },
+    [loading, releaseLoader, settle, taskId],
+  );
+
   const cancelPreview = useCallback(async () => {
     if (taskId) {
       try {
@@ -191,6 +209,7 @@ export function usePreview() {
     elapsed,
     progress,
     generatePreview,
+    resumePreview,
     cancelPreview,
     clear,
   };

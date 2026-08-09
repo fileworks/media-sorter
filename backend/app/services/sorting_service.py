@@ -10,7 +10,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -127,7 +127,12 @@ def _operation_outcome(stats: dict[str, Any], *, cancelled: bool) -> OperationOu
         return "partial"
     if stats["failed"]:
         return "failed"
-    if stats["corrupted"] or stats["issues"] or stats["partial"]:
+    if (
+        stats["corrupted"]
+        or stats["issues"]
+        or stats["partial"]
+        or stats.get("unmatched_companions")
+    ):
         return "completed_with_warnings"
     return "completed"
 
@@ -201,6 +206,7 @@ class SortingService(SortingSupportMixin):
         - Unreadable/corrupted    → _corrupted/
         - Already at destination  → report only; no write
         """
+        started_at = datetime.now(timezone.utc)
         scope = apply_run_scope(self._config_service.get(), excluded_roots)
         config = scope.config
         if frozen_plan is not None and frozen_plan.config_fingerprint != config_fingerprint(config):
@@ -281,6 +287,7 @@ class SortingService(SortingSupportMixin):
             "media_units": len(units),
             "companion_files": sum(len(unit.companions) for unit in units),
             "unmatched_companions": len(traversal.unmatched_companions),
+            "remaining": 0,
             "incomplete_units": 0,
             "operation_id": None,
             "review_only": len(units) if not config.sort else 0,
@@ -576,6 +583,10 @@ class SortingService(SortingSupportMixin):
             }
             for finding in traversal.unmatched_companions
         )
+        # Every reported record is either changed, deliberately left alone, or
+        # needs attention. A cancellation leaves no record for work that never
+        # started, which makes this an honest remaining-work count.
+        stats["remaining"] = max(0, stats["total"] - len(file_records))
 
         duration = int(time.monotonic() - start_time)
         stats["operation_id"] = operation_id
@@ -595,6 +606,7 @@ class SortingService(SortingSupportMixin):
                 stats=stats,
                 duration=duration,
                 file_records=file_records,
+                started_at=started_at,
             )
 
         logger.info("Sort completed", **{k: v for k, v in stats.items() if k != "operation_id"})

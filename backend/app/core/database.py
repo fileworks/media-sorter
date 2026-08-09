@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.core.paths import resolve_app_paths
 
-CURRENT_DATABASE_SCHEMA = 6
+CURRENT_DATABASE_SCHEMA = 7
 BASELINE_OPERATION_COLUMNS = {
     "id",
     "execution_date",
@@ -54,6 +54,16 @@ VERSION_4_OPERATION_COLUMNS = {"companion_files", "incomplete_units"}
 VERSION_4_FILE_OPERATION_COLUMNS = {"unit_id", "companion_role", "unit_primary_path"}
 VERSION_5_FILE_OPERATION_COLUMNS = {"source_root", "would_be_destination"}
 VERSION_6_OPERATION_COLUMNS = {"excluded_roots"}
+VERSION_7_OPERATION_COLUMNS = {
+    "outcome",
+    "run_mode",
+    "transfer_mode",
+    "source_roots",
+    "started_at",
+    "finished_at",
+    "remaining_files",
+    "unmatched_companions",
+}
 
 OPERATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -74,6 +84,14 @@ CREATE TABLE IF NOT EXISTS operations (
     companion_files INTEGER NOT NULL DEFAULT 0,
     incomplete_units INTEGER NOT NULL DEFAULT 0,
     excluded_roots TEXT NOT NULL DEFAULT '[]',
+    outcome TEXT NOT NULL DEFAULT 'unknown',
+    run_mode TEXT NOT NULL DEFAULT 'unknown',
+    transfer_mode TEXT NOT NULL DEFAULT 'unknown',
+    source_roots TEXT NOT NULL DEFAULT '[]',
+    started_at DATETIME,
+    finished_at DATETIME,
+    remaining_files INTEGER NOT NULL DEFAULT 0,
+    unmatched_companions INTEGER NOT NULL DEFAULT 0,
     duration_seconds INTEGER,
     config_hash TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -240,6 +258,21 @@ class DatabaseManager:
                     },
                 ),
             ),
+            7: (
+                (
+                    "operations",
+                    {
+                        "outcome": "TEXT NOT NULL DEFAULT 'unknown'",
+                        "run_mode": "TEXT NOT NULL DEFAULT 'unknown'",
+                        "transfer_mode": "TEXT NOT NULL DEFAULT 'unknown'",
+                        "source_roots": "TEXT NOT NULL DEFAULT '[]'",
+                        "started_at": "DATETIME",
+                        "finished_at": "DATETIME",
+                        "remaining_files": "INTEGER NOT NULL DEFAULT 0",
+                        "unmatched_companions": "INTEGER NOT NULL DEFAULT 0",
+                    },
+                ),
+            ),
         }
         steps = migrations.get(target_version)
         if steps is None:
@@ -299,6 +332,8 @@ class DatabaseManager:
             requirements.append(("file_operations", VERSION_5_FILE_OPERATION_COLUMNS))
         if version >= 6:
             requirements.append(("operations", VERSION_6_OPERATION_COLUMNS))
+        if version >= 7:
+            requirements.append(("operations", VERSION_7_OPERATION_COLUMNS))
         for table, required in requirements:
             missing = required - self._columns(conn, table)
             if missing:

@@ -27,6 +27,22 @@ def test_fresh_schema_has_category_column(tmp_path: Path) -> None:
     assert "category" in _columns(db, "file_operations")
 
 
+def test_fresh_schema_records_terminal_outcome_and_recovery_context(tmp_path: Path) -> None:
+    db = _manager(tmp_path)
+    db.init_schema()
+
+    assert {
+        "outcome",
+        "run_mode",
+        "transfer_mode",
+        "source_roots",
+        "started_at",
+        "finished_at",
+        "remaining_files",
+        "unmatched_companions",
+    } <= _columns(db, "operations")
+
+
 def test_category_column_migrated_onto_old_db(tmp_path: Path) -> None:
     """A pre-existing DB without `category` gets the column added in place."""
     db = _manager(tmp_path)

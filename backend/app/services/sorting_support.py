@@ -362,6 +362,7 @@ class SortingSupportMixin:
         stats: dict[str, Any],
         duration: int,
         file_records: list[dict[str, Any]],
+        started_at: datetime,
     ) -> None:
         """Persist a completed operation to SQLite from a worker thread."""
         if self._db is None:
@@ -371,6 +372,28 @@ class SortingSupportMixin:
                 json.dumps(config.to_dict(), sort_keys=True, default=str).encode()
             ).hexdigest()[:16]
 
+            finished_at = datetime.now(timezone.utc)
+            profile_roots = config.library_profile.roots if config.library_profile else []
+            source_roots = [
+                {
+                    "root_id": root.root_id,
+                    "role": root.role,
+                    "path": root.path,
+                    "display_name": root.display_name,
+                }
+                for root in profile_roots
+                if root.role != "destination"
+            ]
+            if not source_roots and config.source_directory:
+                source_roots.append(
+                    {
+                        "root_id": "legacy-input",
+                        "role": "input",
+                        "path": config.source_directory,
+                        "display_name": None,
+                    }
+                )
+
             with self._db._connect() as conn:
                 conn.execute(
                     """
@@ -379,13 +402,16 @@ class SortingSupportMixin:
                          files_sorted, files_failed, files_skipped, duplicates_found,
                          future_dates, unknown_dates, corrupted_files,
                          junk_files, already_in_destination, companion_files,
-                         incomplete_units, excluded_roots,
+                         incomplete_units, excluded_roots, outcome, run_mode, transfer_mode,
+                         source_roots,
+                         started_at, finished_at, remaining_files, unmatched_companions,
                          duration_seconds, config_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         operation_id,
-                        datetime.now(timezone.utc).isoformat(),
+                        finished_at.isoformat(),
                         config.source_directory,
                         config.target_directory,
                         stats["total"],
@@ -401,6 +427,14 @@ class SortingSupportMixin:
                         stats["companion_files"],
                         stats["incomplete_units"],
                         json.dumps(stats.get("excluded_roots", []), ensure_ascii=False),
+                        stats.get("outcome", "unknown"),
+                        stats.get("run_mode", "unknown"),
+                        "copy" if config.copy_instead_of_move else "move",
+                        json.dumps(source_roots, ensure_ascii=False),
+                        started_at.isoformat(),
+                        finished_at.isoformat(),
+                        stats.get("remaining", 0),
+                        stats.get("unmatched_companions", 0),
                         duration,
                         config_hash,
                     ),

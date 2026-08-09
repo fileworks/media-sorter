@@ -26,6 +26,7 @@ const READY: StageInputs = {
   plannedReason: null,
   duplicateReviewReady: true,
   duplicateReviewReason: null,
+  executionActive: false,
   blocked: false,
   blockedReason: null,
 };
@@ -95,6 +96,12 @@ describe("stage readiness", () => {
 
   it("blocks Execute until a plan has been calculated", () => {
     expect(readiness("execute", { ...READY, planned: false }).canEnter).toBe(false);
+  });
+
+  it("reattaches an active execution even when the reloaded UI has no in-memory plan", () => {
+    expect(readiness("execute", { ...READY, planned: false, executionActive: true }).canEnter).toBe(
+      true,
+    );
   });
 
   it("lets Review inspect proposals but blocks Execute until every set is decided", () => {

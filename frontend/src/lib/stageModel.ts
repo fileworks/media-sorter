@@ -75,6 +75,8 @@ export interface StageInputs {
   /** Review has no proposed or undecided duplicate sets left. */
   duplicateReviewReady: boolean;
   duplicateReviewReason: string | null;
+  /** A backend execution survived this UI instance and is being reattached. */
+  executionActive: boolean;
   /** Startup recovery or drift is holding new work. */
   blocked: boolean;
   blockedReason: string | null;
@@ -124,6 +126,9 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
     return { canEnter: true, reason: null };
   }
   if (stage === "review") {
+    return { canEnter: true, reason: null };
+  }
+  if (stage === "execute" && inputs.executionActive) {
     return { canEnter: true, reason: null };
   }
   if (!inputs.planned) {

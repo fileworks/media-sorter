@@ -19,6 +19,7 @@ export interface UseAnalysisReturn {
   progress: TaskProgress | null;
   /** Resolves with the scan when it finishes, or null if it failed or was cancelled. */
   runAnalysis: (excludedRoots?: string[]) => Promise<AnalysisResult | null>;
+  resumeAnalysis: (taskId: string) => void;
   cancelAnalysis: () => Promise<void>;
   clear: () => void;
 }
@@ -170,6 +171,24 @@ export function useAnalysis(): UseAnalysisReturn {
     void queryClient.removeQueries({ queryKey: ["analysis"] });
   }, [queryClient, releaseLoader, settle]);
 
+  const resumeAnalysis = useCallback(
+    (activeTaskId: string) => {
+      if (taskId === activeTaskId && loading) return;
+      settle(null);
+      setResult(null);
+      setError(null);
+      setCancelled(false);
+      setElapsed(0);
+      handledRef.current = false;
+      lastEventSequenceRef.current = 0;
+      releaseLoader();
+      releaseLoaderRef.current = api.beginOperation();
+      setTaskId(activeTaskId);
+      setLoading(true);
+    },
+    [loading, releaseLoader, settle, taskId],
+  );
+
   const cancelAnalysis = useCallback(async () => {
     if (!taskId) return;
     try {
@@ -192,6 +211,7 @@ export function useAnalysis(): UseAnalysisReturn {
     elapsed,
     progress,
     runAnalysis,
+    resumeAnalysis,
     cancelAnalysis,
     clear,
   };

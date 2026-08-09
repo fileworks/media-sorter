@@ -8,6 +8,7 @@ import { ValidationBadge } from "@/components/ui/validation-badge";
 import { triggerDownload } from "@/lib/download";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/formatters";
+import { formatDate } from "@/lib/dateFormatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { useCountUp } from "@/hooks/useCountUp";
 import type { OperationReport, FileOperationRecord } from "@/types/api";
@@ -252,7 +253,10 @@ const FILTER_TABS: {
     id: "duplicates",
     statuses: ["duplicate", "already_in_destination"],
   },
-  { id: "failed", statuses: ["failed"] },
+  {
+    id: "failed",
+    statuses: ["failed", "incomplete_unit", "unmatched_companion", "cancelled", "blocked"],
+  },
 ];
 
 const STATUS_STYLES: Record<string, { key: string; className: string }> = {
@@ -287,6 +291,26 @@ const STATUS_STYLES: Record<string, { key: string; className: string }> = {
   already_in_destination: {
     key: "report.status.inDestination",
     className: "text-info bg-info/10",
+  },
+  kept_in_place: {
+    key: "report.status.keptInPlace",
+    className: "text-muted-foreground bg-muted",
+  },
+  incomplete_unit: {
+    key: "report.status.incompleteUnit",
+    className: "text-error bg-error/10",
+  },
+  unmatched_companion: {
+    key: "report.status.unmatchedCompanion",
+    className: "text-warning bg-warning/10",
+  },
+  cancelled: {
+    key: "report.status.cancelled",
+    className: "text-info bg-info/10",
+  },
+  blocked: {
+    key: "report.status.blocked",
+    className: "text-error bg-error/10",
   },
 };
 
@@ -604,7 +628,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
   };
 
   const { summary } = report;
-  const total = Math.max(summary.total, 1);
+  const total = Math.max(summary.total + summary.skipped, 1);
   // Fold the P0-engine outcomes into the existing cards so every file is
   // accounted for and the cards agree with the filter tabs below (junk →
   // Quarantined, already-in-destination → Duplicates).
@@ -612,14 +636,58 @@ export function ReportPanel({ report }: ReportPanelProps) {
   const alreadyInDestCount = summary.already_in_destination ?? 0;
   const quarantineCount =
     summary.future_dates + summary.unknown_dates + summary.corrupted + junkCount;
-  const duplicateCount = summary.duplicates + alreadyInDestCount;
+  const duplicateCount = summary.duplicates;
+  const skippedCount = summary.skipped + alreadyInDestCount;
+  const attentionCount =
+    summary.failed + (summary.incomplete_units ?? 0) + (summary.unmatched_companions ?? 0);
+  const remainingCount = summary.remaining;
+  const sourceRoots =
+    report.source_roots?.length > 0
+      ? report.source_roots
+      : [
+          {
+            root_id: "legacy-input",
+            role: "input" as const,
+            path: report.source_path,
+            display_name: null,
+          },
+        ];
+  const outcome = report.outcome ?? "unknown";
+  const outcomeClass: Record<typeof outcome, string> = {
+    completed: "border-success/40 bg-tint-success",
+    completed_with_warnings: "border-warning/40 bg-tint-warning",
+    partial: "border-warning/40 bg-tint-warning",
+    cancelled: "border-info/40 bg-info/5",
+    failed: "border-error/40 bg-tint-error",
+    unknown: "border-border bg-muted/30",
+  };
   const suspiciousCount = report.files.filter((f) => f.suspicious === true).length;
 
   return (
     <div className="space-y-4">
       {/* ── Section A: Summary Cards ── */}
       <div className="rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div
+          className={cn("mb-4 rounded-xl border px-4 py-3", outcomeClass[outcome])}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-sm font-semibold text-foreground">{t(`report.outcome.${outcome}`)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {t(`report.outcome.${outcome}.detail`, {
+              changed: summary.sorted + quarantineCount + duplicateCount,
+              attention: attentionCount,
+              remaining: remainingCount,
+            })}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("report.finishedAt", {
+              date: formatDate(report.finished_at ?? report.execution_date, { locale }),
+            })}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <SummaryCard
             label={t("report.summary.sorted")}
             value={summary.sorted}
@@ -639,28 +707,56 @@ export function ReportPanel({ report }: ReportPanelProps) {
             color="text-info"
           />
           <SummaryCard
-            label={t("report.summary.failed")}
-            value={summary.failed}
-            subtext={pct(summary.failed, total, locale)}
+            label={t("report.summary.skipped")}
+            value={skippedCount}
+            subtext={pct(skippedCount, total, locale)}
+            color="text-muted-foreground"
+          />
+          <SummaryCard
+            label={t("report.summary.attention")}
+            value={attentionCount}
+            subtext={pct(attentionCount, total, locale)}
             color="text-error"
+          />
+          <SummaryCard
+            label={t("report.summary.remaining")}
+            value={remainingCount}
+            subtext={pct(remainingCount, total, locale)}
+            color="text-warning"
           />
         </div>
 
         {/* Meta row */}
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{t(`report.runMode.${report.run_mode ?? "unknown"}`)}</span>
+          <span>·</span>
+          <span>{t(`report.transferMode.${report.transfer_mode ?? "unknown"}`)}</span>
+          <span>·</span>
           <span>
             {t("report.duration", {
               duration: formatDuration(report.duration_seconds, { style: "long", locale }),
             })}
           </span>
           <span>·</span>
-          <span className="max-w-[220px] truncate" title={report.source_path}>
-            {t("report.source", { path: report.source_path })}
-          </span>
-          <span>·</span>
           <span className="max-w-[220px] truncate" title={report.dest_path}>
             {t("report.destination", { path: report.dest_path })}
           </span>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+          <p className="text-xs font-medium text-foreground">
+            {t("report.sourcesUsed", { count: sourceRoots.length })}
+          </p>
+          <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+            {sourceRoots.map((root) => (
+              <li key={root.root_id} className="flex flex-wrap gap-x-2">
+                <span className="font-medium text-foreground">
+                  {root.display_name ?? t(`report.sourceRole.${root.role}`)}
+                </span>
+                <span className="break-all font-mono">{root.path}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
         {(report.excluded_roots?.length ?? 0) > 0 && (
