@@ -380,9 +380,9 @@ fn reveal_path(path: String) {
 fn backend_is_ready(port: u16, capability: &str) -> bool {
     let url = format!("http://127.0.0.1:{}/api/health", port);
     ureq::get(&url)
-        .set("X-MediaSorter-Capability", capability)
+        .header("X-MediaSorter-Capability", capability)
         .call()
-        .map(|r| r.status() == 200)
+        .map(|r| r.status().as_u16() == 200)
         .unwrap_or(false)
 }
 
@@ -519,10 +519,10 @@ fn wait_for_backend(
             Ok(None) => {}
         }
         if let Ok(response) = ureq::get(&url)
-            .set("X-MediaSorter-Capability", capability)
+            .header("X-MediaSorter-Capability", capability)
             .call()
         {
-            if response.status() == 200 {
+            if response.status().as_u16() == 200 {
                 log_info!("Backend ready on port {}", port);
                 return Ok(());
             }
