@@ -6,13 +6,7 @@ import { severityClass, type PresentationSeverity } from "@/lib/statusPresentati
 import { cn } from "@/lib/utils";
 
 export type StateViewVariant =
-  | "empty"
-  | "loading"
-  | "error"
-  | "blocked"
-  | "success"
-  | "info"
-  | "warning";
+  "empty" | "loading" | "error" | "blocked" | "success" | "info" | "warning";
 
 /**
  * `inline` sits in the flow, as one panel among several. `page` is the whole
