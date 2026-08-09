@@ -1,6 +1,7 @@
 /** The run is over: the result, its report, and the next lifecycle action. */
 
 import { ReportPanel } from "@/components/ReportPanel";
+import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
 import type { OperationReport } from "@/types/api";
@@ -18,6 +19,7 @@ export function FinishedRun({
 
   return (
     <div className="space-y-4">
+      <ScreenHeader title={t("execute.titleDone")} />
       <ReportPanel report={report} />
       <div className="flex flex-wrap justify-center gap-2">
         <Button variant="outline" onClick={onOpenHistory}>

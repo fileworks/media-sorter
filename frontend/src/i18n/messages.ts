@@ -767,6 +767,8 @@ export const en = {
   "history.exportFailed": "Export failed",
   "history.empty": "No past sorts yet",
   "history.emptyHelp": "Your sort history will appear here after your first run.",
+  "history.title": "Run history",
+  "history.subtitle": "See what ran, which sources it used, and what still needs attention.",
   "history.searchPlaceholder": "Search by path…",
   "history.searchLabel": "Search sort history by path",
   "history.noMatches": "No operations match your search.",
@@ -844,8 +846,8 @@ export const en = {
   "state.working": "Work continues in the background.",
   "preflight.title": "Before this runs",
   "preflight.description": "Everything below is what will happen. Nothing has moved yet.",
-  "preflight.reversible.title": "Reversible by re-running",
-  "preflight.irreversible.title": "Not reversible",
+  "preflight.reversible.title": "Leaves source files unchanged",
+  "preflight.irreversible.title": "Changes source files or locations",
   "preflight.blocking.empty": "Nothing has been decided yet — there is no work to run.",
   "preflight.blocking.stale":
     "{count} group(s) changed since you reviewed them and must be looked at again.",
@@ -943,7 +945,7 @@ export const en = {
   "sources.pathCopied": "Copied",
   "sources.copyFailed": "Copy failed",
   "sources.locate": "Locate…",
-  "sources.includeNextRun": "Included next run",
+  "sources.includeNextRun": "Include this run",
   "sources.skipRun": "Skip this run",
   "sources.roleChangeSafe": "Making this folder a {role} causes no conflicts.",
   "sources.roleChangeConflict": "That change would create a conflict:",
@@ -1349,6 +1351,7 @@ export const en = {
   "review.viewer.fitToWindow": "Fit to window",
   "review.viewer.fit": "Fit",
   "review.browse.alsoInLibrary": "{count} sets have copies outside this run",
+  "review.browse.alsoInLibrary.one": "1 set has copies outside this run",
   "review.browse.alsoInLibrary.rule":
     "Your library holds these copies in folders this run is not reading, so it cannot compare them and leaves them alone. To decide them, add those folders on the Sources screen and preview again.",
   "review.browse.openSources": "Open Sources",
@@ -2390,6 +2393,9 @@ export const de: Record<MessageKey, string> = {
   "history.exportFailed": "Export fehlgeschlagen",
   "history.empty": "Noch keine Sortierungen",
   "history.emptyHelp": "Nach der ersten Sortierung erscheint der Verlauf hier.",
+  "history.title": "Durchlaufverlauf",
+  "history.subtitle":
+    "Zeigt, was ausgeführt wurde, welche Quellen verwendet wurden und was noch zu prüfen ist.",
   "history.searchPlaceholder": "Nach Pfad suchen…",
   "history.searchLabel": "Sortierverlauf nach Pfad durchsuchen",
   "history.noMatches": "Keine Vorgänge entsprechen der Suche.",
@@ -2470,8 +2476,8 @@ export const de: Record<MessageKey, string> = {
   "preflight.title": "Bevor dieser Plan ausgeführt wird",
   "preflight.description":
     "Unten steht vollständig, was geschehen wird. Es wurde noch nichts verschoben.",
-  "preflight.reversible.title": "Durch erneutes Ausführen wiederholbar",
-  "preflight.irreversible.title": "Nicht rückgängig zu machen",
+  "preflight.reversible.title": "Quelldateien bleiben unverändert",
+  "preflight.irreversible.title": "Ändert Quelldateien oder ihre Speicherorte",
   "preflight.blocking.empty":
     "Es wurde noch nichts entschieden — es gibt keine Arbeit auszuführen.",
   "preflight.blocking.stale":
@@ -2572,7 +2578,7 @@ export const de: Record<MessageKey, string> = {
   "sources.pathCopied": "Kopiert",
   "sources.copyFailed": "Kopieren fehlgeschlagen",
   "sources.locate": "Suchen…",
-  "sources.includeNextRun": "Beim nächsten Lauf enthalten",
+  "sources.includeNextRun": "In diesen Durchlauf aufnehmen",
   "sources.skipRun": "Diesen Lauf überspringen",
   "sources.roleChangeSafe": "Die Rolle {role} verursacht für diesen Ordner keine Konflikte.",
   "sources.roleChangeConflict": "Diese Änderung würde einen Konflikt verursachen:",
@@ -2997,7 +3003,8 @@ export const de: Record<MessageKey, string> = {
   "review.viewer.zoomOut": "Verkleinern",
   "review.viewer.fitToWindow": "An Fenster anpassen",
   "review.viewer.fit": "Angepasst",
-  "review.browse.alsoInLibrary": "{count} Sätze haben Kopien außerhalb dieses Durchlaufs",
+  "review.browse.alsoInLibrary": "{count} Gruppen haben Kopien außerhalb dieses Durchlaufs",
+  "review.browse.alsoInLibrary.one": "1 Gruppe hat Kopien außerhalb dieses Durchlaufs",
   "review.browse.alsoInLibrary.rule":
     "Deine Sammlung hält diese Kopien in Ordnern, die dieser Durchlauf nicht liest — er kann sie nicht vergleichen und lässt sie in Ruhe. Um sie zu entscheiden, füge diese Ordner auf der Quellen-Seite hinzu und erstelle die Vorschau neu.",
   "review.browse.openSources": "Quellen öffnen",

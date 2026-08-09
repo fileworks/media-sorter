@@ -18,7 +18,7 @@ const EMPTY_TREE: TreeNode = {
 
 afterEach(cleanup);
 
-function renderTree(outOfScopeSets: number, onOpenSources?: () => void) {
+function renderTree(outOfScopeSets: number, onOpenSources?: () => void, revealOutOfScope = false) {
   render(
     <I18nProvider initialLocale="en">
       <DestinationTree
@@ -27,6 +27,7 @@ function renderTree(outOfScopeSets: number, onOpenSources?: () => void) {
         onSelect={() => undefined}
         outOfScopeSets={outOfScopeSets}
         onOpenSources={onOpenSources}
+        revealOutOfScope={revealOutOfScope}
       />
     </I18nProvider>,
   );
@@ -67,5 +68,22 @@ describe("out-of-scope duplicate disclosure", () => {
     fireEvent.keyDown(action, { key: "Enter" });
     fireEvent.click(action);
     expect(onOpenSources).toHaveBeenCalledOnce();
+  });
+
+  it("shows an excluded-source explanation immediately and uses singular grammar", () => {
+    const onOpenSources = vi.fn();
+    renderTree(1, onOpenSources, true);
+
+    expect(
+      screen
+        .getByRole("button", {
+          name: translate("en", "review.browse.alsoInLibrary.one", { count: 1 }),
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(screen.getByText(translate("en", "review.browse.alsoInLibrary.rule"))).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: translate("en", "review.browse.openSources") }),
+    ).toBeTruthy();
   });
 });

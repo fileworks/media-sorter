@@ -56,19 +56,19 @@ describe("duplicateTally", () => {
     expect(tally.outOfScope).toBe(1);
   });
 
-  it("does not call a set out of scope when its other copy is under a skipped root", () => {
+  it("reports a set whose other copy is under a skipped root", () => {
     const groups = [group("skipped", ["/phone/only.jpg", "/camera/other.jpg"])];
 
-    const tally = duplicateTally(groups, new Set(["/phone/only.jpg"]), ["/camera"]);
+    const tally = duplicateTally(groups, new Set(["/phone/only.jpg"]));
 
     expect(tally.sets).toBe(0);
-    expect(tally.outOfScope).toBe(0);
+    expect(tally.outOfScope).toBe(1);
   });
 
-  it("still reports a copy outside every configured and skipped root", () => {
+  it("also reports a copy outside every configured root", () => {
     const groups = [group("elsewhere", ["/phone/only.jpg", "/archive/other.jpg"])];
 
-    const tally = duplicateTally(groups, new Set(["/phone/only.jpg"]), ["/camera"]);
+    const tally = duplicateTally(groups, new Set(["/phone/only.jpg"]));
 
     expect(tally.outOfScope).toBe(1);
   });

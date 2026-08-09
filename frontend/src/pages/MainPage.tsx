@@ -707,6 +707,7 @@ export default function MainPage() {
         </div>
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mx-auto max-w-3xl">
+            <ScreenHeader title={t("history.title")} subtitle={t("history.subtitle")} />
             <Suspense
               fallback={<StateView variant="loading" layout="page" title={t("state.loading")} />}
             >

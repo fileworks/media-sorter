@@ -116,8 +116,6 @@ export function ReviewScreen({
   const groups = useReviewGroups(inScope, decidedSetIds, {
     bursts: config.burst_detection_enabled,
     planSets,
-    excludedRootIds: result.excluded_root_ids ?? [],
-    excludedRootPaths: result.excluded_roots ?? [],
   });
   // The catalog is library-wide; the surface is this run. Keep its full groups
   // for the outside-run disclosure, and give every actionable surface only
@@ -605,6 +603,10 @@ export function ReviewScreen({
               onSelect={surface.setTreePath}
               outOfScopeSets={groups.tally?.outOfScope ?? 0}
               onOpenSources={onOpenSources}
+              revealOutOfScope={
+                (result.excluded_root_ids?.length ?? 0) > 0 ||
+                (result.excluded_roots?.length ?? 0) > 0
+              }
               query={treeSearch}
               onQueryChange={setTreeSearch}
             />

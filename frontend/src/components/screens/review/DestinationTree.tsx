@@ -32,6 +32,8 @@ interface DestinationTreeProps {
   outOfScopeSets: number;
   /** Return to the screen that can bring omitted folders into this run. */
   onOpenSources?: () => void;
+  /** Excluded run sources need their explanation immediately, not behind a disclosure. */
+  revealOutOfScope?: boolean;
   /** Controlled when Review coordinates the global Escape stack. */
   query?: string;
   onQueryChange?: (query: string) => void;
@@ -202,6 +204,7 @@ export function DestinationTree({
   onSelect,
   outOfScopeSets,
   onOpenSources,
+  revealOutOfScope = false,
   query: controlledQuery,
   onQueryChange,
 }: DestinationTreeProps) {
@@ -210,7 +213,7 @@ export function DestinationTree({
   const query = controlledQuery ?? localQuery;
   const setQuery = onQueryChange ?? setLocalQuery;
   const [expanded, setExpanded] = useState<Set<string>>(() => initialExpansion(root));
-  const [alsoOpen, setAlsoOpen] = useState(false);
+  const [alsoOpen, setAlsoOpen] = useState(revealOutOfScope);
   const label = useNodeLabel();
 
   const needle = query.trim().toLowerCase();
@@ -232,6 +235,10 @@ export function DestinationTree({
       return changed ? next : current;
     });
   }, [root]);
+
+  useEffect(() => {
+    if (revealOutOfScope && outOfScopeSets > 0) setAlsoOpen(true);
+  }, [outOfScopeSets, revealOutOfScope]);
 
   // A search should show its hits, not make the user open five levels to them.
   const effectiveExpanded = useMemo(() => {
@@ -325,7 +332,12 @@ export function DestinationTree({
             ) : (
               <FiChevronRight className="h-3 w-3 shrink-0" aria-hidden />
             )}
-            {t("review.browse.alsoInLibrary", { count: outOfScopeSets })}
+            {t(
+              outOfScopeSets === 1
+                ? "review.browse.alsoInLibrary.one"
+                : "review.browse.alsoInLibrary",
+              { count: outOfScopeSets },
+            )}
           </button>
           {alsoOpen && (
             <div className="mt-1.5 space-y-2 pl-4">

@@ -80,11 +80,9 @@ export function StateView({
     >
       <p className="text-sm font-medium">{safeTitle}</p>
       {(safeDetail || code) && (
-        <p className="mt-1 text-xs leading-relaxed opacity-90">
+        <p className="mt-1 text-xs leading-relaxed">
           {safeDetail}
-          {code && (
-            <code className={cn("font-mono opacity-70", safeDetail && "ml-1.5")}>{code}</code>
-          )}
+          {code && <code className={cn("font-mono", safeDetail && "ml-1.5")}>{code}</code>}
         </p>
       )}
       {(onRetry || action) && (

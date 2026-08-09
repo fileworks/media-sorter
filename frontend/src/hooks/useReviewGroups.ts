@@ -36,20 +36,19 @@ export function useReviewGroups(
      * than two unclaimed ones, which is what counts a file in both exactly once.
      */
     planSets?: readonly PlanDuplicateSet[];
-    /** Root ids sent to the catalog query, and paths used by the local tally. */
-    excludedRootIds?: readonly string[];
-    excludedRootPaths?: readonly string[];
   } = {},
 ) {
   const kinds: GroupKind[] = options.bursts ? ["exact", "similar", "burst"] : ["exact", "similar"];
-  const excludedRootIds = [...(options.excludedRootIds ?? [])].sort();
 
   // `combine` rather than reading the result array directly: the array itself
   // is new on every render, so it can never be a stable `useMemo` dependency.
   const { groups, isLoading, isError, error, refetch } = useQueries({
     queries: kinds.map((kind) => ({
-      queryKey: ["review", "groups", kind, excludedRootIds],
-      queryFn: () => api.listReviewGroups(kind, { limit: LIMIT, excludedRoots: excludedRootIds }),
+      // Review needs the full library relationship for its honest
+      // outside-this-run disclosure. Actionable rows are scoped separately to
+      // `result.items`, so an excluded member still cannot become a decision.
+      queryKey: ["review", "groups", kind],
+      queryFn: () => api.listReviewGroups(kind, { limit: LIMIT }),
     })),
     combine: (results) => ({
       groups: results.flatMap((result) => result.data?.groups ?? []),
@@ -83,9 +82,8 @@ export function useReviewGroups(
         })),
       ],
       inScope,
-      options.excludedRootPaths,
     );
-  }, [decidedSetIds, groups, inScope, isLoading, options.excludedRootPaths, planSets]);
+  }, [decidedSetIds, groups, inScope, isLoading, planSets]);
 
   return {
     groups,

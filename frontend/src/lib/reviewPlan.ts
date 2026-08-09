@@ -8,7 +8,6 @@
  */
 
 import type { Config, PreviewItem, PreviewResult } from "@/types/api";
-import { isWithin } from "@/lib/sourcesStage";
 
 // ── Headline figures ─────────────────────────────────────────────────────────
 
@@ -81,7 +80,6 @@ const KIND_STRENGTH: Record<TallyGroup["kind"], number> = { exact: 0, similar: 1
 export function duplicateTally(
   groups: readonly TallyGroup[],
   inScope: ReadonlySet<string>,
-  excludedRoots: readonly string[] = [],
 ): DuplicateTally {
   const ordered = [...groups].sort((a, b) => KIND_STRENGTH[a.kind] - KIND_STRENGTH[b.kind]);
   const claimed = new Set<string>();
@@ -95,10 +93,9 @@ export function duplicateTally(
     // but it still belongs to this set — it just cannot add a second copy.
     const present = group.memberPaths.filter((path) => inScope.has(path));
     if (present.length < 2) {
-      const omittedByScope = group.memberPaths.some(
-        (path) => !inScope.has(path) && excludedRoots.some((root) => isWithin(path, root)),
-      );
-      if (omittedByScope) continue;
+      // A configured-but-skipped root is precisely the state the Sources
+      // warning explains. It remains non-actionable, but hiding the catalog
+      // relationship made the run look more complete than it was.
       outOfScope += 1;
       continue;
     }
