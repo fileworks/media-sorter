@@ -10,7 +10,9 @@
  */
 
 /** True when the code is running inside a Tauri desktop window. */
-const inTauri = typeof window !== "undefined" && "__TAURI__" in window;
+const inTauri =
+  typeof window !== "undefined" &&
+  ("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window || "__TAURI__" in window);
 
 export async function triggerDownload(blob: Blob, filename: string): Promise<void> {
   if (inTauri) {
@@ -24,8 +26,8 @@ export async function triggerDownload(blob: Blob, filename: string): Promise<voi
 
 async function tauriSave(blob: Blob, filename: string): Promise<void> {
   // Dynamic import keeps the browser bundle free of Tauri-only code.
-  const { save } = await import("@tauri-apps/api/dialog");
-  const { writeBinaryFile } = await import("@tauri-apps/api/fs");
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const { writeFile } = await import("@tauri-apps/plugin-fs");
 
   // Derive a sensible file-type filter from the extension
   const ext = filename.split(".").pop() ?? "*";
@@ -42,7 +44,7 @@ async function tauriSave(blob: Blob, filename: string): Promise<void> {
   if (!destPath) return; // user cancelled
 
   const buffer = await blob.arrayBuffer();
-  await writeBinaryFile(destPath, buffer);
+  await writeFile(destPath, new Uint8Array(buffer));
 }
 
 // ── Browser fallback ──────────────────────────────────────────────────────────

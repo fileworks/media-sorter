@@ -55,7 +55,7 @@ def test_tauri_installer_visuals_reference_generated_assets() -> None:
     config = json.loads(
         (REPO_ROOT / "frontend/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
     )
-    bundle = config["tauri"]["bundle"]
+    bundle = config["bundle"]
     windows = bundle["windows"]
 
     assert windows["nsis"] == {
@@ -68,13 +68,15 @@ def test_tauri_installer_visuals_reference_generated_assets() -> None:
         "bannerPath": "installer/wix-banner.bmp",
         "dialogImagePath": "installer/wix-dialog.bmp",
     }
-    assert bundle["dmg"] == {
+    assert bundle["macOS"]["dmg"] == {
         "background": "installer/dmg-background.png",
         "windowSize": {"width": 660, "height": 400},
         "appPosition": {"x": 180, "y": 200},
         "applicationFolderPosition": {"x": 480, "y": 200},
     }
-    assert bundle["dmg"]["appPosition"] != bundle["dmg"]["applicationFolderPosition"]
+    assert (
+        bundle["macOS"]["dmg"]["appPosition"] != bundle["macOS"]["dmg"]["applicationFolderPosition"]
+    )
 
 
 def test_ci_and_release_builds_reject_stale_branding() -> None:

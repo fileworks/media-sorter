@@ -105,9 +105,9 @@ def test_tauri_and_makefile_keep_signing_in_packaging_order() -> None:
     tauri_config = json.loads(
         (REPO_ROOT / "frontend" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
     )
-    sign_command = tauri_config["tauri"]["bundle"]["windows"]["signCommand"]
+    sign_command = tauri_config["bundle"]["windows"]["signCommand"]
     assert sign_command == ("python -m scripts.release_integrity sign-windows-file --file %1")
-    assert tauri_config["tauri"]["bundle"]["macOS"]["hardenedRuntime"] is True
+    assert tauri_config["bundle"]["macOS"]["hardenedRuntime"] is True
 
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     release_line = next(line for line in makefile.splitlines() if line.startswith("release:"))

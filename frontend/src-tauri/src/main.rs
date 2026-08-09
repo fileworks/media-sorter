@@ -29,7 +29,7 @@ use std::thread;
 use std::time::Duration;
 
 use native_dialog::{DialogBuilder, MessageLevel};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -380,9 +380,9 @@ fn reveal_path(path: String) {
 fn backend_is_ready(port: u16, capability: &str) -> bool {
     let url = format!("http://127.0.0.1:{}/api/health", port);
     ureq::get(&url)
-        .set("X-MediaSorter-Capability", capability)
+        .header("X-MediaSorter-Capability", capability)
         .call()
-        .map(|r| r.status() == 200)
+        .map(|r| r.status().as_u16() == 200)
         .unwrap_or(false)
 }
 
@@ -519,10 +519,10 @@ fn wait_for_backend(
             Ok(None) => {}
         }
         if let Ok(response) = ureq::get(&url)
-            .set("X-MediaSorter-Capability", capability)
+            .header("X-MediaSorter-Capability", capability)
             .call()
         {
-            if response.status() == 200 {
+            if response.status().as_u16() == 200 {
                 log_info!("Backend ready on port {}", port);
                 return Ok(());
             }
@@ -773,7 +773,7 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
     }
 
     let api_capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
-        rand::thread_rng()
+        rand::rng()
             .sample_iter(&Alphanumeric)
             .take(48)
             .map(char::from)
@@ -795,15 +795,20 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
     let process = Arc::new(Mutex::new(backend_child));
     let process_on_build_error = Arc::clone(&process);
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(BackendState {
             process,
             api_port,
             api_capability,
         })
         .setup(|_app| Ok(()))
-        .on_window_event(|global_window_event| {
-            if let tauri::WindowEvent::Destroyed = global_window_event.event() {
-                kill_backend(global_window_event.window().state::<BackendState>().inner());
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                kill_backend(window.state::<BackendState>().inner());
             }
         })
         .invoke_handler(tauri::generate_handler![

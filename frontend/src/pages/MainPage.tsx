@@ -330,7 +330,7 @@ export default function MainPage() {
         return;
       }
       try {
-        const { open } = await import("@tauri-apps/api/dialog");
+        const { open } = await import("@tauri-apps/plugin-dialog");
         const selected = await open({ directory: true, multiple: false });
         if (typeof selected === "string") applyFolder(target, selected);
       } catch {
