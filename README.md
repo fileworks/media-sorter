@@ -15,6 +15,8 @@
 
 </div>
 
+## Overview
+
 MediaSorter turns mixed camera, phone, messenger, and backup folders into a
 reviewed date-organized library. It extracts capture dates, keeps companion
 files together, detects duplicate and similar media, and can categorize or tag
@@ -30,7 +32,22 @@ Python, Node, and ffmpeg are bundled.
 The installers are currently unsigned. On first launch, use **right-click →
 Open** on macOS or **More info → Run anyway** in Windows SmartScreen.
 
-## Workflow
+## Status
+
+The latest verified public release is
+[v1.3.0](https://github.com/fileworks/media-sorter/releases/tag/v1.3.0).
+Installers remain unsigned by the recorded project decision; the release page
+publishes checksums, but those checksums do not prove publisher identity.
+
+## Quick start
+
+Open MediaSorter, add at least one input and one destination on **Sources**,
+choose a recipe, preview the current settings, resolve any duplicate decisions,
+and execute only after reviewing the frozen impact summary.
+
+## Usage
+
+### Desktop workflow
 
 The application makes every mutation wait behind one reviewed plan:
 
@@ -81,9 +98,16 @@ failures that happen later. The complete contract is in
 | Recovery | Startup reconciliation, support bundles, and explicit operator decisions for uncertain outcomes |
 | Languages | Complete English and German interfaces |
 
+## Configuration
+
 The [settings reference](docs/settings-reference.md) documents every option,
 default, compatibility gate, model tier, environment override, and routing
 rule. The in-app descriptions and previews are the primary configuration UI.
+
+Use the in-app **Configure** screen for saved settings and immediate folder and
+filename previews. For headless deployments, the settings reference lists the
+equivalent environment and API controls, including validation and safe
+defaults.
 
 ## State and logs
 
