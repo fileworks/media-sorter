@@ -10,9 +10,9 @@
  * "will not move module into another chunk" warning with no benefit.
  */
 
-import { writeText } from "@tauri-apps/api/clipboard";
-import { invoke } from "@tauri-apps/api/tauri";
-import { open } from "@tauri-apps/api/shell";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 
 /**
  * Copy *path* to the system clipboard.

@@ -54,7 +54,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
     # Ruff is the single linter + formatter (replaces black + isort + pylint).
-    "ruff>=0.16.0",
+    "ruff>=0.16.1",
     "mypy>=2.3.0",
     "httpx>=0.25.0",
     # Bundling — used by `make bundle-backend` to freeze the backend for distribution
@@ -77,7 +77,7 @@ local-ai = [
     # disables its network path and passes only verified local component paths.
     "onnxruntime>=1.17.0",
     "tokenizers>=0.15.0",
-    "huggingface_hub>=1.25.1",
+    "huggingface_hub>=1.26.0",
     # Reliable cross-platform RAM detection for the hardware tier probe (the
     # probe degrades gracefully without it, but psutil avoids per-OS fallbacks).
     "psutil>=5.9.0",

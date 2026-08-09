@@ -35,7 +35,7 @@ async function fetchReportWithRetry(opId: string): Promise<OperationReport> {
 async function notifyComplete(title: string, body: string): Promise<void> {
   try {
     const { isPermissionGranted, requestPermission, sendNotification } =
-      await import("@tauri-apps/api/notification");
+      await import("@tauri-apps/plugin-notification");
 
     let granted = await isPermissionGranted();
     if (!granted) {

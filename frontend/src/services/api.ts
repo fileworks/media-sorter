@@ -5,7 +5,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from "axios";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import type { RecoveryOperation } from "@/lib/startupRecovery";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -645,7 +645,12 @@ export interface OutcomeProvenance {
       value: string | null;
       accepted: boolean;
       rejection_reason:
-        "absent" | "unparseable" | "sentinel_value" | "suspicious" | "overridden" | null;
+        | "absent"
+        | "unparseable"
+        | "sentinel_value"
+        | "suspicious"
+        | "overridden"
+        | null;
     }>;
   };
   rules: {
@@ -742,7 +747,12 @@ export interface DateCandidate {
   value: string | null;
   accepted: boolean;
   rejection_reason:
-    "absent" | "unparseable" | "sentinel_value" | "suspicious" | "overridden" | null;
+    | "absent"
+    | "unparseable"
+    | "sentinel_value"
+    | "suspicious"
+    | "overridden"
+    | null;
 }
 
 /** Provenance for one file, as `POST /api/review/outcomes` records it. */

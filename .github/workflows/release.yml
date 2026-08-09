@@ -149,7 +149,7 @@ jobs:
       - name: Verify native source independently of package resources
         working-directory: frontend/src-tauri
         env:
-          TAURI_CONFIG: '{"tauri":{"bundle":{"resources":[]}}}'
+          TAURI_CONFIG: '{"bundle":{"resources":[]}}'
         run: |
           cargo fmt --check
           cargo check --locked

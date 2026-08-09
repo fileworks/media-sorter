@@ -350,7 +350,8 @@ export function ReviewScreen({
     () =>
       detailRow?.stack
         ? ((entries.find((entry) => entry.kind === "set" && entry.id === detailRow.stack?.id) as
-            SetEntry | undefined) ?? null)
+            | SetEntry
+            | undefined) ?? null)
         : null,
     [detailRow, entries],
   );

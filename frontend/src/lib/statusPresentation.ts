@@ -196,7 +196,11 @@ export function looksLikeStackTrace(detail: string): boolean {
 }
 
 export type OperationOutcome =
-  "completed" | "completed_with_warnings" | "partial" | "cancelled" | "failed";
+  | "completed"
+  | "completed_with_warnings"
+  | "partial"
+  | "cancelled"
+  | "failed";
 
 export interface OutcomeView {
   tone: StatusTone;
