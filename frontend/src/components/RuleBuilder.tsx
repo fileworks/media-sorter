@@ -242,8 +242,7 @@ export function RuleBuilderInline({
 
   const moveRule = (kind: RuleKind, index: number, offset: -1 | 1) => {
     const collection = [...(kind === "tag" ? ruleSet.tag_rules : ruleSet.route_rules)] as (
-      | TagRule
-      | RouteRule
+      TagRule | RouteRule
     )[];
     const target = index + offset;
     if (target < 0 || target >= collection.length) return;

@@ -26,13 +26,7 @@ import type { DuplicateGroup } from "@/lib/reviewWorkbench";
 import type { OutcomeProvenance, PreviewItem, PreviewResult } from "@/types/api";
 
 export type RowStatus =
-  | "organize"
-  | "keep_in_place"
-  | "duplicate"
-  | "junk"
-  | "already_there"
-  | "baseline"
-  | "unreadable";
+  "organize" | "keep_in_place" | "duplicate" | "junk" | "already_there" | "baseline" | "unreadable";
 
 export type RowFlag = "name_clash" | "duplicate_pending" | "unit_member";
 export type SetAsideCategory = "copy" | "junk" | "undated" | "corrupted";
