@@ -29,7 +29,7 @@ use std::thread;
 use std::time::Duration;
 
 use native_dialog::{DialogBuilder, MessageLevel};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -773,7 +773,7 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
     }
 
     let api_capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
-        rand::thread_rng()
+        rand::rng()
             .sample_iter(&Alphanumeric)
             .take(48)
             .map(char::from)
