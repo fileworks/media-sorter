@@ -3,6 +3,20 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.4.0](https://github.com/fileworks/media-sorter/compare/v1.3.0...v1.4.0) (2026-08-10)
+
+### Features
+
+* migrate Tauri v1 → v2 ([#61](https://github.com/fileworks/media-sorter/issues/61)) ([275ce86](https://github.com/fileworks/media-sorter/commit/275ce8639a154e5e523fc33a389e939269c136f9))
+
+### Bug Fixes
+
+* contain and preview filename templates ([b34306f](https://github.com/fileworks/media-sorter/commit/b34306f3d9e6f50e085bc97501c47b2055426d03))
+* disclose excluded copies in the current run ([4aa1169](https://github.com/fileworks/media-sorter/commit/4aa116909afe087586d275e2667d421956a52f18))
+* make execution outcomes recoverable and traceable ([642b5e5](https://github.com/fileworks/media-sorter/commit/642b5e55cace5faf8275b2d31dc714983d1ea6d7))
+* preserve valid workflow state across navigation ([4d29701](https://github.com/fileworks/media-sorter/commit/4d29701cd6a8e9b9ab8f12d6bd16e39dae5761cc))
+* **release:** sync the Tauri v2 version field ([db7ee77](https://github.com/fileworks/media-sorter/commit/db7ee777ff2ec070bdc9535ce0264a386aa8126d))
+
 ## [1.3.0](https://github.com/fileworks/media-sorter/compare/v1.2.5...v1.3.0) (2026-08-08)
 
 ### Features
