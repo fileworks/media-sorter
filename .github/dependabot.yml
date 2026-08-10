@@ -10,15 +10,15 @@ updates:
       timezone: "Europe/Berlin"
     cooldown:
       default-days: 3
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
     commit-message:
       prefix: "chore(deps)"
     groups:
-      uv-compatible:
+      uv-updates:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+        update-types: ["major", "minor", "patch"]
   - package-ecosystem: "npm"
     directories:
       - "/"
@@ -30,15 +30,15 @@ updates:
       timezone: "Europe/Berlin"
     cooldown:
       default-days: 3
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
     commit-message:
       prefix: "chore(deps)"
     groups:
-      npm-compatible:
+      npm-updates:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+        update-types: ["major", "minor", "patch"]
   - package-ecosystem: "cargo"
     directory: "/frontend/src-tauri"
     schedule:
@@ -48,15 +48,15 @@ updates:
       timezone: "Europe/Berlin"
     cooldown:
       default-days: 3
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
     commit-message:
       prefix: "chore(deps)"
     groups:
-      cargo-compatible:
+      cargo-updates:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+        update-types: ["major", "minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -66,12 +66,12 @@ updates:
       timezone: "Europe/Berlin"
     cooldown:
       default-days: 3
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
     commit-message:
       prefix: "chore(deps)"
     groups:
-      github-actions-compatible:
+      github-actions-updates:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
+        update-types: ["major", "minor", "patch"]
