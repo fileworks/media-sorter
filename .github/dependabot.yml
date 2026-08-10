@@ -9,7 +9,7 @@ updates:
       time: "05:00"
       timezone: "Europe/Berlin"
     cooldown:
-      default-days: 3
+      default-days: 7
     open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
@@ -29,7 +29,7 @@ updates:
       time: "05:00"
       timezone: "Europe/Berlin"
     cooldown:
-      default-days: 3
+      default-days: 7
     open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
@@ -47,7 +47,7 @@ updates:
       time: "05:00"
       timezone: "Europe/Berlin"
     cooldown:
-      default-days: 3
+      default-days: 7
     open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
@@ -65,7 +65,7 @@ updates:
       time: "05:00"
       timezone: "Europe/Berlin"
     cooldown:
-      default-days: 3
+      default-days: 7
     open-pull-requests-limit: 3
     rebase-strategy: "auto"
     labels: ["dependencies"]
