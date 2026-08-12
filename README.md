@@ -35,7 +35,7 @@ Open** on macOS or **More info → Run anyway** in Windows SmartScreen.
 ## Status
 
 The latest verified public release is
-[v1.3.0](https://github.com/fileworks/media-sorter/releases/tag/v1.3.0).
+[v1.4.2](https://github.com/fileworks/media-sorter/releases/tag/v1.4.2).
 Installers remain unsigned by the recorded project decision; the release page
 publishes checksums, but those checksums do not prove publisher identity.
 
