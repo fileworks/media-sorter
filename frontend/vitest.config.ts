@@ -13,5 +13,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // The jsdom component tests render whole screens in parallel workers, so a
+    // test that takes ~400ms alone can take several seconds under contention on
+    // a loaded CI runner. Vitest's 5s default sits inside that spread and fails
+    // on machine speed rather than on behaviour.
+    testTimeout: 15_000,
   },
 });

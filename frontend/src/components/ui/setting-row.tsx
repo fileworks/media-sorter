@@ -107,7 +107,16 @@ function ChangedMarker({ field }: { field: SettingField }) {
     )
     .join(" · ");
 
-  const dot = <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />;
+  // A dot with a halo, at the size the mockup gives it: this is the one mark
+  // that has to be findable while scrolling past forty settings.
+  // `block` is load-bearing: an inline span ignores width and height, so the
+  // dot collapsed to nothing and only its ring painted — a pale square.
+  const dot = (
+    <span
+      className="block h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--tint-primary))]"
+      aria-hidden
+    />
+  );
 
   // Named, not implied. The baseline is the recipe in force, so "changed" here
   // means "you have taken this away from Safe sort" — a different and far more
@@ -118,7 +127,7 @@ function ChangedMarker({ field }: { field: SettingField }) {
     return (
       <Tooltip label={t("config.changed.default", named)}>
         <span
-          className="inline-flex items-center"
+          className="grid h-8 w-8 shrink-0 place-items-center"
           aria-label={t("config.changed.marker", { baseline: diff.baselineLabel })}
         >
           {dot}
@@ -133,11 +142,13 @@ function ChangedMarker({ field }: { field: SettingField }) {
         type="button"
         onClick={() => diff.revert(fields)}
         aria-label={t("config.changed.revert", named)}
-        className="group/revert inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-primary transition-colors hover:bg-tint-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group/revert grid h-8 w-8 shrink-0 place-items-center rounded-control text-primary transition-colors hover:bg-tint-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {dot}
+        <span className="grid place-items-center group-hover/revert:hidden group-focus-visible/revert:hidden">
+          {dot}
+        </span>
         <FiRotateCcw
-          className="h-2.5 w-2.5 opacity-0 transition-opacity group-hover/revert:opacity-100 group-focus-visible/revert:opacity-100"
+          className="hidden h-3.5 w-3.5 group-hover/revert:block group-focus-visible/revert:block"
           aria-hidden
         />
       </button>
@@ -178,22 +189,16 @@ export function SettingRow({
         className={cn("flex flex-col gap-3", !stacked && "sm:flex-row sm:items-center sm:gap-5")}
       >
         <div className="min-w-0 flex-1">
-          {/* The marker sits beside the label rather than inside it: a `<label>`
-              forwards every click to its control, so a revert button nested in
-              one would also flip the toggle it is meant to put back. */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Label
-              {...(htmlFor ? { htmlFor } : {})}
-              className={cn(
-                "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
-                htmlFor && !disabled && "cursor-pointer",
-              )}
-            >
-              {label}
-              {badge}
-            </Label>
-            {field !== undefined && <ChangedMarker field={field} />}
-          </div>
+          <Label
+            {...(htmlFor ? { htmlFor } : {})}
+            className={cn(
+              "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
+              htmlFor && !disabled && "cursor-pointer",
+            )}
+          >
+            {label}
+            {badge}
+          </Label>
           {description && (
             <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>
           )}
@@ -206,6 +211,16 @@ export function SettingRow({
         >
           {children}
         </div>
+        {/* The marker ends the row rather than following the label: it reverts
+            the control, so it belongs next to the control. It is also outside
+            the `<label>` on purpose — a `<label>` forwards every click to its
+            input, so a revert button nested in one would also flip the toggle
+            it is meant to put back. */}
+        {field !== undefined && (
+          <div className={cn("flex items-center justify-end", stacked ? "w-full" : "sm:shrink-0")}>
+            <ChangedMarker field={field} />
+          </div>
+        )}
       </div>
 
       {/* Why it cannot be changed comes before what it currently does: a reader
@@ -254,18 +269,20 @@ export function SubSetting({
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Label
-            {...(htmlFor ? { htmlFor } : {})}
-            className={cn("block text-xs font-medium text-foreground", htmlFor && "cursor-pointer")}
-          >
-            {label}
-          </Label>
-          {field !== undefined && <ChangedMarker field={field} />}
-        </div>
+        <Label
+          {...(htmlFor ? { htmlFor } : {})}
+          className={cn("block text-xs font-medium text-foreground", htmlFor && "cursor-pointer")}
+        >
+          {label}
+        </Label>
         {description && <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>}
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:shrink-0">{children}</div>
+      {field !== undefined && (
+        <div className="flex items-center justify-end sm:shrink-0">
+          <ChangedMarker field={field} />
+        </div>
+      )}
     </div>
   );
 }
@@ -301,12 +318,19 @@ export function SettingGroup({
       aria-labelledby={headingId}
       className={cn("rounded-xl border border-border bg-card", id && "scroll-mt-4")}
     >
-      <header className="sticky top-0 z-10 flex flex-wrap items-baseline gap-2.5 rounded-t-xl border-b border-border bg-card px-5 py-3.5">
-        <span className="font-mono text-xs font-bold text-primary">{ordinal}</span>
-        <h2 id={headingId} className="text-sm font-bold tracking-tight text-foreground">
-          {title}
-        </h2>
-        <span className="text-xs text-faint">{subtitle}</span>
+      {/* Ordinal above, title under it: the number is context for the heading,
+          not a word in it, and stacking them is what stops the three group
+          headers reading as one long sentence when scrolled past quickly. */}
+      <header className="sticky top-0 z-10 rounded-t-xl border-b border-border bg-card px-5 py-3">
+        <span className="block font-mono text-3xs font-bold tracking-[0.09em] text-primary">
+          {ordinal}
+        </span>
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-2.5">
+          <h2 id={headingId} className="text-sm font-bold tracking-tight text-foreground">
+            {title}
+          </h2>
+          <span className="text-xs text-faint">{subtitle}</span>
+        </div>
       </header>
       {children}
     </section>
@@ -345,7 +369,7 @@ export function Segmented<T extends string>({
   return (
     <fieldset
       className={cn(
-        "inline-flex overflow-hidden rounded-lg border border-border",
+        "flex max-w-full overflow-hidden rounded-control border border-border bg-card",
         disabled && "opacity-50",
       )}
       disabled={disabled}
@@ -356,7 +380,7 @@ export function Segmented<T extends string>({
         const control = (
           <label
             className={cn(
-              "cursor-pointer whitespace-nowrap px-3.5 py-1.5 text-xs transition-colors",
+              "flex min-h-[2.375rem] min-w-0 flex-1 cursor-pointer items-center justify-center px-3 py-1.5 text-center text-2xs font-medium leading-snug transition-colors sm:flex-none sm:whitespace-nowrap sm:px-3.5",
               index > 0 && "border-l border-border",
               active
                 ? "bg-primary font-semibold text-primary-foreground"

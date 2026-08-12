@@ -42,16 +42,16 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
   const reason = primary?.disabled ? (primary.disabledReason ?? null) : null;
 
   return (
-    <footer className="shrink-0 border-t border-border bg-card px-4 py-2.5 sm:px-6 sm:py-3">
+    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card px-4 py-2.5 sm:px-6">
       {/* One row once there is room for one. On a narrow window the sentence
           takes its own line and the actions stay together on the next, rather
           than the primary action wrapping away from Back. */}
-      <div className="group/footer flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="group/footer mx-auto flex min-h-10 max-w-workspace flex-col gap-2 md:flex-row md:items-center md:gap-3">
         {/* `basis-1/2` is the guarantee: at the one-row breakpoint the sentence
             starts at half the rail and may grow, so however long the German
             disabled-reason turns out to be it can never squeeze the message to
             a sliver. Both are `min-w-0` so the clamp does the shrinking. */}
-        <p className="flex min-w-0 flex-1 basis-1/2 items-start gap-2 text-2xs leading-relaxed text-muted-foreground sm:text-xs">
+        <p className="hidden min-w-0 flex-1 basis-1/2 items-start gap-2 text-xs leading-relaxed text-muted-foreground md:flex">
           {tone === "note" && (
             <FiCheck
               className="mt-px h-3.5 w-3.5 shrink-0 text-success sm:h-4 sm:w-4"
@@ -67,17 +67,23 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
           <p
             id="action-bar-reason"
             title={reason}
-            className="line-clamp-2 min-w-0 max-w-full text-2xs text-faint hover:line-clamp-none group-focus-within/footer:line-clamp-none sm:max-w-[18rem]"
+            className="line-clamp-2 min-w-0 max-w-full text-2xs text-faint hover:line-clamp-none group-focus-within/footer:line-clamp-none md:max-w-[18rem]"
           >
             {reason}
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
           {children}
 
           {back && (
-            <Button variant="outline" size="sm" onClick={back.onClick} disabled={back.disabled}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={back.onClick}
+              disabled={back.disabled}
+              className="flex-1 md:flex-none"
+            >
               <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
               {back.label}
             </Button>
@@ -90,7 +96,7 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
           {primary && (
             <Button
               size="sm"
-              className="px-5 font-semibold"
+              className="flex-1 px-5 font-semibold md:flex-none"
               onClick={primary.onClick}
               disabled={primary.disabled || primary.busy}
               aria-describedby={reason ? "action-bar-reason" : undefined}

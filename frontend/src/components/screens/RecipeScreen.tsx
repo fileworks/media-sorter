@@ -138,127 +138,133 @@ export function RecipeScreen({
 
   return (
     <div>
-      <ScreenHeader title={t("recipes.title")} subtitle={t("recipes.help")} />
-
-      <RecipeGrid
-        recipes={recipes}
-        selectedId={selectedId}
-        pendingId={pendingId}
-        onSelect={(recipe) => setPendingId(recipe.id)}
-        onDelete={onDelete}
-        disabled={disabled}
+      <ScreenHeader
+        eyebrow={t("stage.position", { current: 2, total: 6 })}
+        title={t("recipes.title")}
+        subtitle={t("recipes.help")}
       />
 
-      <section
-        aria-labelledby="recipe-difference"
-        className="mt-4 min-h-[9rem] rounded-xl border border-border bg-card p-4"
-        aria-live="polite"
-      >
-        <h2 id="recipe-difference" className="text-xs font-bold text-foreground">
-          {pending ? recipeName(pending, t) : t("recipes.difference.none")}
-        </h2>
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,.85fr)]">
+        <RecipeGrid
+          recipes={recipes}
+          selectedId={selectedId}
+          pendingId={pendingId}
+          onSelect={(recipe) => setPendingId(recipe.id)}
+          onDelete={onDelete}
+          disabled={disabled}
+        />
 
-        {!pending ? (
-          <p className="mt-1.5 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
-        ) : (
-          <>
-            {pending.irreversible && (
-              <p
-                className={cn(
-                  "mt-1.5 rounded-lg border border-warning/40 bg-tint-warning px-3 py-2 text-xs text-foreground",
-                )}
-              >
-                {t(pending.consequenceKey)}
-              </p>
-            )}
-            {planExists && activeRows.length > 0 && (
-              <p className="mt-1.5 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
-            )}
+        <section
+          aria-labelledby="recipe-difference"
+          className="min-h-[9rem] min-w-0 rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+          aria-live="polite"
+        >
+          <h2 id="recipe-difference" className="text-xs font-bold text-foreground">
+            {pending ? recipeName(pending, t) : t("recipes.difference.none")}
+          </h2>
 
-            {unauthorized.length > 0 && (
-              /*
-               * The backend would refuse this configuration. Said here, before
-               * the click, naming the settings responsible — rather than after,
-               * as a dead primary action listing fields nobody touched.
-               */
-              <p className="mt-1.5 text-xs font-medium text-error" role="alert">
-                {t("recipes.wouldNotValidate", {
-                  settings: unauthorized.map(configFieldLabel).join(", "),
-                })}
-              </p>
-            )}
+          {!pending ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
+          ) : (
+            <>
+              {pending.irreversible && (
+                <p
+                  className={cn(
+                    "mt-1.5 rounded-lg border border-warning/40 bg-tint-warning px-3 py-2 text-xs text-foreground",
+                  )}
+                >
+                  {t(pending.consequenceKey)}
+                </p>
+              )}
+              {planExists && activeRows.length > 0 && (
+                <p className="mt-1.5 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
+              )}
 
-            {activeRows.length === 0 && (
-              <p className="mt-2.5 text-xs text-muted-foreground">
-                {selectedId === pending.id ? t("recipes.inForce") : t("recipes.noChanges")}
-              </p>
-            )}
+              {unauthorized.length > 0 && (
+                /*
+                 * The backend would refuse this configuration. Said here, before
+                 * the click, naming the settings responsible — rather than after,
+                 * as a dead primary action listing fields nobody touched.
+                 */
+                <p className="mt-1.5 text-xs font-medium text-error" role="alert">
+                  {t("recipes.wouldNotValidate", {
+                    settings: unauthorized.map(configFieldLabel).join(", "),
+                  })}
+                </p>
+              )}
 
-            {rowUniverse.length > 0 && (
-              <div className="mt-2.5">
-                <SettingChangeTable
-                  rowUniverse={rowUniverse}
-                  columns={[
-                    {
-                      id: "recipe",
-                      label: t("recipes.comparison.afterRecipe"),
-                      rows: recipeRows,
-                      emphasized: !resetOthers,
-                    },
-                    ...(resetOthers
-                      ? [
-                          {
-                            id: "full-reset",
-                            label: t("recipes.comparison.afterFullReset"),
-                            rows: fullRows,
-                            emphasized: true,
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              </div>
-            )}
+              {activeRows.length === 0 && (
+                <p className="mt-2.5 text-xs text-muted-foreground">
+                  {selectedId === pending.id ? t("recipes.inForce") : t("recipes.noChanges")}
+                </p>
+              )}
 
-            {/* The wider scope, offered where its consequences are listed. A
+              {rowUniverse.length > 0 && (
+                <div className="mt-2.5">
+                  <SettingChangeTable
+                    rowUniverse={rowUniverse}
+                    columns={[
+                      {
+                        id: "recipe",
+                        label: t("recipes.comparison.afterRecipe"),
+                        rows: recipeRows,
+                        emphasized: !resetOthers,
+                      },
+                      ...(resetOthers
+                        ? [
+                            {
+                              id: "full-reset",
+                              label: t("recipes.comparison.afterFullReset"),
+                              rows: fullRows,
+                              emphasized: true,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </div>
+              )}
+
+              {/* The wider scope, offered where its consequences are listed. A
                 recipe stays narrow unless the user asks otherwise, and ticking
                 this grows the table above rather than changing what it means. */}
-            <label className="mt-3 flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={resetOthers}
-                disabled={disabled || defaults === undefined}
-                onChange={(event) => setResetOthers(event.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-              />
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-foreground">
-                  {t("recipes.resetOthers")}
+              <label className="mt-3 flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={resetOthers}
+                  disabled={disabled || defaults === undefined}
+                  onChange={(event) => setResetOthers(event.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">
+                    {t("recipes.resetOthers")}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {defaults === undefined
+                      ? t("recipes.resetOthers.unavailable")
+                      : t("recipes.resetOthers.help")}
+                  </span>
                 </span>
-                <span className="block text-xs text-muted-foreground">
-                  {defaults === undefined
-                    ? t("recipes.resetOthers.unavailable")
-                    : t("recipes.resetOthers.help")}
-                </span>
-              </span>
-            </label>
+              </label>
 
-            <div className="mt-3">
-              <Button
-                size="sm"
-                disabled={disabled || activeRows.length === 0}
-                title={activeRows.length === 0 ? t("recipes.noChanges") : undefined}
-                onClick={() => {
-                  onApply(patch ?? {});
-                  setResetOthers(false);
-                }}
-              >
-                {t("recipes.apply")}
-              </Button>
-            </div>
-          </>
-        )}
-      </section>
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  disabled={disabled || activeRows.length === 0}
+                  title={activeRows.length === 0 ? t("recipes.noChanges") : undefined}
+                  onClick={() => {
+                    onApply(patch ?? {});
+                    setResetOthers(false);
+                  }}
+                >
+                  {t("recipes.apply")}
+                </Button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

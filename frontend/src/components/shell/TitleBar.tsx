@@ -68,15 +68,23 @@ export function TitleBar({
       {busy && (
         <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />
       )}
-      <div className="flex items-center gap-2.5 px-4 py-2.5 sm:px-5">
-        <AppMark className="h-6 w-6" />
-        <span className="text-sm font-semibold tracking-tight text-foreground">MediaSorter</span>
-        <span className="hidden truncate text-xs text-faint sm:inline">— {runLabel}</span>
+      <div className="flex h-titlebar items-center gap-2.5 px-3 sm:px-5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-tint-primary">
+          <AppMark className="h-6 w-6" />
+        </span>
+        <span className="hidden text-sm font-semibold tracking-tight text-foreground min-[360px]:inline">
+          MediaSorter
+        </span>
+        <span className="hidden truncate text-xs text-faint xl:inline">— {t("app.tagline")}</span>
+        <span className="hidden truncate text-xs text-faint sm:inline xl:hidden">— {runLabel}</span>
         {version && (
           <span className="hidden rounded-full bg-muted px-2 py-0.5 text-3xs font-semibold text-muted-foreground md:inline">
             v{version}
           </span>
         )}
+        <span className="hidden rounded-full bg-muted px-2 py-0.5 text-3xs font-semibold text-muted-foreground lg:inline">
+          {runLabel}
+        </span>
 
         <div className="flex-1" />
 
@@ -114,7 +122,7 @@ export function TitleBar({
             type="button"
             onClick={onOpenHistory}
             aria-label={t("app.history")}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <FiClock className="h-3.5 w-3.5" aria-hidden />
             <span className="hidden sm:inline">{t("app.history")}</span>
@@ -130,7 +138,7 @@ export function TitleBar({
           <button
             type="button"
             onClick={onToggleTheme}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {theme === "dark" ? (
               <FiSun className="h-4 w-4" aria-hidden />

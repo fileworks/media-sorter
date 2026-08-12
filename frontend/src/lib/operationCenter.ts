@@ -11,6 +11,8 @@
  */
 
 import { formatBytes } from "@/lib/formatters";
+import type { DiagnosticsResponse, OperationListItem } from "@/services/api";
+import type { RecoveryOperation } from "@/lib/startupRecovery";
 import type { OperationOutcome } from "./statusPresentation";
 
 export interface OperationSummary {
@@ -30,6 +32,78 @@ export interface OperationSummary {
   bytesWritten: number;
   reportId: string | null;
   recoveryState: "none" | "available" | "required";
+}
+
+/**
+ * Every operation the center can show, newest first, running one included.
+ *
+ * Reports provide the completed runs; diagnostics provides the one task that
+ * may still be going. Combining them is what makes the center answerable from
+ * any stage rather than only from Execute — and it is a data transform over two
+ * API shapes, so it belongs beside the type it produces rather than in the page
+ * that happens to render it.
+ */
+export function operationSummaries(
+  operations: readonly OperationListItem[],
+  activeTask: DiagnosticsResponse["active_task"],
+  recoveryOperations: readonly RecoveryOperation[],
+): OperationSummary[] {
+  const finished: OperationSummary[] = operations.map((operation) => ({
+    operationId: operation.id,
+    kind: "sort" as const,
+    startedAt: operation.started_at ?? operation.execution_date,
+    finishedAt: operation.finished_at,
+    // Historical records can predate the explicit outcome enum. They remain
+    // visible in the center as needing attention instead of masquerading as a
+    // successful completed run.
+    outcome: operation.outcome === "unknown" ? "failed" : operation.outcome,
+    counts: {
+      verified_success: operation.files_sorted,
+      warnings: operation.incomplete_units + operation.unmatched_companions,
+      skipped: operation.files_skipped + operation.already_in_destination,
+      quarantined:
+        operation.future_dates +
+        operation.unknown_dates +
+        operation.corrupted_files +
+        operation.junk_files,
+      failed: operation.files_failed,
+      unresolved: operation.remaining_files,
+    },
+    bytesWritten: 0,
+    reportId: operation.id,
+    recoveryState: recoveryOperations.some((item) => item.operation_id === operation.id)
+      ? ("required" as const)
+      : ("none" as const),
+  }));
+
+  if (activeTask === null) return finished;
+  const kind =
+    activeTask.operation_kind === "sort"
+      ? "sort"
+      : activeTask.operation_kind === "preview"
+        ? "preview"
+        : "scan";
+  return [
+    {
+      operationId: activeTask.task_id,
+      kind,
+      startedAt: activeTask.started_at ?? new Date().toISOString(),
+      finishedAt: null,
+      outcome: null,
+      counts: {
+        verified_success: 0,
+        warnings: 0,
+        skipped: 0,
+        quarantined: 0,
+        failed: 0,
+        unresolved: 0,
+      },
+      bytesWritten: 0,
+      reportId: null,
+      recoveryState: "none" as const,
+    },
+    ...finished,
+  ];
 }
 
 export interface CenterState {

@@ -19,7 +19,7 @@ export function FinishedRun({
 
   return (
     <div className="space-y-4">
-      <ScreenHeader title={t("execute.titleDone")} />
+      <ScreenHeader eyebrow={t("stage.complete")} title={t("execute.titleDone")} />
       <ReportPanel report={report} />
       <div className="flex flex-wrap justify-center gap-2">
         <Button variant="outline" onClick={onOpenHistory}>

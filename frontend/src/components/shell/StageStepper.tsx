@@ -1,5 +1,5 @@
 /**
- * The horizontal stepper: four numbered stops, joined by hairlines.
+ * The horizontal stepper: six named stops, each carrying its current context.
  *
  * Three states, and each is a different shape rather than a different colour
  * alone — filled accent pill for the current stage, a check in a green disc for
@@ -21,66 +21,162 @@ interface StageStepperProps {
   current: Stage;
   gate: (stage: Stage) => StageReadiness;
   complete: (stage: Stage) => boolean;
-  onSelect: (stage: Stage) => void;
+  /** A finished dry run turns the visual Plan step into Review. */
+  planReady: boolean;
+  reviewView: "plan" | "review";
+  onSelect: (stage: Stage, reviewView?: "plan" | "review") => void;
 }
 
-export function StageStepper({ current, gate, complete, onSelect }: StageStepperProps) {
+type VisualStep = {
+  id: Stage | "plan";
+  stage: Stage;
+  labelKey: string;
+  /** The full sentence, which only the tooltip has room for. */
+  descriptionKey: string;
+  /** Two or three words, which is what the rail can actually show. */
+  hintKey: string;
+};
+
+const VISUAL_STEPS: VisualStep[] = [
+  ...STAGE_LABELS.slice(0, 3).map((entry) => ({
+    id: entry.stage,
+    stage: entry.stage,
+    labelKey: `stage.${entry.stage}.label`,
+    descriptionKey: `stage.${entry.stage}.description`,
+    hintKey: `stage.${entry.stage}.hint`,
+  })),
+  {
+    id: "plan",
+    stage: "review",
+    labelKey: "stage.plan.label",
+    descriptionKey: "stage.plan.description",
+    hintKey: "stage.plan.hint",
+  },
+  {
+    id: "review",
+    stage: "review",
+    labelKey: "stage.review.label",
+    descriptionKey: "stage.review.description",
+    hintKey: "stage.review.hint",
+  },
+  {
+    id: "execute",
+    stage: "execute",
+    labelKey: "stage.execute.label",
+    descriptionKey: "stage.execute.description",
+    hintKey: "stage.execute.hint",
+  },
+];
+
+export function StageStepper({
+  current,
+  gate,
+  complete,
+  planReady,
+  reviewView,
+  onSelect,
+}: StageStepperProps) {
   const { t } = useI18n();
+  const activeIndex = VISUAL_STEPS.findIndex((entry) =>
+    entry.id === "plan"
+      ? current === "review" && reviewView === "plan"
+      : entry.id === "review"
+        ? current === "review" && reviewView === "review"
+        : entry.stage === current,
+  );
+  const progress = Math.max(0, activeIndex) / (VISUAL_STEPS.length - 1);
 
   return (
     <nav
       aria-label={t("stage.navigation")}
-      className="shrink-0 overflow-x-auto border-b border-border bg-card"
+      className="relative h-16 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
     >
-      <ol className="flex min-w-max items-center gap-1 px-4 py-2.5 sm:px-5">
-        {STAGE_LABELS.map((entry, index) => {
-          const active = entry.stage === current;
-          const isComplete = complete(entry.stage);
-          const readiness = gate(entry.stage);
+      <div
+        className="pointer-events-none absolute inset-x-4 bottom-1 mx-auto h-0.5 max-w-workspace overflow-hidden rounded-full bg-border"
+        aria-hidden
+      >
+        <span
+          className="block h-full origin-left rounded-full bg-primary transition-transform duration-300"
+          style={{ transform: `scaleX(${progress})` }}
+        />
+      </div>
+      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-1 px-3 pb-2 pt-1.5 md:min-w-[48rem] md:grid-cols-6 md:px-4">
+        {VISUAL_STEPS.map((entry, index) => {
+          const active =
+            entry.id === "plan"
+              ? current === "review" && reviewView === "plan"
+              : entry.id === "review"
+                ? current === "review" && reviewView === "review"
+                : entry.stage === current;
+          const isComplete =
+            entry.id === "plan"
+              ? planReady
+              : entry.id === "review"
+                ? complete("review")
+                : complete(entry.stage);
+          const baseReadiness = gate(entry.stage);
+          const readiness: StageReadiness =
+            entry.id === "review" && !planReady
+              ? { canEnter: false, reason: t("stage.review.planNeeded") }
+              : baseReadiness;
           const reachable = readiness.canEnter || active;
           return (
-            <li key={entry.stage} className="flex items-center gap-1">
-              {index > 0 && <span className="mr-1 h-px w-5 bg-border sm:w-6" aria-hidden />}
-              <Tooltip label={readiness.reason ?? t(`stage.${entry.stage}.description`)}>
+            <li key={entry.id} className={cn("min-w-0", active ? "block" : "hidden md:block")}>
+              <Tooltip label={readiness.reason ?? t(entry.descriptionKey)}>
                 <button
                   type="button"
                   disabled={!reachable}
                   aria-current={active ? "step" : undefined}
-                  aria-label={`${t(`stage.${entry.stage}.label`)}${
-                    isComplete ? `, ${t("stage.complete")}` : ""
-                  }`}
-                  onClick={() => onSelect(entry.stage)}
+                  aria-label={`${t(entry.labelKey)}${isComplete ? `, ${t("stage.complete")}` : ""}`}
+                  onClick={() =>
+                    onSelect(
+                      entry.stage,
+                      entry.id === "plan" ? "plan" : entry.id === "review" ? "review" : undefined,
+                    )
+                  }
                   className={cn(
-                    "flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 transition-colors",
+                    "relative z-[1] flex h-full w-full items-center gap-2.5 rounded-lg border border-transparent px-2.5 text-left transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active && "bg-tint-primary",
-                    !active && reachable && "hover:bg-muted",
+                    active && "border-primary/30 bg-tint-primary text-foreground",
+                    !active &&
+                      reachable &&
+                      "hover:border-border hover:bg-muted hover:text-foreground",
                     !reachable && "cursor-not-allowed",
                   )}
                 >
                   <span
                     className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-3xs font-bold",
-                      active && "bg-primary text-primary-foreground",
-                      isComplete && !active && "bg-tint-success text-success",
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-3xs font-bold tabular-nums",
+                      active &&
+                        "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]",
+                      isComplete && !active && "border-success/40 bg-tint-success text-success",
                       !active && !isComplete && "border border-border text-faint",
                     )}
                     aria-hidden
                   >
                     {isComplete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
                   </span>
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "whitespace-nowrap text-xs",
-                      active
-                        ? "font-semibold text-primary"
-                        : isComplete
-                          ? "text-muted-foreground"
-                          : "text-faint",
-                    )}
-                  >
-                    {t(`stage.${entry.stage}.label`)}
+                  <span className="min-w-0" aria-hidden>
+                    <span
+                      className={cn(
+                        "block truncate text-xs font-semibold",
+                        active
+                          ? "text-foreground"
+                          : isComplete
+                            ? "text-muted-foreground"
+                            : "text-faint",
+                      )}
+                    >
+                      {t(entry.labelKey)}
+                    </span>
+                    {/* A locked step shows what it is for, not why it is
+                        locked. Every locked step shares one blocking reason, so
+                        printing it here repeated the same sentence down the
+                        whole rail; it is stated once in the footer, and this
+                        row's tooltip still carries it. */}
+                    <span className="mt-0.5 block truncate text-3xs font-normal text-faint">
+                      {isComplete && readiness.canEnter ? t("stage.complete") : t(entry.hintKey)}
+                    </span>
                   </span>
                 </button>
               </Tooltip>

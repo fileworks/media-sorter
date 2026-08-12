@@ -1,5 +1,5 @@
 /**
- * Screen 4 — the dry run. Nothing has happened yet, and this screen's whole job
+ * Screen 5 — the dry run. Nothing has happened yet, and this screen's whole job
  * is to make that reviewable rather than to make it reassuring.
  *
  * **Two modes, one screen, one set of state.** Browsing what the run would build
@@ -10,15 +10,14 @@
  * and the browsing position all live in `useReviewSurface`.
  *
  * Every figure the screen quotes comes from `reviewStats` over the same entries
- * both modes render, so the band, the tree and the queue cannot disagree about
- * how many sets are still undecided.
+ * both modes render, so the mode badge, the tree and the queue cannot disagree
+ * about how many sets are still undecided.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiChevronRight } from "react-icons/fi";
 
 import { MediaViewer } from "@/components/screens/review/MediaViewer";
-import { PlanSummary } from "@/components/screens/review/PlanSummary";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
 import { CompareModal } from "@/components/screens/review/CompareModal";
 import { BrowsePane } from "@/components/screens/review/BrowsePane";
@@ -29,12 +28,12 @@ import { SelectionBar } from "@/components/screens/review/SelectionBar";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
-import { Segmented } from "@/components/ui/setting-row";
 import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useReviewSurface, type ReviewMode } from "@/hooks/useReviewSurface";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { isUndecidedState } from "@/lib/duplicateDecisions";
+import { cn } from "@/lib/utils";
 import {
   browseEntries,
   browseTree,
@@ -92,6 +91,9 @@ interface Comparison {
   b: ComparableFile;
   keeperId: string | null;
   setId: string | null;
+  recommendedId: string | null;
+  recommendedLabel: string | null;
+  recommendationReason: string | null;
 }
 
 export function ReviewScreen({
@@ -279,19 +281,38 @@ export function ReviewScreen({
       const [left, right] = rows;
       const sharedSet =
         left.stack !== null && left.stack.id === right.stack?.id ? left.stack.id : null;
+      const sharedEntry =
+        sharedSet === null ? undefined : allSets.find((entry) => entry.id === sharedSet);
+      const proposedRow = sharedEntry?.proposedKeeper ?? null;
+      const proposedFile = proposedRow === null ? null : comparableFor(proposedRow);
+      const leftFile = comparableFor(left);
+      const rightFile = comparableFor(right);
+      const confirmedRow =
+        sharedEntry?.hasBaseline === true || sharedEntry?.decisionKind === "keeper"
+          ? sharedEntry.keeper
+          : null;
       setCompareRefusal(null);
       setComparing({
-        a: comparableFor(left),
-        b: comparableFor(right),
-        keeperId: left.stack?.isKeeper
-          ? comparableFor(left).id
-          : right.stack?.isKeeper
-            ? comparableFor(right).id
-            : null,
+        a: leftFile,
+        b: rightFile,
+        keeperId:
+          confirmedRow?.source === left.source
+            ? leftFile.id
+            : confirmedRow?.source === right.source
+              ? rightFile.id
+              : null,
         setId: sharedSet,
+        recommendedId: proposedFile?.id ?? null,
+        recommendedLabel: proposedRow?.name ?? null,
+        recommendationReason:
+          proposedRow === null
+            ? null
+            : t("review.compare.recommendationReason", {
+                rule: t(`config.keeper.${sharedEntry?.proposalPolicy ?? "manual"}`),
+              }),
       });
     },
-    [comparableFor],
+    [allSets, comparableFor, t],
   );
 
   /**
@@ -314,6 +335,18 @@ export function ReviewScreen({
     },
     [openCompare, t],
   );
+
+  const comparisonNavigation = useMemo(() => {
+    if (comparing?.setId === null || comparing?.setId === undefined) {
+      return { previous: null, next: null };
+    }
+    const comparableSets = allSets.filter((entry) => entry.rows.length >= 2);
+    const index = comparableSets.findIndex((entry) => entry.id === comparing.setId);
+    return {
+      previous: index > 0 ? comparableSets[index - 1] : null,
+      next: index >= 0 && index < comparableSets.length - 1 ? comparableSets[index + 1] : null,
+    };
+  }, [allSets, comparing]);
 
   // ── Resolve position ───────────────────────────────────────────────────────
 
@@ -397,10 +430,6 @@ export function ReviewScreen({
 
   // ── Chrome ─────────────────────────────────────────────────────────────────
 
-  const excludedRootIds = new Set(result.excluded_root_ids ?? []);
-  const rootCount = config.library_profile.roots.filter(
-    (root) => root.role !== "destination" && !excludedRootIds.has(root.root_id),
-  ).length;
   const actions = selectionActions(surface.selectedRows);
 
   /** A folder as a person would say it, including the synthetic branches. */
@@ -497,7 +526,11 @@ export function ReviewScreen({
   if (groups.isLoading) {
     return (
       <div className="space-y-5">
-        <ScreenHeader title={t("review.title")} subtitle={t("review.subtitle")} />
+        <ScreenHeader
+          eyebrow={t("stage.position", { current: 5, total: 6 })}
+          title={t("review.title")}
+          subtitle={t("review.subtitle")}
+        />
         <StateView
           variant="loading"
           title={t("review.catalog.loading")}
@@ -511,7 +544,11 @@ export function ReviewScreen({
     const failure = extractErrorMessage(groups.error, t("review.stacksFailed"));
     return (
       <div className="space-y-5">
-        <ScreenHeader title={t("review.title")} subtitle={t("review.subtitle")} />
+        <ScreenHeader
+          eyebrow={t("stage.position", { current: 5, total: 6 })}
+          title={t("review.title")}
+          subtitle={t("review.subtitle")}
+        />
         <StateView
           variant="error"
           title={failure.message}
@@ -524,16 +561,12 @@ export function ReviewScreen({
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <ScreenHeader title={t("review.title")} subtitle={t("review.subtitle")} />
-        <PlanSummary
-          stats={stats}
-          requiredBytes={result.impact.required_bytes}
-          rootCount={rootCount}
-          onResolve={() => openResolveAt(queue[0]?.id ?? null)}
-        />
-      </div>
+    <div className="space-y-4">
+      <ScreenHeader
+        eyebrow={t("stage.position", { current: 5, total: 6 })}
+        title={t("review.title")}
+        subtitle={t("review.subtitle")}
+      />
 
       {compareRefusal !== null && (
         <StateView
@@ -548,176 +581,249 @@ export function ReviewScreen({
         />
       )}
 
-      <Segmented
-        name="review-mode"
-        label={t("review.mode")}
-        value={surface.mode}
-        options={[
-          { value: "browse" as const, label: t("review.mode.browse") },
-          { value: "resolve" as const, label: t("review.mode.resolve") },
-        ]}
-        onChange={(mode: ReviewMode) => surface.setMode(mode)}
-      />
+      <section className="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+          className="flex h-12 items-end gap-1 border-b border-border px-3"
+          role="tablist"
+          aria-label={t("review.mode")}
+        >
+          {(
+            [
+              ["browse", t("review.mode.browse")],
+              ["resolve", t("review.mode.resolve")],
+            ] as const
+          ).map(([mode, label]) => {
+            const selected = surface.mode === mode;
+            return (
+              <button
+                key={mode}
+                id={`review-tab-${mode}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls="review-workbench-panel"
+                aria-label={label}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => surface.setMode(mode as ReviewMode)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  const nextMode: ReviewMode = mode === "browse" ? "resolve" : "browse";
+                  surface.setMode(nextMode);
+                  window.requestAnimationFrame(() => {
+                    document.getElementById(`review-tab-${nextMode}`)?.focus();
+                  });
+                }}
+                className={cn(
+                  "relative flex h-[47px] items-center gap-2 px-3 text-xs font-semibold transition-colors",
+                  "after:absolute after:inset-x-2 after:bottom-[-1px] after:h-0.5 after:bg-transparent",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  selected
+                    ? "text-foreground after:bg-primary"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                {mode === "resolve" && (
+                  <span
+                    className={cn(
+                      "min-w-5 rounded-md px-1.5 py-0.5 text-center text-3xs tabular-nums",
+                      stats.outstanding > 0
+                        ? "bg-tint-primary text-primary"
+                        : "bg-tint-success text-success",
+                    )}
+                  >
+                    {stats.outstanding}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-      {surface.rows.length === 0 ? (
-        <StateView
-          variant="empty"
-          title={t("review.nothingScanned")}
-          detail={t("review.nothingScannedHelp")}
-          action={
-            <Button size="sm" onClick={onRerunPreview}>
-              {t("preview.action")}
-            </Button>
-          }
-        />
-      ) : surface.mode === "resolve" ? (
-        <ResolveQueue
-          queue={queue}
-          allSets={allSets}
-          current={currentSet}
-          index={queueIndex}
-          onGo={goToQueue}
-          onKeep={chooseKeeperBySource}
-          onKeepAll={keepAll}
-          onAcceptProposal={surface.acceptProposal}
-          onCompare={compareSet}
-          onOpenDetail={surface.setDetailPath}
-          onBackToBrowse={() => surface.setMode("browse")}
-          rule={surface.keepPolicy}
-          onRule={surface.setKeepPolicy}
-          proposalCount={surface.proposals.size}
-          onAcceptAllProposals={surface.acceptAllProposals}
-          selectedSetIds={surface.selectedSetIds}
-          onToggleSetSelection={surface.toggleSetSelection}
-          onSelectSets={surface.selectSets}
-          onClearSetSelection={surface.clearSetSelection}
-          keepSourceByRule={keepSourceByRule}
-          individualOnly={individualOnly}
-        />
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          <div className="lg:sticky lg:top-4 lg:self-start">
-            <DestinationTree
-              root={tree}
-              selectedPath={surface.treePath}
-              onSelect={surface.setTreePath}
-              outOfScopeSets={groups.tally?.outOfScope ?? 0}
-              onOpenSources={onOpenSources}
-              revealOutOfScope={
-                (result.excluded_root_ids?.length ?? 0) > 0 ||
-                (result.excluded_roots?.length ?? 0) > 0
+        <div
+          id="review-workbench-panel"
+          role="tabpanel"
+          aria-labelledby={`review-tab-${surface.mode}`}
+          className="bg-background"
+        >
+          {surface.rows.length === 0 ? (
+            <StateView
+              variant="empty"
+              title={t("review.nothingScanned")}
+              detail={t("review.nothingScannedHelp")}
+              action={
+                <Button size="sm" onClick={onRerunPreview}>
+                  {t("preview.action")}
+                </Button>
               }
-              query={treeSearch}
-              onQueryChange={setTreeSearch}
             />
-          </div>
-
-          <div className="min-w-0 space-y-3">
-            <ReviewToolbar
-              search={surface.search}
-              onSearch={surface.setSearch}
-              view={surface.view}
-              onView={surface.setView}
-              scopeLabel={scopeLabel}
+          ) : surface.mode === "resolve" ? (
+            <ResolveQueue
+              queue={queue}
+              allSets={allSets}
+              current={currentSet}
+              index={queueIndex}
+              onGo={goToQueue}
+              onOpenSet={(setId) => surface.setQueueSetId(setId)}
+              onKeep={chooseKeeperBySource}
+              onKeepAll={keepAll}
+              onAcceptProposal={surface.acceptProposal}
+              onCompare={compareSet}
+              onOpenDetail={surface.setDetailPath}
+              onBackToBrowse={() => surface.setMode("browse")}
+              rule={surface.keepPolicy}
+              onRule={surface.setKeepPolicy}
+              proposalCount={surface.proposals.size}
+              onAcceptAllProposals={surface.acceptAllProposals}
+              selectedSetIds={surface.selectedSetIds}
+              onToggleSetSelection={surface.toggleSetSelection}
+              onSelectSets={surface.selectSets}
+              onClearSetSelection={surface.clearSetSelection}
+              keepSourceByRule={keepSourceByRule}
+              individualOnly={individualOnly}
+              destinationRoot={config.target_directory}
+              sort={surface.sort}
+              onSort={surface.setSort}
             />
+          ) : (
+            <div className="grid min-h-[32rem] min-w-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
+              <div className="min-w-0 overflow-hidden border-b border-border bg-card lg:border-b-0 lg:border-r">
+                <DestinationTree
+                  root={tree}
+                  destinationRoot={config.target_directory}
+                  selectedPath={surface.treePath}
+                  onSelect={surface.setTreePath}
+                  outOfScopeSets={groups.tally?.outOfScope ?? 0}
+                  onOpenSources={onOpenSources}
+                  revealOutOfScope={
+                    (result.excluded_root_ids?.length ?? 0) > 0 ||
+                    (result.excluded_roots?.length ?? 0) > 0
+                  }
+                  query={treeSearch}
+                  onQueryChange={setTreeSearch}
+                  embedded
+                />
+              </div>
 
-            {/* Where in the destination the pane is, and every way back out.
+              <div className="min-w-0">
+                {/* Where in the destination the pane is, and every way back out.
                 The tree and this are one piece of state, so moving in either
                 moves the other. */}
-            {surface.treePath !== null && surface.treePath !== "" && (
-              <nav
-                aria-label={t("review.browse.trail")}
-                className="flex flex-wrap items-center gap-1 text-xs"
-              >
-                <button
-                  type="button"
-                  onClick={() => surface.setTreePath(null)}
-                  className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("review.tree.root")}
-                </button>
-                {folderTrail(surface.treePath).map((step, index, all) => (
-                  <span key={step.path} className="flex items-center gap-1">
-                    <FiChevronRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
-                    {index === all.length - 1 ? (
-                      <span
-                        aria-current="location"
-                        className="px-1.5 py-0.5 font-semibold text-foreground"
-                      >
-                        {folderNameFor(step.path, step.name)}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => surface.setTreePath(step.path)}
-                        className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {folderNameFor(step.path, step.name)}
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </nav>
-            )}
+                <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+                  <nav
+                    aria-label={t("review.browse.trail")}
+                    className="flex min-w-[12rem] flex-1 items-center gap-1 overflow-hidden font-mono text-3xs"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => surface.setTreePath(null)}
+                      className="shrink-0 rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {t("review.tree.root")}
+                    </button>
+                    {surface.treePath !== null &&
+                      surface.treePath !== "" &&
+                      folderTrail(surface.treePath).map((step, index, all) => (
+                        <span key={step.path} className="flex min-w-0 items-center gap-1">
+                          <FiChevronRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
+                          {index === all.length - 1 ? (
+                            <span
+                              aria-current="location"
+                              className="truncate px-1 py-0.5 font-semibold text-foreground"
+                            >
+                              {folderNameFor(step.path, step.name)}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => surface.setTreePath(step.path)}
+                              className="truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {folderNameFor(step.path, step.name)}
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                  </nav>
+                  <ReviewToolbar
+                    search={surface.search}
+                    onSearch={surface.setSearch}
+                    view={surface.view}
+                    onView={surface.setView}
+                    sort={surface.sort}
+                    onSort={surface.setSort}
+                    scopeLabel={scopeLabel}
+                  />
+                </div>
 
-            <SelectionBar
-              selected={surface.selectedRows}
-              actions={actions}
-              onKeepOnlyThis={() => {
-                const row = surface.selectedRows[0];
-                if (row?.stack) chooseKeeperBySource(row.stack.id, row.source);
-              }}
-              onCompare={() => openCompare(comparePair(surface.selectedRows))}
-              onClear={surface.clearSelection}
-            />
+                <div className="space-y-2 p-2">
+                  <SelectionBar
+                    selected={surface.selectedRows}
+                    actions={actions}
+                    onKeepOnlyThis={() => {
+                      const row = surface.selectedRows[0];
+                      if (row?.stack) chooseKeeperBySource(row.stack.id, row.source);
+                    }}
+                    onCompare={() => openCompare(comparePair(surface.selectedRows))}
+                    onClear={surface.clearSelection}
+                  />
 
-            {paneEntries.length === 0 ? (
-              <StateView
-                variant="empty"
-                title={
-                  needle === ""
-                    ? t("review.browse.folderEmpty")
-                    : t("review.browse.searchMatchesNothing", { query: surface.search.trim() })
-                }
-                action={
-                  needle === "" ? undefined : (
-                    <Button variant="outline" size="sm" onClick={() => surface.setSearch("")}>
-                      {t("review.browse.clearSearch")}
-                    </Button>
-                  )
-                }
-              />
-            ) : (
-              <BrowsePane
-                entries={paneEntries}
-                view={surface.view}
-                selectedPath={surface.treePath}
-                onSelectPath={surface.setTreePath}
-                folderLabel={folderNameFor}
-                selected={surface.selected}
-                selectedSetIds={surface.selectedSetIds}
-                expandedSets={expandedSets}
-                onToggleSet={(setId) =>
-                  setExpandedSets((current) => {
-                    const next = new Set(current);
-                    if (next.has(setId)) next.delete(setId);
-                    else next.add(setId);
-                    return next;
-                  })
-                }
-                onToggleSetSelection={surface.toggleSetSelection}
-                onToggle={(source, shiftKey) => surface.toggle(source, shiftKey, paneOrder)}
-                onOpenDetail={surface.setDetailPath}
-                onEnlarge={surface.setViewerPath}
-                onResolveSet={openResolveAt}
-                onKeep={chooseKeeperBySource}
-                onKeepAll={keepAll}
-                onCompare={compareSet}
-              />
-            )}
-          </div>
+                  {paneEntries.length === 0 ? (
+                    <StateView
+                      variant="empty"
+                      title={
+                        needle === ""
+                          ? t("review.browse.folderEmpty")
+                          : t("review.browse.searchMatchesNothing", {
+                              query: surface.search.trim(),
+                            })
+                      }
+                      action={
+                        needle === "" ? undefined : (
+                          <Button variant="outline" size="sm" onClick={() => surface.setSearch("")}>
+                            {t("review.browse.clearSearch")}
+                          </Button>
+                        )
+                      }
+                    />
+                  ) : (
+                    <BrowsePane
+                      entries={paneEntries}
+                      view={surface.view}
+                      selectedPath={surface.treePath}
+                      onSelectPath={surface.setTreePath}
+                      folderLabel={folderNameFor}
+                      selected={surface.selected}
+                      selectedSetIds={surface.selectedSetIds}
+                      expandedSets={expandedSets}
+                      onToggleSet={(setId) =>
+                        setExpandedSets((current) => {
+                          const next = new Set(current);
+                          if (next.has(setId)) next.delete(setId);
+                          else next.add(setId);
+                          return next;
+                        })
+                      }
+                      onToggleSetSelection={surface.toggleSetSelection}
+                      onToggle={(source, shiftKey) => surface.toggle(source, shiftKey, paneOrder)}
+                      sort={surface.sort}
+                      onOpenDetail={surface.setDetailPath}
+                      onEnlarge={surface.setViewerPath}
+                      onResolveSet={openResolveAt}
+                      onKeep={chooseKeeperBySource}
+                      onKeepAll={keepAll}
+                      onCompare={compareSet}
+                      destinationRoot={config.target_directory}
+                      embedded
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </section>
 
       {detailRow && (
         <DetailView
@@ -763,6 +869,9 @@ export function ReviewScreen({
           b={comparing.b}
           keeperId={comparing.keeperId}
           setId={comparing.setId}
+          recommendedId={comparing.recommendedId}
+          recommendedLabel={comparing.recommendedLabel}
+          recommendationReason={comparing.recommendationReason}
           onClose={() => setComparing(null)}
           onKeep={(memberId) => {
             if (comparing.setId) surface.chooseKeeper(comparing.setId, memberId);
@@ -777,6 +886,12 @@ export function ReviewScreen({
             surface.setDetailPath(path);
           }}
           onEnlarge={surface.setViewerPath}
+          onPreviousSet={
+            comparisonNavigation.previous ? () => compareSet(comparisonNavigation.previous!) : null
+          }
+          onNextSet={
+            comparisonNavigation.next ? () => compareSet(comparisonNavigation.next!) : null
+          }
         />
       )}
 

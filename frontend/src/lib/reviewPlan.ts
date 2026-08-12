@@ -274,6 +274,14 @@ export interface TreeNode {
   isNew: boolean;
   /** Review folders read differently from date folders and are marked. */
   isReview: boolean;
+  /**
+   * Duplicate sets at or below this node that still need a person.
+   *
+   * The tree is how somebody finds work without scrolling the whole plan, and
+   * an undecided set is the only thing in it that blocks the run. The plan tree
+   * reports 0 — it is built before any decision exists and must not imply one.
+   */
+  undecidedSets: number;
 }
 
 /**
@@ -353,6 +361,7 @@ export function destinationTree(
     children: [],
     isNew: false,
     isReview: false,
+    undecidedSets: 0,
   };
   const index = new Map<string, TreeNode>([["", root]]);
 
@@ -373,6 +382,7 @@ export function destinationTree(
           children: [],
           isNew: !existingFolders.has(prefix),
           isReview: REVIEW_FOLDERS.has(segment),
+          undecidedSets: 0,
         };
         index.set(prefix, node);
         parent.children.push(node);

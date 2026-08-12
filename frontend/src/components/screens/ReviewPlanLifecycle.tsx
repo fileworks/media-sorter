@@ -55,7 +55,11 @@ export function ReviewPlanLifecycle({
 
   return (
     <div>
-      <ScreenHeader title={t("stage.review.label")} subtitle={t("stage.review.planHelp")} />
+      <ScreenHeader
+        eyebrow={t("stage.position", { current: 4, total: 6 })}
+        title={t("stage.plan.label")}
+        subtitle={t("stage.review.planHelp")}
+      />
       {failure ? (
         <StateView
           variant="error"

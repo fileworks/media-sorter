@@ -195,18 +195,26 @@ export function ExecutePreflight({
 
   return (
     <section
-      className="space-y-5 rounded-2xl border border-border bg-card p-5 shadow-card"
+      className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_21rem]"
       aria-label={t("preflight.title")}
     >
-      <section className="rounded-xl bg-muted/60 p-4" aria-labelledby="rerunnable-effects">
-        <h2 id="rerunnable-effects" className="text-sm font-semibold text-foreground">
-          {t("preflight.reversible.title")}
-        </h2>
-        <ul className="mt-1 space-y-1">
+      <section
+        className="overflow-hidden rounded-xl border border-border bg-card"
+        aria-labelledby="rerunnable-effects"
+      >
+        <header className="border-b border-border px-4 py-3">
+          <p className="text-3xs font-bold uppercase tracking-[0.09em] text-faint">
+            {t("stage.plan.label")}
+          </p>
+          <h2 id="rerunnable-effects" className="mt-0.5 text-sm font-semibold text-foreground">
+            {t("preflight.reversible.title")}
+          </h2>
+        </header>
+        <ul className="divide-y divide-border">
           {result.reversible.map((line) => (
             <li
               key={line.text}
-              className={`text-sm ${line.tone === "warning" ? "text-warning" : "text-foreground"}`}
+              className={`px-4 py-3 text-xs ${line.tone === "warning" ? "text-warning" : "text-foreground"}`}
             >
               {lineText(line)}
             </li>
@@ -214,63 +222,70 @@ export function ExecutePreflight({
         </ul>
       </section>
 
-      <section
-        className="rounded-xl border border-warning/30 bg-warning/10 p-4"
+      <aside
+        className="rounded-xl border border-warning/35 bg-tint-warning p-4"
         aria-labelledby="irreversible-effects"
         aria-live="assertive"
         aria-atomic="true"
       >
-        <h2 id="irreversible-effects" className="text-sm font-semibold text-warning">
+        <p className="text-3xs font-bold uppercase tracking-[0.09em] text-warning">
+          {t("stage.position", { current: 6, total: 6 })}
+        </p>
+        <h2 id="irreversible-effects" className="mt-1 text-sm font-semibold text-warning">
           {t("preflight.irreversible.title")}
         </h2>
-        <ul className="mt-1 space-y-1">
+        <ul className="mt-2 space-y-1.5">
           {result.irreversible.map((line) => (
             <li
               key={line.text}
-              className={`text-sm ${line.tone === "warning" ? "text-warning" : "text-foreground"}`}
+              className={`text-xs leading-relaxed ${line.tone === "warning" ? "text-warning" : "text-foreground"}`}
             >
               {lineText(line)}
             </li>
           ))}
         </ul>
-      </section>
 
-      {result.blocking.map((line) => (
-        <StatusMessage
-          key={line.text}
-          code={line.tone === "error" ? "reconciliation_required" : "metadata_limitation"}
-          detail={lineText(line)}
-        />
-      ))}
+        <div className="mt-3 space-y-2">
+          {result.blocking.map((line) => (
+            <StatusMessage
+              key={line.text}
+              code={line.tone === "error" ? "reconciliation_required" : "metadata_limitation"}
+              detail={lineText(line)}
+            />
+          ))}
+        </div>
 
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={input.acknowledgedSourceMutations}
-          onChange={(event) => onAcknowledge(event.target.checked)}
-        />
-        {result.acknowledgement
-          ? input.sourceMutations > 0
-            ? t("preflight.acknowledge.mutations")
-            : t("preflight.acknowledge")
-          : t("preflight.acknowledge")}
-      </label>
+        <label className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-foreground">
+          <input
+            type="checkbox"
+            checked={input.acknowledgedSourceMutations}
+            onChange={(event) => onAcknowledge(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {result.acknowledgement
+            ? input.sourceMutations > 0
+              ? t("preflight.acknowledge.mutations")
+              : t("preflight.acknowledge")
+            : t("preflight.acknowledge")}
+        </label>
 
-      {/* Every disabled control states its reason. This is a footer action, so
+        {/* Every disabled control states its reason. This is a footer action, so
           the reason is written beside it rather than hidden in a hover: a
           native `title` never appears for a keyboard user and cannot be read at
           all on a control that is disabled. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
-          onClick={onExecute}
-        >
-          {busy ? t("preflight.running") : t("preflight.execute")}
-        </Button>
-        {executeBlockedBecause !== null && (
-          <p className="text-xs text-muted-foreground">{executeBlockedBecause}</p>
-        )}
-      </div>
+        <div className="mt-4 space-y-2">
+          <Button
+            className="w-full"
+            disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
+            onClick={onExecute}
+          >
+            {busy ? t("preflight.running") : t("preflight.execute")}
+          </Button>
+          {executeBlockedBecause !== null && (
+            <p className="text-xs text-muted-foreground">{executeBlockedBecause}</p>
+          )}
+        </div>
+      </aside>
     </section>
   );
 }

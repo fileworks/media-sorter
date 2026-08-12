@@ -1,5 +1,5 @@
 /**
- * Screen 4 — the run itself.
+ * Screen 6 — the run itself.
  *
  * One big number, because during a twenty-minute operation the only question is
  * "how much longer". Everything else on the screen answers the second question,
@@ -98,6 +98,7 @@ export function ExecuteScreen({
     <div className="space-y-5">
       <div>
         <ScreenHeader
+          eyebrow={t("stage.position", { current: 6, total: 6 })}
           title={t(settled ? "execute.titleDone" : "execute.title")}
           subtitle={
             <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -154,7 +155,7 @@ export function ExecuteScreen({
             <div
               className={cn(
                 "h-full rounded-full transition-[width] duration-500",
-                failed ? "bg-error" : "bg-gradient-to-r from-primary to-brand",
+                failed ? "bg-error" : "bg-primary",
               )}
               style={{ width: `${percentage}%` }}
             />

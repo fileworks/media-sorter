@@ -15,8 +15,8 @@
     {
       "owner": "desktop-navigation",
       "path": "frontend/src/pages/MainPage.tsx",
-      "rationale": "The page owns top-level stage orchestration; separable panels remain lazy components.",
-      "warning_lines": 950
+      "rationale": "The page owns top-level stage orchestration; separable panels remain lazy components. Reviewed when the review-surface work pushed it past its point: three things there were not stage orchestration and moved out — root and folder editing to useRootFolders, the saved-recipe library to useRecipes, and the operation-center view-model transform to lib/operationCenter, together 160 lines. What remains is stage state, the two validation gates, the run lifecycle, and the composition of screens and dialogs; those share one answer to 'which stage is the user on and may they leave it', so the point moves rather than the module splitting again.",
+      "warning_lines": 1050
     },
     {
       "owner": "review-execution",

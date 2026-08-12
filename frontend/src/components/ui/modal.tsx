@@ -132,7 +132,7 @@ export function Modal({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-4",
+        "modal-backdrop-enter fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-4",
         // No blur: at 2px it reads as a rendering fault rather than depth. The
         // scrim is deepened instead, which separates the panel just as well.
         "bg-foreground/65",
@@ -153,8 +153,8 @@ export function Modal({
         className={cn(
           // Opacity fades temporarily blend every line with the backdrop and
           // make otherwise compliant dialog text fail contrast while opening.
-          "my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
-          "rounded-2xl border border-border bg-card shadow-card outline-none",
+          "modal-panel-enter my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
+          "rounded-lg border border-border bg-card shadow-card outline-none",
           SIZE_CLASS[size],
           className,
         )}
@@ -182,7 +182,7 @@ export function ModalHeader({
   // `div`, not `header`/`footer`: inside a dialog those still map to the page's
   // `banner` and `contentinfo` landmarks, so an open modal reported two of each.
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-5 py-3.5">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-border px-3 py-2.5">
       <h2
         id={titleId}
         className={cn("min-w-0 text-sm font-semibold text-foreground", titleHidden && "sr-only")}
@@ -196,7 +196,7 @@ export function ModalHeader({
         type="button"
         onClick={onClose}
         aria-label={t("common.close")}
-        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <FiX className="h-4 w-4" aria-hidden />
       </button>
@@ -205,14 +205,12 @@ export function ModalHeader({
 }
 
 export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", className)}>{children}</div>
-  );
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", className)}>{children}</div>;
 }
 
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-3.5">
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-2.5">
       {children}
     </div>
   );

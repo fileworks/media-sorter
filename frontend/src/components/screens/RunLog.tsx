@@ -91,10 +91,11 @@ export function RunLog({ entries, running }: { entries: LogEntry[]; running: boo
       {!collapsed && (
         <div
           ref={scrollRef}
+          tabIndex={0}
           role="log"
           aria-live={running ? "polite" : "off"}
           aria-label={t("execute.log")}
-          className="max-h-64 overflow-y-auto bg-background px-4 py-3 font-mono text-xs leading-[1.9]"
+          className="max-h-64 overflow-y-auto bg-background px-4 py-3 font-mono text-xs leading-[1.9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           {entries.length === 0 ? (
             <p className="text-faint">{t("execute.logEmpty")}</p>

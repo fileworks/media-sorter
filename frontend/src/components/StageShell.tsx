@@ -1,5 +1,5 @@
 /**
- * Sources → Recipe → Configure → Review → Execute, inside one window frame.
+ * Sources → Recipe → Configure → Plan → Review → Execute, inside one window frame.
  *
  * The shell owns exactly one thing: which stage and view are current, and
  * whether the next one may be entered. Everything it renders around the content
@@ -59,6 +59,9 @@ interface StageShellProps {
   complete?: (stage: Stage) => boolean;
   /** An explicit lifecycle action such as “start a new run” may request a stage. */
   requestedStage?: Stage | null;
+  /** The two visual stops backed by the internal Review stage. */
+  reviewView?: "plan" | "review";
+  onReviewViewChange?: (view: "plan" | "review") => void;
   /** Discard the plan, which is the one way out of the lock. */
   onUnlock?: () => void;
   /** Rendered for the current stage and view. `locked` is read-only-ness. */
@@ -84,6 +87,8 @@ export function StageShell({
   planExists = false,
   complete = () => false,
   requestedStage = null,
+  reviewView = "plan",
+  onReviewViewChange,
   onUnlock,
   children,
   footer,
@@ -172,7 +177,12 @@ export function StageShell({
         current={state.stage}
         gate={(stage) => readiness(stage, inputs)}
         complete={complete}
-        onSelect={(stage) => requestMove(stage)}
+        planReady={inputs.planned}
+        reviewView={reviewView}
+        onSelect={(stage, nextReviewView) => {
+          if (nextReviewView) onReviewViewChange?.(nextReviewView);
+          requestMove(stage);
+        }}
       />
 
       {/* `relative` is not decoration. `sr-only` is `position: absolute`, so
@@ -182,17 +192,18 @@ export function StageShell({
           point a `scrollIntoView` scrolls the title bar and stepper off the top
           of the app. Anchoring them here keeps `<main>` the only scroller. */}
       <main
-        className="relative min-h-0 flex-1 overflow-y-auto"
+        tabIndex={0}
+        className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         style={{ scrollbarGutter: "stable" }}
         aria-labelledby="current-stage-heading"
       >
-        {/* 96rem, not 80. The screens that need the width are two-column —
+        {/* The 1480px source-of-truth workspace. The screens that need the width are two-column —
             Review's tree beside its contents, Configure's rail beside its
             settings — and at 80rem both panes were squeezed while a 1920-pixel
             display sat half empty. The bound stays: prose inside a settings row
             still has to be readable, and an unbounded column would set a line
             length nobody can track back to the next line. */}
-        <div className="mx-auto w-full max-w-[96rem] px-4 py-5 sm:px-6">
+        <div className="mx-auto w-full max-w-workspace px-4 py-5 sm:px-6">
           {(banners || invalidated.length > 0) && (
             <div className="mb-4 space-y-3">
               {banners}
@@ -254,7 +265,11 @@ export function StageShell({
               would leave every locked control tab-reachable. It takes a real
               boolean: React 19 reads an empty string as `false`, which would
               silently leave the screen editable while it looked locked. */}
-          <div inert={locked || undefined} className={cn(locked && "select-none opacity-75")}>
+          <div
+            key={`${state.stage}:${state.key.planVersion}`}
+            inert={locked || undefined}
+            className={cn("stage-enter", locked && "select-none opacity-75")}
+          >
             {children(state, nav, locked)}
           </div>
         </div>

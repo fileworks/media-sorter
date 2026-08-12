@@ -16,7 +16,7 @@
  * also read, so the band cannot claim a number the screen below it contradicts.
  */
 
-import { FiArrowRight } from "react-icons/fi";
+import { FiArrowRight, FiCheckCircle } from "react-icons/fi";
 
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -69,6 +69,31 @@ export function PlanSummary({ stats, requiredBytes, rootCount, onResolve }: Plan
 
   return (
     <section aria-label={t("review.summary")} className="rounded-xl border border-border bg-card">
+      <div className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-foreground">{t("review.summary")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {stats.outstanding === 0
+              ? t("stage.complete")
+              : t("review.band.outstanding", {
+                  count: n(stats.outstanding),
+                  proposed: n(stats.proposed),
+                  undecided: n(stats.undecided),
+                })}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-3xs font-semibold",
+            stats.outstanding === 0
+              ? "bg-tint-success text-success"
+              : "bg-tint-warning text-warning",
+          )}
+        >
+          {stats.outstanding === 0 && <FiCheckCircle className="h-3.5 w-3.5" aria-hidden />}
+          {stats.outstanding === 0 ? t("stage.complete") : t("review.legend.setAside")}
+        </span>
+      </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 sm:grid-cols-4">
         <Figure value={n(stats.scanned)} label={t("review.figure.scanned")} muted />
         <Figure
@@ -102,7 +127,7 @@ export function PlanSummary({ stats, requiredBytes, rootCount, onResolve }: Plan
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
+      <div className="flex flex-col items-start gap-x-4 gap-y-2 p-4 sm:flex-row sm:flex-wrap sm:items-center">
         <ul className="min-w-0 flex-1 space-y-1 text-xs leading-relaxed text-muted-foreground">
           <li>
             {t("review.band.from", {
@@ -124,7 +149,9 @@ export function PlanSummary({ stats, requiredBytes, rootCount, onResolve }: Plan
         {/* The one actionable figure. Zero is a statement, not a button — a
             control that does nothing when pressed is worse than its absence. */}
         {stats.outstanding === 0 ? (
-          <p className="shrink-0 text-xs font-medium text-success">{t("review.band.allDecided")}</p>
+          <p className="text-xs font-medium text-success sm:shrink-0">
+            {t("review.band.allDecided")}
+          </p>
         ) : (
           <button
             type="button"

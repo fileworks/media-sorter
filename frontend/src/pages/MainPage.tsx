@@ -13,12 +13,12 @@
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiArrowLeft } from "react-icons/fi";
+import { useQuery } from "@tanstack/react-query";
+import { FiActivity, FiArrowLeft, FiSearch } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
-import { ExecutePreflight } from "@/components/OperationCenter";
+import { ExecutePreflight, OperationCenter } from "@/components/OperationCenter";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { StageShell, type StageNav } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
@@ -27,13 +27,14 @@ import { StageFooter } from "@/components/shell/StageFooter";
 import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
+import { PlanScreen } from "@/components/screens/PlanScreen";
 import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { ReviewPlanLifecycle } from "@/components/screens/ReviewPlanLifecycle";
-import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RunLog } from "@/components/screens/RunLog";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { usePlanImpact } from "@/hooks/usePlanImpact";
@@ -41,6 +42,8 @@ import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
 import { useLogs } from "@/hooks/useLogs";
+import { useRecipes } from "@/hooks/useRecipes";
+import { useRootFolders } from "@/hooks/useRootFolders";
 import { useRootProbes } from "@/hooks/useRootProbes";
 import { usePreview } from "@/hooks/usePreview";
 import { useSorting } from "@/hooks/useSorting";
@@ -56,40 +59,48 @@ import {
   type ReviewDecisionUpdate,
   type RunDecisions,
 } from "@/lib/runDecisions";
-import type { RootCard, RootRole } from "@/lib/sourcesStage";
 import { activeCards, blockingConflicts, rootCards, validateRoots } from "@/lib/sourcesStage";
 import { stageComplete, type StageInputs, type StageKey, type StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { invalidationForConfigPatch } from "@/lib/workflowInvalidation";
+import { operationSummaries, type OperationSummary } from "@/lib/operationCenter";
 import { api } from "@/services/api";
-import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
+import type { Config, ConfigIssue } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
   import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
+);
+/**
+ * Review is the largest screen in the app — the browse pane, the resolve queue,
+ * the comparison modal and the media viewer between them are most of the
+ * bundle — and it is unreachable until a plan exists. Splitting it keeps that
+ * weight out of the first paint, which happens on the Sources screen.
+ */
+const ReviewScreen = lazy(() =>
+  import("@/components/screens/ReviewScreen").then((module) => ({ default: module.ReviewScreen })),
 );
 const FinishedRun = lazy(() =>
   import("@/components/screens/FinishedRun").then((module) => ({ default: module.FinishedRun })),
 );
 
-/** What a folder request is for: a new root in a role, or an existing one. */
-type FolderTarget = { kind: "add"; role: RootRole } | { kind: "change"; rootId: string };
-
 export default function MainPage() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { theme, toggle: toggleTheme } = useTheme();
   const { config, validationErrors, updateConfig, saveError, retrySave } = useConfig();
   const { setLocale, locale, t } = useI18n();
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [operationCenterOpen, setOperationCenterOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
   const [stage, setStage] = useState<StageState["stage"]>("sources");
   const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
+  const [reviewView, setReviewView] = useState<"plan" | "review">("plan");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
-  const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
@@ -130,7 +141,21 @@ export default function MainPage() {
     if (config?.language) setLocale(config.language);
   }, [config?.language, setLocale]);
 
-  useEffect(() => setImpactAcknowledged(false), [preview.result]);
+  useEffect(() => {
+    setImpactAcknowledged(false);
+    setReviewView("plan");
+  }, [preview.result]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const scanned = analysis.result !== null && analysis.error === null;
   const planned = preview.result !== null && preview.error === null;
@@ -242,112 +267,23 @@ export default function MainPage() {
     [handleConfigSave],
   );
 
-  const handleRootsChange = useCallback(
-    (nextCards: RootCard[]) => {
-      if (!config) return;
-      const roots = nextCards.map((card) => {
-        const existing = config.library_profile.roots.find((root) => root.root_id === card.rootId);
-        return {
-          root_id: card.rootId,
-          role: card.role,
-          path: card.path,
-          display_name: card.displayName,
-          priority: card.priority,
-          exclusions: card.exclusions,
-          identity: existing?.identity ?? null,
-        };
-      });
-      handleConfigSave({
-        source_directory: roots.find((root) => root.role === "input")?.path ?? "",
-        target_directory: roots.find((root) => root.role === "destination")?.path ?? "",
-        library_profile: { ...config.library_profile, roots },
-      });
-    },
-    [config, handleConfigSave],
+  const onPickerFailed = useCallback(
+    () => toast(t("sources.folderPickerFailed"), "error"),
+    [t, toast],
   );
-
-  /** Where a chosen path lands: appended as a new root, or replacing one. */
-  const applyFolder = useCallback(
-    (target: FolderTarget, path: string) => {
-      if (target.kind === "change") {
-        handleRootsChange(
-          cards.map((card) =>
-            card.rootId === target.rootId ? { ...card, path, volume: null } : card,
-          ),
-        );
-        return;
-      }
-      handleRootsChange([
-        ...cards,
-        {
-          rootId: `${target.role}-${Date.now()}`,
-          role: target.role,
-          path,
-          displayName: null,
-          // Priority is no longer written: the reorder controls are gone and
-          // nothing consumes the order. The field stays in the model.
-          priority: 0,
-          exclusions: [],
-          state: "unknown",
-          volume: null,
-          freshness: "unknown",
-          indexedFiles: null,
-          issueCount: 0,
-        },
-      ]);
-    },
-    [cards, handleRootsChange],
-  );
-
-  /**
-   * Ask for a folder. The desktop shell has the OS picker; a browser gets the
-   * folder browser, which lists through the same endpoint that validates a
-   * root. Both paths land in `applyFolder`, so the two builds cannot diverge.
-   */
-  const requestFolder = useCallback(
-    async (target: FolderTarget) => {
-      if (!isTauri) {
-        setFolderPrompt(target);
-        return;
-      }
-      try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const selected = await open({ directory: true, multiple: false });
-        if (typeof selected === "string") applyFolder(target, selected);
-      } catch {
-        toast(t("sources.folderPickerFailed"), "error");
-      }
-    },
-    [applyFolder, t, toast],
-  );
-
-  const removeFolder = useCallback(
-    (rootId: string) => handleRootsChange(cards.filter((card) => card.rootId !== rootId)),
-    [cards, handleRootsChange],
-  );
+  const { changeRoots, requestFolder, removeFolder, folderBrowser } = useRootFolders({
+    config,
+    cards,
+    saveConfig: handleConfigSave,
+    onPickerFailed,
+  });
 
   // ── Recipes ────────────────────────────────────────────────────────────────
 
-  const { data: savedRecipes = [] } = useQuery({
-    queryKey: ["recipes"],
-    queryFn: () => api.listRecipes(),
+  const { savedRecipes, saveRecipe, deleteRecipe } = useRecipes({
     enabled: health?.status === "ok",
-    staleTime: 60_000,
-  });
-
-  const saveRecipe = useMutation({
-    mutationFn: ({ name, settings }: { name: string; settings: RecipeSettings }) =>
-      api.saveRecipe(name, settings),
-    onSuccess: (recipe) => {
-      void queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      toast(t("recipes.saved", { name: recipe.name }), "success");
-    },
-  });
-
-  const deleteRecipe = useMutation({
-    mutationFn: (recipeId: string) => api.deleteRecipe(recipeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recipes"] }),
-    onError: () => toast(t("recipes.deleteFailed"), "error"),
+    onSaved: (name) => toast(t("recipes.saved", { name }), "success"),
+    onDeleteFailed: () => toast(t("recipes.deleteFailed"), "error"),
   });
 
   // ── Gates ──────────────────────────────────────────────────────────────────
@@ -551,6 +487,23 @@ export default function MainPage() {
   );
   const impact = runImpact.data ?? preview.result?.impact;
 
+  /**
+   * A refused impact is a refused decision, and it has to say so here.
+   *
+   * The backend rejects a keeper that cannot stand in for the copies it
+   * replaces — different companion files, most often — and this query was the
+   * only thing asking. Its error was never read, so the refusal was silent and
+   * the figures below quietly fell back to the pre-decision impact: the one
+   * screen whose job is "exactly what will happen" then showed a number for a
+   * run that would not happen. Execute re-validates and would still refuse, so
+   * nothing unsafe could run; the user just found out several screens later.
+   */
+  const impactError = runImpact.error;
+  useEffect(() => {
+    if (impactError === null) return;
+    toast(extractErrorMessage(impactError, t("review.impactRefused")).message, "warning");
+  }, [impactError, t, toast]);
+
   // Review publishes its derived decision wire from an effect. Keep this
   // boundary stable and ignore a byte-identical publication; an inline
   // callback made the effect publish, rerender MainPage, receive a new callback
@@ -618,6 +571,27 @@ export default function MainPage() {
           ? "connecting"
           : "connecting";
 
+  // Reports provide completed runs; diagnostics provides the one task that may
+  // still be running. Combining them makes the operation center available from
+  // every workflow stage instead of only from Execute.
+  const operations = useMemo<OperationSummary[]>(
+    () => operationSummaries(historyMeta?.operations ?? [], activeTask, recoveryOperations),
+    [activeTask, historyMeta?.operations, recoveryOperations],
+  );
+
+  const commandItems = useMemo(
+    () =>
+      [
+        { id: "sources", stage: "sources" as const, label: t("stage.sources.label") },
+        { id: "recipe", stage: "recipe" as const, label: t("stage.recipe.label") },
+        { id: "configure", stage: "configure" as const, label: t("stage.configure.label") },
+        { id: "plan", stage: "review" as const, label: t("stage.plan.label") },
+        { id: "review", stage: "review" as const, label: t("stage.review.label") },
+        { id: "execute", stage: "execute" as const, label: t("stage.execute.label") },
+      ].filter((item) => item.label.toLowerCase().includes(commandQuery.trim().toLowerCase())),
+    [commandQuery, t],
+  );
+
   const titleBar = (
     <TitleBar
       runLabel={t(
@@ -641,7 +615,28 @@ export default function MainPage() {
       historyCount={historyMeta?.total ?? 0}
       onOpenHistory={() => setHistoryOpen(true)}
       busy={isAnyRunning || loaderActive}
-    />
+    >
+      <button
+        type="button"
+        onClick={() => setCommandOpen(true)}
+        className="hidden h-10 min-w-[13.5rem] items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:border-faint hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:flex"
+      >
+        <FiSearch className="h-3.5 w-3.5" aria-hidden />
+        {t("app.command")}
+        <kbd className="ml-auto rounded border border-border bg-card px-1.5 py-1 font-mono text-3xs leading-none">
+          ⌘K
+        </kbd>
+      </button>
+      <button
+        type="button"
+        onClick={() => setOperationCenterOpen(true)}
+        aria-label={t("operations.title")}
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <FiActivity className="h-3.5 w-3.5" aria-hidden />
+        <span className="hidden lg:inline">{t("operations.title")}</span>
+      </button>
+    </TitleBar>
   );
 
   const saveFailure = saveError ? extractErrorMessage(saveError, t("config.saveFailedHelp")) : null;
@@ -725,6 +720,8 @@ export default function MainPage() {
         inputs={stageInputs}
         stageKey={stageKey}
         requestedStage={requestedStage}
+        reviewView={reviewView}
+        onReviewViewChange={setReviewView}
         titleBar={titleBar}
         banners={banners}
         planExists={planExists}
@@ -756,6 +753,8 @@ export default function MainPage() {
               nav.go("review");
               void buildPlan();
             }}
+            reviewView={reviewView}
+            onOpenReview={() => setReviewView("review")}
           />
         )}
       >
@@ -768,7 +767,7 @@ export default function MainPage() {
                 analysis={analysis.result}
                 config={config}
                 disabled={isAnyRunning}
-                onChange={handleRootsChange}
+                onChange={changeRoots}
                 onExcludeForRun={(next) => {
                   setExcludedForRun(next);
                   discardScan();
@@ -823,17 +822,34 @@ export default function MainPage() {
                 onRetry={() => void buildPlan()}
               >
                 {preview.result && config ? (
-                  <ReviewScreen
-                    result={preview.result}
-                    config={config}
-                    onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
-                    onOpenSources={() => nav.go("sources")}
-                    onRerunPreview={() => {
-                      setRunDecisions(EMPTY_RUN_DECISIONS);
-                      void preview.generatePreview(excludedForRun);
-                    }}
-                    onDecisionsChange={publishRunDecisions}
-                  />
+                  reviewView === "plan" ? (
+                    <PlanScreen
+                      result={preview.result}
+                      inputCount={activeRootCards.filter((card) => card.role === "input").length}
+                      referenceCount={
+                        activeRootCards.filter((card) => card.role === "reference").length
+                      }
+                      onRecalculate={() => void buildPlan()}
+                    />
+                  ) : (
+                    <Suspense
+                      fallback={
+                        <StateView variant="loading" layout="page" title={t("state.loading")} />
+                      }
+                    >
+                      <ReviewScreen
+                        result={preview.result}
+                        config={config}
+                        onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
+                        onOpenSources={() => nav.go("sources")}
+                        onRerunPreview={() => {
+                          setRunDecisions(EMPTY_RUN_DECISIONS);
+                          void preview.generatePreview(excludedForRun);
+                        }}
+                        onDecisionsChange={publishRunDecisions}
+                      />
+                    </Suspense>
+                  )
                 ) : null}
               </ReviewPlanLifecycle>
             );
@@ -860,8 +876,12 @@ export default function MainPage() {
             // start at a card, which also left `<main>`'s `aria-labelledby`
             // pointing at nothing on the one screen that decides to move files.
             return (
-              <div className="mx-auto max-w-2xl">
-                <ScreenHeader title={t("preflight.title")} subtitle={t("preflight.description")} />
+              <div className="mx-auto max-w-5xl">
+                <ScreenHeader
+                  eyebrow={t("stage.position", { current: 6, total: 6 })}
+                  title={t("preflight.title")}
+                  subtitle={t("preflight.description")}
+                />
                 <ExecutePreflight
                   input={preflightInput}
                   onAcknowledge={setImpactAcknowledged}
@@ -896,21 +916,77 @@ export default function MainPage() {
         }}
       </StageShell>
 
-      <FolderBrowserDialog
-        open={folderPrompt !== null}
-        initialPath={
-          folderPrompt?.kind === "change"
-            ? (cards.find((card) => card.rootId === folderPrompt.rootId)?.path ?? "")
-            : ""
-        }
-        requireWritable={
-          folderPrompt?.kind === "change"
-            ? cards.find((card) => card.rootId === folderPrompt.rootId)?.role === "destination"
-            : folderPrompt?.role === "destination"
-        }
-        onSelect={(path) => folderPrompt && applyFolder(folderPrompt, path)}
-        onClose={() => setFolderPrompt(null)}
-      />
+      <Modal
+        open={commandOpen}
+        onClose={() => {
+          setCommandOpen(false);
+          setCommandQuery("");
+        }}
+        title={t("app.command")}
+        size="md"
+      >
+        <ModalHeader />
+        <ModalBody className="space-y-2">
+          <label className="relative block">
+            <span className="sr-only">{t("app.commandSearch")}</span>
+            <FiSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint"
+              aria-hidden
+            />
+            <input
+              autoFocus
+              type="search"
+              value={commandQuery}
+              onChange={(event) => setCommandQuery(event.target.value)}
+              placeholder={t("app.commandSearch")}
+              className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </label>
+          <div className="grid gap-1" role="listbox" aria-label={t("app.command")}>
+            {commandItems.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={stage === item.stage}
+                onClick={() => {
+                  setCommandOpen(false);
+                  setCommandQuery("");
+                  if (item.id === "plan" || item.id === "review") setReviewView(item.id);
+                  setRequestedStage(item.stage);
+                }}
+                className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-left text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="font-mono text-3xs text-faint">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="font-semibold">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </ModalBody>
+      </Modal>
+
+      <Modal
+        open={operationCenterOpen}
+        onClose={() => setOperationCenterOpen(false)}
+        title={t("operations.title")}
+        size="md"
+      >
+        <ModalHeader />
+        <ModalBody>
+          <OperationCenter
+            operations={operations}
+            progress={sorting.progress?.progress ?? preview.progress ?? analysis.progress}
+            onOpen={() => {
+              setOperationCenterOpen(false);
+              setHistoryOpen(true);
+            }}
+          />
+        </ModalBody>
+      </Modal>
+
+      <FolderBrowserDialog {...folderBrowser} />
 
       <ConfirmDialog
         open={cancelConfirmOpen}

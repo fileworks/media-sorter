@@ -14,6 +14,7 @@ const EMPTY_TREE: TreeNode = {
   children: [],
   isNew: false,
   isReview: false,
+  undecidedSets: 0,
 };
 
 afterEach(cleanup);

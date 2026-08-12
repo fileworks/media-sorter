@@ -17,14 +17,19 @@ on it, and tells the React frontend where to find it via `invoke("get_api_port")
 UI then talks to the backend over plain HTTP plus a WebSocket for the live log stream.
 No port is ever hardcoded.
 
-The interface has one navigation model: **Sources → Configure → Review → Execute**
-(`Stage` in `frontend/src/lib/stageModel.ts` is the list). Sources owns typed roots,
-recipes, and the non-mutating scan. Configure owns the settings groups and the
-folder-tree preview. Review is **one surface**, not a set of tabs: a destination tree,
-filter chips, and a single item list, all derived from the same rows so two numbers on
-it cannot disagree. Execute owns the frozen impact summary, deliberate confirmation,
-live operation state, and report. The operation center remains reachable across all four
-stages.
+The interface presents one six-stop workflow: **Sources → Recipe → Configure → Plan →
+Review → Execute**. The typed state machine in `frontend/src/lib/stageModel.ts` keeps
+Plan and Review on one internal review artifact, because both read the same immutable
+preview; `reviewView` provides the two distinct visual stops without duplicating backend
+state. Sources owns typed roots and the non-mutating scan. Recipe establishes a safe
+starting policy. Configure owns the setting groups and live destination preview. Plan
+summarizes impact and safety checks. Review exposes two coordinated modes — destination
+browsing and duplicate decisions — derived from the same rows so their numbers cannot
+disagree. Execute owns deliberate confirmation, live operation state, and the report.
+The operation center remains reachable throughout the workflow.
+
+The exact visual contract — semantic tokens, geometry, typography, motion, responsive
+rules, and repository identity — is documented in [design-system.md](design-system.md).
 
 Stage readiness and back-navigation invalidation are derived from the typed model in
 `frontend/src/lib/stageModel.ts`; panels do not invent their own entry rules. Empty,

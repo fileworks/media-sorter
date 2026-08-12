@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 import { keeperProposals, type DuplicateDecision } from "@/lib/duplicateDecisions";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
+import { REVIEW_SORTS, type ReviewSort } from "@/lib/reviewSort";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
 import type { KeeperPolicyId } from "@/services/api";
 import type { PreviewResult } from "@/types/api";
 
 const VIEW_KEY = "mediasort_review_view";
 const MODE_KEY = "mediasort_review_mode";
+const SORT_KEY = "mediasort_review_sort";
 
 /**
  * Browsing what the run would build, or deciding between copies.
@@ -61,6 +63,10 @@ export function useReviewSurface(
   const [view, setViewState] = useState<ViewMode>(() =>
     stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]),
   );
+  /** One order for both toolbars — see `lib/reviewSort`. */
+  const [sort, setSortState] = useState<ReviewSort>(() =>
+    stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS),
+  );
   const [keepPolicy, setKeepPolicy] = useState<KeeperPolicyId>(defaultKeepPolicy);
 
   const proposals = useMemo(
@@ -90,6 +96,11 @@ export function useReviewSurface(
   const setMode = useCallback((next: ReviewMode) => {
     setModeState(next);
     if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
+  }, []);
+
+  const setSort = useCallback((next: ReviewSort) => {
+    setSortState(next);
+    if (typeof localStorage !== "undefined") localStorage.setItem(SORT_KEY, next);
   }, []);
 
   const rows = useMemo(
@@ -264,6 +275,8 @@ export function useReviewSurface(
     setTreePath,
     view,
     setView,
+    sort,
+    setSort,
     keepPolicy,
     setKeepPolicy,
   };

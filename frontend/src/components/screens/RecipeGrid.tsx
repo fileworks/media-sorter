@@ -40,7 +40,7 @@ export function RecipeGrid({
   const { t } = useI18n();
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <ul className="grid min-w-0 gap-2">
       {recipes.map((recipe) => {
         const active = selectedId === recipe.id;
         const reading = pendingId === recipe.id;
@@ -52,7 +52,7 @@ export function RecipeGrid({
               aria-pressed={active}
               onClick={() => onSelect(recipe)}
               className={cn(
-                "flex h-full w-full flex-col rounded-xl p-4 text-left transition-colors",
+                "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-3 rounded-xl p-3.5 text-left transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 "disabled:cursor-not-allowed disabled:opacity-60",
                 recipe.outline
@@ -66,38 +66,61 @@ export function RecipeGrid({
                 reading && !active && "ring-2 ring-inset ring-brand/40",
               )}
             >
-              <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "mt-0.5 h-4 w-4 rounded-full border-[1.5px] bg-card",
+                  active ? "border-[4px] border-primary" : "border-input",
+                )}
+                aria-hidden
+              />
+              <span className="min-w-0">
+                <span className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-xs font-bold",
+                      recipe.outline && !active ? "text-muted-foreground" : "text-foreground",
+                    )}
+                  >
+                    {recipeName(recipe, t)}
+                  </span>
+                  <span className="flex-1" />
+                  {active && (
+                    <span
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                      aria-hidden
+                    >
+                      <FiCheck className="h-2.5 w-2.5" />
+                    </span>
+                  )}
+                </span>
                 <span
                   className={cn(
-                    "text-xs font-bold",
-                    recipe.outline && !active ? "text-muted-foreground" : "text-foreground",
+                    "mt-1 block text-xs leading-relaxed",
+                    recipe.outline ? "text-faint" : "text-muted-foreground",
                   )}
                 >
-                  {recipeName(recipe, t)}
+                  {t(recipe.descriptionKey)}
                 </span>
-                <span className="flex-1" />
-                {active && (
-                  <span
-                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                    aria-hidden
-                  >
-                    <FiCheck className="h-2.5 w-2.5" />
+                <span className="mt-2.5 flex items-center gap-2 text-3xs text-faint">
+                  <span className="inline-flex gap-0.5" aria-hidden>
+                    {[1, 2, 3].map((level) => (
+                      <span
+                        key={level}
+                        className={cn(
+                          "h-1 w-3.5 rounded-full bg-input",
+                          level <= (recipe.irreversible ? 3 : recipe.outline ? 2 : 1) && "bg-brand",
+                        )}
+                      />
+                    ))}
+                  </span>
+                  <span className="sm:line-clamp-1">{t(recipe.consequenceKey)}</span>
+                </span>
+                {recipe.recommended && (
+                  <span className="mt-2 inline-block w-fit rounded-md bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success">
+                    {t("recipes.recommended")}
                   </span>
                 )}
               </span>
-              <span
-                className={cn(
-                  "mt-1.5 block text-xs leading-relaxed",
-                  recipe.outline ? "text-faint" : "text-muted-foreground",
-                )}
-              >
-                {t(recipe.descriptionKey)}
-              </span>
-              {recipe.recommended && (
-                <span className="mt-2.5 inline-block w-fit rounded-full bg-tint-success px-2.5 py-0.5 text-3xs font-semibold text-success">
-                  {t("recipes.recommended")}
-                </span>
-              )}
             </button>
 
             {recipe.custom && !disabled && (
