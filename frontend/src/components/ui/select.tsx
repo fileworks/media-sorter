@@ -21,9 +21,9 @@ import { cn } from "@/lib/utils";
 export type SelectSize = "sm" | "md";
 
 const SIZE_CLASS: Record<SelectSize, string> = {
-  // Both sit at 12px/14px — never smaller, or the native popup misaligns.
-  sm: "h-8 py-1 pl-2.5 pr-8 text-xs",
-  md: "h-9 py-1.5 pl-3 pr-9 text-sm",
+  // Both sit at 12px/13px — never smaller, or the native popup misaligns.
+  sm: "h-[2.375rem] py-1 pl-2.5 pr-8 text-[0.75rem]",
+  md: "h-10 py-1.5 pl-2.5 pr-9 text-xs",
 };
 
 const CHEVRON_CLASS: Record<SelectSize, string> = {
@@ -65,9 +65,9 @@ export function Select({
         onChange={(event) => onValueChange(event.target.value)}
         disabled={disabled}
         className={cn(
-          "w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg border border-input bg-background",
+          "w-full min-w-0 cursor-pointer appearance-none truncate rounded-control border border-input bg-card",
           "font-medium text-foreground transition-colors",
-          "hover:border-faint",
+          "hover:border-border-strong",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-50",
           SIZE_CLASS[size],

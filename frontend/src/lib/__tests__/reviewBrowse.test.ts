@@ -242,6 +242,25 @@ describe("a set sits where its keeper sits", () => {
     expect(tree.children[tree.children.length - 1]?.path).toBe(STAYS_PATH);
   });
 
+  it("carries the undecided-set count up every branch it belongs to", () => {
+    const { entries } = fixture();
+    const root = browseTree(entries);
+    const undecided = resolveQueue(entries).length;
+
+    // The root sees all of them, so a collapsed tree still says there is work.
+    expect(root.undecidedSets).toBe(undecided);
+    // And no branch may claim more than the whole plan holds.
+    const visit = (node: typeof root): void => {
+      expect(node.undecidedSets).toBeLessThanOrEqual(undecided);
+      expect(node.undecidedSets).toBeGreaterThanOrEqual(0);
+      node.children.forEach(visit);
+    };
+    visit(root);
+    // A branch with an undecided set in it exists — otherwise the assertions
+    // above would pass on a tree that never marks anything at all.
+    expect(root.children.some((child) => child.undecidedSets > 0)).toBe(true);
+  });
+
   it("makes every node's count equal the pane opened by its path", () => {
     const { entries } = fixture();
     const root = browseTree(entries);

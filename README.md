@@ -56,9 +56,11 @@ The application makes every mutation wait behind one reviewed plan:
 2. **Recipe** — choose a safe starting policy.
 3. **Configure** — adjust movement, structure, cleanup, metadata, and AI
    settings. Changed values and their effects are visible.
-4. **Review** — browse planned destinations and resolve every duplicate or
+4. **Plan** — calculate the complete read-only impact and verify the destination,
+   available sources, write boundary, and required space.
+5. **Review** — browse planned destinations and resolve every duplicate or
    similar-media set. Preview and scanning remain read-only.
-5. **Execute** — confirm the frozen impact summary, follow progress, and inspect
+6. **Execute** — confirm the frozen impact summary, follow progress, and inspect
    the final report.
 
 Returning to folders or settings invalidates the dependent plan instead of

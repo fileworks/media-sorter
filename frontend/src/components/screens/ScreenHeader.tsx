@@ -12,15 +12,26 @@ export function ScreenHeader({
   title,
   subtitle,
   actions,
+  eyebrow,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** Compact workflow or outcome context above the title. */
+  eyebrow?: ReactNode;
 }) {
   return (
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 id="current-stage-heading" className="text-lg font-bold tracking-tight text-foreground">
+        {eyebrow && (
+          <p className="mb-1 text-3xs font-bold uppercase tracking-[0.09em] text-faint">
+            {eyebrow}
+          </p>
+        )}
+        <h1
+          id="current-stage-heading"
+          className="text-[1.375rem] font-semibold leading-tight tracking-[-0.018em] text-foreground"
+        >
           {title}
         </h1>
         {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}

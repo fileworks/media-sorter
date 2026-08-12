@@ -319,6 +319,7 @@ export function ConfigureScreen({
   return (
     <div>
       <ScreenHeader
+        eyebrow={t("stage.position", { current: 3, total: 6 })}
         title={
           baseline.origin
             ? t("config.title.recipe", {
@@ -344,7 +345,7 @@ export function ConfigureScreen({
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
+      <div className="grid gap-3.5 lg:grid-cols-[14rem_minmax(0,1fr)]">
         <nav aria-label={t("config.rail.label")} className="lg:sticky lg:top-4 lg:self-start">
           {/* Below the two-column breakpoint the rail would otherwise be a
               screenful of links standing between the user and the first
@@ -366,7 +367,7 @@ export function ConfigureScreen({
 
           <div
             className={cn(
-              "rounded-xl border border-border bg-card p-2",
+              "rounded-xl border border-border bg-card p-1.5",
               !railOpen && "hidden lg:block",
             )}
           >
@@ -401,9 +402,13 @@ export function ConfigureScreen({
                     </Tooltip>
                   )}
                 </div>
-                <ul>
+                <ul className="grid gap-0.5">
                   {CONFIG_RAIL.filter((entry) => entry.group === group.id).map((entry) => {
                     const current = activeAnchor === entry.id;
+                    // Numbered across the whole rail, not within each group:
+                    // the number is a table-of-contents position, and one that
+                    // restarts three times is not one.
+                    const index = String(CONFIG_RAIL.indexOf(entry) + 1).padStart(2, "0");
                     return (
                       <li key={entry.id}>
                         <button
@@ -411,22 +416,37 @@ export function ConfigureScreen({
                           onClick={() => jumpTo(entry.id)}
                           aria-current={current ? "true" : undefined}
                           className={cn(
-                            "flex w-full flex-col gap-0.5 rounded-lg border-l-2 px-2.5 py-1.5 text-left transition-colors",
+                            "grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             current
-                              ? "border-brand bg-tint-primary"
-                              : "border-transparent hover:bg-muted",
+                              ? "bg-tint-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                              : "hover:bg-muted",
                           )}
                         >
                           <span
+                            aria-hidden
                             className={cn(
-                              "text-xs font-semibold",
-                              current ? "text-primary" : "text-foreground",
+                              "grid h-6 w-6 place-items-center rounded-full border font-mono text-3xs",
+                              current
+                                ? "border-primary/45 text-primary"
+                                : "border-border text-faint",
                             )}
                           >
-                            {t(entry.labelKey)}
+                            {index}
                           </span>
-                          <span className="truncate text-xs text-faint">{summaries[entry.id]}</span>
+                          <span className="min-w-0">
+                            <span
+                              className={cn(
+                                "block truncate text-2xs font-semibold",
+                                current ? "text-primary" : "text-foreground",
+                              )}
+                            >
+                              {t(entry.labelKey)}
+                            </span>
+                            <span className="mt-0.5 block truncate text-3xs font-normal text-faint">
+                              {summaries[entry.id]}
+                            </span>
+                          </span>
                         </button>
                       </li>
                     );

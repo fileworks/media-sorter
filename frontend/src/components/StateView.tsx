@@ -78,7 +78,13 @@ export function StateView({
       aria-live={variant === "loading" ? "polite" : undefined}
       aria-busy={variant === "loading" || undefined}
     >
-      <p className="text-sm font-medium">{safeTitle}</p>
+      {layout === "page" ? (
+        <h1 id="current-stage-heading" className="text-sm font-medium">
+          {safeTitle}
+        </h1>
+      ) : (
+        <p className="text-sm font-medium">{safeTitle}</p>
+      )}
       {(safeDetail || code) && (
         <p className="mt-1 text-xs leading-relaxed">
           {safeDetail}

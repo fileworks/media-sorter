@@ -15,19 +15,24 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // used to keep a ring that no other control in the app draws.
 const variantClasses: Record<Variant, string> = {
   default:
-    "bg-primary text-primary-foreground shadow-card hover:bg-primary-hover focus-visible:ring-ring disabled:bg-primary/50",
+    "border-primary bg-primary text-primary-foreground hover:border-primary-hover hover:bg-primary-hover focus-visible:ring-ring",
   destructive:
-    "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive disabled:bg-destructive/50",
+    "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive",
   ghost:
-    "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring disabled:text-faint",
+    "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring",
+  // The outline button darkens its edge *and* raises its fill on hover. Fill
+  // alone left it indistinguishable from a hovered row behind it.
   outline:
-    "border border-border bg-background text-foreground hover:bg-muted focus-visible:ring-ring disabled:text-muted-foreground",
+    "border-border bg-card text-foreground hover:border-border-strong hover:bg-muted focus-visible:ring-ring",
 };
 
+// One weight and one type size across all three, from `--text-ui` in the
+// mockup: a control label is not body copy, and letting the default button
+// carry 14px made every toolbar taller than the rails around it.
 const sizeClasses: Record<Size, string> = {
-  default: "min-h-10 gap-2 px-4 py-2 text-sm",
-  sm: "min-h-8 gap-1.5 px-3 py-1.5 text-xs",
-  icon: "h-9 w-9 p-0",
+  default: "min-h-[2.375rem] gap-1.5 px-2.5 py-1.5 text-2xs",
+  sm: "min-h-8 gap-1.5 px-2.5 py-1 text-2xs",
+  icon: "h-9 w-9 p-0 text-2xs",
 };
 
 export function Button({
@@ -43,11 +48,14 @@ export function Button({
     <button
       type={type}
       disabled={disabled}
+      data-size={size}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-lg font-medium [&>svg]:shrink-0",
-        "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "active:scale-[0.98] active:transition-none",
-        "disabled:cursor-not-allowed disabled:active:scale-100",
+        "ui-button inline-flex shrink-0 items-center justify-center rounded-control border font-semibold tracking-[0.02em] [&>svg]:shrink-0",
+        "transition-[background-color,border-color,color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        // The press is a nudge downward, not a shrink: at these sizes a scale
+        // reflows the label and the icon beside it reads as a stutter.
+        "active:translate-y-px active:transition-none",
+        "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0",
         variantClasses[variant],
         sizeClasses[size],
         className,

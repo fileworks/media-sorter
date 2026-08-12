@@ -14,12 +14,11 @@ from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL = Path("branding/app-icon.png")
-# The mark is the "outline + arrow" direction shared across the product family:
-# a rounded frame, a folder in ink, and the accent arrow landing in it. Rendered
-# from `frontend/src-tauri/icons/icon.svg`, whose strokes are optically
-# thickened so the 16 px derivative still reads.
+# The approved Kontur folder mark is inset on a warm app tile. The added clear
+# space keeps the bundle optically balanced in macOS docks and menu bars while
+# the favicon uses the tighter 32-unit drawing directly.
 APPROVED_SOURCE_SHA256 = (
-    "bb017c7f437dc1813b192ebeed3dab097233661bce0e1460cc32ba9ccbaa1190"
+    "04998437b95f5b3b2271fcbf5b27b4777dc172338f29802892114c99eca70791"
 )
 CANONICAL_SIZE = (1024, 1024)
 

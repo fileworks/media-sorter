@@ -62,6 +62,10 @@
     --destructive-foreground: 0 0% 100%;
 
     --border: 28 10% 89%;
+    /* The hairline, walked toward the ink. Every hoverable bordered object in
+       the mockup darkens its edge rather than filling — this is that edge, so
+       "hovered" is one token instead of a different opacity per component. */
+    --border-strong: 27 8% 68%;
     --input: 28 10% 89%;
     --ring: 19 86% 40%;
 
@@ -70,7 +74,7 @@
     /* Third text level, below `muted-foreground`: counts, units, row meta.
        Held at 43% so it still clears AA on the raised neutral, not only on
        the page. */
-    --faint: 25 6% 42%;
+    --faint: 25 6% 39%;
 
     /* The undimmed accents. Decoration only — never text, never a surface with
        text on it — so they are free of the 4.5:1 floor that keeps the status
@@ -85,6 +89,11 @@
     --tint-success: 152 45% 94%;
     --tint-warning: 38 88% 94%;
     --tint-error: 6 80% 95%;
+    --tint-info: 214 75% 95%;
+    --surface-muted: 30 10% 96%;
+    /* One step below the raised neutral: the well a compared photograph sits
+       in, so the image edge is readable against the panel around it. */
+    --surface-sunken: 30 8% 92%;
 
     /* Semantic status colours — theme-aware accents for validation, badges,
        status text, and subtle alert boxes. Exposed as Tailwind utilities
@@ -153,6 +162,7 @@
     --destructive-foreground: 220 12% 8%;
 
     --border: 220 9% 22%;
+    --border-strong: 218 8% 39%;
     --input: 220 9% 22%;
     --ring: 20 95% 58%;
 
@@ -168,6 +178,9 @@
     --tint-success: 158 30% 14%;
     --tint-warning: 35 38% 15%;
     --tint-error: 4 34% 16%;
+    --tint-info: 214 38% 15%;
+    --surface-muted: 220 9% 17%;
+    --surface-sunken: 220 9% 21%;
 
     /* Semantic status colours — brighter so they read on a dark surface. */
     --color-success: 156 62% 50%;
@@ -204,6 +217,8 @@
     @apply bg-background font-sans text-foreground;
     min-width: 320px;
     min-height: 100vh;
+    font-size: 13px;
+    line-height: 1.45;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
@@ -226,6 +241,44 @@
   }
   ::selection {
     background: hsl(var(--primary) / 0.2);
+  }
+}
+
+@keyframes stage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage-enter {
+    animation: stage-enter 160ms ease both;
+  }
+}
+
+@keyframes backdrop-enter {
+  from {
+    background-color: hsl(var(--foreground) / 0);
+  }
+}
+
+@keyframes modal-enter {
+  from {
+    transform: translateY(7px) scale(0.992);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .modal-backdrop-enter {
+    animation: backdrop-enter 160ms ease both;
+  }
+  .modal-panel-enter {
+    animation: modal-enter 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 }
 
@@ -391,69 +444,25 @@ input[type="range"]::-moz-range-track {
   animation: progress-indeterminate 1.5s ease-in-out infinite;
 }
 
-/* ── Purposeful micro-animations (disabled under reduced-motion) ──────────── */
-
-@keyframes step-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
+/* Motion is purposeful, and the system preference is authoritative. The
+   no-preference animations live with the component they animate above; this
+   guard also removes utility transitions and native smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-@keyframes badge-pop {
-  0% {
-    transform: scale(0.85);
+@media (pointer: coarse) {
+  .ui-button {
+    min-height: 44px;
   }
-  60% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes celebration-bloom {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  /* Wizard step content fades/slides in on each transition */
-  .step-enter {
-    animation: step-enter 220ms ease-out;
-  }
-  .animate-fade-in {
-    animation: fade-in 200ms ease-out;
-  }
-  /* Status badges pop briefly when their state changes */
-  .animate-badge-pop {
-    animation: badge-pop 220ms ease-out;
-  }
-  /* Sort-complete check-mark bloom (~600ms) */
-  .animate-celebration-bloom {
-    animation: celebration-bloom 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  .ui-button[data-size="icon"] {
+    min-width: 44px;
   }
 }

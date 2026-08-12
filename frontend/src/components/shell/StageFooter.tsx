@@ -27,6 +27,8 @@ interface StageFooterProps {
   /** Configure's primary is the only one gated on more than the stage model. */
   previewReady: { ok: boolean; reason: string | null };
   onPreview: () => void;
+  reviewView?: "plan" | "review";
+  onOpenReview?: () => void;
 }
 
 export function StageFooter({
@@ -36,6 +38,8 @@ export function StageFooter({
   busy,
   previewReady,
   onPreview,
+  reviewView = "review",
+  onOpenReview,
 }: StageFooterProps) {
   const { t, locale } = useI18n();
 
@@ -96,6 +100,16 @@ export function StageFooter({
           // must not be reported as a folder problem.
           disabledReason: previewReady.reason,
         }}
+      />
+    );
+  }
+
+  if (reviewView === "plan") {
+    return (
+      <ActionBar
+        message={t("footer.plan")}
+        back={{ label: t("common.back"), onClick: () => nav.go("configure") }}
+        primary={{ label: t("footer.toReview"), onClick: onOpenReview ?? (() => undefined) }}
       />
     );
   }

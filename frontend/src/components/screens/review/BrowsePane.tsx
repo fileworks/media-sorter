@@ -35,6 +35,8 @@ import {
   FiLock,
 } from "react-icons/fi";
 
+import { StackVisual } from "@/components/screens/review/StackVisual";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -51,6 +53,7 @@ import {
   type FolderGroup,
   type SetEntry,
 } from "@/lib/reviewBrowse";
+import { sortEntries, sortRows, type ReviewSort } from "@/lib/reviewSort";
 import type { ReviewRow } from "@/lib/reviewRows";
 
 export type ViewMode = "grid" | "list";
@@ -103,6 +106,8 @@ interface BrowsePaneProps {
   onToggleSet: (setId: string) => void;
   onToggleSetSelection: (setId: string) => void;
   onToggle: (source: string, shiftKey: boolean) => void;
+  /** The order chosen in the toolbar, applied inside each folder group. */
+  sort: ReviewSort;
   onOpenDetail: (source: string) => void;
   onEnlarge: (source: string) => void;
   onResolveSet: (setId: string) => void;
@@ -110,6 +115,8 @@ interface BrowsePaneProps {
   onKeep: (setId: string, source: string) => void;
   onKeepAll: (setId: string) => void;
   onCompare: (entry: SetEntry) => void;
+  /** Remove a second border when the pane already sits inside Review's shell. */
+  embedded?: boolean;
 }
 
 export function BrowsePane({
@@ -124,15 +131,27 @@ export function BrowsePane({
   onToggleSet,
   onToggleSetSelection,
   onToggle,
+  sort,
   onOpenDetail,
   onEnlarge,
   onResolveSet,
   onKeep,
   onKeepAll,
   onCompare,
+  embedded = false,
 }: BrowsePaneProps) {
   const { t, locale } = useI18n();
-  const groups = useMemo(() => folderGroups(entries, selectedPath), [entries, selectedPath]);
+  // Sorted inside each folder group, never across them: the groups are the
+  // structure the run would build, and reordering *those* by file size would
+  // stop the pane answering the question the tree asks it.
+  const groups = useMemo(
+    () =>
+      folderGroups(entries, selectedPath).map((group) => ({
+        ...group,
+        entries: sortEntries(group.entries, sort, locale),
+      })),
+    [entries, locale, selectedPath, sort],
+  );
   const label = useMemo(
     () => (group: FolderGroup) =>
       group.direct ? t("review.browse.landsHere") : folderLabel(group.path, group.name),
@@ -152,7 +171,7 @@ export function BrowsePane({
   if (view === "grid") {
     return (
       <div
-        className="overflow-y-auto rounded-xl border border-border"
+        className={cn("overflow-y-auto", !embedded && "rounded-xl border border-border")}
         style={{ maxHeight }}
         role="group"
         aria-label={t("review.items")}
@@ -193,6 +212,7 @@ export function BrowsePane({
                         entry={entry}
                         expanded={expandedSets.has(entry.id)}
                         selected={selected}
+                        sort={sort}
                         setSelected={selectedSetIds.has(entry.id)}
                         onToggleExpand={() => onToggleSet(entry.id)}
                         onToggleSetSelection={() => onToggleSetSelection(entry.id)}
@@ -220,7 +240,7 @@ export function BrowsePane({
     <div
       ref={windowing.scrollRef}
       onScroll={windowing.onScroll}
-      className="overflow-y-auto rounded-xl border border-border"
+      className={cn("overflow-y-auto", !embedded && "rounded-xl border border-border")}
       style={{ maxHeight }}
       role="group"
       aria-label={t("review.items")}
@@ -263,6 +283,7 @@ export function BrowsePane({
                 <SetCopies
                   entry={line.entry}
                   selected={selected}
+                  sort={sort}
                   onToggleSelect={onToggle}
                   onOpenDetail={onOpenDetail}
                   onEnlarge={onEnlarge}
@@ -379,6 +400,14 @@ function FolderTile({
   );
 }
 
+/**
+ * A duplicate set as one line in the folder it lands in.
+ *
+ * It is deliberately not shaped like a file row: the overlapping pair says
+ * "several copies" before anything is read, the tint says whether it is settled,
+ * and the trailing action says what the click will do. A set that still needs a
+ * person is the one thing on this screen that must be findable while scanning.
+ */
 function SetHeader({
   entry,
   expanded,
@@ -398,10 +427,22 @@ function SetHeader({
 }) {
   const { t } = useI18n();
   const undecided = isUndecidedState(entry.decisionState) && !entry.hasBaseline;
+  const proposed = isProposedState(entry.decisionState) && entry.proposedKeeper !== null;
+  const settled = entry.hasBaseline || isDecidedState(entry.decisionState);
   const bytes = entry.rows.reduce((sum, row) => sum + row.sizeBytes, 0);
+  const name = entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id;
 
   return (
-    <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2">
+    <div
+      className={cn(
+        "flex items-center gap-2.5 border-b px-3 py-2 transition-colors",
+        settled
+          ? "border-success/45 bg-tint-success/55"
+          : proposed
+            ? "border-primary/45 bg-tint-primary/45"
+            : "border-primary/55 bg-tint-primary",
+      )}
+    >
       {!entry.hasBaseline && (
         <input
           type="checkbox"
@@ -417,62 +458,83 @@ function SetHeader({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-panel py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {expanded ? (
           <FiChevronDown className="h-3 w-3 shrink-0 text-faint" aria-hidden />
         ) : (
           <FiChevronRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
         )}
-        <FiLayers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-semibold text-foreground">
-          {t("review.stack.copies", { count: entry.rows.length })}
-        </span>
-        <span className="rounded-full border border-border px-2 py-0.5 text-3xs font-semibold text-muted-foreground">
-          {t(`review.stack.kind.${entry.setKind}`)}
-        </span>
-        <span className="shrink-0 text-3xs text-faint">{formatBytes(bytes, { locale })}</span>
-        {entry.hasBaseline && (
-          <Tooltip label={t("review.stack.baselineHelp")}>
-            <span className="flex shrink-0 items-center gap-1 text-3xs font-semibold text-muted-foreground">
-              <FiLock className="h-3 w-3" aria-hidden />
-              {t("review.stack.baseline")}
+        <StackVisual paths={entry.rows.map((row) => row.source)} />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <FiLayers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="truncate text-xs font-semibold text-foreground">{name}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              · {t("review.stack.copies", { count: entry.rows.length })}
             </span>
-          </Tooltip>
-        )}
-        {entry.keeper && isDecidedState(entry.decisionState) && (
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {t("review.stack.keeping", { name: entry.keeper.name })}
           </span>
-        )}
-        {undecided && (
-          <span className="min-w-0 truncate text-xs font-medium text-warning">
-            {t("review.browse.setUndecided")}
+          <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-3xs text-muted-foreground">
+            <span>{t(`review.stack.kind.${entry.setKind}`)}</span>
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">{formatBytes(bytes, { locale })}</span>
+            {entry.hasBaseline && (
+              <Tooltip label={t("review.stack.baselineHelp")}>
+                <span className="flex shrink-0 items-center gap-1 font-semibold">
+                  <FiLock className="h-3 w-3" aria-hidden />
+                  {t("review.stack.baseline")}
+                </span>
+              </Tooltip>
+            )}
+            {entry.keeper && isDecidedState(entry.decisionState) && (
+              <span className="min-w-0 truncate">
+                · {t("review.stack.keeping", { name: entry.keeper.name })}
+              </span>
+            )}
+            {undecided && (
+              <span className="min-w-0 truncate font-semibold text-primary">
+                · {t("review.browse.setUndecided")}
+              </span>
+            )}
+            {proposed && entry.proposedKeeper && (
+              <span className="min-w-0 truncate font-semibold text-primary">
+                ·{" "}
+                {t("review.browse.setProposed", {
+                  name: entry.proposedKeeper.name,
+                  rule: t(`config.keeper.${entry.proposalPolicy ?? "manual"}`),
+                })}
+              </span>
+            )}
+            {entry.decisionKind === "keep_all" && (
+              <span className="min-w-0 truncate font-semibold text-success">
+                · {t("review.state.notDuplicates")}
+              </span>
+            )}
           </span>
-        )}
-        {isProposedState(entry.decisionState) && entry.proposedKeeper && (
-          <span className="min-w-0 truncate text-xs font-medium text-primary">
-            {t("review.browse.setProposed", {
-              name: entry.proposedKeeper.name,
-              rule: t(`config.keeper.${entry.proposalPolicy ?? "manual"}`),
-            })}
-          </span>
-        )}
-        {entry.decisionKind === "keep_all" && (
-          <span className="min-w-0 truncate text-xs font-medium text-success">
-            {t("review.state.notDuplicates")}
-          </span>
-        )}
+        </span>
       </button>
+
+      {/* On a tinted row the badge's own tint would be the same colour as the
+          row, so it lifts onto the card surface and keeps a hairline. */}
+      <Badge
+        tone={settled ? "success" : "primary"}
+        className={cn("border bg-card", settled ? "border-success/30" : "border-primary/30")}
+      >
+        {t(settled ? "review.stack.state.decided" : "review.stack.state.open")}
+      </Badge>
 
       {/* Opening the set in the queue is still offered, for working through
           several in sequence — but it is no longer the only way to decide one. */}
       <button
         type="button"
         onClick={onResolve}
-        className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-3xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "shrink-0 rounded-[5px] px-1.5 py-0.5 text-3xs font-bold transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          settled ? "text-success hover:bg-tint-success" : "text-primary hover:bg-tint-primary",
+        )}
       >
-        {t("review.browse.openInResolve")}
+        {t(settled ? "review.browse.openResult" : "review.browse.openInResolve")}
       </button>
     </div>
   );
@@ -489,6 +551,7 @@ function SetHeader({
 function SetCopies({
   entry,
   selected,
+  sort,
   onToggleSelect,
   onOpenDetail,
   onEnlarge,
@@ -499,6 +562,7 @@ function SetCopies({
 }: {
   entry: SetEntry;
   selected: ReadonlySet<string>;
+  sort: ReviewSort;
   onToggleSelect: (source: string, shiftKey: boolean) => void;
   onOpenDetail: (source: string) => void;
   onEnlarge: (source: string) => void;
@@ -508,11 +572,12 @@ function SetCopies({
   locale: string;
 }) {
   const { t } = useI18n();
+  const copies = sortRows(entry.rows, sort, locale);
 
   return (
     <div className="border-b border-border bg-muted/20 px-3 py-3">
       <ul className="flex flex-wrap gap-2.5">
-        {entry.rows.map((row) => {
+        {copies.map((row) => {
           const isKeeper = entry.keeper?.source === row.source;
           const locked = row.status === "baseline";
           return (
@@ -627,6 +692,7 @@ function SetBlock({
   entry,
   expanded,
   selected,
+  sort,
   setSelected,
   onToggleExpand,
   onToggleSetSelection,
@@ -642,6 +708,7 @@ function SetBlock({
   entry: SetEntry;
   expanded: boolean;
   selected: ReadonlySet<string>;
+  sort: ReviewSort;
   setSelected: boolean;
   onToggleExpand: () => void;
   onToggleSetSelection: () => void;
@@ -669,6 +736,7 @@ function SetBlock({
         <SetCopies
           entry={entry}
           selected={selected}
+          sort={sort}
           onToggleSelect={onToggleSelect}
           onOpenDetail={onOpenDetail}
           onEnlarge={onEnlarge}

@@ -2,11 +2,10 @@
  * Two copies, side by side, so the choice is made by looking rather than by
  * reading numbers.
  *
- * Three modes because three different questions get asked: Slide answers "is
- * this the same picture", Side-by-side answers "which one is framed better",
- * Difference answers "did anything actually change". The facts table underneath
- * marks which side wins each individual comparison, which is the part people
- * actually decide on when the images look identical.
+ * Four modes answer different questions: Side-by-side shows framing and detail,
+ * Overlay and Slide reveal alignment, and Difference exposes changed pixels. The
+ * facts table underneath marks which side wins each individual comparison, which
+ * is the part people actually decide on when the images look identical.
  *
  * **Any two files can be compared.** Selecting two that were not in the same
  * duplicate set used to open nothing at all — the caller returned early and the
@@ -15,9 +14,10 @@
  * that is now stated in the footer instead of enforced by silence.
  */
 
-import { useState } from "react";
-import { FiMaximize } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiCheck, FiChevronLeft, FiChevronRight, FiMaximize } from "react-icons/fi";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MediaImage } from "@/components/ui/media-image";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { resolutionLabel, type ComparableFile } from "@/lib/reviewWorkbench";
 import { api } from "@/services/api";
 
-type Mode = "slide" | "side" | "difference";
+type Mode = "slide" | "overlay" | "side" | "difference";
 
 interface CompareModalProps {
   a: ComparableFile;
@@ -40,6 +40,10 @@ interface CompareModalProps {
   keeperId: string | null;
   /** The set both files belong to, or null when they are merely two files. */
   setId: string | null;
+  /** A rule suggestion is evidence, never an implicit selection. */
+  recommendedId?: string | null;
+  recommendedLabel?: string | null;
+  recommendationReason?: string | null;
   onKeep: (memberId: string) => void;
   onKeepBoth: () => void;
   onClose: () => void;
@@ -47,6 +51,9 @@ interface CompareModalProps {
   onOpenDetail?: (path: string) => void;
   /** Examine one side full screen, by its path. */
   onEnlarge?: (path: string) => void;
+  /** Move between comparable duplicate groups without leaving the dialog. */
+  onPreviousSet?: (() => void) | null;
+  onNextSet?: (() => void) | null;
 }
 
 /**
@@ -68,23 +75,39 @@ function FactRow({
   left: string;
   right: string;
   winner: "a" | "b" | null;
-  /** Why this side wins, e.g. "larger". Announced, never drawn. */
+  /** Why this side wins, e.g. "larger". Announced, and drawn as a cell note. */
   winnerNote: string;
 }) {
+  // Three cell states, and they mean different things. Green: this side wins
+  // this comparison. Amber: the two differ but neither is better — a fact to
+  // read, not a verdict. Plain: identical, and therefore not part of the
+  // decision at all.
+  const differs = winner === null && left !== right;
   const cell = (value: string, side: "a" | "b") => (
     <span
       className={cn(
-        "break-words",
-        winner === side ? "font-semibold text-success" : "text-foreground",
+        "-my-1 min-w-0 break-words rounded-[5px] px-1.5 py-1",
+        winner === side
+          ? "bg-tint-success font-semibold text-success"
+          : differs
+            ? "bg-tint-warning text-warning"
+            : "text-foreground",
       )}
     >
       {value}
-      {winner === side && <span className="sr-only"> — {winnerNote}</span>}
+      {winner === side && (
+        <>
+          <span className="sr-only"> — {winnerNote}</span>
+          <span className="mt-0.5 block text-3xs font-bold tracking-[0.02em]" aria-hidden>
+            {winnerNote}
+          </span>
+        </>
+      )}
     </span>
   );
   return (
-    <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border px-5 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
-      <span className="text-faint">{label}</span>
+    <div className="grid grid-cols-[5rem_1fr_1fr] items-start gap-2.5 border-b border-border px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
+      <span className="pt-1 text-faint">{label}</span>
       {cell(left, "a")}
       {cell(right, "b")}
     </div>
@@ -144,15 +167,29 @@ export function CompareModal({
   b,
   keeperId,
   setId,
+  recommendedId = null,
+  recommendedLabel = null,
+  recommendationReason = null,
   onKeep,
   onKeepBoth,
   onClose,
   onOpenDetail,
   onEnlarge,
+  onPreviousSet,
+  onNextSet,
 }: CompareModalProps) {
   const { t, locale } = useI18n();
-  const [mode, setMode] = useState<Mode>("slide");
+  const [mode, setMode] = useState<Mode>("side");
   const [split, setSplit] = useState(50);
+  const [zoom, setZoom] = useState(100);
+  const [draftId, setDraftId] = useState<string | null>(keeperId);
+
+  useEffect(() => {
+    setDraftId(keeperId);
+    setMode("side");
+    setSplit(50);
+    setZoom(100);
+  }, [a.id, b.id, keeperId]);
 
   const nameA = getBasename(a.label);
   const nameB = getBasename(b.label);
@@ -188,99 +225,284 @@ export function CompareModal({
   };
 
   return (
-    <Modal open onClose={onClose} title={t("review.compare.title")} size="full">
-      <ModalHeader
-        actions={
-          <Segmented
-            name="compare-mode"
-            label={t("review.compare.mode")}
-            value={mode}
-            options={[
-              { value: "slide", label: t("review.compare.slide") },
-              { value: "side", label: t("review.compare.side") },
-              { value: "difference", label: t("review.compare.difference") },
-            ]}
-            onChange={setMode}
-          />
-        }
-      >
+    <Modal
+      open
+      onClose={onClose}
+      title={t("review.compare.title")}
+      size="xl"
+      className="h-[min(52rem,calc(100dvh-2rem))]"
+    >
+      <ModalHeader>
         <span className="min-w-0 truncate text-xs text-faint">
           {nameA} · {nameB}
         </span>
       </ModalHeader>
 
-      <div className="flex h-[clamp(16rem,56dvh,52rem)] shrink-0 items-center justify-center overflow-hidden bg-background px-2 py-2 sm:px-4">
-        <div
-          className="relative max-h-full max-w-full overflow-hidden bg-background"
-          data-testid="comparison-frame"
-          data-aspect-ratio={frameAspect.toFixed(4)}
-          style={{
-            aspectRatio: frameAspect,
-            width: `min(100%, calc(clamp(16rem, 56dvh, 52rem) * ${frameAspect}))`,
-          }}
-        >
-          {mode === "difference" ? (
-            <MediaImage
-              src={api.diffUrl(a.path, b.path, 800)}
-              alt={t("review.compare.diffAlt", { a: nameA, b: nameB })}
-              className="h-full w-full object-contain"
-              fallback={
-                <p className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
-                  {t("review.compare.diffUnavailable")}
-                </p>
-              }
-            />
-          ) : mode === "side" ? (
-            <div className="grid h-full grid-cols-2 gap-px bg-border">
-              <Thumbnail path={a.path} maxPx={800} className="h-full w-full" />
-              <Thumbnail path={b.path} maxPx={800} className="h-full w-full" />
-            </div>
-          ) : (
-            <>
-              <Thumbnail path={b.path} maxPx={800} className="absolute inset-0 h-full w-full" />
-              {/* Clipping rather than resizing: both images stay laid out at the
-                full panel width, so the slider reveals the same pixels the
-                other side is showing instead of a differently-scaled copy. */}
-              <div
-                className="absolute inset-0"
-                style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
-              >
-                <Thumbnail path={a.path} maxPx={800} className="absolute inset-0 h-full w-full" />
-              </div>
-              <div
-                className="pointer-events-none absolute inset-y-0 w-0.5 bg-brand"
-                style={{ left: `${split}%` }}
-                aria-hidden
-              />
-              <label className="absolute inset-x-0 bottom-3 px-6">
-                <span className="sr-only">{t("review.compare.splitLabel")}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={split}
-                  onChange={(event) => setSplit(Number(event.target.value))}
-                  className="w-full"
-                />
-              </label>
-            </>
-          )}
-
-          <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-success px-2.5 py-0.5 text-3xs font-bold text-white">
-            {t("review.compare.sideA", { state: keeperId === a.id ? "•" : "" })}
-          </span>
-          <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-muted px-2.5 py-0.5 text-3xs font-bold text-muted-foreground">
-            {t("review.compare.sideB", { state: keeperId === b.id ? "•" : "" })}
-          </span>
+      {/* Mode, what the mode is for, and magnification. The middle one is not
+          decoration: "Overlay" and "Difference" answer different questions, and
+          a reader who picks the wrong one concludes the wrong thing. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/25 px-3 py-2">
+        <div className="min-w-0 flex-1 sm:flex-none [&_label]:px-2 [&_label]:text-[0.7rem] sm:[&_label]:px-3.5 sm:[&_label]:text-2xs">
+          <Segmented
+            name="compare-mode"
+            label={t("review.compare.mode")}
+            value={mode}
+            options={[
+              { value: "side", label: t("review.compare.side") },
+              { value: "overlay", label: t("review.compare.overlay") },
+              { value: "difference", label: t("review.compare.difference") },
+              { value: "slide", label: t("review.compare.slide") },
+            ]}
+            onChange={setMode}
+          />
         </div>
+        <span className="min-w-0 text-3xs text-muted-foreground">
+          {t(`review.compare.hint.${mode}`)}
+        </span>
+        <label className="ml-auto flex items-center gap-2 text-3xs text-muted-foreground">
+          {t("review.compare.zoom")}
+          <input
+            type="range"
+            min={100}
+            max={200}
+            step={5}
+            value={zoom}
+            onChange={(event) => setZoom(Number(event.target.value))}
+            className="w-24 sm:w-36"
+          />
+          <output className="w-10 text-right font-mono text-3xs tabular-nums">{zoom}%</output>
+        </label>
       </div>
 
       <ModalBody className="px-0 py-0">
-        <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border px-5 py-2 text-3xs font-semibold uppercase tracking-[0.07em] text-faint sm:grid-cols-[7rem_1fr_1fr]">
+        <div className="flex h-[clamp(13rem,38dvh,25rem)] items-center justify-center overflow-hidden bg-background px-2 py-2 sm:px-4">
+          <div
+            className="relative max-h-full max-w-full overflow-hidden bg-background"
+            data-testid="comparison-frame"
+            data-aspect-ratio={frameAspect.toFixed(4)}
+            style={{
+              aspectRatio: frameAspect,
+              width: `min(100%, calc(clamp(13rem, 38dvh, 25rem) * ${frameAspect}))`,
+              transform: `scale(${zoom / 100})`,
+              transition: "transform 160ms ease",
+            }}
+          >
+            {mode === "difference" ? (
+              <MediaImage
+                src={api.diffUrl(a.path, b.path, 800)}
+                alt={t("review.compare.diffAlt", { a: nameA, b: nameB })}
+                className="h-full w-full object-contain"
+                fallback={
+                  <p className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
+                    {t("review.compare.diffUnavailable")}
+                  </p>
+                }
+              />
+            ) : mode === "side" ? (
+              <div className="grid h-full grid-cols-2 gap-px bg-border">
+                {([a, b] as const).map((file) => (
+                  <div
+                    key={file.id}
+                    className={cn(
+                      "relative h-full w-full overflow-hidden",
+                      // The ring, not a border: a border on one half of a
+                      // two-up would shift that image against the other, and
+                      // the whole point of this mode is that they line up.
+                      recommendedId === file.id &&
+                        "shadow-[inset_0_0_0_2px_hsl(var(--color-success))]",
+                    )}
+                  >
+                    <Thumbnail path={file.path} maxPx={800} className="h-full w-full" />
+                  </div>
+                ))}
+              </div>
+            ) : mode === "overlay" ? (
+              <>
+                <Thumbnail path={a.path} maxPx={800} className="absolute inset-0 h-full w-full" />
+                <div
+                  className="absolute inset-0 transition-opacity duration-150"
+                  style={{ opacity: split / 100 }}
+                >
+                  <Thumbnail path={b.path} maxPx={800} className="h-full w-full" />
+                </div>
+                <label className="absolute inset-x-0 bottom-3 px-6">
+                  <span className="sr-only">{t("review.compare.overlayLabel")}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={split}
+                    onChange={(event) => setSplit(Number(event.target.value))}
+                    className="w-full"
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <Thumbnail path={b.path} maxPx={800} className="absolute inset-0 h-full w-full" />
+                {/* Clipping rather than resizing: both images stay laid out at the
+                full panel width, so the slider reveals the same pixels the
+                other side is showing instead of a differently-scaled copy. */}
+                <div
+                  className="absolute inset-0"
+                  style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
+                >
+                  <Thumbnail path={a.path} maxPx={800} className="absolute inset-0 h-full w-full" />
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-y-0 w-0.5 bg-brand"
+                  style={{ left: `${split}%` }}
+                  aria-hidden
+                />
+                <label className="absolute inset-x-0 bottom-3 px-6">
+                  <span className="sr-only">{t("review.compare.splitLabel")}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={split}
+                    onChange={(event) => setSplit(Number(event.target.value))}
+                    className="w-full"
+                  />
+                </label>
+              </>
+            )}
+
+            <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-foreground/80 px-2.5 py-0.5 text-3xs font-bold text-background">
+              {t("review.compare.sideA", { state: draftId === a.id ? "•" : "" })}
+            </span>
+            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-foreground/80 px-2.5 py-0.5 text-3xs font-bold text-background">
+              {t("review.compare.sideB", { state: draftId === b.id ? "•" : "" })}
+            </span>
+          </div>
+        </div>
+
+        {/* The captions sit under the frame rather than inside it, so the zoom
+            transform magnifies the photographs and not the words about them. */}
+        <div className="grid grid-cols-2 gap-2 bg-background px-2 pb-2 sm:px-4">
+          {([a, b] as const).map((file, index) => (
+            <div
+              key={file.id}
+              className={cn(
+                "flex min-w-0 items-center gap-2 rounded-panel border bg-card px-2.5 py-2",
+                recommendedId === file.id
+                  ? "border-success/60 shadow-[inset_0_0_0_1px_hsl(var(--color-success)/0.25)]"
+                  : "border-border",
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-xs font-semibold text-foreground">
+                    {index === 0 ? nameA : nameB}
+                  </span>
+                  {recommendedId === file.id && (
+                    <Badge tone="success">{t("review.resolve.recommendation")}</Badge>
+                  )}
+                </span>
+                <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
+                  {file.facts ? formatBytes(file.facts.size_bytes, { locale }) : unknown} ·{" "}
+                  {resolution(file)}
+                </span>
+              </span>
+              {onEnlarge && (
+                <button
+                  type="button"
+                  onClick={() => onEnlarge(file.path)}
+                  aria-label={t("review.viewer.open", { name: getBasename(file.label) })}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[5px] text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <FiMaximize className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2.5 border-y border-border bg-card px-3 py-3">
+          <div className="flex min-w-0 gap-2 rounded-panel border border-success/35 bg-tint-success px-2.5 py-2">
+            <FiCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+            <div className="min-w-0">
+              <strong className="block text-xs text-foreground">
+                {recommendedLabel === null
+                  ? t("review.compare.recommendation")
+                  : t("review.resolve.recommended", { name: recommendedLabel })}
+              </strong>
+              <p className="mt-0.5 text-3xs leading-relaxed text-muted-foreground">
+                {recommendedLabel === null
+                  ? t("review.compare.recommendationNone")
+                  : (recommendationReason ?? recommendedLabel)}
+              </p>
+            </div>
+          </div>
+          {sameSet && (
+            <fieldset>
+              <legend className="mb-1.5 text-3xs font-semibold text-muted-foreground">
+                {t("review.compare.selectToKeep")}
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {([a, b] as const).map((file, index) => {
+                  const selected = draftId === file.id;
+                  const recommended = recommendedId === file.id;
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setDraftId(file.id)}
+                      className={cn(
+                        "flex min-h-10 min-w-0 items-center justify-between gap-2 rounded-control border px-2.5 py-1.5 text-left",
+                        "transition-[border-color,background-color,box-shadow]",
+                        selected
+                          ? "border-primary bg-tint-primary shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
+                          : recommended
+                            ? "border-dashed border-success bg-tint-success/40"
+                            : "border-border hover:border-border-strong hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-foreground">
+                          {index === 0 ? "A" : "B"} · {getBasename(file.label)}
+                        </span>
+                        {/* What the button currently means, in words — the
+                            border colour is the same claim for people who can
+                            see it, and neither is allowed to be the only one. */}
+                        <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
+                          {selected
+                            ? t("review.compare.willBeKept")
+                            : t("review.compare.notSelected")}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border text-3xs",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border-strong",
+                        )}
+                      >
+                        {selected && <FiCheck className="h-3 w-3" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+        </div>
+
+        <div className="border-b border-border bg-card px-3 py-2">
+          <h3 className="text-xs font-semibold text-foreground">
+            {t("review.compare.detailsTitle")}
+          </h3>
+          <p className="mt-0.5 text-3xs text-muted-foreground">{t("review.compare.detailsHelp")}</p>
+        </div>
+        <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border bg-muted/40 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.07em] text-faint sm:grid-cols-[7rem_1fr_1fr]">
           <span />
           {/* The column heads are the way into the full facts for either side:
               a comparison that raises a question about one file should not make
-              the user close it to answer that question. */}
+              the user close it to answer that question. Enlarging lives on the
+              caption under each picture, where the picture is. */}
           {(
             [
               [t("review.compare.columnA", { name: nameA }), a],
@@ -298,18 +520,6 @@ export function CompareModal({
                 </button>
               ) : (
                 <span className="truncate">{label}</span>
-              )}
-              {/* Two files that look identical at this size are exactly the case
-                  where the decision needs them at full size. */}
-              {onEnlarge && (
-                <button
-                  type="button"
-                  onClick={() => onEnlarge(file.path)}
-                  aria-label={t("review.viewer.open", { name: getBasename(file.label) })}
-                  className="shrink-0 rounded p-0.5 text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <FiMaximize className="h-3 w-3" aria-hidden />
-                </button>
               )}
             </span>
           ))}
@@ -389,19 +599,61 @@ export function CompareModal({
         {/* Two files that are not one set can still be looked at side by side —
             there is simply nothing to keep *instead of* the other, and saying so
             is better than three buttons that would decide the wrong thing. */}
-        <span className="mr-auto min-w-0 text-xs text-faint">
-          {sameSet ? t("review.compare.scopeNote") : t("review.compare.notOneSet")}
+        <span className="mr-auto min-w-0 text-3xs text-faint">
+          {sameSet ? (
+            <>
+              {/* What confirming would do, and how far it reaches. The second
+                  line is the guarantee: looking at two files here never moves
+                  anything on its own. */}
+              <span className="block" aria-live="polite">
+                {draftId === null
+                  ? t("review.compare.nothingSelected")
+                  : t("review.compare.selectionState", {
+                      name: getBasename((draftId === a.id ? a : b).label),
+                    })}
+              </span>
+              <span className="block">{t("review.compare.scopeNote")}</span>
+            </>
+          ) : (
+            t("review.compare.notOneSet")
+          )}
         </span>
+        {(onPreviousSet || onNextSet) && (
+          <div className="flex items-center gap-1 sm:border-r sm:border-border sm:pr-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onPreviousSet ?? undefined}
+              disabled={!onPreviousSet}
+            >
+              <FiChevronLeft className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">{t("review.compare.previousSet")}</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onNextSet ?? undefined}
+              disabled={!onNextSet}
+            >
+              <span className="hidden sm:inline">{t("review.compare.nextSet")}</span>
+              <FiChevronRight className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+        )}
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          {t("review.compare.back")}
+        </Button>
         {sameSet && (
           <>
             <Button size="sm" variant="outline" onClick={onKeepBoth}>
               {t("review.compare.keepBoth")}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => onKeep(b.id)}>
-              {t("review.compare.keepB")}
-            </Button>
-            <Button size="sm" onClick={() => onKeep(a.id)}>
-              {t("review.compare.keepA")}
+            <Button
+              size="sm"
+              disabled={draftId === null}
+              onClick={() => draftId && onKeep(draftId)}
+            >
+              {t("review.compare.confirmSelection")}
             </Button>
           </>
         )}

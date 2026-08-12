@@ -19,6 +19,7 @@ import {
   FiEye,
   FiEyeOff,
   FiFolder,
+  FiInfo,
   FiMapPin,
   FiPlus,
   FiX,
@@ -46,7 +47,7 @@ import type { AnalysisResult, Config } from "@/types/api";
 
 const ROLE_BADGE: Record<RootRole, string> = {
   input: "bg-tint-primary text-primary",
-  reference: "bg-muted text-muted-foreground",
+  reference: "bg-tint-info text-info",
   destination: "bg-tint-success text-success",
 };
 
@@ -190,122 +191,135 @@ function FolderCard({
     <li>
       <div
         className={cn(
-          "rounded-xl border bg-card p-4",
+          "grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-xl border bg-card p-3.5",
           status.tone === "error" ? "border-error/50" : "border-border",
+          card.role === "reference" && "border-info/25 bg-tint-info/40",
+          card.role === "destination" && "border-success/25 bg-tint-success/30",
           // The chip carries the state in words. Dimming the whole card made
           // every fact and control fail contrast in a real browser, so use a
           // structural treatment that leaves its contents fully readable.
           excluded && "border-dashed bg-surface-muted",
         )}
       >
-        <div className="flex h-5 min-w-0 items-center gap-1.5">
-          <p
-            className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
-            title={card.path}
-          >
-            {card.displayName ?? card.path.split(/[\\/]/).filter(Boolean).pop() ?? card.path}
-          </p>
-          {excluded && (
-            <span className="shrink-0 rounded-full border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold leading-none text-warning">
-              {t("sources.excludedThisRun")}
-            </span>
+        <span
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            ROLE_BADGE[card.role],
           )}
-          {ownConflict && (
-            <span
-              className={cn(
-                "shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold leading-none",
-                ownConflict.blocking
-                  ? "border-error/40 bg-tint-error text-error"
-                  : "border-warning/40 bg-tint-warning text-warning",
-              )}
+          aria-hidden
+        >
+          <FiFolder className="h-[1.125rem] w-[1.125rem]" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex h-5 min-w-0 items-center gap-1.5">
+            <p
+              className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
+              title={card.path}
             >
-              {t("sources.conflictChip")}
-            </span>
-          )}
-        </div>
-        <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={card.path}>
-          {card.path}
-        </p>
-
-        {/* Facts render only what they have to say. Every ordinary card has two
-            truthful facts; no invisible paragraph stands in for a future one. */}
-        <div className="mt-2.5 space-y-0.5 text-xs text-muted-foreground">
-          {facts.map((line, index) => (
-            <p key={index}>{line}</p>
-          ))}
-        </div>
-
-        {/* A conflict needs the sentence a chip cannot carry, so that one card
-            grows. Ordinary and merely skipped cards spend no row on absence. */}
-        {ownConflict && (
-          <p
-            className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
-            role={ownConflict.blocking ? "alert" : "status"}
-          >
-            {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
+              {card.displayName ?? card.path.split(/[\\/]/).filter(Boolean).pop() ?? card.path}
+            </p>
+            {excluded && (
+              <span className="shrink-0 rounded-full border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold leading-none text-warning">
+                {t("sources.excludedThisRun")}
+              </span>
+            )}
+            {ownConflict && (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold leading-none",
+                  ownConflict.blocking
+                    ? "border-error/40 bg-tint-error text-error"
+                    : "border-warning/40 bg-tint-warning text-warning",
+                )}
+              >
+                {t("sources.conflictChip")}
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={card.path}>
+            {card.path}
           </p>
-        )}
 
-        <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onChangeFolder}
-            disabled={disabled}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          >
-            {t("sources.change")}
-          </button>
-          {onRemove && (
+          {/* Facts render only what they have to say. Every ordinary card has two
+            truthful facts; no invisible paragraph stands in for a future one. */}
+          <div className="mt-2.5 space-y-0.5 text-xs text-muted-foreground">
+            {facts.map((line, index) => (
+              <p key={index}>{line}</p>
+            ))}
+          </div>
+
+          {/* A conflict needs the sentence a chip cannot carry, so that one card
+            grows. Ordinary and merely skipped cards spend no row on absence. */}
+          {ownConflict && (
+            <p
+              className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
+              role={ownConflict.blocking ? "alert" : "status"}
+            >
+              {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
+            </p>
+          )}
+
+          <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={onRemove}
+              onClick={onChangeFolder}
               disabled={disabled}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
-              {t("sources.remove")}
+              {t("sources.change")}
             </button>
-          )}
-        </div>
-
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {onToggleBaseline && (
-            <label className="flex min-w-0 items-start gap-2 py-1">
-              <input
-                type="checkbox"
-                checked={card.role === "reference"}
+            {onRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
                 disabled={disabled}
-                onChange={(event) => onToggleBaseline(event.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-foreground">
-                  {t("sources.baseline")}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("sources.baselineHelp")}
-                </span>
-              </span>
-            </label>
-          )}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              >
+                {t("sources.remove")}
+              </button>
+            )}
+          </div>
 
-          <span className="flex-1" />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {onToggleBaseline && (
+              <label className="flex min-w-0 items-start gap-2 py-1">
+                <input
+                  type="checkbox"
+                  checked={card.role === "reference"}
+                  disabled={disabled}
+                  onChange={(event) => onToggleBaseline(event.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">
+                    {t("sources.baseline")}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t("sources.baselineHelp")}
+                  </span>
+                </span>
+              </label>
+            )}
 
-          <IconButton
-            label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
-            onClick={() => void copyPath()}
-            icon={copied ? FiCheck : FiClipboard}
-          />
-          {onToggleExcluded && (
+            <span className="flex-1" />
+
             <IconButton
-              label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
-              disabled={disabled}
-              onClick={onToggleExcluded}
-              icon={excluded ? FiEye : FiEyeOff}
+              label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
+              onClick={() => void copyPath()}
+              icon={copied ? FiCheck : FiClipboard}
             />
-          )}
-          {offline && onRemap && (
-            <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
-          )}
+            {onToggleExcluded && (
+              <IconButton
+                label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
+                disabled={disabled}
+                onClick={onToggleExcluded}
+                icon={excluded ? FiEye : FiEyeOff}
+              />
+            )}
+            {offline && onRemap && (
+              <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -361,10 +375,8 @@ export function SourcesScreen({
   const active = useMemo(() => activeCards(cards, excludedForRun), [cards, excludedForRun]);
   const conflicts = useMemo(() => validateRoots(active), [active]);
 
-  // Inputs and baselines are one list: a baseline is an input folder that is
-  // only ever compared against, which is a property of the folder, not a
-  // separate place to put one.
-  const inputs = useMemo(() => cards.filter((card) => card.role !== "destination"), [cards]);
+  const inputs = useMemo(() => cards.filter((card) => card.role === "input"), [cards]);
+  const references = useMemo(() => cards.filter((card) => card.role === "reference"), [cards]);
   const destination = useMemo(
     () => cards.find((card) => card.role === "destination") ?? null,
     [cards],
@@ -467,26 +479,38 @@ export function SourcesScreen({
   return (
     <div className="space-y-7">
       <div>
-        <ScreenHeader title={t("sources.title")} subtitle={t("sources.description")} />
+        <ScreenHeader
+          eyebrow={t("stage.position", { current: 1, total: 6 })}
+          title={t("sources.title")}
+          subtitle={t("sources.description")}
+        />
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-5">
           <section aria-labelledby="sources-inputs" className="min-w-0">
-            <div className="mb-2.5 flex items-center gap-2">
-              <span
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-lg",
-                  ROLE_BADGE.input,
-                )}
-                aria-hidden
-              >
-                <FiFolder className="h-3.5 w-3.5" />
-              </span>
-              <h2
-                id="sources-inputs"
-                className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint"
-              >
-                {t("sources.inputFolders")}
-              </h2>
+            <div className="mb-2 flex items-end gap-2">
+              <div>
+                <h2
+                  id="sources-inputs"
+                  className="text-3xs font-bold uppercase tracking-[0.09em] text-faint"
+                >
+                  {t("sources.inputFolders")}
+                </h2>
+                <p className="mt-0.5 text-3xs text-faint">
+                  {t("sources.role.input.description", undefined, ROLE_DESCRIPTION.input)}
+                </p>
+              </div>
+              <span className="flex-1" />
+              {inputs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onAddFolder("input")}
+                  disabled={disabled}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                >
+                  <FiPlus className="h-3.5 w-3.5" aria-hidden />
+                  {t("sources.addFolder")}
+                </button>
+              )}
             </div>
 
             {inputs.length === 0 ? (
@@ -507,35 +531,49 @@ export function SourcesScreen({
             ) : (
               <ul className="space-y-2.5">{inputs.map((card) => cardFor(card, false))}</ul>
             )}
-
-            <button
-              type="button"
-              onClick={() => onAddFolder("input")}
-              disabled={disabled}
-              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            >
-              <FiPlus className="h-3.5 w-3.5" aria-hidden />
-              {t("sources.addFolder")}
-            </button>
           </section>
 
-          <section aria-labelledby="sources-destination" className="min-w-0">
-            <div className="mb-2.5 flex items-center gap-2">
-              <span
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-lg",
-                  ROLE_BADGE.destination,
+          {references.length > 0 && (
+            <section aria-labelledby="sources-references" className="min-w-0">
+              <div className="mb-2 flex items-end gap-2">
+                <div>
+                  <h2
+                    id="sources-references"
+                    className="text-3xs font-bold uppercase tracking-[0.09em] text-faint"
+                  >
+                    {t("sources.baseline")}
+                  </h2>
+                  <p className="mt-0.5 text-3xs text-faint">{t("sources.baselineHelp")}</p>
+                </div>
+                <span className="flex-1" />
+                {references.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onAddFolder("reference")}
+                    disabled={disabled}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    <FiPlus className="h-3.5 w-3.5" aria-hidden />
+                    {t("sources.empty.reference")}
+                  </button>
                 )}
-                aria-hidden
-              >
-                <FiFolder className="h-3.5 w-3.5" />
-              </span>
+              </div>
+
+              <ul className="space-y-2.5">{references.map((card) => cardFor(card, false))}</ul>
+            </section>
+          )}
+
+          <section aria-labelledby="sources-destination" className="min-w-0">
+            <div className="mb-2">
               <h2
                 id="sources-destination"
-                className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint"
+                className="text-3xs font-bold uppercase tracking-[0.09em] text-faint"
               >
                 {t("sources.role.destination", undefined, ROLE_LABEL.destination)}
               </h2>
+              <p className="mt-0.5 text-3xs text-faint">
+                {t("sources.role.destination.description", undefined, ROLE_DESCRIPTION.destination)}
+              </p>
             </div>
 
             {destination === null ? (
@@ -562,6 +600,20 @@ export function SourcesScreen({
             )}
           </section>
         </div>
+
+        {destination && (
+          <aside className="mt-5 flex items-start gap-3 rounded-xl border border-info/25 bg-tint-info/35 p-3.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-tint-info text-info">
+              <FiInfo className="h-4 w-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">{t("sources.boundary.title")}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {t("sources.boundary.detail", { path: destination.path })}
+              </p>
+            </div>
+          </aside>
+        )}
 
         {/* The live region sits inside each item, not on it: a `listitem` may
             not also be an `alert`, and moving the role inward keeps both the

@@ -27,6 +27,7 @@ per line, no prose. Everything else explains a subsystem to a person.
 | File | Covers |
 |---|---|
 | [design.md](design.md) | architecture and the *why* behind each decision |
+| [design-system.md](design-system.md) | semantic UI tokens, component geometry, motion, responsiveness, and icon rules |
 | [development.md](development.md) | setup, running, quality gates, testing, releasing |
 | [architecture-ownership.md](architecture-ownership.md) | the module seams and the growth-review policy |
 

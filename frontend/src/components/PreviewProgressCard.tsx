@@ -51,6 +51,7 @@ export function PreviewProgressCard({
   return (
     <div>
       <ScreenHeader
+        eyebrow={t("stage.position", { current: 4, total: 6 })}
         title={t("stage.review.computing")}
         subtitle={t("stage.review.computingHelp")}
       />

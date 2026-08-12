@@ -55,15 +55,34 @@ interface DetailViewProps {
   onClose: () => void;
 }
 
+/**
+ * One line of the planned-state card.
+ *
+ * A definition list, not a table of rows: these are labelled values about one
+ * subject, and marking them up as such is what lets a screen reader read
+ * "Goes to — 2024/07/IMG_2048.heic" instead of two unrelated cells.
+ */
 function Fact({ label, value, unknown }: { label: string; value: string; unknown?: boolean }) {
   return (
-    <div className="grid grid-cols-[7rem_1fr] gap-2.5 border-b border-border px-5 py-2 text-xs last:border-b-0">
-      <span className="text-faint">{label}</span>
-      <span className={cn("min-w-0 break-words", unknown ? "text-faint" : "text-foreground")}>
+    <>
+      <dt className="text-3xs text-faint">{label}</dt>
+      <dd
+        className={cn(
+          "m-0 min-w-0 break-words text-3xs",
+          unknown ? "text-faint" : "text-foreground",
+        )}
+      >
         {value}
-      </span>
-    </div>
+      </dd>
+    </>
   );
+}
+
+/** The extension as a person would name the format, or nothing to show. */
+function fileType(name: string): string | null {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot === name.length - 1) return null;
+  return name.slice(dot + 1).toUpperCase();
 }
 
 export function DetailView({
@@ -96,6 +115,7 @@ export function DetailView({
       ? `${info.data.width} × ${info.data.height}`
       : unknown;
   const size = row.sizeBytes > 0 ? formatBytes(row.sizeBytes, { locale }) : unknown;
+  const type = fileType(row.name);
 
   const outcomeRecord = outcome.data?.state === "available" ? outcome.data.outcome : null;
   // The row and the inspector prefer the exact same plan object. The endpoint
@@ -114,90 +134,104 @@ export function DetailView({
         </span>
       </ModalHeader>
 
-      {/* The picture gets the room. Deciding between two copies of the same
-          photograph is the job this dialog exists for, and it cannot be done
-          from a strip — clicking through to full screen is one gesture away. */}
-      <div className="h-64 shrink-0 bg-background sm:h-80 lg:h-96">
-        <Thumbnail
-          path={row.source}
-          maxPx={1200}
-          className="h-full w-full"
-          onOpen={onEnlarge}
-          openLabel={t("review.viewer.open", { name: row.name })}
-        />
-      </div>
+      <ModalBody className="p-0">
+        {/* The picture gets the room, and the facts about it sit beside it
+            rather than under it — a preview whose metadata is a scroll away is
+            one the reader has to remember instead of read. */}
+        <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="min-h-[16rem] overflow-hidden rounded-panel bg-muted sm:min-h-[22rem] lg:min-h-[27rem]">
+            <Thumbnail
+              path={row.source}
+              maxPx={1200}
+              className="h-full w-full"
+              onOpen={onEnlarge}
+              openLabel={t("review.viewer.open", { name: row.name })}
+            />
+          </div>
 
-      <ModalBody className="px-0 py-0">
-        {info.isLoading ? (
-          <StateView
-            compact
-            variant="loading"
-            title={t("review.detail.infoLoading")}
-            className="mx-5 my-3"
-          />
-        ) : infoFailure !== null ? (
-          <StateView
-            compact
-            variant="error"
-            title={infoFailure.message}
-            code={infoFailure.code}
-            onRetry={() => void info.refetch()}
-            className="mx-5 my-3"
-          />
-        ) : (
-          <Fact
-            label={t("review.column.resolution")}
-            value={resolution}
-            unknown={resolution === unknown}
-          />
-        )}
-        <Fact label={t("review.column.size")} value={size} unknown={size === unknown} />
-        <Fact
-          label={t("review.column.date")}
-          value={
-            row.date === null
-              ? unknown
-              : t("review.detail.dateFrom", {
-                  date: row.date,
-                  source: formatMetadataSource(row.dateSource, t),
-                })
-          }
-          unknown={row.date === null}
-        />
-        <Fact
-          label={t("review.detail.source")}
-          value={row.folder === "" ? unknown : row.folder}
-          unknown={row.folder === ""}
-        />
-        <Fact
-          label={t("review.detail.destination")}
-          value={row.destination ?? t("review.destination.none")}
-          unknown={row.destination === null}
-        />
-        <Fact label={t("review.detail.reason")} value={t(row.reason.key, row.reason.params)} />
-        <Fact
-          label={t("review.detail.category")}
-          value={row.category ?? unknown}
-          unknown={row.category === null}
-        />
-        <Fact
-          label={t("review.detail.tags")}
-          value={row.tags.length > 0 ? row.tags.join(", ") : unknown}
-          unknown={row.tags.length === 0}
-        />
-        {set !== null && (
-          <Fact
-            label={t("review.detail.set")}
-            value={t("review.detail.setMembership", {
-              count: set.rows.length,
-              kind: t(`review.stack.kind.${set.setKind}`),
-            })}
-          />
-        )}
+          <aside className="self-start overflow-hidden rounded-panel border border-border">
+            <h3 className="border-b border-border px-2.5 py-2 text-xs font-semibold text-foreground">
+              {t("review.detail.plannedState")}
+            </h3>
+            {info.isLoading ? (
+              <StateView
+                compact
+                variant="loading"
+                title={t("review.detail.infoLoading")}
+                className="m-2.5"
+              />
+            ) : infoFailure !== null ? (
+              <StateView
+                compact
+                variant="error"
+                title={infoFailure.message}
+                code={infoFailure.code}
+                onRetry={() => void info.refetch()}
+                className="m-2.5"
+              />
+            ) : null}
+            <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2.5 gap-y-2 px-2.5 py-2.5">
+              {type !== null && <Fact label={t("review.detail.fileType")} value={type} />}
+              {!info.isLoading && infoFailure === null && (
+                <Fact
+                  label={t("review.column.resolution")}
+                  value={resolution}
+                  unknown={resolution === unknown}
+                />
+              )}
+              <Fact label={t("review.column.size")} value={size} unknown={size === unknown} />
+              <Fact
+                label={t("review.column.date")}
+                value={
+                  row.date === null
+                    ? unknown
+                    : t("review.detail.dateFrom", {
+                        date: row.date,
+                        source: formatMetadataSource(row.dateSource, t),
+                      })
+                }
+                unknown={row.date === null}
+              />
+              <Fact
+                label={t("review.detail.source")}
+                value={row.folder === "" ? unknown : row.folder}
+                unknown={row.folder === ""}
+              />
+              <Fact
+                label={t("review.detail.destination")}
+                value={row.destination ?? t("review.destination.none")}
+                unknown={row.destination === null}
+              />
+              <Fact
+                label={t("review.detail.reason")}
+                value={t(row.reason.key, row.reason.params)}
+              />
+              <Fact
+                label={t("review.detail.category")}
+                value={row.category ?? unknown}
+                unknown={row.category === null}
+              />
+              <Fact
+                label={t("review.detail.tags")}
+                value={row.tags.length > 0 ? row.tags.join(", ") : unknown}
+                unknown={row.tags.length === 0}
+              />
+              {set !== null && (
+                <Fact
+                  label={t("review.detail.set")}
+                  value={t("review.detail.setMembership", {
+                    count: set.rows.length,
+                    kind: t(`review.stack.kind.${set.setKind}`),
+                  })}
+                />
+              )}
+            </dl>
+          </aside>
+        </div>
 
         {/* The working behind the complete destination. Absent rather than
             invented when the preview that recorded it has been superseded. */}
-        <div className="border-t border-border px-5 py-3">
+        <div className="border-t border-border px-3 py-3">
           {outcome.isLoading ? (
             <StateView
               compact

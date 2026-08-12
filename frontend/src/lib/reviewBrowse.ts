@@ -311,7 +311,7 @@ export function folderTrail(path: string | null): { path: string; name: string }
 // ── The tree ─────────────────────────────────────────────────────────────────
 
 function emptyNode(name: string, path: string, isReview = false): TreeNode {
-  return { name, path, count: 0, isReview, isNew: false, children: [] };
+  return { name, path, count: 0, isReview, isNew: false, undecidedSets: 0, children: [] };
 }
 
 /**
@@ -326,11 +326,18 @@ export function browseTree(entries: readonly BrowseEntry[], rootName = "destinat
   const index = new Map<string, TreeNode>([["", root]]);
 
   for (const entry of entries) {
+    // A set nobody has decided is counted at every folder on the way down, so
+    // the marker on a collapsed branch means "there is work in here" rather
+    // than only "there is work exactly here".
+    const undecided =
+      entry.kind === "set" && !entry.hasBaseline && isOutstandingState(entry.decisionState) ? 1 : 0;
     if (entry.folder === "") {
       root.count += 1;
+      root.undecidedSets += undecided;
       continue;
     }
     root.count += 1;
+    root.undecidedSets += undecided;
     let parent = root;
     let prefix = "";
     for (const segment of entry.folder.split("/")) {
@@ -342,6 +349,7 @@ export function browseTree(entries: readonly BrowseEntry[], rootName = "destinat
         parent.children.push(node);
       }
       node.count += 1;
+      node.undecidedSets += undecided;
       parent = node;
     }
   }

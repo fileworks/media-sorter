@@ -25,6 +25,8 @@ import type { TreeNode } from "@/lib/reviewPlan";
 
 interface DestinationTreeProps {
   root: TreeNode;
+  /** Actual destination root, shown as context above the planned hierarchy. */
+  destinationRoot?: string;
   /** The folder the contents pane is showing, or null for the whole plan. */
   selectedPath: string | null;
   onSelect: (path: string | null) => void;
@@ -37,6 +39,8 @@ interface DestinationTreeProps {
   /** Controlled when Review coordinates the global Escape stack. */
   query?: string;
   onQueryChange?: (query: string) => void;
+  /** Remove card chrome when the tree is the left rail of Review's shared shell. */
+  embedded?: boolean;
 }
 
 /** Every node whose subtree matches, plus the ancestors needed to reach it. */
@@ -137,6 +141,19 @@ function Row({
           </span>
         )}
 
+        {/* Where the undecided sets are. The tree is how somebody finds the
+            work without scrolling the plan, and an open decision is the only
+            thing in here that stops the run. */}
+        {node.undecidedSets > 0 && (
+          <Tooltip label={t("review.tree.undecidedHere", { count: node.undecidedSets })}>
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+              role="img"
+              aria-label={t("review.tree.undecidedHere", { count: node.undecidedSets })}
+            />
+          </Tooltip>
+        )}
+
         <span className={cn("shrink-0 tabular-nums", selected ? "text-primary" : "text-faint")}>
           {node.count.toLocaleString(locale)}
         </span>
@@ -200,6 +217,7 @@ function initialExpansion(root: TreeNode): Set<string> {
 
 export function DestinationTree({
   root,
+  destinationRoot,
   selectedPath,
   onSelect,
   outOfScopeSets,
@@ -207,6 +225,7 @@ export function DestinationTree({
   revealOutOfScope = false,
   query: controlledQuery,
   onQueryChange,
+  embedded = false,
 }: DestinationTreeProps) {
   const { t, locale } = useI18n();
   const [localQuery, setLocalQuery] = useState("");
@@ -263,104 +282,115 @@ export function DestinationTree({
   return (
     <section
       aria-label={t("review.tree.title")}
-      className="rounded-xl border border-border bg-card p-3.5"
+      className={cn("bg-card", embedded ? "" : "rounded-xl border border-border p-3.5")}
     >
-      <div className="mb-2.5 flex items-center gap-2">
-        <h2 className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
-          {t("review.tree.title")}
-        </h2>
-        <span className="flex-1" />
+      <div className={cn("flex items-start gap-2", embedded && "border-b border-border p-3")}>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
+            {t("review.tree.title")}
+          </h2>
+          {destinationRoot && (
+            <p
+              className="mt-1 truncate font-mono text-3xs text-muted-foreground"
+              title={destinationRoot}
+            >
+              {destinationRoot}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setExpanded(new Set([""]))}
-          className="text-3xs text-faint underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 text-3xs text-faint underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("review.tree.collapseAll")}
         </button>
       </div>
 
-      <label className="mb-2.5 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
-        <FiSearch className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
-        <span className="sr-only">{t("review.tree.jumpTo")}</span>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape" || query === "") return;
-            event.preventDefault();
-            event.stopPropagation();
-            setQuery("");
-          }}
-          placeholder={t("review.tree.jumpTo")}
-          className="min-w-0 flex-1 bg-transparent text-xs placeholder:text-faint focus-visible:outline-none"
-        />
-      </label>
-
-      {filtered && filtered.count > 0 ? (
-        <ul className="max-h-[min(26rem,45dvh)] overflow-y-auto">
-          <Row
-            node={filtered}
-            depth={0}
-            expanded={effectiveExpanded}
-            onToggle={toggle}
-            selectedPath={selectedPath}
-            onSelect={onSelect}
-            locale={locale}
-            label={label}
-            t={t}
+      <div className={cn(embedded && "p-2")}>
+        <label className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
+          <FiSearch className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
+          <span className="sr-only">{t("review.tree.jumpTo")}</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || query === "") return;
+              event.preventDefault();
+              event.stopPropagation();
+              setQuery("");
+            }}
+            placeholder={t("review.tree.jumpTo")}
+            className="min-w-0 flex-1 bg-transparent text-xs placeholder:text-faint focus-visible:outline-none"
           />
-        </ul>
-      ) : (
-        <p className="px-1 py-3 text-xs text-faint">
-          {needle ? t("review.tree.noMatches", { query }) : t("review.tree.empty")}
-        </p>
-      )}
+        </label>
 
-      {/* Sets whose members are not both in this run. Collapsed, because they
+        {filtered && filtered.count > 0 ? (
+          <ul className="max-h-[min(26rem,45dvh)] overflow-y-auto">
+            <Row
+              node={filtered}
+              depth={0}
+              expanded={effectiveExpanded}
+              onToggle={toggle}
+              selectedPath={selectedPath}
+              onSelect={onSelect}
+              locale={locale}
+              label={label}
+              t={t}
+            />
+          </ul>
+        ) : (
+          <p className="px-1 py-3 text-xs text-faint">
+            {needle ? t("review.tree.noMatches", { query }) : t("review.tree.empty")}
+          </p>
+        )}
+
+        {/* Sets whose members are not both in this run. Collapsed, because they
           are not this run's business — but stated, because "why is this set not
           listed?" is otherwise unanswerable from the screen. */}
-      {outOfScopeSets > 0 && (
-        <div className="mt-3 border-t border-border pt-2.5">
-          <button
-            type="button"
-            aria-expanded={alsoOpen}
-            onClick={() => setAlsoOpen((open) => !open)}
-            className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {alsoOpen ? (
-              <FiChevronDown className="h-3 w-3 shrink-0" aria-hidden />
-            ) : (
-              <FiChevronRight className="h-3 w-3 shrink-0" aria-hidden />
-            )}
-            {t(
-              outOfScopeSets === 1
-                ? "review.browse.alsoInLibrary.one"
-                : "review.browse.alsoInLibrary",
-              { count: outOfScopeSets },
-            )}
-          </button>
-          {alsoOpen && (
-            <div className="mt-1.5 space-y-2 pl-4">
-              <p className="text-xs leading-relaxed text-faint">
-                {t("review.browse.alsoInLibrary.rule")}
-              </p>
-              {onOpenSources && (
-                <button
-                  type="button"
-                  onClick={onOpenSources}
-                  className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("review.browse.openSources")}
-                </button>
+        {outOfScopeSets > 0 && (
+          <div className="mt-3 border-t border-border pt-2.5">
+            <button
+              type="button"
+              aria-expanded={alsoOpen}
+              onClick={() => setAlsoOpen((open) => !open)}
+              className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {alsoOpen ? (
+                <FiChevronDown className="h-3 w-3 shrink-0" aria-hidden />
+              ) : (
+                <FiChevronRight className="h-3 w-3 shrink-0" aria-hidden />
               )}
-            </div>
-          )}
-        </div>
-      )}
+              {t(
+                outOfScopeSets === 1
+                  ? "review.browse.alsoInLibrary.one"
+                  : "review.browse.alsoInLibrary",
+                { count: outOfScopeSets },
+              )}
+            </button>
+            {alsoOpen && (
+              <div className="mt-1.5 space-y-2 pl-4">
+                <p className="text-xs leading-relaxed text-faint">
+                  {t("review.browse.alsoInLibrary.rule")}
+                </p>
+                {onOpenSources && (
+                  <button
+                    type="button"
+                    onClick={onOpenSources}
+                    className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {t("review.browse.openSources")}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-      <p className="mt-3 border-t border-border pt-2.5 text-xs leading-relaxed text-faint">
-        {t("review.tree.note")}
-      </p>
+        <p className="mt-3 border-t border-border pt-2.5 text-3xs leading-relaxed text-faint">
+          {t("review.tree.note")}
+        </p>
+      </div>
     </section>
   );
 }

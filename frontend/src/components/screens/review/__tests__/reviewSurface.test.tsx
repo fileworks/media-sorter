@@ -161,7 +161,11 @@ function rowCheckbox(name: string): HTMLInputElement {
 }
 
 function switchTo(mode: "browse" | "resolve") {
-  fireEvent.click(screen.getByRole("radio", { name: en(`review.mode.${mode}`) }));
+  fireEvent.click(screen.getByRole("tab", { name: en(`review.mode.${mode}`) }));
+}
+
+async function waitForReview() {
+  await screen.findByRole("tab", { name: en("review.mode.resolve") });
 }
 
 /** The tree's "make this folder the subject" control, by folder name. */
@@ -348,13 +352,12 @@ describe("the stays branch", () => {
 
   it("says how many sets are waiting, and the queue holds exactly that many", async () => {
     renderReview(result);
+    await waitForReview();
+    switchTo("resolve");
 
-    const call = await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 1 })),
-    });
-    fireEvent.click(call);
-
-    expect(screen.getByText(en("review.resolve.position", { index: 1, total: 1 }))).toBeTruthy();
+    expect(
+      screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 1, total: 1 })}`)),
+    ).toBeTruthy();
   });
 });
 
@@ -388,9 +391,7 @@ describe("resolve", () => {
 
   it("keeps a copy by activating it, and the run is told", async () => {
     renderReview(result);
-    await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 2 })),
-    });
+    await waitForReview();
     switchTo("resolve");
 
     fireEvent.click(
@@ -399,20 +400,22 @@ describe("resolve", () => {
       }),
     );
 
+    expect(decisions.reviewedSets).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
+
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]);
   });
 
   it("resolves by keyboard alone, with no pointer anywhere", async () => {
     renderReview(result);
-    await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 2 })),
-    });
+    await waitForReview();
     switchTo("resolve");
 
-    // Number keys keep a copy; arrows move between sets.
+    // Number keys create a draft; confirmation makes the binding decision.
     fireEvent.keyDown(window, { key: "1" });
-    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
     fireEvent.keyDown(window, { key: "2" });
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
 
     expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
       "/in/a.jpg",
@@ -420,27 +423,26 @@ describe("resolve", () => {
     ]);
   });
 
-  it("accepts a number shortcut while the Resolve mode radio retains focus", async () => {
+  it("accepts a number shortcut while the Resolve mode tab retains focus", async () => {
     renderReview(result);
-    await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 2 })),
-    });
-    const resolveMode = screen.getByRole("radio", {
+    await waitForReview();
+    const resolveMode = screen.getByRole("tab", {
       name: en("review.mode.resolve"),
-    }) as HTMLInputElement;
+    }) as HTMLButtonElement;
 
     fireEvent.click(resolveMode);
     resolveMode.focus();
     fireEvent.keyDown(resolveMode, { key: "1" });
+
+    expect(decisions.reviewedSets).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
 
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/a.jpg", demote: ["/in/b.jpg"] }]);
   });
 
   it("records 'not duplicates' as a binding decision instead of clearing the set", async () => {
     renderReview(result);
-    await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 2 })),
-    });
+    await waitForReview();
     switchTo("resolve");
 
     fireEvent.click(screen.getByRole("button", { name: en("review.resolve.keepAll") }));
@@ -456,9 +458,7 @@ describe("resolve", () => {
 
   it("does not let queue shortcuts decide a set through an open dialog", async () => {
     renderReview(result);
-    await screen.findByRole("button", {
-      name: new RegExp(en("review.band.undecided", { count: 2 })),
-    });
+    await waitForReview();
     switchTo("resolve");
     fireEvent.click(screen.getByRole("button", { name: en("review.compare") }));
 
@@ -472,9 +472,7 @@ describe("resolve", () => {
     // Stated rather than inherited: the rule is what decides which copy wins,
     // so a test about the rule must not depend on the fixture's default.
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
-    await screen.findByRole("button", {
-      name: en("review.band.outstanding", { count: 2, proposed: 2, undecided: 0 }),
-    });
+    await waitForReview();
     switchTo("resolve");
 
     // A rule has ranked both sets, but a proposal binds nothing.
@@ -507,9 +505,7 @@ describe("resolve", () => {
 
   it("accepts one proposal and re-proposes only the outstanding sets when the rule changes", async () => {
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
-    await screen.findByRole("button", {
-      name: en("review.band.outstanding", { count: 2, proposed: 2, undecided: 0 }),
-    });
+    await waitForReview();
     switchTo("resolve");
 
     fireEvent.click(screen.getByRole("button", { name: en("review.proposal.acceptOne") }));
@@ -571,16 +567,16 @@ describe("resolve", () => {
 
   it("ends with a way back rather than an empty frame", async () => {
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
-    await screen.findByRole("button", {
-      name: en("review.band.outstanding", { count: 2, proposed: 2, undecided: 0 }),
-    });
+    await waitForReview();
     switchTo("resolve");
     fireEvent.click(
       screen.getByRole("button", { name: en("review.proposal.acceptAll", { count: 2 }) }),
     );
 
-    expect(screen.getByText(en("review.resolve.doneTitle"))).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.backToBrowse") }));
+    expect(
+      screen.getByText(en("review.resolve.decidedCount", { decided: 2, total: 2 })),
+    ).toBeTruthy();
+    switchTo("browse");
     expect(screen.getByRole("searchbox")).toBeTruthy();
   });
 });
@@ -609,7 +605,7 @@ describe("a baseline decides its own set", () => {
 
   it("never puts it in the queue, and says the reference is protected", async () => {
     renderReview(result);
-    await screen.findByText(en("review.band.allDecided"));
+    await waitForReview();
 
     switchTo("resolve");
     expect(screen.getByText(en("review.resolve.doneTitle"))).toBeTruthy();

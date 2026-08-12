@@ -84,6 +84,7 @@ interface QueueOverrides {
   onKeep?: (setId: string, source: string) => void;
   onKeepAll?: (setId: string) => void;
   onGo?: (index: number) => void;
+  onOpenSet?: (setId: string) => void;
   keepSourceByRule?: (setId: string) => string | null;
 }
 
@@ -100,6 +101,7 @@ function queue(
         current={current}
         index={0}
         onGo={overrides.onGo ?? (() => undefined)}
+        onOpenSet={overrides.onOpenSet ?? (() => undefined)}
         onKeep={overrides.onKeep ?? (() => undefined)}
         onKeepAll={overrides.onKeepAll ?? (() => undefined)}
         onAcceptProposal={() => undefined}
@@ -116,6 +118,8 @@ function queue(
         onClearSetSelection={overrides.onClearSetSelection ?? (() => undefined)}
         keepSourceByRule={overrides.keepSourceByRule ?? (() => null)}
         individualOnly={{ perceptual: 0, unmeasured: 0 }}
+        sort="name"
+        onSort={() => undefined}
       />
     </I18nProvider>
   );

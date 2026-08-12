@@ -79,17 +79,42 @@ function renderComparison(a: ComparableFile, b: ComparableFile, onEnlarge = vi.f
 afterEach(cleanup);
 
 describe("duplicate comparison", () => {
+  it("keeps the rule recommendation separate from the explicitly confirmed choice", () => {
+    const onKeep = vi.fn();
+    const a = file("a", facts({ width: 2000, height: 3000 }));
+    const b = file("b", facts({ width: 1000, height: 1500 }));
+    render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={a}
+          b={b}
+          keeperId={null}
+          setId="set-1"
+          recommendedId="a"
+          recommendedLabel="a.jpg"
+          recommendationReason="Suggested by quality; it is not selected automatically."
+          onKeep={onKeep}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Recommended: a.jpg")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /B.*b\.jpg/ }));
+    expect(onKeep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm selection" }));
+    expect(onKeep).toHaveBeenCalledWith("b");
+  });
+
   it("uses the portrait aspect ratio throughout all three viewport-scaled modes", () => {
     renderComparison(
       file("a", facts({ width: 2000, height: 3000 })),
       file("b", facts({ width: 1000, height: 1500 })),
     );
 
-    expect(screen.getByTestId("comparison-frame").getAttribute("data-aspect-ratio")).toBe("0.6667");
-    expect(screen.getByTestId("comparison-frame").parentElement?.className).toContain("56dvh");
-
-    fireEvent.click(screen.getByRole("radio", { name: "Side-by-side" }));
     expect(screen.getByTestId("comparison-frame").getAttribute("data-aspect-ratio")).toBe("1.3333");
+    expect(screen.getByTestId("comparison-frame").parentElement?.className).toContain("38dvh");
     expect(screen.getByTestId("thumbnail:/source/a.jpg")).not.toBeNull();
     expect(screen.getByTestId("thumbnail:/source/b.jpg")).not.toBeNull();
 
