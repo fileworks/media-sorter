@@ -1,12 +1,4 @@
-/**
- * Search, and how the contents pane draws itself. Nothing else.
- *
- * This used to carry ten filter chips and a keep-rule bar. Both were doing the
- * modes' job before the modes existed: the chips were a flat way to answer
- * "where do these files go", which the destination tree now answers as a
- * structure, and the keep rule belongs beside the sets it decides — in Resolve,
- * where its scope can be stated before it acts.
- */
+/** Search, sort, and view controls for the review browser. */
 
 import { FiGrid, FiList, FiSearch } from "react-icons/fi";
 
@@ -42,12 +34,7 @@ export function ReviewToolbar({
   const { t } = useI18n();
 
   return (
-    // The search field takes the slack rather than sitting at a fixed width,
-    // which clipped its own placeholder at the sizes this bar actually gets.
-    // It keeps a floor, though: with `min-w-0` alone it went on giving space
-    // away until the placeholder was a single letter. Below that floor the bar
-    // wraps onto its own line instead, which is the honest way to run out of
-    // room.
+    // Let search grow but wrap before its label becomes unreadable.
     <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
       <p className="sr-only" role="status">
         {scopeLabel}

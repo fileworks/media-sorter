@@ -1,20 +1,22 @@
 {
-  "manifest_version": "2026-07-29.1",
+  "manifest_version": "2026-08-13.1",
   "targets": {
     "darwin-arm64": [
       {
         "binaries": ["ffmpeg"],
+        "format": "binary",
         "license": "GPL-3.0-or-later",
-        "sha256": "59e39a5cec2e5d2307ed079c53227a9181e64b87454ed4de998349e044bfdc70",
-        "upstream_version": "7.1.1",
-        "url": "https://www.osxexperts.net/ffmpeg711arm.zip"
+        "sha256": "6d175a4743ca50256e89a8cdd731100f9cee33bd79aeea46894d209410dc6617",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffmpeg-darwin-arm64"
       },
       {
         "binaries": ["ffprobe"],
+        "format": "binary",
         "license": "GPL-3.0-or-later",
-        "sha256": "e695da37c08c8fbc218ebc161ee20d5606b50f3c7e8d696cbcf01bd40fe20d7e",
-        "upstream_version": "7.1.1",
-        "url": "https://www.osxexperts.net/ffprobe711arm.zip"
+        "sha256": "df2684842eca145bd72f4724ce9cecbf38558a4d64b2aef7846680f877702baa",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffprobe-darwin-arm64"
       }
     ],
     "darwin-x86_64": [

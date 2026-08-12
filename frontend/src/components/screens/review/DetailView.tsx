@@ -1,17 +1,4 @@
-/**
- * Everything known about one file, including how it came to be known.
- *
- * The inspector was removed as unreferenced, which left `/api/media/info` and
- * `POST /api/review/outcomes` working with no callers — and left the screen
- * unable to answer "what *is* this file?" at all. It is back, and it now shows
- * the thing only the outcomes endpoint knows: which candidate dates existed,
- * which one won, and why each of the others lost. A row's reason summarises
- * that in a sentence; this is the working.
- *
- * A fact that is not known says so. Nothing here fabricates a zero, a date or a
- * resolution — the file being inspected is one somebody is about to make a
- * decision about, and a plausible-looking wrong number is worse than a gap.
- */
+/** Inspect one file's metadata, plan, and recorded provenance. */
 
 import { FiArrowLeft, FiArrowRight, FiExternalLink, FiMaximize } from "react-icons/fi";
 
@@ -33,14 +20,7 @@ interface DetailViewProps {
   row: ReviewRow;
   /** The set this file belongs to, when it is one of several copies. */
   set: SetEntry | null;
-  /**
-   * What left and right are walking, and where in it this file sits.
-   *
-   * A file outside a duplicate set walks the folder it was opened from. Both
-   * halves were always required; only the set half was ever wired, so for most
-   * files the arrows sat inert beside "not part of a duplicate set" — which
-   * reads as a fault rather than as a boundary.
-   */
+  /** Navigation stays within the current duplicate set or folder. */
   scope: { kind: "set" | "folder"; index: number; total: number };
   /** Where left and right go. Null at either end of the scope. */
   onPrevious: (() => void) | null;
@@ -55,13 +35,7 @@ interface DetailViewProps {
   onClose: () => void;
 }
 
-/**
- * One line of the planned-state card.
- *
- * A definition list, not a table of rows: these are labelled values about one
- * subject, and marking them up as such is what lets a screen reader read
- * "Goes to — 2024/07/IMG_2048.heic" instead of two unrelated cells.
- */
+/** One labelled value in the planned-state definition list. */
 function Fact({ label, value, unknown }: { label: string; value: string; unknown?: boolean }) {
   return (
     <>
@@ -118,9 +92,7 @@ export function DetailView({
   const type = fileType(row.name);
 
   const outcomeRecord = outcome.data?.state === "available" ? outcome.data.outcome : null;
-  // The row and the inspector prefer the exact same plan object. The endpoint
-  // validates that it is still current and supplies a compatibility fallback
-  // for plans created before rows began carrying provenance directly.
+  // Fall back to endpoint provenance for older preview rows.
   const provenance =
     outcome.data?.state === "available"
       ? (row.provenance ?? outcomeRecord?.provenance ?? null)
@@ -135,9 +107,7 @@ export function DetailView({
       </ModalHeader>
 
       <ModalBody className="p-0">
-        {/* The picture gets the room, and the facts about it sit beside it
-            rather than under it — a preview whose metadata is a scroll away is
-            one the reader has to remember instead of read. */}
+        {/* Keep the preview and its facts visible together on wide screens. */}
         <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-h-[16rem] overflow-hidden rounded-panel bg-muted sm:min-h-[22rem] lg:min-h-[27rem]">
             <Thumbnail
@@ -229,8 +199,7 @@ export function DetailView({
           </aside>
         </div>
 
-        {/* The working behind the complete destination. Absent rather than
-            invented when the preview that recorded it has been superseded. */}
+        {/* Superseded previews never fabricate provenance. */}
         <div className="border-t border-border px-3 py-3">
           {outcome.isLoading ? (
             <StateView
@@ -269,9 +238,7 @@ export function DetailView({
       </ModalBody>
 
       <ModalFooter>
-        {/* Left and right stay inside whatever the reader is reading — the
-            copies of one set, or the folder they opened this from. Walking off
-            into the rest of the plan would lose the comparison they came for. */}
+        {/* Navigation stays within the current set or folder. */}
         <div className="mr-auto flex items-center gap-1.5">
           <Button
             size="sm"

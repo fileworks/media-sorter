@@ -1,18 +1,4 @@
-/**
- * One photograph, as large as the screen allows.
- *
- * `Thumbnail` has carried an `onOpen` prop with a zoom affordance since it was
- * written and never had a caller, so nothing on a screen whose entire job is
- * looking at photographs could actually enlarge one. Deciding between two copies
- * of the same picture at 80 pixels is not deciding; it is guessing.
- *
- * Built on the shared dialog shell rather than beside it. The first draft
- * portalled, trapped focus and answered Escape for itself — and
- * `interactionContracts` rejected it, correctly: a layer that dismissed
- * differently from every other layer is the inconsistency the dialog work was
- * done to remove. The shell also gives it the modal *stack*, which is what makes
- * one Escape close the viewer and leave the detail view beneath it open.
- */
+/** Full-screen media viewer built on the shared modal stack. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FiArrowLeft, FiArrowRight, FiMaximize, FiMinus, FiPlus } from "react-icons/fi";
@@ -23,11 +9,7 @@ import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 import { api } from "@/services/api";
 import { cn } from "@/lib/utils";
 
-/**
- * The largest edge the backend will render. Requesting it once and scaling in
- * the browser keeps magnification instant and costs one image rather than one
- * per zoom step.
- */
+/** Request one large image and scale it locally across zoom steps. */
 const VIEWER_MAX_PX = 2048;
 
 const ZOOM_STEPS = [1, 1.5, 2, 3, 4] as const;
@@ -58,9 +40,7 @@ export function MediaViewer({
   const [zoomStep, setZoomStep] = useState(0);
   const zoom = ZOOM_STEPS[zoomStep];
 
-  // A new file is shown at fit-to-window: carrying a 4× magnification of the
-  // previous picture onto this one lands the reader somewhere they did not
-  // choose, on a photograph they have not seen yet.
+  // Each newly opened file starts fitted to the viewport.
   useEffect(() => setZoomStep(0), [path]);
 
   const zoomIn = useCallback(
@@ -69,8 +49,7 @@ export function MediaViewer({
   );
   const zoomOut = useCallback(() => setZoomStep((step) => Math.max(step - 1, 0)), []);
 
-  // Escape belongs to the shell. These do not, and a typing target must keep
-  // its own arrow keys.
+  // The modal owns Escape; typing controls retain their navigation keys.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -86,9 +65,7 @@ export function MediaViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [onNext, onPrevious, zoomIn, zoomOut]);
 
-  // Panning is scrolling: the frame is a scroll container and the image is
-  // simply larger than it. That gets keyboard scrolling, momentum and
-  // touch-drag for free, where a transform-based pan gets none of them.
+  // Center the scrollable image after each zoom change.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame || zoom === 1) return;
@@ -135,8 +112,7 @@ export function MediaViewer({
         </span>
       </ModalHeader>
 
-      {/* A deep surface under the picture rather than the card's own: judging a
-          photograph against a light panel misreads its exposure. */}
+      {/* Use a high-contrast neutral surface behind the image. */}
       <div
         ref={frameRef}
         className={cn(
@@ -204,14 +180,7 @@ function ViewerButton({
   );
 }
 
-/**
- * The picture itself, through the same queue every other preview uses.
- *
- * Going through `useQueuedThumbnail` rather than a bare `<img src>` is what
- * releases the decoded image on close and abandons a superseded request when the
- * reader moves on — a viewer that leaked one full-size bitmap per file navigated
- * would be the worst offender in the application.
- */
+/** Reuse the thumbnail queue so superseded image requests are released. */
 function ViewerImage({ path, name, zoom }: { path: string; name: string; zoom: number }) {
   const { t } = useI18n();
   const wrapperRef = useRef<HTMLDivElement>(null);

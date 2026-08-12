@@ -1,10 +1,4 @@
-/**
- * "Sort by", in both Review toolbars.
- *
- * Two instances, one state: the browser bar and the duplicate rule bar each
- * need it within reach, but changing it in one has to change the other, or the
- * screen would be sorted two ways at once and neither label would be true.
- */
+/** Shared sort control used by both review toolbars. */
 
 import { Select, SelectItem } from "@/components/ui/select";
 import { useI18n } from "@/i18n/I18nContext";

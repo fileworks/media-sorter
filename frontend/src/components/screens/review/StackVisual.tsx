@@ -1,11 +1,4 @@
-/**
- * Two copies, overlapping. The picture of "there is more than one of these".
- *
- * A duplicate set is the only thing on the Review screen that is several files
- * standing in for one entry, and a single thumbnail says nothing about that. The
- * offset pair says it before any label is read, which is what makes a set
- * findable while scanning a folder rather than only while reading it.
- */
+/** Overlapping thumbnails that distinguish a duplicate set from one file. */
 
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { cn } from "@/lib/utils";

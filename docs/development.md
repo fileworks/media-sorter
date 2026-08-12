@@ -20,7 +20,7 @@ Makefile    every dev/build command
 make install      # venv + npm install + Rust toolchain check (one-time)
 ```
 
-**Prerequisites:** Python 3.10+, Node 20+, Rust stable. On Linux you'll also
+**Prerequisites:** Python 3.10+, Node 24, Rust stable. On Linux you'll also
 need the usual image libraries (`libjpeg`, `libpng`). ffmpeg is bundled in releases —
 you don't need it installed to develop.
 
@@ -129,7 +129,8 @@ Releases are driven by **Conventional Commits** — you don't tag by hand. Push 
 updates `CHANGELOG.md`, syncs that version everywhere (`scripts/sync-version.mjs` →
 `_version.py`, `tauri.conf.json`, `Cargo.toml`, …), and pushes a `v<version>` tag. That
 tag triggers the release workflow, which builds every OS natively — macOS arm64 + Intel
-`.dmg`, Windows `.msi` + `.exe` — and uploads them to a GitHub Release.
+`.dmg`, Windows `.msi`, NSIS `.exe`, and portable `.zip` — and uploads them to a
+GitHub Release.
 
 Tag builds publish a GitHub Release only after artifact type/content checks, packaged
 backend/ffmpeg smoke tests, controlled native startup recovery, checksums, and the
@@ -147,8 +148,9 @@ version.
 
 > **One-time setup:** add a `SEMANTIC_RELEASE_TOKEN` secret (a fine-grained PAT
 > with `contents: read/write`) so the pushed tag triggers the build — a tag pushed
-> with the default `GITHUB_TOKEN` won't. To cut a release by hand instead:
-> `git tag v1.2.3 && git push origin v1.2.3`.
+> with the default `GITHUB_TOKEN` won't. If release-it creates a tag without that
+> token, dispatch the existing tag explicitly:
+> `gh workflow run release.yml --ref vX.Y.Z`.
 
 ### Building locally
 

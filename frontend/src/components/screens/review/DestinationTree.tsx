@@ -1,18 +1,4 @@
-/**
- * The folder structure this run would build — the object of the screen, not a
- * filter on it.
- *
- * Two jobs, two controls, and they used to be swapped: the chevron expanded and
- * the *label* filtered, which is backwards from every file browser anyone has
- * used. The row now expands, as a row does; a separate, separately-labelled
- * affordance makes the folder the subject of the contents pane. Both are
- * keyboard-reachable and announced differently, so assistive technology can tell
- * the two apart as well.
- *
- * Counts sit on every folder because "2,206 files would land in 08 — August" is
- * the sentence that catches a mis-set date criterion, and it catches it before
- * anything has moved.
- */
+/** Planned destination hierarchy for the current run. */
 
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiSearch } from "react-icons/fi";
@@ -101,11 +87,7 @@ function Row({
         )}
         style={{ paddingLeft: `${depth * 0.9}rem` }}
       >
-        {/* The chevron is the only control that opens the folder; the row is
-            the one that shows it. They used to be the other way round, with the
-            name toggling expansion and a trailing corner-arrow doing the
-            revealing — so the obvious click did the less useful thing, and the
-            useful one was an unlabelled glyph at the far end of the row. */}
+        {/* Expansion and content selection remain separate controls. */}
         {hasChildren ? (
           <button
             type="button"
@@ -142,9 +124,7 @@ function Row({
           </span>
         </button>
 
-        {/* Where the undecided sets are. The tree is how somebody finds the
-            work without scrolling the plan, and an open decision is the only
-            thing in here that stops the run. */}
+        {/* Mark folders containing unresolved duplicate sets. */}
         {node.undecidedSets > 0 && (
           <Tooltip label={t("review.tree.undecidedHere", { count: node.undecidedSets })}>
             <span
@@ -165,8 +145,7 @@ function Row({
         </span>
       </div>
 
-      {/* Each division of "stays where it is" states its rule once, here,
-          rather than repeating it on every row beneath it. */}
+      {/* State each stay-in-place rule once per division. */}
       {division !== null && isOpen && (
         <p
           className="py-1 pr-2 text-3xs leading-relaxed text-faint"
@@ -226,8 +205,7 @@ export function DestinationTree({
   const needle = query.trim().toLowerCase();
   const filtered = useMemo(() => filterTree(root, needle), [root, needle]);
 
-  // A folder that appears after a decision has to be openable without the user
-  // knowing it appeared. Newly-seen top-level branches start expanded.
+  // Expand newly discovered top-level branches.
   useEffect(() => {
     setExpanded((current) => {
       const next = new Set(current);
@@ -247,7 +225,7 @@ export function DestinationTree({
     if (revealOutOfScope && outOfScopeSets > 0) setAlsoOpen(true);
   }, [outOfScopeSets, revealOutOfScope]);
 
-  // A search should show its hits, not make the user open five levels to them.
+  // Expand filtered paths so every match is visible.
   const effectiveExpanded = useMemo(() => {
     if (!needle || !filtered) return expanded;
     const all = new Set<string>();
@@ -333,9 +311,7 @@ export function DestinationTree({
           </p>
         )}
 
-        {/* Sets whose members are not both in this run. Collapsed, because they
-          are not this run's business — but stated, because "why is this set not
-          listed?" is otherwise unanswerable from the screen. */}
+        {/* Keep excluded duplicate sets visible but collapsed. */}
         {outOfScopeSets > 0 && (
           <div className="mt-3 border-t border-border pt-2.5">
             <button

@@ -69,7 +69,7 @@ const ASYNC_PRESENTATIONS = [
     source: "duplicate catalog",
     loading: "review.catalog.loading",
     error: "review.stacksFailed",
-    empty: "review.band.noSets",
+    empty: "review.resolve.doneTitle",
   },
   {
     source: "outcome lookup",

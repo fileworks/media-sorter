@@ -1,9 +1,4 @@
-/**
- * The duplicate resolver from the Open Design workbench, backed by the real
- * review model. A persistent queue provides place and progress; the resolver
- * keeps recommendation, draft selection and confirmed decision visibly
- * separate. Number keys select a copy and confirmation is explicit.
- */
+/** Duplicate resolver with explicit draft and confirmed states. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiArrowLeft, FiArrowRight, FiCheck, FiLock } from "react-icons/fi";
@@ -30,14 +25,7 @@ function isOpenSet(entry: SetEntry): boolean {
   return !entry.hasBaseline && !isDecidedState(entry.decisionState);
 }
 
-/**
- * One line of evidence per copy, from the facts already on screen.
- *
- * Not a claim about quality — the queue has bytes and dates, not sharpness —
- * but "1.1 MB smaller than the largest copy" is exactly the comparison a person
- * makes by eye between two rows anyway, and stating it saves them the
- * subtraction. Anything it cannot support it does not say.
- */
+/** Derive one factual comparison note without inferring media quality. */
 function candidateNote(
   row: ReviewRow,
   rows: readonly ReviewRow[],
@@ -141,13 +129,7 @@ export function ResolveQueue({
     setEditingDecision(false);
   }, [confirmedSource, current?.id]);
 
-  // Keep very large catalogs quick to open while preserving a browsable,
-  // ordered queue. Opening a set from elsewhere always reveals it; the rail
-  // grows in deliberate chunks instead of mounting hundreds of image previews
-  // before the first decision can be made.
-  // The rail is drawn in the screen's order, so the rule bar's "sort by" moves
-  // the queue too — a queue sorted differently from the browser is a second
-  // idea of where you are.
+  // Render large queues incrementally in the screen-wide order.
   const orderedSets = useMemo(() => sortSets(allSets, sort, locale), [allSets, locale, sort]);
 
   useEffect(() => {
@@ -249,15 +231,11 @@ export function ResolveQueue({
 
   const ruleCanDecide = ruleChoices.filter((choice) => choice.source !== null).length;
   const folderCanDecide = folderChoices.filter((choice) => choice.source !== null).length;
-  // One scan over the queue, memoised: a catalog can hold hundreds of sets and
-  // every bulk action re-renders this component, so anything linear here is paid
-  // again per keystroke.
+  // Memoize the full-queue scan for bulk-action rerenders.
   const openSets = useMemo(() => allSets.filter(isOpenSet), [allSets]);
   const openCount = openSets.length;
   const decidedCount = allSets.length - openCount;
-  // Walk forward from the current set rather than asking `allSets` for each
-  // candidate's position, which was quadratic on a large queue. Wraps to the
-  // first open set that is not the current one.
+  // Find the next open set in one pass, wrapping once.
   const nextOpen = useMemo(() => {
     if (current === null) return openSets[0];
     const from = allSets.findIndex((entry) => entry.id === current.id);
@@ -271,15 +249,7 @@ export function ResolveQueue({
   const remainingSets = Math.max(0, orderedSets.length - listedSets.length);
   const candidates = current === null ? [] : sortRows(current.rows, sort, locale);
 
-  /**
-   * The rule measured against every open set, not only the selected ones.
-   *
-   * The selection-scoped bulk panel below answers "these twelve"; this answers
-   * "the rest of the queue", which is the question somebody has after deciding
-   * the interesting sets by hand. Both refuse to touch a decision already made.
-   */
-  // Ranking a set costs a catalog lookup per copy, so this stays memoised: the
-  // whole open queue is measured here, not just the selection.
+  // Measure the rule across open sets without touching manual decisions.
   const ruleDecidable = useMemo(
     () =>
       openSets
@@ -303,10 +273,7 @@ export function ResolveQueue({
         {t("review.setSelection.noFolders")}
       </p>
 
-      {/* Four groups, hairline-separated: the rule, the order, the selection,
-          and where you are in the queue. They used to be one undivided row of
-          eight controls, which is why "apply rule" and "select all sets" read
-          as the same kind of thing. */}
+      {/* Separate rule, order, selection, and queue-position controls. */}
       <div className="flex min-h-14 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border bg-card px-2.5 py-2">
         <div
           className="flex min-w-0 flex-wrap items-center gap-2"
@@ -526,7 +493,7 @@ export function ResolveQueue({
           ) : (
             <div>
               <header className="flex flex-wrap items-start gap-2 pb-2.5">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
                   <span className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
                     {t(`review.stack.kind.${current.setKind}`)}
                   </span>
@@ -542,9 +509,7 @@ export function ResolveQueue({
                     {t("review.stack.copies", { count: current.rows.length })}
                   </p>
                 </div>
-                {/* Labelled, not a bare box: this feeds the bulk actions, and
-                    an unnamed checkbox beside "Compare" reads as a mystery
-                    toggle to anyone who is not using a screen reader. */}
+                {/* This labelled selection feeds the bulk actions. */}
                 <label className="mt-0.5 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-3xs text-muted-foreground">
                   <input
                     type="checkbox"
@@ -647,16 +612,13 @@ export function ResolveQueue({
                     {t("review.resolve.chooseHelp")}
                   </div>
 
-                  {/* One copy per row, stacked: a set of four is a list to read
-                      down, not a wall of pictures to scan across. */}
+                  {/* Keep each duplicate set as one vertical comparison list. */}
                   <ul className="grid gap-2">
                     {candidates.map((row) => (
                       <li key={row.source}>
                         <Copy
                           row={row}
-                          // The number is the keyboard shortcut, so it has to
-                          // name the copy's place in the *set*, not in whatever
-                          // order the sort happens to be showing.
+                          // Shortcut numbers follow stable set order.
                           position={current.rows.indexOf(row)}
                           selected={draftSource === row.source}
                           confirmed={confirmedSource === row.source}
@@ -676,9 +638,7 @@ export function ResolveQueue({
                     ))}
                   </ul>
 
-                  {/* Summary left, actions right — the shortcut hint sits under
-                      the summary rather than between it and the buttons, where
-                      it competed with the thing it was describing. */}
+                  {/* Keep evidence and decision actions visually separate. */}
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-panel border border-border bg-card px-2.5 py-2.5">
                     <div className="mr-auto min-w-0" aria-live="polite">
                       <strong className="block text-xs text-foreground">
@@ -809,15 +769,7 @@ function BulkAction({
   );
 }
 
-/**
- * One copy, as a decision.
- *
- * Three states have to stay visibly separate or the screen lies: a *proposal*
- * (dashed green, nothing bound), a *draft selection* (solid orange, chosen but
- * unconfirmed), and a *confirmed keeper*. The chip in the corner says which,
- * in words, because the border colours alone would leave the distinction
- * invisible to anyone who cannot see them.
- */
+/** One candidate with textual proposal, draft, and confirmed states. */
 function Copy({
   row,
   position,
@@ -846,15 +798,6 @@ function Copy({
   const { t } = useI18n();
   const baseline = row.status === "baseline";
 
-  /**
-   * The whole card is the control.
-   *
-   * It used to be a strip of fixed-width columns with the select button last,
-   * which meant the row's width was the sum of its parts and the button — the
-   * only thing on the row you have to be able to reach — was the first casualty
-   * when that sum exceeded the panel. A grid distributes instead of summing, so
-   * the state chip can sit over the thumbnail where it cannot be clipped.
-   */
   return (
     <article
       className={cn(
@@ -871,8 +814,7 @@ function Copy({
     >
       <div className="relative">
         <Thumbnail path={row.source} maxPx={160} className="h-[3.625rem] w-[3.625rem] rounded-md" />
-        {/* Over the picture, not after the figures: an overlay cannot be pushed
-            out of the row by a long path in the cell beside it. */}
+        {/* Overlay state remains visible regardless of filename length. */}
         <span
           className={cn(
             "pointer-events-none absolute left-1 top-1 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-bold shadow-sm",
@@ -900,16 +842,7 @@ function Copy({
       </div>
 
       <div className="min-w-0">
-        {/* Two controls, layered rather than nested: the select target is the
-            whole card, and the name sits above it (z-10) so the detail view is
-            still one click away. Siblings, so neither swallows the other's
-            activation.
-
-            The button carries the card's own bounds rather than projecting them
-            through an `::after`. A zero-size button with a pseudo-element for a
-            hit area is invisible to anything that measures elements — test
-            drivers and assistive tooling included — even though a mouse finds
-            it. */}
+        {/* Sibling controls keep selection and detail actions independent. */}
         <button
           type="button"
           disabled={baseline}
@@ -952,20 +885,23 @@ function Copy({
         {formatBytes(row.sizeBytes, { locale })}
       </span>
 
-      <span className="text-right text-3xs text-muted-foreground">
+      <span className="candidate-date text-right text-3xs text-muted-foreground">
         {row.date === null ? t("review.resolve.noDate") : row.date}
       </span>
 
-      <span className="text-right text-3xs text-faint">
+      <span className="candidate-date-source text-right text-3xs text-faint">
         {row.date === null ? "" : formatMetadataSource(row.dateSource, t)}
       </span>
 
-      <span className="truncate font-mono text-3xs text-faint" title={row.destination ?? undefined}>
+      <span
+        className="candidate-destination truncate font-mono text-3xs text-faint"
+        title={row.destination ?? undefined}
+      >
         {row.destination !== null && `→ ${relativeDestination(row.destination, destinationRoot)}`}
       </span>
 
       {isProposed && !selected && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded border border-success/40 bg-tint-success px-1.5 py-0.5 text-3xs font-bold text-success">
+        <span className="candidate-recommendation-badge pointer-events-none absolute right-1.5 top-1.5 z-10 rounded border border-success/40 bg-tint-success px-1.5 py-0.5 text-3xs font-bold text-success">
           {t("review.resolve.recommendation")}
         </span>
       )}

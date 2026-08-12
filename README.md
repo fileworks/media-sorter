@@ -27,15 +27,16 @@ explicitly select a cloud tagging provider.
 
 Download the latest macOS DMG, Windows MSI/installer, or portable Windows ZIP
 from [Releases](https://github.com/fileworks/media-sorter/releases/latest).
-Python, Node, and ffmpeg are bundled.
+Python, Node, and ffmpeg are bundled. The macOS build requires macOS 12 or
+later, matching the minimum version of its bundled media tools.
 
 The installers are currently unsigned. On first launch, use **right-click →
 Open** on macOS or **More info → Run anyway** in Windows SmartScreen.
 
 ## Status
 
-The latest verified public release is
-[v1.4.2](https://github.com/fileworks/media-sorter/releases/tag/v1.4.2).
+The latest verified public release is listed on the
+[Releases page](https://github.com/fileworks/media-sorter/releases/latest).
 Installers remain unsigned by the recorded project decision; the release page
 publishes checksums, but those checksums do not prove publisher identity.
 
@@ -166,6 +167,11 @@ cd frontend && npm run lint && npm test && npm run build
 The desktop shell is Tauri/Rust, the API is FastAPI/Python, and the interface is
 React/TypeScript. Releases bundle the frozen backend plus static ffmpeg and
 ffprobe binaries.
+
+Renovate combines routine non-major updates into one Monday `fix(deps)` pull
+request and squash-merges it only after all checks pass. Only one dependency
+branch can exist at a time. Major, replacement, and rollback updates stay on
+the Dependency Dashboard until explicitly approved and are never auto-merged.
 
 - [Development guide](docs/development.md)
 - [Architecture](docs/design.md)

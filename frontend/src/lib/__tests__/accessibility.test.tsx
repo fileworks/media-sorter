@@ -18,9 +18,7 @@ import { ExecutePreflight } from "@/components/OperationCenter";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { RunLog } from "@/components/screens/RunLog";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
-import { PlanSummary } from "@/components/screens/review/PlanSummary";
 import { destinationTree } from "@/lib/reviewPlan";
-import type { ReviewStats } from "@/lib/reviewBrowse";
 import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
 import { StageShell } from "@/components/StageShell";
@@ -188,20 +186,6 @@ function renderShell(locale: Locale, planExists = false) {
   );
 }
 
-const REVIEW_STATS: ReviewStats = {
-  scanned: 1000,
-  organized: 900,
-  setAside: 80,
-  staysPut: 20,
-  sets: 40,
-  copies: 80,
-  copyBytes: 1_200_000,
-  undecided: 30,
-  proposed: 0,
-  outstanding: 30,
-  share: { organized: 90, setAside: 8, staysPut: 2 },
-};
-
 /** A dry run with one ordinary file, one duplicate stack and one warning. */
 const PREVIEW_RESULT = {
   config_fingerprint: "fp",
@@ -365,17 +349,6 @@ const DIALOG_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
 
 const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
   ["Sources", () => <SourcesScreen {...SOURCES_PROPS} />],
-  [
-    "plan summary",
-    () => (
-      <PlanSummary
-        stats={REVIEW_STATS}
-        requiredBytes={68_400_000_000}
-        rootCount={3}
-        onResolve={() => undefined}
-      />
-    ),
-  ],
   [
     "destination tree",
     () => (
