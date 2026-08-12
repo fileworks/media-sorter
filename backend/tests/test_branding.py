@@ -58,6 +58,10 @@ def test_tauri_installer_visuals_reference_generated_assets() -> None:
     bundle = config["bundle"]
     windows = bundle["windows"]
 
+    # Cargo's package name is `media-sorter`; without an explicit main binary
+    # name Tauri v2 installs `media-sorter.exe`, while the branded package
+    # smoke tests and user-facing documentation correctly expect MediaSorter.
+    assert config["mainBinaryName"] == config["productName"] == "MediaSorter"
     assert windows["nsis"] == {
         "installMode": "both",
         "installerIcon": "icons/icon.ico",
