@@ -205,9 +205,7 @@ export function ModalHeader({
 }
 
 export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", className)}>{children}</div>
-  );
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", className)}>{children}</div>;
 }
 
 export function ModalFooter({ children }: { children: ReactNode }) {

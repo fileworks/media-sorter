@@ -76,7 +76,10 @@ export function ReviewToolbar({
 
       <SortControl id="review-browse-sort" value={sort} onChange={onSort} />
 
-      <div className="flex shrink-0 rounded-control border border-border bg-card p-0.5" role="group">
+      <div
+        className="flex shrink-0 rounded-control border border-border bg-card p-0.5"
+        role="group"
+      >
         {(["list", "grid"] as const).map((mode) => (
           <Tooltip key={mode} label={t(`review.view.${mode}`)}>
             <button

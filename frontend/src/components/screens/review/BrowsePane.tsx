@@ -887,10 +887,7 @@ function FileLine({
         )}
       </span>
 
-      <span
-        className="truncate font-mono text-3xs text-faint"
-        title={row.destination ?? undefined}
-      >
+      <span className="truncate font-mono text-3xs text-faint" title={row.destination ?? undefined}>
         {row.destination === null
           ? ""
           : (destinationFolder(relativeDestination(row.destination, destinationRoot)) ?? "")}

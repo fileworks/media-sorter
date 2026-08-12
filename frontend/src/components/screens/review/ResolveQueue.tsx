@@ -56,7 +56,9 @@ function candidateNote(
   if (row.sizeBytes === largest && largest > 0) {
     const smaller = rows.some((candidate) => candidate.sizeBytes < largest);
     if (smaller) {
-      return isNewest ? t("review.resolve.note.largestAndNewest") : t("review.resolve.note.largest");
+      return isNewest
+        ? t("review.resolve.note.largestAndNewest")
+        : t("review.resolve.note.largest");
     }
   } else if (largest > row.sizeBytes) {
     return t("review.resolve.note.smallerBy", {
@@ -306,7 +308,10 @@ export function ResolveQueue({
           eight controls, which is why "apply rule" and "select all sets" read
           as the same kind of thing. */}
       <div className="flex min-h-14 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border bg-card px-2.5 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("review.keepRule")}>
+        <div
+          className="flex min-w-0 flex-wrap items-center gap-2"
+          aria-label={t("review.keepRule")}
+        >
           <label
             htmlFor="review-keep-rule"
             className="whitespace-nowrap text-3xs text-muted-foreground"

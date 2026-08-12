@@ -68,9 +68,7 @@ export function RuleImpactModal({
             </li>
           ))}
         </ul>
-        <p className="mt-2.5 text-3xs leading-relaxed text-faint">
-          {t("review.keepRule.scope")}
-        </p>
+        <p className="mt-2.5 text-3xs leading-relaxed text-faint">{t("review.keepRule.scope")}</p>
       </ModalBody>
       <ModalFooter>
         <Button size="sm" variant="outline" onClick={onClose}>

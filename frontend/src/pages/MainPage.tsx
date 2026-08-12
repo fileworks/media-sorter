@@ -13,7 +13,7 @@
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { FiActivity, FiArrowLeft, FiSearch } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -42,6 +42,8 @@ import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
 import { useLogs } from "@/hooks/useLogs";
+import { useRecipes } from "@/hooks/useRecipes";
+import { useRootFolders } from "@/hooks/useRootFolders";
 import { useRootProbes } from "@/hooks/useRootProbes";
 import { usePreview } from "@/hooks/usePreview";
 import { useSorting } from "@/hooks/useSorting";
@@ -57,15 +59,14 @@ import {
   type ReviewDecisionUpdate,
   type RunDecisions,
 } from "@/lib/runDecisions";
-import type { RootCard, RootRole } from "@/lib/sourcesStage";
 import { activeCards, blockingConflicts, rootCards, validateRoots } from "@/lib/sourcesStage";
 import { stageComplete, type StageInputs, type StageKey, type StageState } from "@/lib/stageModel";
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { invalidationForConfigPatch } from "@/lib/workflowInvalidation";
-import type { OperationSummary } from "@/lib/operationCenter";
+import { operationSummaries, type OperationSummary } from "@/lib/operationCenter";
 import { api } from "@/services/api";
-import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
+import type { Config, ConfigIssue } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
   import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
@@ -83,12 +84,8 @@ const FinishedRun = lazy(() =>
   import("@/components/screens/FinishedRun").then((module) => ({ default: module.FinishedRun })),
 );
 
-/** What a folder request is for: a new root in a role, or an existing one. */
-type FolderTarget = { kind: "add"; role: RootRole } | { kind: "change"; rootId: string };
-
 export default function MainPage() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { theme, toggle: toggleTheme } = useTheme();
   const { config, validationErrors, updateConfig, saveError, retrySave } = useConfig();
   const { setLocale, locale, t } = useI18n();
@@ -104,7 +101,6 @@ export default function MainPage() {
   const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
   const [reviewView, setReviewView] = useState<"plan" | "review">("plan");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
-  const [folderPrompt, setFolderPrompt] = useState<FolderTarget | null>(null);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
@@ -271,112 +267,23 @@ export default function MainPage() {
     [handleConfigSave],
   );
 
-  const handleRootsChange = useCallback(
-    (nextCards: RootCard[]) => {
-      if (!config) return;
-      const roots = nextCards.map((card) => {
-        const existing = config.library_profile.roots.find((root) => root.root_id === card.rootId);
-        return {
-          root_id: card.rootId,
-          role: card.role,
-          path: card.path,
-          display_name: card.displayName,
-          priority: card.priority,
-          exclusions: card.exclusions,
-          identity: existing?.identity ?? null,
-        };
-      });
-      handleConfigSave({
-        source_directory: roots.find((root) => root.role === "input")?.path ?? "",
-        target_directory: roots.find((root) => root.role === "destination")?.path ?? "",
-        library_profile: { ...config.library_profile, roots },
-      });
-    },
-    [config, handleConfigSave],
+  const onPickerFailed = useCallback(
+    () => toast(t("sources.folderPickerFailed"), "error"),
+    [t, toast],
   );
-
-  /** Where a chosen path lands: appended as a new root, or replacing one. */
-  const applyFolder = useCallback(
-    (target: FolderTarget, path: string) => {
-      if (target.kind === "change") {
-        handleRootsChange(
-          cards.map((card) =>
-            card.rootId === target.rootId ? { ...card, path, volume: null } : card,
-          ),
-        );
-        return;
-      }
-      handleRootsChange([
-        ...cards,
-        {
-          rootId: `${target.role}-${Date.now()}`,
-          role: target.role,
-          path,
-          displayName: null,
-          // Priority is no longer written: the reorder controls are gone and
-          // nothing consumes the order. The field stays in the model.
-          priority: 0,
-          exclusions: [],
-          state: "unknown",
-          volume: null,
-          freshness: "unknown",
-          indexedFiles: null,
-          issueCount: 0,
-        },
-      ]);
-    },
-    [cards, handleRootsChange],
-  );
-
-  /**
-   * Ask for a folder. The desktop shell has the OS picker; a browser gets the
-   * folder browser, which lists through the same endpoint that validates a
-   * root. Both paths land in `applyFolder`, so the two builds cannot diverge.
-   */
-  const requestFolder = useCallback(
-    async (target: FolderTarget) => {
-      if (!isTauri) {
-        setFolderPrompt(target);
-        return;
-      }
-      try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const selected = await open({ directory: true, multiple: false });
-        if (typeof selected === "string") applyFolder(target, selected);
-      } catch {
-        toast(t("sources.folderPickerFailed"), "error");
-      }
-    },
-    [applyFolder, t, toast],
-  );
-
-  const removeFolder = useCallback(
-    (rootId: string) => handleRootsChange(cards.filter((card) => card.rootId !== rootId)),
-    [cards, handleRootsChange],
-  );
+  const { changeRoots, requestFolder, removeFolder, folderBrowser } = useRootFolders({
+    config,
+    cards,
+    saveConfig: handleConfigSave,
+    onPickerFailed,
+  });
 
   // ── Recipes ────────────────────────────────────────────────────────────────
 
-  const { data: savedRecipes = [] } = useQuery({
-    queryKey: ["recipes"],
-    queryFn: () => api.listRecipes(),
+  const { savedRecipes, saveRecipe, deleteRecipe } = useRecipes({
     enabled: health?.status === "ok",
-    staleTime: 60_000,
-  });
-
-  const saveRecipe = useMutation({
-    mutationFn: ({ name, settings }: { name: string; settings: RecipeSettings }) =>
-      api.saveRecipe(name, settings),
-    onSuccess: (recipe) => {
-      void queryClient.invalidateQueries({ queryKey: ["recipes"] });
-      toast(t("recipes.saved", { name: recipe.name }), "success");
-    },
-  });
-
-  const deleteRecipe = useMutation({
-    mutationFn: (recipeId: string) => api.deleteRecipe(recipeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recipes"] }),
-    onError: () => toast(t("recipes.deleteFailed"), "error"),
+    onSaved: (name) => toast(t("recipes.saved", { name }), "success"),
+    onDeleteFailed: () => toast(t("recipes.deleteFailed"), "error"),
   });
 
   // ── Gates ──────────────────────────────────────────────────────────────────
@@ -665,65 +572,12 @@ export default function MainPage() {
           : "connecting";
 
   // Reports provide completed runs; diagnostics provides the one task that may
-  // still be running. Combining them here makes the operation center available
-  // from every workflow stage instead of only from Execute.
-  const operationSummaries = useMemo<OperationSummary[]>(() => {
-    const finished = (historyMeta?.operations ?? []).map((operation) => ({
-      operationId: operation.id,
-      kind: "sort" as const,
-      startedAt: operation.started_at ?? operation.execution_date,
-      finishedAt: operation.finished_at,
-      // Historical records can predate the explicit outcome enum. They remain
-      // visible in the center as needing attention instead of masquerading as
-      // a successful completed run.
-      outcome: operation.outcome === "unknown" ? "failed" : operation.outcome,
-      counts: {
-        verified_success: operation.files_sorted,
-        warnings: operation.incomplete_units + operation.unmatched_companions,
-        skipped: operation.files_skipped + operation.already_in_destination,
-        quarantined:
-          operation.future_dates +
-          operation.unknown_dates +
-          operation.corrupted_files +
-          operation.junk_files,
-        failed: operation.files_failed,
-        unresolved: operation.remaining_files,
-      },
-      bytesWritten: 0,
-      reportId: operation.id,
-      recoveryState: recoveryOperations.some((item) => item.operation_id === operation.id)
-        ? ("required" as const)
-        : ("none" as const),
-    }));
-    if (!activeTask) return finished;
-    const kind =
-      activeTask.operation_kind === "sort"
-        ? "sort"
-        : activeTask.operation_kind === "preview"
-          ? "preview"
-          : "scan";
-    return [
-      {
-        operationId: activeTask.task_id,
-        kind,
-        startedAt: activeTask.started_at ?? new Date().toISOString(),
-        finishedAt: null,
-        outcome: null,
-        counts: {
-          verified_success: 0,
-          warnings: 0,
-          skipped: 0,
-          quarantined: 0,
-          failed: 0,
-          unresolved: 0,
-        },
-        bytesWritten: 0,
-        reportId: null,
-        recoveryState: "none" as const,
-      },
-      ...finished,
-    ];
-  }, [activeTask, historyMeta?.operations, recoveryOperations]);
+  // still be running. Combining them makes the operation center available from
+  // every workflow stage instead of only from Execute.
+  const operations = useMemo<OperationSummary[]>(
+    () => operationSummaries(historyMeta?.operations ?? [], activeTask, recoveryOperations),
+    [activeTask, historyMeta?.operations, recoveryOperations],
+  );
 
   const commandItems = useMemo(
     () =>
@@ -913,7 +767,7 @@ export default function MainPage() {
                 analysis={analysis.result}
                 config={config}
                 disabled={isAnyRunning}
-                onChange={handleRootsChange}
+                onChange={changeRoots}
                 onExcludeForRun={(next) => {
                   setExcludedForRun(next);
                   discardScan();
@@ -1122,7 +976,7 @@ export default function MainPage() {
         <ModalHeader />
         <ModalBody>
           <OperationCenter
-            operations={operationSummaries}
+            operations={operations}
             progress={sorting.progress?.progress ?? preview.progress ?? analysis.progress}
             onOpen={() => {
               setOperationCenterOpen(false);
@@ -1132,21 +986,7 @@ export default function MainPage() {
         </ModalBody>
       </Modal>
 
-      <FolderBrowserDialog
-        open={folderPrompt !== null}
-        initialPath={
-          folderPrompt?.kind === "change"
-            ? (cards.find((card) => card.rootId === folderPrompt.rootId)?.path ?? "")
-            : ""
-        }
-        requireWritable={
-          folderPrompt?.kind === "change"
-            ? cards.find((card) => card.rootId === folderPrompt.rootId)?.role === "destination"
-            : folderPrompt?.role === "destination"
-        }
-        onSelect={(path) => folderPrompt && applyFolder(folderPrompt, path)}
-        onClose={() => setFolderPrompt(null)}
-      />
+      <FolderBrowserDialog {...folderBrowser} />
 
       <ConfirmDialog
         open={cancelConfirmOpen}

@@ -46,7 +46,10 @@ export function setSortModel(entry: SetEntry): SortModel {
   return {
     name: lead?.name ?? entry.id,
     size: rows.reduce((largest, row) => Math.max(largest, row.sizeBytes), 0),
-    date: rows.reduce((latest, row) => (row.date !== null && row.date > latest ? row.date : latest), ""),
+    date: rows.reduce(
+      (latest, row) => (row.date !== null && row.date > latest ? row.date : latest),
+      "",
+    ),
   };
 }
 
@@ -60,7 +63,12 @@ export function entrySortModel(entry: BrowseEntry): SortModel {
  * so the order is total — an unstable tail is what makes a list appear to
  * reshuffle itself when a single decision changes one row.
  */
-export function compareBySort(a: SortModel, b: SortModel, sort: ReviewSort, locale: string): number {
+export function compareBySort(
+  a: SortModel,
+  b: SortModel,
+  sort: ReviewSort,
+  locale: string,
+): number {
   const byName = () => a.name.localeCompare(b.name, locale, { sensitivity: "base" });
   if (sort === "name") return byName();
   if (sort === "size") return b.size - a.size || byName();
@@ -92,11 +100,7 @@ export function sortRows(
   );
 }
 
-export function sortSets(
-  sets: readonly SetEntry[],
-  sort: ReviewSort,
-  locale: string,
-): SetEntry[] {
+export function sortSets(sets: readonly SetEntry[], sort: ReviewSort, locale: string): SetEntry[] {
   return [...sets].sort((left, right) =>
     compareBySort(setSortModel(left), setSortModel(right), sort, locale),
   );
