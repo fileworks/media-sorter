@@ -682,6 +682,7 @@ export function ReviewScreen({
               onClearSetSelection={surface.clearSetSelection}
               keepSourceByRule={keepSourceByRule}
               individualOnly={individualOnly}
+              destinationRoot={config.target_directory}
               sort={surface.sort}
               onSort={surface.setSort}
             />
@@ -813,6 +814,7 @@ export function ReviewScreen({
                       onKeep={chooseKeeperBySource}
                       onKeepAll={keepAll}
                       onCompare={compareSet}
+                      destinationRoot={config.target_directory}
                       embedded
                     />
                   )}

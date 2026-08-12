@@ -44,12 +44,16 @@ export function ReviewToolbar({
   return (
     // The search field takes the slack rather than sitting at a fixed width,
     // which clipped its own placeholder at the sizes this bar actually gets.
-    <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+    // It keeps a floor, though: with `min-w-0` alone it went on giving space
+    // away until the placeholder was a single letter. Below that floor the bar
+    // wraps onto its own line instead, which is the honest way to run out of
+    // room.
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
       <p className="sr-only" role="status">
         {scopeLabel}
       </p>
 
-      <label className="relative min-w-0 flex-1 sm:max-w-sm">
+      <label className="relative min-w-[11rem] flex-1 sm:max-w-sm">
         <span className="sr-only">{t("review.search")}</span>
         <FiSearch
           className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"

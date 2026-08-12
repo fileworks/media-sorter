@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiCornerDownRight, FiSearch } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiSearch } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
@@ -101,45 +101,46 @@ function Row({
         )}
         style={{ paddingLeft: `${depth * 0.9}rem` }}
       >
-        {/* The row itself: activating it opens or closes the folder. A leaf has
-            nothing to open, so it is a plain span and not a dead button. */}
+        {/* The chevron is the only control that opens the folder; the row is
+            the one that shows it. They used to be the other way round, with the
+            name toggling expansion and a trailing corner-arrow doing the
+            revealing — so the obvious click did the less useful thing, and the
+            useful one was an unlabelled glyph at the far end of the row. */}
         {hasChildren ? (
           <button
             type="button"
             onClick={() => onToggle(node.path)}
             aria-expanded={isOpen}
             aria-label={t("review.browse.expand", { folder: name })}
-            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 pl-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 rounded p-0.5 text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {isOpen ? (
-              <FiChevronDown className="h-3 w-3 shrink-0 text-faint" aria-hidden />
+              <FiChevronDown className="h-3 w-3" aria-hidden />
             ) : (
-              <FiChevronRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
+              <FiChevronRight className="h-3 w-3" aria-hidden />
             )}
-            <span
-              className={cn(
-                "truncate",
-                selected && "font-semibold text-primary",
-                !selected && (stays || node.isReview ? "text-muted-foreground" : "text-foreground"),
-              )}
-            >
-              {name}
-            </span>
           </button>
         ) : (
-          <span className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1.5">
-            <span className="w-3 shrink-0" aria-hidden />
-            <span
-              className={cn(
-                "truncate",
-                selected && "font-semibold text-primary",
-                !selected && (stays || node.isReview ? "text-muted-foreground" : "text-foreground"),
-              )}
-            >
-              {name}
-            </span>
-          </span>
+          <span className="w-4 shrink-0" aria-hidden />
         )}
+
+        <button
+          type="button"
+          aria-pressed={selected}
+          aria-label={t("review.browse.showContents", { folder: name })}
+          onClick={() => onSelect(selected ? null : node.path)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span
+            className={cn(
+              "truncate",
+              selected && "font-semibold text-primary",
+              !selected && (stays || node.isReview ? "text-muted-foreground" : "text-foreground"),
+            )}
+          >
+            {name}
+          </span>
+        </button>
 
         {/* Where the undecided sets are. The tree is how somebody finds the
             work without scrolling the plan, and an open decision is the only
@@ -154,27 +155,14 @@ function Row({
           </Tooltip>
         )}
 
-        <span className={cn("shrink-0 tabular-nums", selected ? "text-primary" : "text-faint")}>
+        <span
+          className={cn(
+            "shrink-0 font-mono text-3xs tabular-nums",
+            selected ? "text-primary" : "text-faint",
+          )}
+        >
           {node.count.toLocaleString(locale)}
         </span>
-
-        {/* The second job, and the second control. Named "Show the contents of
-            X" rather than "X", so a screen reader user hears which of the two
-            buttons on this row does what. */}
-        <Tooltip label={t("review.browse.showContents", { folder: name })}>
-          <button
-            type="button"
-            aria-pressed={selected}
-            aria-label={t("review.browse.showContents", { folder: name })}
-            onClick={() => onSelect(selected ? null : node.path)}
-            className={cn(
-              "shrink-0 rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              selected ? "text-primary" : "text-faint hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <FiCornerDownRight className="h-3 w-3" aria-hidden />
-          </button>
-        </Tooltip>
       </div>
 
       {/* Each division of "stays where it is" states its rule once, here,

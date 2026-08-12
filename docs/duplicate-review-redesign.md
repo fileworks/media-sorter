@@ -1,5 +1,22 @@
 # Duplicate Review Redesign
 
+> **Status: proposal, partly adopted.** This is the reasoning behind the current
+> duplicate surface, not a description of it — read
+> [duplicate-review.md](duplicate-review.md) for what ships.
+>
+> Adopted: stacks are embedded in the destination browser and decidable there;
+> one run-local decision model backs every surface; recommendations are visibly
+> non-binding and never unlock Execute; ruled-out copies centralize under
+> `_copies/` beside their keeper.
+>
+> **Not adopted: point 3 below, "remove or demote the separate Resolve mode."**
+> The Open Design reference `mediasorter-final.html` keeps two tabs — a
+> destination browser and a duplicate queue — because scanning a planned library
+> and adjudicating one set at a time are different tasks, and the queue is what
+> gives the second one a place and a sense of progress. Both tabs share the same
+> decisions, selection, and sort order, which is the property this document was
+> actually after.
+
 ## Product direction
 
 Review is primarily a destination browser. It shows the planned library structure

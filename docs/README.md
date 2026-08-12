@@ -27,7 +27,8 @@ per line, no prose. Everything else explains a subsystem to a person.
 | File | Covers |
 |---|---|
 | [design.md](design.md) | architecture and the *why* behind each decision |
-| [design-system.md](design-system.md) | semantic UI tokens, component geometry, motion, responsiveness, and icon rules |
+| [design-system.md](design-system.md) | semantic UI tokens, component geometry, review row grids, motion, responsiveness, and icon rules |
+| [duplicate-review-redesign.md](duplicate-review-redesign.md) | the proposal behind the current duplicate surface, and the one point of it that was not adopted |
 | [development.md](development.md) | setup, running, quality gates, testing, releasing |
 | [architecture-ownership.md](architecture-ownership.md) | the module seams and the growth-review policy |
 

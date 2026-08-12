@@ -31,7 +31,10 @@ type VisualStep = {
   id: Stage | "plan";
   stage: Stage;
   labelKey: string;
+  /** The full sentence, which only the tooltip has room for. */
   descriptionKey: string;
+  /** Two or three words, which is what the rail can actually show. */
+  hintKey: string;
 };
 
 const VISUAL_STEPS: VisualStep[] = [
@@ -40,24 +43,28 @@ const VISUAL_STEPS: VisualStep[] = [
     stage: entry.stage,
     labelKey: `stage.${entry.stage}.label`,
     descriptionKey: `stage.${entry.stage}.description`,
+    hintKey: `stage.${entry.stage}.hint`,
   })),
   {
     id: "plan",
     stage: "review",
     labelKey: "stage.plan.label",
     descriptionKey: "stage.plan.description",
+    hintKey: "stage.plan.hint",
   },
   {
     id: "review",
     stage: "review",
     labelKey: "stage.review.label",
     descriptionKey: "stage.review.description",
+    hintKey: "stage.review.hint",
   },
   {
     id: "execute",
     stage: "execute",
     labelKey: "stage.execute.label",
     descriptionKey: "stage.execute.description",
+    hintKey: "stage.execute.hint",
   },
 ];
 
@@ -162,12 +169,13 @@ export function StageStepper({
                     >
                       {t(entry.labelKey)}
                     </span>
+                    {/* A locked step shows what it is for, not why it is
+                        locked. Every locked step shares one blocking reason, so
+                        printing it here repeated the same sentence down the
+                        whole rail; it is stated once in the footer, and this
+                        row's tooltip still carries it. */}
                     <span className="mt-0.5 block truncate text-3xs font-normal text-faint">
-                      {readiness.canEnter
-                        ? isComplete
-                          ? t("stage.complete")
-                          : t(entry.descriptionKey)
-                        : readiness.reason}
+                      {isComplete && readiness.canEnter ? t("stage.complete") : t(entry.hintKey)}
                     </span>
                   </span>
                 </button>

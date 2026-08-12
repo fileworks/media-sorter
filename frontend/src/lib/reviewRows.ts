@@ -573,6 +573,38 @@ export function destinationSegments(destination: string, root = ""): string[] {
   return relative.split("/").filter(Boolean).slice(0, -1);
 }
 
+/**
+ * A destination as the review surface prints it: relative to the library root.
+ *
+ * Rows quote where a file lands, and the absolute path is the least useful form
+ * of that — it is mostly the same machine-specific prefix repeated down the
+ * column, which pushes the part that actually differs off the end of the cell.
+ * A path outside the root is returned whole, for the same reason
+ * `destinationSegments` keeps it: that is an anomaly worth seeing.
+ */
+export function relativeDestination(destination: string, root = ""): string {
+  const normalize = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "");
+  const full = normalize(destination);
+  const prefix = normalize(root);
+  if (prefix === "" || !(full === prefix || full.startsWith(`${prefix}/`))) return full;
+  return full.slice(prefix.length).replace(/^\/+/, "");
+}
+
+/**
+ * The folder a file sits in, named the way a person would name it.
+ *
+ * Rows quote the containing folder to tell two copies apart, and the absolute
+ * path is a poor way to do that: the segments that differ are at the end, so a
+ * cell that truncates shows the identical prefix and hides the answer. Callers
+ * keep the full path on the element's `title` for the case where the leaf is
+ * genuinely ambiguous.
+ */
+export function folderLeaf(folder: string): string {
+  const normalized = folder.replace(/\\/g, "/").replace(/\/+$/, "");
+  const separator = normalized.lastIndexOf("/");
+  return separator === -1 ? normalized : normalized.slice(separator + 1);
+}
+
 // ── Selection ────────────────────────────────────────────────────────────────
 
 export interface SelectionActions {

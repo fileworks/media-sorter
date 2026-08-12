@@ -54,7 +54,7 @@ import {
   type SetEntry,
 } from "@/lib/reviewBrowse";
 import { sortEntries, sortRows, type ReviewSort } from "@/lib/reviewSort";
-import type { ReviewRow } from "@/lib/reviewRows";
+import { relativeDestination, type ReviewRow } from "@/lib/reviewRows";
 
 export type ViewMode = "grid" | "list";
 
@@ -115,6 +115,8 @@ interface BrowsePaneProps {
   onKeep: (setId: string, source: string) => void;
   onKeepAll: (setId: string) => void;
   onCompare: (entry: SetEntry) => void;
+  /** Library root, stripped from planned destinations so rows show the tail. */
+  destinationRoot: string;
   /** Remove a second border when the pane already sits inside Review's shell. */
   embedded?: boolean;
 }
@@ -138,6 +140,7 @@ export function BrowsePane({
   onKeep,
   onKeepAll,
   onCompare,
+  destinationRoot,
   embedded = false,
 }: BrowsePaneProps) {
   const { t, locale } = useI18n();
@@ -245,6 +248,22 @@ export function BrowsePane({
       role="group"
       aria-label={t("review.items")}
     >
+      {/* The list is a table in everything but markup, so it gets a table's
+          header. It shares `.asset-grid` with the rows, which is what stops a
+          heading from describing a column the rows do not have — and it lives
+          inside the scroller, because a header outside one is offset by the
+          scrollbar and drifts out of line with the columns it names. */}
+      <div
+        aria-hidden
+        className="asset-grid sticky top-0 z-20 border-b border-border bg-card px-3 py-1 text-3xs font-bold uppercase tracking-wider text-faint"
+      >
+        <span />
+        <span />
+        <span>{t("review.browse.columnName")}</span>
+        <span className="text-right">{t("review.browse.columnDate")}</span>
+        <span className="text-right">{t("review.browse.columnStatus")}</span>
+        <span>{t("review.browse.columnDestination")}</span>
+      </div>
       <div style={{ height: windowing.totalSize, position: "relative" }}>
         {windowing.virtualItems.map((virtual) => {
           const line = lines[virtual.index];
@@ -299,6 +318,7 @@ export function BrowsePane({
                   onToggle={(shiftKey) => onToggle(line.row.source, shiftKey)}
                   onOpenDetail={() => onOpenDetail(line.row.source)}
                   onEnlarge={() => onEnlarge(line.row.source)}
+                  destinationRoot={destinationRoot}
                   locale={locale}
                 />
               )}
@@ -764,6 +784,7 @@ function FileLine({
   onToggle,
   onOpenDetail,
   onEnlarge,
+  destinationRoot,
   locale,
 }: {
   row: ReviewRow;
@@ -771,6 +792,7 @@ function FileLine({
   onToggle: (shiftKey: boolean) => void;
   onOpenDetail: () => void;
   onEnlarge: () => void;
+  destinationRoot: string;
   locale: string;
 }) {
   const { t } = useI18n();
@@ -786,7 +808,7 @@ function FileLine({
         onToggle(event.shiftKey);
       }}
       className={cn(
-        "flex items-center gap-2.5 border-b border-border px-3 py-2 text-xs",
+        "asset-grid h-[3.25rem] border-b border-border px-3 text-xs",
         !locked && "cursor-pointer hover:bg-muted/50",
         selected && "bg-accent",
       )}
@@ -806,10 +828,10 @@ function FileLine({
         onChange={(event) =>
           onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
         }
-        className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+        className="h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
       />
 
-      <span onClick={(event) => event.stopPropagation()} className="shrink-0">
+      <span onClick={(event) => event.stopPropagation()}>
         <Thumbnail
           path={row.source}
           maxPx={80}
@@ -825,38 +847,62 @@ function FileLine({
           event.stopPropagation();
           onOpenDetail();
         }}
-        className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        title={t(row.reason.key, row.reason.params)}
+        className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="flex items-center gap-1.5 truncate font-medium text-foreground">
           {locked && <FiLock className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />}
           {row.name}
         </span>
-        {/* Where it came from, then why it lands where it lands. Both without a
-            request: a per-row fetch over forty thousand rows is not a list. */}
+        {/* Size and where the date came from — the qualifier, not the sentence.
+            The full reason was a whole clause that repeated the date now shown
+            in its own column, and the absolute source path it used to carry was
+            the widest thing in the list and the least worth reading. Both are
+            one click away in the detail view, and on this row's tooltip. */}
         <span className="block truncate text-3xs text-faint">
-          {t("review.browse.from", { folder: row.folder })} · {t(row.reason.key, row.reason.params)}
+          {formatBytes(row.sizeBytes, { locale })}
+          {row.date !== null && ` · ${formatMetadataSource(row.dateSource, t)}`}
         </span>
       </button>
 
-      <span className="hidden shrink-0 text-muted-foreground sm:inline">
-        {formatBytes(row.sizeBytes, { locale })}
+      <span className="truncate text-right text-3xs tabular-nums text-muted-foreground">
+        {row.date ?? t("review.resolve.noDate")}
       </span>
 
-      {row.setAsideCategory !== null && (
-        <span className="shrink-0 rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-3xs font-semibold text-warning">
-          {t(`review.setAside.${row.setAsideCategory}`)}
-        </span>
-      )}
-
-      {row.flags.map((flag) => (
-        <Tooltip key={flag} label={t(`review.flag.${flag}.help`)}>
-          <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-3xs font-semibold text-muted-foreground">
-            {t(`review.flag.${flag}`)}
+      <span className="flex justify-end gap-1">
+        {row.setAsideCategory !== null ? (
+          <span className="truncate rounded border border-warning/40 bg-tint-warning px-1.5 py-0.5 text-3xs font-semibold text-warning">
+            {t(`review.setAside.${row.setAsideCategory}`)}
           </span>
-        </Tooltip>
-      ))}
+        ) : row.flags.length > 0 ? (
+          <Tooltip label={t(`review.flag.${row.flags[0]}.help`)}>
+            <span className="truncate rounded border border-border px-1.5 py-0.5 text-3xs font-semibold text-muted-foreground">
+              {t(`review.flag.${row.flags[0]}`)}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="rounded bg-tint-success px-1.5 py-0.5 text-3xs font-semibold text-success">
+            {t("review.browse.statusReady")}
+          </span>
+        )}
+      </span>
+
+      <span
+        className="truncate font-mono text-3xs text-faint"
+        title={row.destination ?? undefined}
+      >
+        {row.destination === null
+          ? ""
+          : (destinationFolder(relativeDestination(row.destination, destinationRoot)) ?? "")}
+      </span>
     </div>
   );
+}
+
+/** The folder part of a root-relative destination — the cell shows where, not what. */
+function destinationFolder(relative: string): string {
+  const separator = relative.lastIndexOf("/");
+  return separator === -1 ? "" : `${relative.slice(0, separator)}/`;
 }
 
 /** One file in the grid: the tile opens it, the corner checkbox selects it. */

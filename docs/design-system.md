@@ -63,7 +63,34 @@ dashed, while a confirmed keeper is orange and solid.
 
 Use the shared `Button`, `Select`, `Input`, `Toggle`, `Modal`, `Tooltip`, `SettingRow`,
 and `StateView` before adding local control chrome. A component owns its layout; global
-CSS owns tokens, native control normalization, and motion accessibility.
+CSS owns tokens, native control normalization, motion accessibility, and the two review
+row grids below.
+
+### Review row grids
+
+The two review surfaces are tables in everything but markup, so their column templates
+live once in `index.css` as `.asset-grid` (browse) and `.candidate-grid` (resolve) rather
+than inline on each row. The header row shares the class with its rows, which is what
+stops a heading from naming a column the rows do not have.
+
+| Class | Columns | Drops at 1280px | Drops again at 900px |
+|---|---|---|---|
+| `.asset-grid` | select · thumbnail · name · date · status · destination | destination | status |
+| `.candidate-grid` | thumbnail · name · size · date · date source · destination | date source | date and destination |
+
+Two rules follow from those breakpoints. Columns drop from the right, least-decisive
+first — a destination is recoverable from the row's detail view, a file's name is not.
+And a row's controls never live in a trailing column: the resolve card carries its
+keep-state chip over the thumbnail, because a control placed after a variable-width path
+is the first thing an overflowing row pushes out of reach.
+
+Rows quote destinations relative to the library root and folders by their leaf name
+(`relativeDestination`, `folderLeaf` in `lib/reviewRows.ts`). Absolute paths repeat one
+machine-specific prefix down the whole column and truncate away the part that differs;
+the full value stays on the element's `title`.
+
+A virtualized list keeps its column header inside the scroll container as a sticky row.
+A header outside one is offset by the scrollbar and drifts out of line with its columns.
 
 ## Motion
 

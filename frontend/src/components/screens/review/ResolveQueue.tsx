@@ -15,14 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Thumbnail } from "@/components/ui/thumbnail";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { isDecidedState, isProposedState, sourceFolder } from "@/lib/duplicateDecisions";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { cn } from "@/lib/utils";
 import type { SetEntry } from "@/lib/reviewBrowse";
-import type { ReviewRow } from "@/lib/reviewRows";
+import { folderLeaf, relativeDestination, type ReviewRow } from "@/lib/reviewRows";
 import { sortRows, sortSets, type ReviewSort } from "@/lib/reviewSort";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
 
@@ -90,6 +89,8 @@ interface ResolveQueueProps {
   onClearSetSelection: () => void;
   keepSourceByRule: (setId: string, rule: KeeperPolicyId) => string | null;
   individualOnly: { perceptual: number; unmeasured: number };
+  /** Library root, stripped from planned destinations so rows show the tail. */
+  destinationRoot: string;
   /** The screen-wide order, shared with Browse. */
   sort: ReviewSort;
   onSort: (sort: ReviewSort) => void;
@@ -118,6 +119,7 @@ export function ResolveQueue({
   onClearSetSelection,
   keepSourceByRule,
   individualOnly,
+  destinationRoot,
   sort,
   onSort,
 }: ResolveQueueProps) {
@@ -535,15 +537,21 @@ export function ResolveQueue({
                     {t("review.stack.copies", { count: current.rows.length })}
                   </p>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={selectedSetIds.has(current.id)}
-                  aria-label={t("review.setSelection.toggle", {
-                    name: current.keeper?.name ?? current.id,
-                  })}
-                  onChange={() => onToggleSetSelection(current.id)}
-                  className="mt-1 h-4 w-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
-                />
+                {/* Labelled, not a bare box: this feeds the bulk actions, and
+                    an unnamed checkbox beside "Compare" reads as a mystery
+                    toggle to anyone who is not using a screen reader. */}
+                <label className="mt-0.5 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-3xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={selectedSetIds.has(current.id)}
+                    aria-label={t("review.setSelection.toggle", {
+                      name: current.keeper?.name ?? current.id,
+                    })}
+                    onChange={() => onToggleSetSelection(current.id)}
+                    className="h-3.5 w-3.5 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  {t("review.setSelection.forBulk")}
+                </label>
                 <Button size="sm" variant="outline" onClick={() => onCompare(current)}>
                   {t("review.compare")}
                 </Button>
@@ -582,8 +590,7 @@ export function ResolveQueue({
                     <p className="mt-0.5 text-3xs leading-relaxed text-muted-foreground">
                       {t("review.resolve.recommendationHelp", {
                         rule: t(`config.keeper.${current.proposalPolicy ?? rule}`),
-                      })}{" "}
-                      {t("review.resolve.recommendationNeverBinds")}
+                      })}
                     </p>
                   </div>
                 </aside>
@@ -657,28 +664,32 @@ export function ResolveQueue({
                             setEditingDecision(true);
                           }}
                           onOpenDetail={() => onOpenDetail(row.source)}
+                          destinationRoot={destinationRoot}
                           locale={locale}
                         />
                       </li>
                     ))}
                   </ul>
 
+                  {/* Summary left, actions right — the shortcut hint sits under
+                      the summary rather than between it and the buttons, where
+                      it competed with the thing it was describing. */}
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-panel border border-border bg-card px-2.5 py-2.5">
-                    <div className="min-w-0 flex-1" aria-live="polite">
+                    <div className="mr-auto min-w-0" aria-live="polite">
                       <strong className="block text-xs text-foreground">
                         {draftSource === null
                           ? t("review.resolve.nothingSelected")
                           : t("review.resolve.oneSelected", { total: current.rows.length })}
                       </strong>
-                      <span className="text-3xs text-muted-foreground">
+                      <span className="block text-3xs text-muted-foreground">
                         {draftSource === null
                           ? t("review.resolve.selectAtLeastOne")
                           : t("review.resolve.selectionCanChange")}
                       </span>
+                      <span className="mt-0.5 hidden text-3xs text-faint lg:block">
+                        {t("review.resolve.keyboardHelp")}
+                      </span>
                     </div>
-                    <p className="basis-full text-3xs text-faint sm:basis-auto">
-                      {t("review.resolve.keyboardHelp")}
-                    </p>
                     {editingDecision && currentResolved && (
                       <Button
                         size="sm"
@@ -811,6 +822,7 @@ function Copy({
   note,
   onSelect,
   onOpenDetail,
+  destinationRoot,
   locale,
 }: {
   row: ReviewRow;
@@ -822,56 +834,100 @@ function Copy({
   note: string | null;
   onSelect: () => void;
   onOpenDetail: () => void;
+  /** Library root, stripped from the planned destination so the cell shows the tail. */
+  destinationRoot: string;
   locale: string;
 }) {
   const { t } = useI18n();
   const baseline = row.status === "baseline";
 
+  /**
+   * The whole card is the control.
+   *
+   * It used to be a strip of fixed-width columns with the select button last,
+   * which meant the row's width was the sum of its parts and the button — the
+   * only thing on the row you have to be able to reach — was the first casualty
+   * when that sum exceeded the panel. A grid distributes instead of summing, so
+   * the state chip can sit over the thumbnail where it cannot be clipped.
+   */
   return (
     <article
       className={cn(
-        "relative flex min-w-0 items-center gap-3 rounded-panel border bg-card px-2.5 py-2",
-        "transition-[border-color,box-shadow,background-color] duration-150",
+        "candidate-grid relative min-h-[4.875rem] min-w-0 rounded-panel border bg-card px-2 py-1.5",
+        "transition-[border-color,box-shadow,background-color,transform] duration-150",
+        baseline ? "cursor-default" : "cursor-pointer",
+        selected && "selection-set",
         selected
           ? "border-primary bg-tint-primary/50 shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
           : isProposed
-            ? "border-dashed border-success"
+            ? "border-dashed border-success hover:border-border-strong"
             : "border-border hover:border-border-strong",
       )}
     >
-      {/* Thumbnail and its chip are one control: a copy is decided by picking
-          it, so the picture is the target rather than a checkbox beside it. */}
-      <button
-        type="button"
-        disabled={baseline}
-        aria-describedby={baseline ? "review-baseline-rule" : undefined}
-        aria-pressed={selected}
-        onClick={onSelect}
-        aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
-        className={cn(
-          "relative shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          baseline ? "cursor-not-allowed" : "cursor-pointer",
-        )}
-      >
-        <Thumbnail path={row.source} maxPx={160} className="h-14 w-[4.75rem] rounded-md" />
-        <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-card/90 font-mono text-3xs font-bold text-foreground">
-          {position + 1}
+      <div className="relative">
+        <Thumbnail path={row.source} maxPx={160} className="h-[3.625rem] w-[3.625rem] rounded-md" />
+        {/* Over the picture, not after the figures: an overlay cannot be pushed
+            out of the row by a long path in the cell beside it. */}
+        <span
+          className={cn(
+            "pointer-events-none absolute left-1 top-1 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-bold shadow-sm",
+            selected
+              ? "bg-primary text-primary-foreground"
+              : baseline
+                ? "bg-card/90 text-muted-foreground"
+                : "bg-card/90 text-muted-foreground",
+          )}
+        >
+          {baseline ? (
+            <>
+              <FiLock className="h-2.5 w-2.5" aria-hidden />
+              {t("review.resolve.protected")}
+            </>
+          ) : selected ? (
+            <>
+              <FiCheck className="h-2.5 w-2.5" aria-hidden />
+              {confirmed ? t("review.resolve.kept") : t("review.resolve.selected")}
+            </>
+          ) : (
+            t("review.resolve.selectThis")
+          )}
         </span>
-      </button>
+      </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="min-w-0">
+        {/* Two controls, layered rather than nested: the select target is the
+            whole card, and the name sits above it (z-10) so the detail view is
+            still one click away. Siblings, so neither swallows the other's
+            activation.
+
+            The button carries the card's own bounds rather than projecting them
+            through an `::after`. A zero-size button with a pseudo-element for a
+            hit area is invisible to anything that measures elements — test
+            drivers and assistive tooling included — even though a mouse finds
+            it. */}
+        <button
+          type="button"
+          disabled={baseline}
+          aria-describedby={baseline ? "review-baseline-rule" : undefined}
+          aria-pressed={selected}
+          onClick={onSelect}
+          aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
+          className="absolute inset-0 rounded-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        />
         <button
           type="button"
           onClick={onOpenDetail}
-          className="truncate text-left text-xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative z-10 block max-w-full truncate text-left text-2xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {row.name}
         </button>
-        <span className="truncate text-3xs text-muted-foreground">{row.folder}</span>
+        <span className="block truncate text-3xs text-muted-foreground" title={row.folder}>
+          {folderLeaf(row.folder)}
+        </span>
         {note !== null && (
           <p
             className={cn(
-              "flex items-center gap-1.5 text-3xs leading-snug",
+              "mt-0.5 flex items-center gap-1.5 truncate text-3xs leading-snug",
               isProposed ? "font-semibold text-success" : "text-muted-foreground",
             )}
           >
@@ -882,67 +938,32 @@ function Copy({
               )}
               aria-hidden
             />
-            {note}
+            <span className="truncate">{note}</span>
           </p>
         )}
       </div>
 
-      {/* The facts a decision is actually made on, in fixed-width columns so
-          they line up down the set and can be compared at a glance rather than
-          read as prose. Widths are fixed, not intrinsic: a column that sizes to
-          its content puts each row's figures in a different place. */}
-      <div className="hidden shrink-0 items-center gap-4 text-3xs text-muted-foreground md:flex">
-        <span className="w-16 text-right tabular-nums">
-          {formatBytes(row.sizeBytes, { locale })}
-        </span>
-        <span className="w-36 text-right">
-          {row.date === null
-            ? t("review.resolve.noDate")
-            : t("review.resolve.dated", {
-                date: row.date,
-                source: formatMetadataSource(row.dateSource, t),
-              })}
-        </span>
-        <span
-          className="hidden w-64 truncate font-mono text-faint lg:block"
-          title={row.destination ?? undefined}
-        >
-          {row.destination !== null && `→ ${row.destination}`}
-        </span>
-      </div>
+      <span className="text-right text-3xs tabular-nums text-muted-foreground">
+        {formatBytes(row.sizeBytes, { locale })}
+      </span>
 
-      <div className="flex shrink-0 items-center gap-1.5">
-        {isProposed && !selected && (
-          <span className="rounded border border-success/40 bg-tint-success px-2 py-0.5 text-3xs font-bold text-success">
-            {t("review.resolve.recommendation")}
-          </span>
-        )}
-        {baseline ? (
-          <Tooltip label={t("review.stack.baselineHelp")}>
-            <span className="flex items-center gap-1 rounded px-2 py-0.5 text-3xs font-semibold text-muted-foreground">
-              <FiLock className="h-3 w-3" aria-hidden />
-              {t("review.resolve.protected")}
-            </span>
-          </Tooltip>
-        ) : (
-          // Always present, never only when chosen: a chip that appears on
-          // selection tells you what you did, one that is always there tells
-          // you what the row is for.
-          <span
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-0.5 text-3xs font-bold",
-              selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-          >
-            {selected && <FiCheck className="h-3 w-3" aria-hidden />}
-            {selected
-              ? confirmed
-                ? t("review.resolve.kept")
-                : t("review.resolve.selected")
-              : t("review.resolve.selectThis")}
-          </span>
-        )}
-      </div>
+      <span className="text-right text-3xs text-muted-foreground">
+        {row.date === null ? t("review.resolve.noDate") : row.date}
+      </span>
+
+      <span className="text-right text-3xs text-faint">
+        {row.date === null ? "" : formatMetadataSource(row.dateSource, t)}
+      </span>
+
+      <span className="truncate font-mono text-3xs text-faint" title={row.destination ?? undefined}>
+        {row.destination !== null && `→ ${relativeDestination(row.destination, destinationRoot)}`}
+      </span>
+
+      {isProposed && !selected && (
+        <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded border border-success/40 bg-tint-success px-1.5 py-0.5 text-3xs font-bold text-success">
+          {t("review.resolve.recommendation")}
+        </span>
+      )}
     </article>
   );
 }

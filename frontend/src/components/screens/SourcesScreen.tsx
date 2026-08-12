@@ -191,7 +191,8 @@ function FolderCard({
     <li>
       <div
         className={cn(
-          "grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-xl border bg-card p-3.5",
+          "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border bg-card p-3",
+          "sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]",
           status.tone === "error" ? "border-error/50" : "border-border",
           card.role === "reference" && "border-info/25 bg-tint-info/40",
           card.role === "destination" && "border-success/25 bg-tint-success/30",
@@ -240,86 +241,77 @@ function FolderCard({
             {card.path}
           </p>
 
-          {/* Facts render only what they have to say. Every ordinary card has two
-            truthful facts; no invisible paragraph stands in for a future one. */}
-          <div className="mt-2.5 space-y-0.5 text-xs text-muted-foreground">
-            {facts.map((line, index) => (
-              <p key={index}>{line}</p>
-            ))}
-          </div>
+          {/* One line, not a stack of paragraphs. A folder card is an entry in a
+            list of three to five, and the previous layout spent a full screen
+            on two of them by giving each fact, each button and the baseline
+            toggle's restated description a row of its own. */}
+          <p className="mt-1 truncate text-xs text-muted-foreground" title={facts.join(" · ")}>
+            {facts.map((line) => line.replace(/\.$/, "")).join(" · ")}
+          </p>
 
           {/* A conflict needs the sentence a chip cannot carry, so that one card
             grows. Ordinary and merely skipped cards spend no row on absence. */}
           {ownConflict && (
             <p
-              className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
+              className={cn("mt-1.5 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
               role={ownConflict.blocking ? "alert" : "status"}
             >
               {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
             </p>
           )}
+        </div>
 
-          <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+        {/* Below `sm` the card is two columns, so the controls take a row of
+            their own rather than tucking under the folder icon. */}
+        <div className="col-span-2 flex shrink-0 flex-wrap items-center justify-end gap-1 sm:col-span-1">
+          {/* The section this card sits in already says what a baseline is for,
+              so the toggle needs the word and not the explanation. */}
+          {onToggleBaseline && (
+            <label className="mr-1 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={card.role === "reference"}
+                disabled={disabled}
+                onChange={(event) => onToggleBaseline(event.target.checked)}
+                className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              {t("sources.baseline")}
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={onChangeFolder}
+            disabled={disabled}
+            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          >
+            {t("sources.change")}
+          </button>
+          {onRemove && (
             <button
               type="button"
-              onClick={onChangeFolder}
+              onClick={onRemove}
               disabled={disabled}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
-              {t("sources.change")}
+              {t("sources.remove")}
             </button>
-            {onRemove && (
-              <button
-                type="button"
-                onClick={onRemove}
-                disabled={disabled}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                {t("sources.remove")}
-              </button>
-            )}
-          </div>
-
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {onToggleBaseline && (
-              <label className="flex min-w-0 items-start gap-2 py-1">
-                <input
-                  type="checkbox"
-                  checked={card.role === "reference"}
-                  disabled={disabled}
-                  onChange={(event) => onToggleBaseline(event.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <span className="min-w-0">
-                  <span className="block text-xs font-medium text-foreground">
-                    {t("sources.baseline")}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {t("sources.baselineHelp")}
-                  </span>
-                </span>
-              </label>
-            )}
-
-            <span className="flex-1" />
-
+          )}
+          <IconButton
+            label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
+            onClick={() => void copyPath()}
+            icon={copied ? FiCheck : FiClipboard}
+          />
+          {onToggleExcluded && (
             <IconButton
-              label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
-              onClick={() => void copyPath()}
-              icon={copied ? FiCheck : FiClipboard}
+              label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
+              disabled={disabled}
+              onClick={onToggleExcluded}
+              icon={excluded ? FiEye : FiEyeOff}
             />
-            {onToggleExcluded && (
-              <IconButton
-                label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}
-                disabled={disabled}
-                onClick={onToggleExcluded}
-                icon={excluded ? FiEye : FiEyeOff}
-              />
-            )}
-            {offline && onRemap && (
-              <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
-            )}
-          </div>
+          )}
+          {offline && onRemap && (
+            <IconButton label={t("sources.locate")} onClick={onRemap} icon={FiMapPin} />
+          )}
         </div>
       </div>
 
@@ -396,7 +388,22 @@ export function SourcesScreen({
     onChange(attempt.cards);
   };
 
-  const globalConflicts = conflicts.filter((conflict) => conflict.rootIds.length === 0);
+  /**
+   * The conflicts worth a callout — which does not include having added nothing
+   * yet.
+   *
+   * `no_input` and `no_destination` still gate the stage, but on a screen the
+   * user has only just opened they are not faults: the empty dropzone already
+   * asks for the folder, and the footer already says which one is missing.
+   * Rendering them as red alerts greeted a first run with two errors it had
+   * done nothing to earn, and said the same sentence a third and fourth time.
+   */
+  const globalConflicts = conflicts.filter(
+    (conflict) =>
+      conflict.rootIds.length === 0 &&
+      conflict.kind !== "no_input" &&
+      conflict.kind !== "no_destination",
+  );
 
   const rolePanelFor = (rootId: string): ReactNode => {
     if (!preview || !pendingRole || pendingRole.rootId !== rootId) return null;
@@ -520,12 +527,12 @@ export function SourcesScreen({
                 disabled={disabled}
                 className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
+                {/* The section heading immediately above already says what an
+                    input folder is for; the dropzone only has to offer the
+                    action. It used to repeat that sentence word for word. */}
                 <FiFolder className="h-5 w-5 text-faint" aria-hidden />
                 <span className="text-xs font-medium text-foreground">
                   {t("sources.empty.input")}
-                </span>
-                <span className="text-xs text-faint">
-                  {t("sources.role.input.description", undefined, ROLE_DESCRIPTION.input)}
                 </span>
               </button>
             ) : (
@@ -586,13 +593,6 @@ export function SourcesScreen({
                 <FiFolder className="h-5 w-5 text-faint" aria-hidden />
                 <span className="text-xs font-medium text-foreground">
                   {t("sources.empty.destination")}
-                </span>
-                <span className="text-xs text-faint">
-                  {t(
-                    "sources.role.destination.description",
-                    undefined,
-                    ROLE_DESCRIPTION.destination,
-                  )}
                 </span>
               </button>
             ) : (

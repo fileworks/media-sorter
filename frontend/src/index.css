@@ -244,6 +244,69 @@
   }
 }
 
+/* ── Review row grids ─────────────────────────────────────────────────────────
+ *
+ * The two review surfaces are tables in everything but markup: a file row and a
+ * duplicate-candidate row each line their figures up in fixed columns so a set
+ * can be compared by running the eye down it. Tailwind can express one such
+ * template inline, but not the three widths each needs, and repeating the
+ * template on the header and the row is exactly how the two drift apart.
+ *
+ * So the template lives here once per surface and the header row shares it —
+ * the header cannot describe columns the rows do not have. Columns drop from
+ * the right as space runs out, least-decisive first: a destination is
+ * recoverable from the row's detail view, a file's name is not.
+ */
+@layer components {
+  /* Select · thumbnail · name · date · status · destination. */
+  .asset-grid {
+    display: grid;
+    grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5.875rem 5.125rem 5.75rem;
+    align-items: center;
+    gap: 0.5625rem;
+  }
+
+  .candidate-grid {
+    display: grid;
+    grid-template-columns: 3.625rem minmax(10rem, 1.2fr) 5rem 5.75rem 7.5rem minmax(10rem, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* One column short: the planned destination folds away first. */
+  @media (max-width: 1280px) {
+    .asset-grid {
+      grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5.25rem 4.75rem;
+    }
+    .asset-grid > *:nth-child(6) {
+      display: none;
+    }
+    .candidate-grid {
+      grid-template-columns: 3.625rem minmax(8.75rem, 1fr) 4.5rem 5.5rem minmax(8rem, 1fr);
+    }
+    .candidate-grid > *:nth-child(5) {
+      display: none;
+    }
+  }
+
+  /* Name and one figure. Everything else lives in the detail view. */
+  @media (max-width: 900px) {
+    .asset-grid {
+      grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5rem;
+    }
+    .asset-grid > *:nth-child(5),
+    .asset-grid > *:nth-child(6) {
+      display: none;
+    }
+    .candidate-grid {
+      grid-template-columns: 3.625rem minmax(0, 1fr) 5rem;
+    }
+    .candidate-grid > *:nth-child(n + 4) {
+      display: none;
+    }
+  }
+}
+
 @keyframes stage-enter {
   from {
     opacity: 0;
@@ -258,6 +321,22 @@
 @media (prefers-reduced-motion: no-preference) {
   .stage-enter {
     animation: stage-enter 160ms ease both;
+  }
+}
+
+/* Choosing which copy to keep is the one irreversible-feeling decision on the
+   review screen, and the only place a plain colour swap left people unsure
+   whether the click registered. One 220ms settle, once, on the row that
+   changed — not a hover flourish on every row in a list of forty. */
+@keyframes selection-set {
+  from {
+    transform: scale(0.994);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .selection-set {
+    animation: selection-set 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 }
 

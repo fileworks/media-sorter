@@ -30,7 +30,6 @@ import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { PlanScreen } from "@/components/screens/PlanScreen";
 import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { ReviewPlanLifecycle } from "@/components/screens/ReviewPlanLifecycle";
-import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { RunLog } from "@/components/screens/RunLog";
 import { SourcesScreen } from "@/components/screens/SourcesScreen";
@@ -70,6 +69,15 @@ import type { Config, ConfigIssue, RecipeSettings } from "@/types/api";
 
 const HistoryPanel = lazy(() =>
   import("@/components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
+);
+/**
+ * Review is the largest screen in the app — the browse pane, the resolve queue,
+ * the comparison modal and the media viewer between them are most of the
+ * bundle — and it is unreachable until a plan exists. Splitting it keeps that
+ * weight out of the first paint, which happens on the Sources screen.
+ */
+const ReviewScreen = lazy(() =>
+  import("@/components/screens/ReviewScreen").then((module) => ({ default: module.ReviewScreen })),
 );
 const FinishedRun = lazy(() =>
   import("@/components/screens/FinishedRun").then((module) => ({ default: module.FinishedRun })),
@@ -572,6 +580,23 @@ export default function MainPage() {
   );
   const impact = runImpact.data ?? preview.result?.impact;
 
+  /**
+   * A refused impact is a refused decision, and it has to say so here.
+   *
+   * The backend rejects a keeper that cannot stand in for the copies it
+   * replaces — different companion files, most often — and this query was the
+   * only thing asking. Its error was never read, so the refusal was silent and
+   * the figures below quietly fell back to the pre-decision impact: the one
+   * screen whose job is "exactly what will happen" then showed a number for a
+   * run that would not happen. Execute re-validates and would still refuse, so
+   * nothing unsafe could run; the user just found out several screens later.
+   */
+  const impactError = runImpact.error;
+  useEffect(() => {
+    if (impactError === null) return;
+    toast(extractErrorMessage(impactError, t("review.impactRefused")).message, "warning");
+  }, [impactError, t, toast]);
+
   // Review publishes its derived decision wire from an effect. Keep this
   // boundary stable and ignore a byte-identical publication; an inline
   // callback made the effect publish, rerender MainPage, receive a new callback
@@ -953,17 +978,23 @@ export default function MainPage() {
                       onRecalculate={() => void buildPlan()}
                     />
                   ) : (
-                    <ReviewScreen
-                      result={preview.result}
-                      config={config}
-                      onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
-                      onOpenSources={() => nav.go("sources")}
-                      onRerunPreview={() => {
-                        setRunDecisions(EMPTY_RUN_DECISIONS);
-                        void preview.generatePreview(excludedForRun);
-                      }}
-                      onDecisionsChange={publishRunDecisions}
-                    />
+                    <Suspense
+                      fallback={
+                        <StateView variant="loading" layout="page" title={t("state.loading")} />
+                      }
+                    >
+                      <ReviewScreen
+                        result={preview.result}
+                        config={config}
+                        onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
+                        onOpenSources={() => nav.go("sources")}
+                        onRerunPreview={() => {
+                          setRunDecisions(EMPTY_RUN_DECISIONS);
+                          void preview.generatePreview(excludedForRun);
+                        }}
+                        onDecisionsChange={publishRunDecisions}
+                      />
+                    </Suspense>
                   )
                 ) : null}
               </ReviewPlanLifecycle>

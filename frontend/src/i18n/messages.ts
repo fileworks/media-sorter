@@ -52,6 +52,7 @@ export const en = {
   "review.setSelection.count": "{count} sets selected",
   "review.setSelection.selectAll": "Select all {count}",
   "review.setSelection.toggle": "Select duplicate set containing {name}",
+  "review.setSelection.forBulk": "Select for bulk actions",
   "review.setSelection.none": "Select at least one duplicate set first.",
   "review.setSelection.noFolders": "The selection contains no eligible source folders.",
   "review.browse.keyboardHelp": "Esc backs out one layer · Ctrl/⌘A selects the visible files",
@@ -893,6 +894,15 @@ export const en = {
   "stage.navigation": "Stages",
   "stage.complete": "complete",
   "stage.position": "Step {current} of {total}",
+  // The rail's second line. Kept to two or three words because the rail gives
+  // it about twenty characters: the full descriptions below are what the
+  // tooltip says, and every one of them used to arrive ellipsised.
+  "stage.sources.hint": "Folders and roles",
+  "stage.recipe.hint": "Starting point",
+  "stage.configure.hint": "Rules and options",
+  "stage.plan.hint": "Check the impact",
+  "stage.review.hint": "Approve the plan",
+  "stage.execute.hint": "Run the plan",
   "stage.sources.label": "Sources",
   "stage.sources.description": "Which folders, and what each one is for",
   "stage.recipe.label": "Recipe",
@@ -1380,7 +1390,14 @@ export const en = {
     "An identical file is already there, so there is nothing to move.",
   "review.browse.expand": "Open or close {folder}",
   "review.browse.showContents": "Show the contents of {folder}",
+  "review.impactRefused":
+    "This decision cannot be applied to the plan. Review the set again or exclude one of its copies.",
   "review.browse.from": "from {folder}",
+  "review.browse.columnName": "Name",
+  "review.browse.columnDate": "Date",
+  "review.browse.columnStatus": "Status",
+  "review.browse.columnDestination": "Destination",
+  "review.browse.statusReady": "ready",
   "review.browse.openInResolve": "Decide this set",
   "review.browse.openResult": "Open result",
   "review.browse.setUndecided": "no decision yet",
@@ -1457,8 +1474,6 @@ export const en = {
   "review.resolve.selectThis": "Select",
   "review.resolve.recommendation": "Recommended",
   "review.resolve.recommendationLabel": "Why this copy is recommended",
-  "review.resolve.recommendationNeverBinds":
-    "The recommendation is independent of your selection and is never confirmed for you.",
   "review.resolve.note.largest": "Largest copy in this set.",
   "review.resolve.note.newest": "Newest copy in this set.",
   "review.resolve.note.largestAndNewest": "Largest and newest copy in this set.",
@@ -1558,7 +1573,10 @@ export const en = {
   "review.viewMode": "View",
   "review.view.cards": "Cards",
   "review.view.list": "List",
-  "review.search": "Search name, tag, folder…",
+  // Scoped to the folder the tree has selected, which is why it does not repeat
+  // the tree's own "jump to folder" wording — two fields both offering to find
+  // folders is what made the pair read as duplicates of each other.
+  "review.search": "Search files here…",
   "review.keepRule": "Keep rule",
   "review.keepRuleNote": "default from Configure — changing it here won't edit your recipe",
   "review.applyToUnresolved": "Apply to {count} unresolved",
@@ -1777,6 +1795,7 @@ export const de: Record<MessageKey, string> = {
   "review.setSelection.count": "{count} Sätze ausgewählt",
   "review.setSelection.selectAll": "Alle {count} auswählen",
   "review.setSelection.toggle": "Duplikatsatz mit {name} auswählen",
+  "review.setSelection.forBulk": "Für Sammelaktionen auswählen",
   "review.setSelection.none": "Wähle zuerst mindestens einen Duplikatsatz aus.",
   "review.setSelection.noFolders": "Die Auswahl enthält keine geeigneten Quellordner.",
   "review.browse.keyboardHelp":
@@ -2653,6 +2672,12 @@ export const de: Record<MessageKey, string> = {
   "stage.navigation": "Phasen",
   "stage.complete": "abgeschlossen",
   "stage.position": "Schritt {current} von {total}",
+  "stage.sources.hint": "Ordner und Rollen",
+  "stage.recipe.hint": "Ausgangspunkt",
+  "stage.configure.hint": "Regeln und Optionen",
+  "stage.plan.hint": "Auswirkung prüfen",
+  "stage.review.hint": "Plan freigeben",
+  "stage.execute.hint": "Plan ausführen",
   "stage.sources.label": "Quellen",
   "stage.sources.description": "Welche Ordner verwendet werden und wofür",
   "stage.recipe.label": "Rezept",
@@ -3160,7 +3185,14 @@ export const de: Record<MessageKey, string> = {
     "Eine identische Datei liegt bereits dort, es gibt nichts zu verschieben.",
   "review.browse.expand": "{folder} öffnen oder schließen",
   "review.browse.showContents": "Inhalt von {folder} anzeigen",
+  "review.impactRefused":
+    "Diese Entscheidung lässt sich nicht auf den Plan anwenden. Prüfe den Stapel erneut oder schließe eine der Kopien aus.",
   "review.browse.from": "aus {folder}",
+  "review.browse.columnName": "Name",
+  "review.browse.columnDate": "Datum",
+  "review.browse.columnStatus": "Status",
+  "review.browse.columnDestination": "Ziel",
+  "review.browse.statusReady": "bereit",
   "review.browse.openInResolve": "Im Duplikat-Tab prüfen",
   "review.browse.openResult": "Ergebnis öffnen",
   "review.browse.setUndecided": "noch nicht entschieden",
@@ -3237,8 +3269,6 @@ export const de: Record<MessageKey, string> = {
   "review.resolve.selectThis": "Auswählen",
   "review.resolve.recommendation": "Empfehlung",
   "review.resolve.recommendationLabel": "Begründung der Empfehlung",
-  "review.resolve.recommendationNeverBinds":
-    "Die Empfehlung ist unabhängig von deiner Auswahl und wird nie automatisch bestätigt.",
   "review.resolve.note.largest": "Größte Datei in diesem Stapel.",
   "review.resolve.note.newest": "Neueste Datei in diesem Stapel.",
   "review.resolve.note.largestAndNewest": "Größte und neueste Datei in diesem Stapel.",
@@ -3341,7 +3371,7 @@ export const de: Record<MessageKey, string> = {
   "review.viewMode": "Ansicht",
   "review.view.cards": "Karten",
   "review.view.list": "Liste",
-  "review.search": "Name, Schlagwort, Ordner suchen…",
+  "review.search": "Dateien hier suchen…",
   "review.keepRule": "Behaltregel",
   "review.keepRuleNote":
     "Voreinstellung aus „Einstellen“ — eine Änderung hier ändert das Rezept nicht",

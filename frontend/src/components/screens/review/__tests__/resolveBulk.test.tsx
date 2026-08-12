@@ -118,6 +118,7 @@ function queue(
         onClearSetSelection={overrides.onClearSetSelection ?? (() => undefined)}
         keepSourceByRule={overrides.keepSourceByRule ?? (() => null)}
         individualOnly={{ perceptual: 0, unmeasured: 0 }}
+        destinationRoot="/out"
         sort="name"
         onSort={() => undefined}
       />
