@@ -66,6 +66,18 @@ def test_release_native_gate_runs_on_a_shipped_platform() -> None:
     assert "needs: [check-ci, check-native]" in release
 
 
+def test_release_retries_transient_tauri_bundler_download_failures() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    build_step = release.split("      - name: Build desktop app", maxsplit=1)[1].split(
+        "      - name: Reject post-sign payload mutation", maxsplit=1
+    )[0]
+
+    assert "for attempt in 1 2 3" in build_step
+    assert "if make build-tauri; then" in build_step
+    assert 'if [ "$attempt" -eq 3 ]; then' in build_step
+    assert "Tauri bundling retry" in build_step
+
+
 def test_frozen_backend_bundles_runtime_resources() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")

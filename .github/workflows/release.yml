@@ -353,7 +353,20 @@ jobs:
           SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: make build-tauri
+        run: |
+          # Tauri fetches platform bundlers (notably NSIS) during packaging.
+          # Retry the build on hosted runners so a transient upstream
+          # 5xx cannot strand an otherwise verified release tag.
+          for attempt in 1 2 3; do
+            if make build-tauri; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning title=Tauri bundling retry::Build attempt $attempt failed; retrying in $((attempt * 15)) seconds"
+            sleep $((attempt * 15))
+          done
 
       - name: Reject post-sign payload mutation
         run: |
