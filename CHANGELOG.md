@@ -3,6 +3,12 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.4.2](https://github.com/fileworks/media-sorter/compare/v1.4.1...v1.4.2) (2026-08-12)
+
+### Bug Fixes
+
+* **release:** harden Windows installer packaging ([#73](https://github.com/fileworks/media-sorter/issues/73)) ([120fe09](https://github.com/fileworks/media-sorter/commit/120fe096516f09a16580bfccacab4fe443932c8f))
+
 ## [1.4.1](https://github.com/fileworks/media-sorter/compare/v1.4.0...v1.4.1) (2026-08-12)
 
 ### Bug Fixes
