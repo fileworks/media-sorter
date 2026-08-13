@@ -1,18 +1,4 @@
-/**
- * Two copies, side by side, so the choice is made by looking rather than by
- * reading numbers.
- *
- * Four modes answer different questions: Side-by-side shows framing and detail,
- * Overlay and Slide reveal alignment, and Difference exposes changed pixels. The
- * facts table underneath marks which side wins each individual comparison, which
- * is the part people actually decide on when the images look identical.
- *
- * **Any two files can be compared.** Selecting two that were not in the same
- * duplicate set used to open nothing at all — the caller returned early and the
- * button appeared broken. Two pictures can always be put side by side; what
- * needs them to share a set is only whether a *keeper* can be chosen here, and
- * that is now stated in the footer instead of enforced by silence.
- */
+/** Compare any two files; keeper actions require a shared duplicate set. */
 
 import { useEffect, useState } from "react";
 import { FiCheck, FiChevronLeft, FiChevronRight, FiMaximize } from "react-icons/fi";
@@ -56,14 +42,7 @@ interface CompareModalProps {
   onNextSet?: (() => void) | null;
 }
 
-/**
- * One comparison row, with the winning side marked.
- *
- * Marked three ways, not one: weight, colour and a word only a screen reader
- * reads. Colour alone would leave the whole table meaningless to anyone who
- * cannot see it, and this table is what the choice is actually made on when the
- * two images look identical.
- */
+/** Identify a fact's winning side with both text and styling. */
 function FactRow({
   label,
   left,
@@ -78,10 +57,7 @@ function FactRow({
   /** Why this side wins, e.g. "larger". Announced, and drawn as a cell note. */
   winnerNote: string;
 }) {
-  // Three cell states, and they mean different things. Green: this side wins
-  // this comparison. Amber: the two differ but neither is better — a fact to
-  // read, not a verdict. Plain: identical, and therefore not part of the
-  // decision at all.
+  // A neutral difference is evidence, not a winner.
   const differs = winner === null && left !== right;
   const cell = (value: string, side: "a" | "b") => (
     <span
@@ -114,7 +90,7 @@ function FactRow({
   );
 }
 
-//: How much a match is worth, ordered, so the stronger evidence can be marked.
+// Rank confidence so the stronger match can be marked.
 const CONFIDENCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1, unknown: 0 };
 
 /** Compare two numbers, tolerating either being unknown. */
@@ -238,11 +214,8 @@ export function CompareModal({
         </span>
       </ModalHeader>
 
-      {/* Mode, what the mode is for, and magnification. The middle one is not
-          decoration: "Overlay" and "Difference" answer different questions, and
-          a reader who picks the wrong one concludes the wrong thing. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/25 px-3 py-2">
-        <div className="min-w-0 flex-1 sm:flex-none [&_label]:px-2 [&_label]:text-[0.7rem] sm:[&_label]:px-3.5 sm:[&_label]:text-2xs">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-none [&_label]:px-2 [&_label]:text-[0.7rem] sm:[&_label]:px-3.5 sm:[&_label]:text-2xs">
           <Segmented
             name="compare-mode"
             label={t("review.compare.mode")}
@@ -256,10 +229,10 @@ export function CompareModal({
             onChange={setMode}
           />
         </div>
-        <span className="min-w-0 text-3xs text-muted-foreground">
+        <span className="w-full min-w-0 text-3xs text-muted-foreground sm:w-auto sm:flex-1">
           {t(`review.compare.hint.${mode}`)}
         </span>
-        <label className="ml-auto flex items-center gap-2 text-3xs text-muted-foreground">
+        <label className="flex w-full items-center gap-2 text-3xs text-muted-foreground sm:ml-auto sm:w-auto">
           {t("review.compare.zoom")}
           <input
             type="range"
@@ -305,9 +278,7 @@ export function CompareModal({
                     key={file.id}
                     className={cn(
                       "relative h-full w-full overflow-hidden",
-                      // The ring, not a border: a border on one half of a
-                      // two-up would shift that image against the other, and
-                      // the whole point of this mode is that they line up.
+                      // An inset ring preserves alignment between the two images.
                       recommendedId === file.id &&
                         "shadow-[inset_0_0_0_2px_hsl(var(--color-success))]",
                     )}
@@ -340,9 +311,7 @@ export function CompareModal({
             ) : (
               <>
                 <Thumbnail path={b.path} maxPx={800} className="absolute inset-0 h-full w-full" />
-                {/* Clipping rather than resizing: both images stay laid out at the
-                full panel width, so the slider reveals the same pixels the
-                other side is showing instead of a differently-scaled copy. */}
+                {/* Clip at a shared scale so the slider compares matching pixels. */}
                 <div
                   className="absolute inset-0"
                   style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
@@ -377,8 +346,7 @@ export function CompareModal({
           </div>
         </div>
 
-        {/* The captions sit under the frame rather than inside it, so the zoom
-            transform magnifies the photographs and not the words about them. */}
+        {/* Keep captions outside the zoomed media frame. */}
         <div className="grid grid-cols-2 gap-2 bg-background px-2 pb-2 sm:px-4">
           {([a, b] as const).map((file, index) => (
             <div
@@ -463,9 +431,7 @@ export function CompareModal({
                         <span className="block truncate text-xs font-semibold text-foreground">
                           {index === 0 ? "A" : "B"} · {getBasename(file.label)}
                         </span>
-                        {/* What the button currently means, in words — the
-                            border colour is the same claim for people who can
-                            see it, and neither is allowed to be the only one. */}
+                        {/* State the selection independently of border color. */}
                         <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
                           {selected
                             ? t("review.compare.willBeKept")
@@ -499,10 +465,7 @@ export function CompareModal({
         </div>
         <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border bg-muted/40 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.07em] text-faint sm:grid-cols-[7rem_1fr_1fr]">
           <span />
-          {/* The column heads are the way into the full facts for either side:
-              a comparison that raises a question about one file should not make
-              the user close it to answer that question. Enlarging lives on the
-              caption under each picture, where the picture is. */}
+          {/* Column headings link to each file's full details. */}
           {(
             [
               [t("review.compare.columnA", { name: nameA }), a],
@@ -596,15 +559,9 @@ export function CompareModal({
       </ModalBody>
 
       <ModalFooter>
-        {/* Two files that are not one set can still be looked at side by side —
-            there is simply nothing to keep *instead of* the other, and saying so
-            is better than three buttons that would decide the wrong thing. */}
         <span className="mr-auto min-w-0 text-3xs text-faint">
           {sameSet ? (
             <>
-              {/* What confirming would do, and how far it reaches. The second
-                  line is the guarantee: looking at two files here never moves
-                  anything on its own. */}
               <span className="block" aria-live="polite">
                 {draftId === null
                   ? t("review.compare.nothingSelected")
@@ -623,6 +580,7 @@ export function CompareModal({
             <Button
               size="sm"
               variant="ghost"
+              aria-label={t("review.compare.previousSet")}
               onClick={onPreviousSet ?? undefined}
               disabled={!onPreviousSet}
             >
@@ -632,6 +590,7 @@ export function CompareModal({
             <Button
               size="sm"
               variant="ghost"
+              aria-label={t("review.compare.nextSet")}
               onClick={onNextSet ?? undefined}
               disabled={!onNextSet}
             >

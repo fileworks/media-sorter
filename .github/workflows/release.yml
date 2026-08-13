@@ -442,13 +442,20 @@ jobs:
             Get-Content $log -Tail 100
             throw "MSI installation failed with exit code $($install.ExitCode)"
           }
-          $candidates = @(
-            "$env:ProgramFiles\MediaSorter\MediaSorter.exe",
-            "$env:LOCALAPPDATA\MediaSorter\MediaSorter.exe"
-          )
-          $shell = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $shell) {
-            throw "MSI completed but the installed MediaSorter.exe was not found"
+          $programs = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
+          $shortcut = Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File |
+            Select-Object -First 1
+          if (-not $shortcut) {
+            Get-Content $log -Tail 100
+            throw "MSI completed but its MediaSorter Start Menu shortcut was not found"
+          }
+          $shell = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
+          if (
+            [string]::IsNullOrWhiteSpace($shell) -or
+            [IO.Path]::GetExtension($shell) -ine ".exe" -or
+            -not (Test-Path -LiteralPath $shell -PathType Leaf)
+          ) {
+            throw "MSI shortcut does not target an installed executable: $shell"
           }
           python scripts/release_integrity.py smoke-webview --path $shell
           $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
@@ -456,6 +463,12 @@ jobs:
           )
           if ($uninstall.ExitCode -notin @(0, 1605, 3010)) {
             throw "MSI uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+          if (Test-Path -LiteralPath $shell) {
+            throw "MSI uninstall completed but its installed executable still exists: $shell"
+          }
+          if (Test-Path -LiteralPath $shortcut.FullName) {
+            throw "MSI uninstall completed but its Start Menu shortcut still exists"
           }
 
       - name: Install, launch, and uninstall NSIS on a clean Windows runner
@@ -470,13 +483,26 @@ jobs:
           if ($install.ExitCode -ne 0) {
             throw "NSIS installation failed with exit code $($install.ExitCode)"
           }
-          $candidates = @(
-            "$env:ProgramFiles\MediaSorter\MediaSorter.exe",
-            "$env:LOCALAPPDATA\MediaSorter\MediaSorter.exe"
+          $programRoots = @(
+            [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs),
+            [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
+          ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
+          $shortcuts = @(
+            foreach ($programs in $programRoots) {
+              Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File
+            }
           )
-          $shell = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $shell) {
-            throw "NSIS completed but the installed MediaSorter.exe was not found"
+          $shortcut = $shortcuts | Select-Object -First 1
+          if (-not $shortcut) {
+            throw "NSIS completed but its MediaSorter Start Menu shortcut was not found"
+          }
+          $shell = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
+          if (
+            [string]::IsNullOrWhiteSpace($shell) -or
+            [IO.Path]::GetExtension($shell) -ine ".exe" -or
+            -not (Test-Path -LiteralPath $shell -PathType Leaf)
+          ) {
+            throw "NSIS shortcut does not target an installed executable: $shell"
           }
           python scripts/release_integrity.py smoke-webview --path $shell
           $uninstaller = Join-Path (Split-Path $shell) "uninstall.exe"
@@ -486,6 +512,12 @@ jobs:
           $uninstall = Start-Process $uninstaller -Wait -PassThru -ArgumentList "/S"
           if ($uninstall.ExitCode -ne 0) {
             throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+          if (Test-Path -LiteralPath $shell) {
+            throw "NSIS uninstall completed but its installed executable still exists: $shell"
+          }
+          if (Test-Path -LiteralPath $shortcut.FullName) {
+            throw "NSIS uninstall completed but its Start Menu shortcut still exists"
           }
 
       - name: Upload artifacts

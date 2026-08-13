@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Fetch verified ffmpeg/ffprobe resources for MediaSorter packages.
 
 The script is deliberately standard-library-only: release runners execute it
 before the application environment exists. Every source comes from the reviewed
-``ffmpeg-sources.json`` manifest, is SHA-256 verified before extraction, and is
-fully path-validated before any archive member is written.
+``ffmpeg-sources.json`` manifest and is SHA-256 verified before use. Archives
+are fully path-validated before any member is written.
 """
 
 from __future__ import annotations
@@ -31,7 +30,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DEST = REPO_ROOT / "frontend" / "src-tauri" / "resources" / "ffmpeg"
 DEFAULT_MANIFEST = Path(__file__).with_name("ffmpeg-sources.json")
 PROVENANCE_FILE = "native-tools-provenance.json"
-_USER_AGENT = "mediasort-ffmpeg-fetcher/2.0 (+https://github.com/fileworks/media-sorter)"
+_USER_AGENT = (
+    "mediasort-ffmpeg-fetcher/2.0 (+https://github.com/fileworks/media-sorter)"
+)
 _DRIVE_PATH = re.compile(r"^[A-Za-z]:")
 _ARCHIVE_SUFFIXES = (".tar.xz", ".tar.gz", ".tar.bz2", ".tgz", ".txz", ".tar", ".zip")
 
@@ -88,18 +89,31 @@ def load_sources(
         url = raw.get("url")
         digest = raw.get("sha256")
         names = raw.get("binaries")
+        source_format = raw.get("format", "archive")
         if not isinstance(url, str) or not url.startswith("https://"):
             raise SystemExit(f"ERROR: source {position} does not use an HTTPS URL")
         if "/latest/" in url or url.endswith("/latest"):
             raise SystemExit(f"ERROR: source {position} uses a mutable latest URL")
         if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
             raise SystemExit(f"ERROR: source {position} has no valid SHA-256")
-        if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
+        if (
+            not isinstance(names, list)
+            or not names
+            or not all(isinstance(n, str) for n in names)
+        ):
             raise SystemExit(f"ERROR: source {position} has no binary inventory")
+        if source_format not in {"archive", "binary"}:
+            raise SystemExit(f"ERROR: source {position} has an unsupported format")
+        if source_format == "binary" and len(names) != 1:
+            raise SystemExit(
+                f"ERROR: binary source {position} must provide exactly one executable"
+            )
         binaries.update(name.lower() for name in names)
         normalized.append(dict(raw))
 
-    expected = {"ffmpeg.exe", "ffprobe.exe"} if os_key == "windows" else {"ffmpeg", "ffprobe"}
+    expected = (
+        {"ffmpeg.exe", "ffprobe.exe"} if os_key == "windows" else {"ffmpeg", "ffprobe"}
+    )
     if binaries != expected:
         raise SystemExit(
             f"ERROR: source plan for {os_key}/{arch_key} provides "
@@ -116,7 +130,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def download(url: str, expected_sha256: str, destination: Path, attempts: int = 3) -> None:
+def download(
+    url: str, expected_sha256: str, destination: Path, attempts: int = 3
+) -> None:
     """Stream one source to a temporary file and verify it before returning."""
     log(f"  ↓ {url}")
     last_error: Exception | None = None
@@ -135,7 +151,9 @@ def download(url: str, expected_sha256: str, destination: Path, attempts: int = 
                 raise OSError("downloaded file is empty")
             observed = digest.hexdigest()
             if observed != expected_sha256:
-                raise OSError(f"SHA-256 mismatch: expected {expected_sha256}, observed {observed}")
+                raise OSError(
+                    f"SHA-256 mismatch: expected {expected_sha256}, observed {observed}"
+                )
             return
         except Exception as exc:  # noqa: BLE001 - preserve network/IO context
             last_error = exc
@@ -147,7 +165,11 @@ def download(url: str, expected_sha256: str, destination: Path, attempts: int = 
 def _safe_destination(root: Path, member_name: str) -> Path:
     """Map an archive name below *root*, treating both slash styles as separators."""
     normalized = member_name.replace("\\", "/")
-    if not normalized or normalized.startswith(("/", "//")) or _DRIVE_PATH.match(normalized):
+    if (
+        not normalized
+        or normalized.startswith(("/", "//"))
+        or _DRIVE_PATH.match(normalized)
+    ):
         raise ValueError(f"unsafe absolute archive member: {member_name!r}")
     relative = PurePosixPath(normalized)
     if any(part in {"", ".", ".."} for part in relative.parts):
@@ -161,7 +183,9 @@ def _safe_destination(root: Path, member_name: str) -> Path:
     return destination
 
 
-def _validate_zip(archive: zipfile.ZipFile, root: Path) -> list[tuple[zipfile.ZipInfo, Path]]:
+def _validate_zip(
+    archive: zipfile.ZipFile, root: Path
+) -> list[tuple[zipfile.ZipInfo, Path]]:
     plan: list[tuple[zipfile.ZipInfo, Path]] = []
     for member in archive.infolist():
         destination = _safe_destination(root, member.filename)
@@ -173,7 +197,9 @@ def _validate_zip(archive: zipfile.ZipFile, root: Path) -> list[tuple[zipfile.Zi
     return plan
 
 
-def _validate_tar(archive: tarfile.TarFile, root: Path) -> list[tuple[tarfile.TarInfo, Path]]:
+def _validate_tar(
+    archive: tarfile.TarFile, root: Path
+) -> list[tuple[tarfile.TarInfo, Path]]:
     plan: list[tuple[tarfile.TarInfo, Path]] = []
     for member in archive.getmembers():
         destination = _safe_destination(root, member.name)
@@ -237,6 +263,17 @@ def find_binary(root: Path, base_name: str) -> Path:
     return matches[0]
 
 
+def materialize_source(
+    source: Mapping[str, Any], downloaded: Path, extracted: Path
+) -> list[tuple[str, Path]]:
+    """Return each declared executable from one verified source."""
+    names = [str(name) for name in source["binaries"]]
+    if source.get("format", "archive") == "binary":
+        return [(names[0], downloaded)]
+    extract(downloaded, extracted)
+    return [(name, find_binary(extracted, name)) for name in names]
+
+
 def post_process(binary: Path, os_key: str) -> None:
     if os_key != "windows":
         binary.chmod(0o755)
@@ -256,9 +293,13 @@ def post_process(binary: Path, os_key: str) -> None:
 def smoke_test(binary: Path) -> None:
     try:
         result = subprocess.run(
-            [str(binary), "-version"], capture_output=True, text=True, timeout=30
+            [str(binary), "-version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise SystemExit(f"ERROR: {binary.name} failed to execute: {exc}") from exc
     if result.returncode != 0:
         raise SystemExit(
@@ -270,7 +311,9 @@ def smoke_test(binary: Path) -> None:
 
 def _archive_suffix(url: str) -> str:
     lowered = url.lower()
-    return next((suffix for suffix in _ARCHIVE_SUFFIXES if lowered.endswith(suffix)), ".zip")
+    return next(
+        (suffix for suffix in _ARCHIVE_SUFFIXES if lowered.endswith(suffix)), ".zip"
+    )
 
 
 def _write_provenance(
@@ -289,7 +332,10 @@ def _write_provenance(
         "architecture": arch_key,
         "sources": list(sources),
         "bundled_binaries": {
-            binary.name: {"sha256": sha256_file(binary), "size_bytes": binary.stat().st_size}
+            binary.name: {
+                "sha256": sha256_file(binary),
+                "size_bytes": binary.stat().st_size,
+            }
             for binary in sorted(binaries)
         },
     }
@@ -317,7 +363,9 @@ def _publish_bundle(staged_bundle: Path, destination: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bundle verified static ffmpeg + ffprobe.")
+    parser = argparse.ArgumentParser(
+        description="Bundle verified static ffmpeg + ffprobe."
+    )
     parser.add_argument("--dest", type=Path, default=DEFAULT_DEST)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--skip-smoke-test", action="store_true")
@@ -342,12 +390,12 @@ def main() -> int:
         extension = ".exe" if os_key == "windows" else ""
         for index, source in enumerate(sources):
             url = str(source["url"])
-            archive_path = workspace / f"source-{index}{_archive_suffix(url)}"
-            download(url, str(source["sha256"]), archive_path)
+            source_format = source.get("format", "archive")
+            suffix = ".bin" if source_format == "binary" else _archive_suffix(url)
+            downloaded = workspace / f"source-{index}{suffix}"
+            download(url, str(source["sha256"]), downloaded)
             extracted = workspace / f"source-{index}"
-            extract(archive_path, extracted)
-            for base_name in source["binaries"]:
-                found = find_binary(extracted, str(base_name))
+            for base_name, found in materialize_source(source, downloaded, extracted):
                 stem = "ffprobe" if "ffprobe" in str(base_name).lower() else "ffmpeg"
                 target = bundle / f"{stem}{extension}"
                 if target.exists():

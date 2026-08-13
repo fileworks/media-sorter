@@ -44,6 +44,46 @@ def test_manual_release_validation_cannot_publish_without_a_tag() -> None:
     assert "if: startsWith(github.ref, 'refs/tags/v')" in release
 
 
+def test_msi_smoke_resolves_the_installer_created_shortcut_target() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    smoke = release.split(
+        "      - name: Install, launch, and uninstall MSI on a clean Windows runner",
+        maxsplit=1,
+    )[1].split(
+        "      - name: Install, launch, and uninstall NSIS on a clean Windows runner",
+        maxsplit=1,
+    )[0]
+
+    assert "[Environment+SpecialFolder]::CommonPrograms" in smoke
+    assert 'Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File' in smoke
+    assert "CreateShortcut($shortcut.FullName).TargetPath" in smoke
+    assert '[IO.Path]::GetExtension($shell) -ine ".exe"' in smoke
+    assert "Test-Path -LiteralPath $shell -PathType Leaf" in smoke
+    assert "if (Test-Path -LiteralPath $shell)" in smoke
+    assert "GetFileName($shell)" not in smoke
+    assert "Windows\\CurrentVersion\\Uninstall\\*" not in smoke
+    assert "$env:ProgramFiles\\MediaSorter\\MediaSorter.exe" not in smoke
+
+
+def test_nsis_smoke_resolves_the_installer_created_shortcut_target() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    smoke = release.split(
+        "      - name: Install, launch, and uninstall NSIS on a clean Windows runner",
+        maxsplit=1,
+    )[1].split("\n      - name: Upload artifacts", maxsplit=1)[0]
+
+    assert "[Environment+SpecialFolder]::Programs" in smoke
+    assert "[Environment+SpecialFolder]::CommonPrograms" in smoke
+    assert 'Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File' in smoke
+    assert "CreateShortcut($shortcut.FullName).TargetPath" in smoke
+    assert '[IO.Path]::GetExtension($shell) -ine ".exe"' in smoke
+    assert "Test-Path -LiteralPath $shell -PathType Leaf" in smoke
+    assert "if (Test-Path -LiteralPath $shell)" in smoke
+    assert "GetFileName($shell)" not in smoke
+    assert "$env:ProgramFiles\\MediaSorter\\MediaSorter.exe" not in smoke
+    assert "$env:LOCALAPPDATA\\MediaSorter\\MediaSorter.exe" not in smoke
+
+
 def test_green_tag_pipeline_publishes_through_the_release_environment() -> None:
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
     publish = release.split("  publish:", maxsplit=1)[1]

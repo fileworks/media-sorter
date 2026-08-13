@@ -293,7 +293,7 @@ describe("catalog states", () => {
 
     renderReview(result);
 
-    expect(screen.queryByText(en("review.band.noSets"))).toBeNull();
+    expect(screen.queryByText(en("review.resolve.doneTitle"))).toBeNull();
     expect(screen.getByText(en("review.catalog.loading"))).toBeTruthy();
   });
 
@@ -313,7 +313,7 @@ describe("catalog states", () => {
       "The duplicate catalog is unavailable.",
     );
     expect(screen.getByRole("alert").textContent).toContain("CATALOG_UNAVAILABLE");
-    expect(screen.queryByText(en("review.band.noSets"))).toBeNull();
+    expect(screen.queryByText(en("review.resolve.doneTitle"))).toBeNull();
   });
 });
 

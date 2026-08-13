@@ -1,18 +1,4 @@
-/**
- * Screen 5 — the dry run. Nothing has happened yet, and this screen's whole job
- * is to make that reviewable rather than to make it reassuring.
- *
- * **Two modes, one screen, one set of state.** Browsing what the run would build
- * and adjudicating duplicate copies are not the same task: one is scanning, the
- * other is deciding one thing at a time, and asking both through a single list
- * of rows is why the reported experience was "I don't really know what to do
- * there". Switching modes loses nothing — selection, keeper choices
- * and the browsing position all live in `useReviewSurface`.
- *
- * Every figure the screen quotes comes from `reviewStats` over the same entries
- * both modes render, so the mode badge, the tree and the queue cannot disagree
- * about how many sets are still undecided.
- */
+/** Review the dry run and resolve duplicates before execution. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiChevronRight } from "react-icons/fi";
@@ -111,31 +97,23 @@ export function ReviewScreen({
   const [treeSearch, setTreeSearch] = useState("");
 
   const inScope = useMemo(() => new Set(result.items.map((item) => item.source)), [result.items]);
-  // The sets the dry run found for itself. Computed from the plan alone so it
-  // does not depend on the rows, which depend on the catalog answering.
+  // Plan-derived sets remain available while catalog rows load.
   const planSets = useMemo(() => planDuplicateSets(result.items), [result.items]);
   const [decidedSetIds, setDecidedSetIds] = useState<ReadonlySet<string>>(new Set());
   const groups = useReviewGroups(inScope, decidedSetIds, {
     bursts: config.burst_detection_enabled,
     planSets,
   });
-  // The catalog is library-wide; the surface is this run. Keep its full groups
-  // for the outside-run disclosure, and give every actionable surface only
-  // groups with at least two members in the preview.
+  // Actionable groups contain at least two members from this run.
   const scopedGroups = useMemo(
     () => catalogGroupsForRun(result.items, groups.groups),
     [groups.groups, result.items],
   );
   const surface = useReviewSurface(result, scopedGroups, config.duplicate_keeper_policy);
 
-  // The tally is scoped to this run and needs the same decisions the rows use.
   useEffect(() => setDecidedSetIds(surface.decidedSetIds), [surface.decidedSetIds]);
 
-  // ── The one derivation ─────────────────────────────────────────────────────
-
-  // The destination root is stripped from every planned path, so the tree shows
-  // the library the run would build rather than the machine's directory layout —
-  // and so contextual `_copies/` leaves and root review folders are recognised.
+  // Strip the machine-specific destination root from the planned tree.
   const entries = useMemo(
     () => browseEntries(surface.rows, config.target_directory),
     [config.target_directory, surface.rows],
@@ -147,9 +125,7 @@ export function ReviewScreen({
     [config.target_directory, surface.rows],
   );
 
-  // Execute consumes both the binding wire decisions and the one authoritative
-  // outstanding count. Publishing neither until the catalog settles prevents a
-  // transient empty state from opening the gate early.
+  // Do not expose a transient zero while catalog-backed decisions load.
   useEffect(() => {
     if (groups.isLoading || groups.isError) return;
     onDecisionsChange?.({
@@ -167,10 +143,7 @@ export function ReviewScreen({
     stats.undecided,
     surface.reviewedSets,
   ]);
-  // The sets waiting on a person, plus one opened deliberately from Browse.
-  // A baseline set is never *offered* — the reference wins and there is nothing
-  // to choose — but a user who asks to see it should get the queue's view of
-  // it, protection and all, rather than a control that does nothing.
+  // Include a resolved set when Browse explicitly opens it in the queue.
   const queue = useMemo(() => {
     const waiting = resolveQueue(entries);
     if (surface.queueSetId === null || waiting.some((entry) => entry.id === surface.queueSetId)) {
@@ -191,15 +164,7 @@ export function ReviewScreen({
     );
   }, [entries, needle, surface.treePath]);
 
-  /**
-   * The pane's own order, which is what a shift-click ranges over and what the
-   * detail view walks when the file belongs to no duplicate set.
-   *
-   * Grouped exactly as the pane draws it, so a range never runs in an order the
-   * reader cannot see. A set contributes its keeper while collapsed: the entry
-   * is one thing on screen, so extending across it must not sweep up copies
-   * nobody can see. Opening the set puts its copies in the pane, in this order.
-   */
+  /** Visible order for range selection and folder-scoped detail navigation. */
   const paneOrder = useMemo(
     () =>
       folderGroups(paneEntries, surface.treePath).flatMap((group) =>
@@ -216,8 +181,6 @@ export function ReviewScreen({
     [expandedSets, paneEntries, surface.treePath],
   );
 
-  // ── Decisions ──────────────────────────────────────────────────────────────
-
   const chooseKeeperBySource = useCallback(
     (setId: string, source: string) => {
       const row = surface.rows.find((candidate) => candidate.source === source);
@@ -232,15 +195,7 @@ export function ReviewScreen({
     [scopedGroups],
   );
 
-  /**
-   * The bulk rule, applied only to the sets it can actually decide.
-   *
-   * A set the dry run found for itself is never among them: the rules rank
-   * copies by measured facts — pixels, byte size, modification time — and those
-   * live on the catalog's member records, which such a set has none of. Ranking
-   * it on the little the plan carries would pick a keeper on grounds the user
-   * was never shown, which is worse than not offering it.
-   */
+  /** Apply bulk rules only to sets with measured catalog facts. */
   const keepSourceByRule = useCallback(
     (setId: string, policy: import("@/services/api").KeeperPolicyId): string | null => {
       const group = groupFor(setId);
@@ -262,8 +217,6 @@ export function ReviewScreen({
 
   /** "These are not duplicates": every copy is kept and placed on its own. */
   const keepAll = useCallback((setId: string) => surface.markNotDuplicates(setId), [surface]);
-
-  // ── Comparing ──────────────────────────────────────────────────────────────
 
   const comparableFor = useCallback(
     (row: ReviewRow): ComparableFile => {
@@ -315,13 +268,7 @@ export function ReviewScreen({
     [allSets, comparableFor, t],
   );
 
-  /**
-   * Compare a set against its own members, never against what is on screen.
-   *
-   * The old implementation searched the visible rows for a partner, so a filter
-   * that hid the second copy made the button inert with no explanation. The set
-   * knows its members; a set that genuinely has only one comparable copy says so.
-   */
+  /** Compare a set's members independently of the current filter. */
   const compareSet = useCallback(
     (entry: SetEntry) => {
       const comparable = entry.rows.filter((row) => row.status !== "baseline");
@@ -348,8 +295,6 @@ export function ReviewScreen({
     };
   }, [allSets, comparing]);
 
-  // ── Resolve position ───────────────────────────────────────────────────────
-
   const queueIndex = useMemo(() => {
     if (surface.queueSetId === null) return 0;
     const found = queue.findIndex((entry) => entry.id === surface.queueSetId);
@@ -373,8 +318,6 @@ export function ReviewScreen({
     [surface],
   );
 
-  // ── Detail ─────────────────────────────────────────────────────────────────
-
   const detailRow = useMemo(
     () => surface.rows.find((row) => row.source === surface.detailPath) ?? null,
     [surface.detailPath, surface.rows],
@@ -387,16 +330,7 @@ export function ReviewScreen({
         : null,
     [detailRow, entries],
   );
-  /**
-   * What left and right walk: the copies when the file is one of several, the
-   * folder's own contents otherwise.
-   *
-   * Both halves were already required — "a folder's visible contents, or the
-   * copies in one duplicate set" — but only the set half was ever wired, so for
-   * any file outside a duplicate set both arrows sat disabled beside the words
-   * "not part of a duplicate set", which reads as a fault rather than a
-   * boundary.
-   */
+  /** Navigate within the duplicate set, or within the visible folder otherwise. */
   const detailScope = useMemo(
     () => (detailSet ? detailSet.rows.map((row) => row.source) : paneOrder),
     [detailSet, paneOrder],
@@ -406,8 +340,6 @@ export function ReviewScreen({
     (index: number) => surface.setDetailPath(detailScope[index] ?? null),
     [detailScope, surface],
   );
-
-  // ── The full-screen viewer ─────────────────────────────────────────────────
 
   const viewerRow = useMemo(
     () => surface.rows.find((row) => row.source === surface.viewerPath) ?? null,
@@ -427,8 +359,6 @@ export function ReviewScreen({
     (index: number) => surface.setViewerPath(viewerScope[index] ?? null),
     [surface, viewerScope],
   );
-
-  // ── Chrome ─────────────────────────────────────────────────────────────────
 
   const actions = selectionActions(surface.selectedRows);
 
@@ -452,9 +382,7 @@ export function ReviewScreen({
           count: paneEntries.length.toLocaleString(locale),
         });
 
-  // Depends on individual values, not on `surface`: the hook returns a fresh
-  // object every render, so listing it here would tear down and re-register the
-  // window listener on every keystroke, filter change and hover.
+  // Destructure stable dependencies; `surface` is a new object each render.
   const {
     clearSelection,
     clearSetSelection,
@@ -468,9 +396,7 @@ export function ReviewScreen({
       if (surface.mode !== "browse" || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-      // A dialog owns the first Escape. Review must not also collapse or clear
-      // the surface underneath it while the shared modal stack dismisses only
-      // its topmost layer.
+      // The modal stack owns Escape while a dialog is open.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (event.key === "Escape") {
         if (expandedSets.size > 0) {
@@ -520,9 +446,7 @@ export function ReviewScreen({
     treeSearch,
   ]);
 
-  // Every figure below depends on catalog-backed set membership. Until those
-  // requests answer, zero is not a fact and neither the tree nor the resolve
-  // queue has a stable derivation to render.
+  // Catalog-backed membership must settle before counts are authoritative.
   if (groups.isLoading) {
     return (
       <div className="space-y-5">
@@ -707,9 +631,7 @@ export function ReviewScreen({
               </div>
 
               <div className="min-w-0">
-                {/* Where in the destination the pane is, and every way back out.
-                The tree and this are one piece of state, so moving in either
-                moves the other. */}
+                {/* Breadcrumbs and tree selection share one path. */}
                 <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
                   <nav
                     aria-label={t("review.browse.trail")}
@@ -895,8 +817,7 @@ export function ReviewScreen({
         />
       )}
 
-      {/* Above every other layer: it is opened *from* the detail view and from a
-          comparison, and closing it must return to whichever of them is behind. */}
+      {/* The modal stack returns focus to the viewer's source dialog. */}
       {viewerRow && (
         <MediaViewer
           path={viewerRow.source}

@@ -107,6 +107,31 @@ describe("duplicate comparison", () => {
     expect(onKeep).toHaveBeenCalledWith("b");
   });
 
+  it("names set navigation buttons even when their visible labels are hidden", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("b", facts({ width: 1000, height: 1500 }))}
+          keeperId={null}
+          setId="set-1"
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+          onPreviousSet={() => undefined}
+          onNextSet={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Previous set" }).getAttribute("aria-label")).toBe(
+      "Previous set",
+    );
+    expect(screen.getByRole("button", { name: "Next set" }).getAttribute("aria-label")).toBe(
+      "Next set",
+    );
+  });
+
   it("uses the portrait aspect ratio throughout all three viewport-scaled modes", () => {
     renderComparison(
       file("a", facts({ width: 2000, height: 3000 })),
@@ -129,6 +154,21 @@ describe("duplicate comparison", () => {
     expect(
       (screen.getByRole("slider", { name: "Slider position" }) as HTMLInputElement).value,
     ).toBe("31");
+  });
+
+  it("gives mode guidance and zoom their own rows at phone widths", () => {
+    renderComparison(
+      file("a", facts({ width: 2000, height: 3000 })),
+      file("b", facts({ width: 1000, height: 1500 })),
+    );
+
+    expect(
+      screen.getByRole("group", { name: "Comparison mode" }).parentElement?.className,
+    ).toContain("w-full");
+    expect(
+      screen.getByText("Both files at the same size, next to each other.").className,
+    ).toContain("w-full");
+    expect(screen.getByText("Zoom").className).toContain("w-full");
   });
 
   it("shows resolution, megapixels and dated provenance and marks a real winner accessibly", () => {

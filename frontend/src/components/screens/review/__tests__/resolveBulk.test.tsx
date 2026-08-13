@@ -129,6 +129,23 @@ function queue(
 afterEach(cleanup);
 
 describe("selection-scoped duplicate decisions", () => {
+  it("gives the active set identity a full row at narrow widths", () => {
+    render(queue([setEntry("one")]));
+
+    const heading = screen.getByRole("heading", { name: "one.jpg" });
+    expect(heading.parentElement?.className).toContain("basis-full");
+    expect(heading.parentElement?.className).toContain("sm:flex-1");
+  });
+
+  it("keeps the recommendation badge separate from responsive data columns", () => {
+    const proposed = setEntry("proposed");
+    proposed.rows[0].stack!.isProposedKeeper = true;
+
+    render(queue([proposed]));
+
+    expect(screen.getByText("Recommended").className).toContain("candidate-recommendation-badge");
+  });
+
   it("decides two hundred unrankable sets of every origin and kind in three bulk actions", () => {
     const sets = Array.from({ length: 200 }, (_, index) =>
       setEntry(

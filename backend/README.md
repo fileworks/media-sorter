@@ -1,6 +1,6 @@
 # MediaSorter Backend
 
-Python **FastAPI** server for intelligent media organisation.  
+Python **FastAPI** server for intelligent media organisation.
 Extracts dates from EXIF / video metadata / filenames, sorts files into a date-based folder
 structure, and persists an operation history in SQLite.
 
@@ -17,6 +17,9 @@ make backend
 # → http://localhost:8000
 # → API docs: http://localhost:8000/api/docs
 ```
+
+The command prints a per-launch API capability. Direct clients must send it as
+`X-MediaSorter-Capability`; the desktop shell supplies its own token.
 
 ---
 

@@ -1,29 +1,4 @@
-/**
- * What lands in the folder you selected, which subfolder each file goes to, and
- * why.
- *
- * The pane used to answer "how many files are under this folder" by listing all
- * of them flat. The tree beside it already answered that with a count; what
- * neither answered was *which* files go to `01 — January` and which to
- * `_copies/`, on a screen whose whole purpose is reading the structure a run
- * would build. So the contents are grouped by the next folder down: the list
- * under sticky headers, the grid as folder tiles you can move into.
- *
- * **A duplicate set is decided where it is found.** Expanding one puts every
- * copy side by side with the facts needed to choose between them and a control
- * on each. Sending the reader to a separate queue to answer a question about a
- * set they are looking at is the trip that made them ask for this screen to
- * change.
- *
- * **Selecting and opening are different gestures.** The preview and the name
- * open a file; the rest of the row selects it. In the grid the tile opens and a
- * corner checkbox selects. Neither needs a mode, and both are reachable from the
- * keyboard.
- *
- * Rows are measured rather than estimated: a group header, a set header, a
- * collapsed set and an opened one are four different heights, and an estimate
- * applied to all four drifts further with every one the list scrolls past.
- */
+/** Browse planned folders and resolve duplicate sets in place. */
 
 import { useMemo } from "react";
 import {
@@ -144,9 +119,7 @@ export function BrowsePane({
   embedded = false,
 }: BrowsePaneProps) {
   const { t, locale } = useI18n();
-  // Sorted inside each folder group, never across them: the groups are the
-  // structure the run would build, and reordering *those* by file size would
-  // stop the pane answering the question the tree asks it.
+  // Sort within destination groups without reordering the hierarchy.
   const groups = useMemo(
     () =>
       folderGroups(entries, selectedPath).map((group) => ({
@@ -194,9 +167,7 @@ export function BrowsePane({
               />
             )}
 
-            {/* Only the files landing here are drawn as tiles. A subfolder is a
-                tile you move into, so its contents are not also spilled beside
-                it — that is the flat list this rendering replaces. */}
+            {/* Draw only direct children of the current destination. */}
             {group.direct && (
               <ul className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {group.entries.map((entry) =>
@@ -248,11 +219,7 @@ export function BrowsePane({
       role="group"
       aria-label={t("review.items")}
     >
-      {/* The list is a table in everything but markup, so it gets a table's
-          header. It shares `.asset-grid` with the rows, which is what stops a
-          heading from describing a column the rows do not have — and it lives
-          inside the scroller, because a header outside one is offset by the
-          scrollbar and drifts out of line with the columns it names. */}
+      {/* Header and rows share the same responsive grid. */}
       <div
         aria-hidden
         className="asset-grid sticky top-0 z-20 border-b border-border bg-card px-3 py-1 text-3xs font-bold uppercase tracking-wider text-faint"
@@ -420,14 +387,7 @@ function FolderTile({
   );
 }
 
-/**
- * A duplicate set as one line in the folder it lands in.
- *
- * It is deliberately not shaped like a file row: the overlapping pair says
- * "several copies" before anything is read, the tint says whether it is settled,
- * and the trailing action says what the click will do. A set that still needs a
- * person is the one thing on this screen that must be findable while scanning.
- */
+/** One duplicate set in its planned destination. */
 function SetHeader({
   entry,
   expanded,
@@ -534,8 +494,7 @@ function SetHeader({
         </span>
       </button>
 
-      {/* On a tinted row the badge's own tint would be the same colour as the
-          row, so it lifts onto the card surface and keeps a hairline. */}
+      {/* Lift the status badge above the tinted row. */}
       <Badge
         tone={settled ? "success" : "primary"}
         className={cn("border bg-card", settled ? "border-success/30" : "border-primary/30")}
@@ -543,8 +502,7 @@ function SetHeader({
         {t(settled ? "review.stack.state.decided" : "review.stack.state.open")}
       </Badge>
 
-      {/* Opening the set in the queue is still offered, for working through
-          several in sequence — but it is no longer the only way to decide one. */}
+      {/* Offer sequential resolution without blocking inline decisions. */}
       <button
         type="button"
         onClick={onResolve}
@@ -560,14 +518,7 @@ function SetHeader({
   );
 }
 
-/**
- * The set opened in place: every copy, and the decision.
- *
- * The facts on each card are the ones that decide between two copies of the same
- * picture — how many pixels, how many bytes, where it came from, and what date
- * was read off it. A baseline copy states that it is protected instead of
- * offering a control that cannot be used.
- */
+/** Expanded duplicate set with copy facts and decision controls. */
 function SetCopies({
   entry,
   selected,
@@ -770,14 +721,7 @@ function SetBlock({
   );
 }
 
-/**
- * One file in the list.
- *
- * The row's own surface selects; the preview and the name open. Clicking the
- * name used to be the only way to open a file and the checkbox the only way to
- * select one, which put the more common gesture on the smaller target and gave
- * the row's whole width to nothing at all.
- */
+/** File row with separate selection, preview, and detail actions. */
 function FileLine({
   row,
   selected,
@@ -799,9 +743,7 @@ function FileLine({
   const locked = row.status === "baseline";
 
   return (
-    /* The pointer affordance is deliberately redundant: the checkbox is the
-       accessible selection control and stays keyboard-reachable, so widening the
-       target adds a gesture without inventing a second semantic. */
+    /* The checkbox remains the accessible selection control. */
     <div
       onClick={(event) => {
         if (locked) return;
@@ -821,10 +763,7 @@ function FileLine({
         aria-label={row.name}
         aria-description={locked ? t("review.stack.baselineHelp") : undefined}
         onClick={(event) => event.stopPropagation()}
-        // Shift is read off the change event's own click, and the box is left
-        // to toggle normally. A second `onClick` handler used to call
-        // `preventDefault()` here, which reverted the DOM checkbox after
-        // React's value tracker had already recorded the toggle.
+        // Preserve shift-range selection from the checkbox event.
         onChange={(event) =>
           onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
         }
@@ -854,11 +793,7 @@ function FileLine({
           {locked && <FiLock className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />}
           {row.name}
         </span>
-        {/* Size and where the date came from — the qualifier, not the sentence.
-            The full reason was a whole clause that repeated the date now shown
-            in its own column, and the absolute source path it used to carry was
-            the widest thing in the list and the least worth reading. Both are
-            one click away in the detail view, and on this row's tooltip. */}
+        {/* Keep the row summary compact; full provenance is in details. */}
         <span className="block truncate text-3xs text-faint">
           {formatBytes(row.sizeBytes, { locale })}
           {row.date !== null && ` · ${formatMetadataSource(row.dateSource, t)}`}
@@ -937,9 +872,7 @@ function GridTile({
         </button>
       </Tooltip>
 
-      {/* Revealed on hover and on focus, and permanent once checked — a tile
-          whose selection control vanished when the pointer left would make the
-          selected state unreadable. */}
+      {/* Keep the selection control visible after selection. */}
       <span
         className={cn(
           "absolute left-1 top-1 rounded bg-card/90 p-1 transition-opacity",

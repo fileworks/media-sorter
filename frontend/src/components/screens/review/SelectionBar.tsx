@@ -10,12 +10,7 @@ interface SelectionBarProps {
   onClear: () => void;
 }
 
-/**
- * What can be done with the current selection, and why not when it cannot.
- *
- * Selection acts on duplicate decisions and comparison only. Run scope is
- * directory-level and is chosen on Sources before files are scanned.
- */
+/** Actions available for the current review selection. */
 export function SelectionBar({
   selected,
   actions,

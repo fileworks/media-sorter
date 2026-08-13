@@ -1,17 +1,4 @@
-/**
- * "What would this rule do?", answered before it does it.
- *
- * A keep rule applied across a queue is the one action on this screen that
- * decides many things at once, and the thing it must never do is silently
- * overwrite a decision somebody made by hand. So the dialog states three
- * numbers — what is still open, how much of that the rule can actually rank,
- * and how many manual decisions it will leave exactly as they are — and only
- * then offers to apply it.
- *
- * The fourth number is the honest one: sets the rule *cannot* rank, because
- * the facts it ranks on were never measured for them. Those stay open, and
- * saying so here is what stops "apply rule" reading as broken afterwards.
- */
+/** Preview a bulk rule without modifying manual decisions. */
 
 import { Button } from "@/components/ui/button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
