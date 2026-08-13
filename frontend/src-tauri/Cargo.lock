@@ -2148,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "media-sorter"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "native-dialog",
  "rand 0.10.2",
