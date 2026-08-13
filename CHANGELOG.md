@@ -3,6 +3,12 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.4.4](https://github.com/fileworks/media-sorter/compare/v1.4.3...v1.4.4) (2026-08-13)
+
+### Bug Fixes
+
+* **ui:** streamline review workflow ([#76](https://github.com/fileworks/media-sorter/issues/76)) ([76513cc](https://github.com/fileworks/media-sorter/commit/76513cc64ab748188c1450455aaebd36d48c09c3))
+
 ## [1.4.3](https://github.com/fileworks/media-sorter/compare/v1.4.2...v1.4.3) (2026-08-13)
 
 ### Bug Fixes
