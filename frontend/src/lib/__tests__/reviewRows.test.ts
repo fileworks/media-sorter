@@ -232,6 +232,31 @@ describe("toReviewRows", () => {
     expect(rows[0].stack?.keptInstead).toBeNull();
     expect(rows[1].stack?.isKeeper).toBe(false);
     expect(rows[1].stack?.keptInstead).toBe("/in/a.jpg");
+    expect(rows[0].stack?.similarity).toBe(100);
+  });
+
+  it("reports the weakest measured similarity across a perceptual set", () => {
+    const first = member("m1", "/in/a.jpg");
+    const second = member("m2", "/in/b.jpg");
+    first.evidence = {
+      ...first.evidence,
+      algorithm: "phash",
+      signature: "0".repeat(16),
+      distance: 4,
+    };
+    second.evidence = {
+      ...second.evidence,
+      algorithm: "phash",
+      signature: "f".repeat(16),
+      distance: 8,
+    };
+
+    const rows = toReviewRows(
+      result(item({ source: "/in/a.jpg" }), item({ source: "/in/b.jpg" })),
+      [stack({ kind: "similar", members: [first, second] })],
+    );
+
+    expect(rows.map((row) => row.stack?.similarity)).toEqual([88, 88]);
   });
 
   it("does not turn a library-wide group with one current member into a one-copy set", () => {

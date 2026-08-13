@@ -14,7 +14,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FiActivity, FiArrowLeft, FiSearch } from "react-icons/fi";
+import { FiActivity, FiArrowLeft } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FolderBrowserDialog } from "@/components/FolderBrowserDialog";
@@ -92,8 +92,6 @@ export default function MainPage() {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [operationCenterOpen, setOperationCenterOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
-  const [commandQuery, setCommandQuery] = useState("");
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
@@ -145,17 +143,6 @@ export default function MainPage() {
     setImpactAcknowledged(false);
     setReviewView("plan");
   }, [preview.result]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const scanned = analysis.result !== null && analysis.error === null;
   const planned = preview.result !== null && preview.error === null;
@@ -579,19 +566,6 @@ export default function MainPage() {
     [activeTask, historyMeta?.operations, recoveryOperations],
   );
 
-  const commandItems = useMemo(
-    () =>
-      [
-        { id: "sources", stage: "sources" as const, label: t("stage.sources.label") },
-        { id: "recipe", stage: "recipe" as const, label: t("stage.recipe.label") },
-        { id: "configure", stage: "configure" as const, label: t("stage.configure.label") },
-        { id: "plan", stage: "review" as const, label: t("stage.plan.label") },
-        { id: "review", stage: "review" as const, label: t("stage.review.label") },
-        { id: "execute", stage: "execute" as const, label: t("stage.execute.label") },
-      ].filter((item) => item.label.toLowerCase().includes(commandQuery.trim().toLowerCase())),
-    [commandQuery, t],
-  );
-
   const titleBar = (
     <TitleBar
       runLabel={t(
@@ -616,17 +590,6 @@ export default function MainPage() {
       onOpenHistory={() => setHistoryOpen(true)}
       busy={isAnyRunning || loaderActive}
     >
-      <button
-        type="button"
-        onClick={() => setCommandOpen(true)}
-        className="hidden h-10 min-w-[13.5rem] items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:border-faint hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:flex"
-      >
-        <FiSearch className="h-3.5 w-3.5" aria-hidden />
-        {t("app.command")}
-        <kbd className="ml-auto rounded border border-border bg-card px-1.5 py-1 font-mono text-3xs leading-none">
-          ⌘K
-        </kbd>
-      </button>
       <button
         type="button"
         onClick={() => setOperationCenterOpen(true)}
@@ -915,57 +878,6 @@ export default function MainPage() {
           );
         }}
       </StageShell>
-
-      <Modal
-        open={commandOpen}
-        onClose={() => {
-          setCommandOpen(false);
-          setCommandQuery("");
-        }}
-        title={t("app.command")}
-        size="md"
-      >
-        <ModalHeader />
-        <ModalBody className="space-y-2">
-          <label className="relative block">
-            <span className="sr-only">{t("app.commandSearch")}</span>
-            <FiSearch
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint"
-              aria-hidden
-            />
-            <input
-              autoFocus
-              type="search"
-              value={commandQuery}
-              onChange={(event) => setCommandQuery(event.target.value)}
-              placeholder={t("app.commandSearch")}
-              className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-          <div className="grid gap-1" role="listbox" aria-label={t("app.command")}>
-            {commandItems.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                role="option"
-                aria-selected={stage === item.stage}
-                onClick={() => {
-                  setCommandOpen(false);
-                  setCommandQuery("");
-                  if (item.id === "plan" || item.id === "review") setReviewView(item.id);
-                  setRequestedStage(item.stage);
-                }}
-                className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-left text-xs text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="font-mono text-3xs text-faint">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="font-semibold">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </ModalBody>
-      </Modal>
 
       <Modal
         open={operationCenterOpen}

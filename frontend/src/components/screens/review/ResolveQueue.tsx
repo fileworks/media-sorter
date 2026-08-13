@@ -426,7 +426,7 @@ export function ResolveQueue({
               {t("review.resolve.openCount", { count: openCount })}
             </Badge>
           </div>
-          <ul className="grid gap-1 p-1.5 sm:grid-cols-2 lg:grid-cols-1">
+          <ul className="grid max-h-[min(32rem,60dvh)] gap-1 overflow-y-auto overscroll-contain p-1.5 sm:grid-cols-2 lg:grid-cols-1">
             {listedSets.map((entry) => {
               const active = current?.id === entry.id;
               const decided = entry.hasBaseline || isDecidedState(entry.decisionState);
@@ -451,7 +451,13 @@ export function ResolveQueue({
                           ? t("review.resolve.queueDecided")
                           : proposed
                             ? t("review.resolve.queueProposed")
-                            : t(`review.stack.kind.${entry.setKind}`)}
+                            : entry.setKind === "exact"
+                              ? t("review.stack.match.exact")
+                              : entry.setKind === "similar" && entry.similarity !== null
+                                ? t("review.stack.match.similar", {
+                                    percent: entry.similarity,
+                                  })
+                                : t(`review.stack.kind.${entry.setKind}`)}
                       </span>
                     </span>
                     <span
@@ -495,7 +501,11 @@ export function ResolveQueue({
               <header className="flex flex-wrap items-start gap-2 pb-2.5">
                 <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
                   <span className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
-                    {t(`review.stack.kind.${current.setKind}`)}
+                    {current.setKind === "exact"
+                      ? t("review.stack.match.exact")
+                      : current.setKind === "similar" && current.similarity !== null
+                        ? t("review.stack.match.similar", { percent: current.similarity })
+                        : t(`review.stack.kind.${current.setKind}`)}
                   </span>
                   <h2
                     id="review-queue-position"

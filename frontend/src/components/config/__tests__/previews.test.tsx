@@ -115,7 +115,9 @@ describe("folder tree preview", () => {
 
     expect(screen.queryByText("2025/")).toBeNull();
     expect(screen.getByText("_corrupted/")).toBeTruthy();
-    expect(screen.getByText(/Everything else stays exactly where it is/)).toBeTruthy();
+    expect(
+      screen.getByText(/Files that are not duplicates stay in their source folders/),
+    ).toBeTruthy();
   });
 
   it("omits a review folder the settings cannot produce", () => {

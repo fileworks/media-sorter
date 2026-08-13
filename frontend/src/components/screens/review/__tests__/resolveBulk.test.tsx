@@ -72,6 +72,7 @@ function setEntry(
     decisionKind: null,
     proposedKeeper: null,
     proposalPolicy: null,
+    similarity: setKind === "exact" ? 100 : null,
     folder: "_stays/undecided",
   };
 }

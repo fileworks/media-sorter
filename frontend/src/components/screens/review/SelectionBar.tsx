@@ -43,8 +43,9 @@ export function SelectionBar({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-tint-info px-3 py-2"
+      className="fixed inset-x-3 bottom-[4.5rem] z-40 mx-auto flex max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 px-3 py-2 shadow-card backdrop-blur sm:inset-x-6"
       role="status"
+      aria-live="polite"
     >
       <span className="text-xs font-semibold text-foreground">
         {t("review.selected", { count: selected.length.toLocaleString(locale) })}
