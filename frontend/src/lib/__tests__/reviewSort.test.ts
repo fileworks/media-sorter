@@ -67,6 +67,7 @@ function setEntry(id: string, rows: ReviewRow[]): SetEntry {
     decisionKind: null,
     proposedKeeper: null,
     proposalPolicy: null,
+    similarity: 100,
     folder: "2024/07",
   };
 }

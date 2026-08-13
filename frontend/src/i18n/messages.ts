@@ -69,6 +69,8 @@ export const en = {
   "review.stack.kind.exact": "identical",
   "review.stack.kind.similar": "similar",
   "review.stack.kind.burst": "burst",
+  "review.stack.match.exact": "absolutely identical",
+  "review.stack.match.similar": "{percent}% similar",
   "review.stack.keeping": "keeping {name}",
   "review.stack.keeperBaseline":
     "This set contains a baseline file, which always wins. No rule can change it.",
@@ -90,7 +92,7 @@ export const en = {
   "review.reason.duplicateKeeper": "The copy kept out of {count}.",
   "review.reason.duplicateCopy": "A copy of {kept}, kept beside it under _copies/.",
   "review.reason.duplicateUndecided":
-    "One of {count} copies with no decision yet — the run leaves the whole set alone.",
+    "One of {count} copies still awaiting review — the run leaves the whole set alone.",
   "review.reason.duplicateProposed":
     "One of {count} copies ranked by a rule proposal — nothing binds until it is accepted.",
   "review.reason.notDuplicates":
@@ -427,8 +429,6 @@ export const en = {
     "Choose the folders you want to organize. No file changes until you review the plan and choose Execute.",
   "app.tagline": "Review first. Organize with confidence.",
   "app.history": "History",
-  "app.command": "Jump to…",
-  "app.commandSearch": "Search stages",
   "app.sortHistory": "Sort history",
   "app.back": "Back",
   "app.next": "Next",
@@ -1254,7 +1254,7 @@ export const en = {
   "config.folder.previewAttribution": "The result of every setting in Sort.",
   "config.folder.previewExample": "example filenames — run a preview to see your own",
   "config.folder.previewStaysInPlace":
-    "Everything else stays exactly where it is; only these folders are added.",
+    "Files that are not duplicates stay in their source folders. Copies set aside by this run go to the review folders shown here.",
   "config.example.camera": "Pixel 9 Pro",
   "config.example.category": "travel",
   "config.criteria.year": "Year",
@@ -1363,12 +1363,12 @@ export const en = {
   "review.mode.browse": "Browse the result",
   "review.mode.resolve": "Decide the duplicates",
   "review.browse.stays": "Stays where it is",
-  "review.browse.stays.undecided": "Sets with no decision",
+  "review.browse.stays.undecided": "Sets to review",
   "review.browse.stays.undecided.rule":
-    "The run skips a duplicate set nobody has decided — every copy stays put, including the one it would have kept.",
-  "review.browse.stays.proposed": "Rule proposals awaiting acceptance",
+    "These sets have a likely keeper but still need your review. Until then, the run skips every copy in the set.",
+  "review.browse.stays.proposed": "Suggested keep choices",
   "review.browse.stays.proposed.rule":
-    "A keep rule ranked these sets, but proposals bind nothing until you accept them.",
+    "A smart keep rule picked a likely keeper for each set. Review and accept the suggestion to apply it.",
   "review.browse.stays.baseline": "Baseline folders",
   "review.browse.stays.baseline.rule":
     "Baseline folders are compared against and never written to.",
@@ -1387,7 +1387,7 @@ export const en = {
   "review.browse.statusReady": "ready",
   "review.browse.openInResolve": "Decide this set",
   "review.browse.openResult": "Open result",
-  "review.browse.setUndecided": "no decision yet",
+  "review.browse.setUndecided": "review needed",
   "review.stack.state.open": "open",
   "review.stack.state.decided": "decided",
   "review.browse.setProposed": "proposed: keep {name} · {rule}",
@@ -1407,10 +1407,10 @@ export const en = {
   "review.viewer.zoomOut": "Zoom out",
   "review.viewer.fitToWindow": "Fit to window",
   "review.viewer.fit": "Fit",
-  "review.browse.alsoInLibrary": "{count} sets have copies outside this run",
-  "review.browse.alsoInLibrary.one": "1 set has copies outside this run",
+  "review.browse.alsoInLibrary": "{count} sets also include files outside the selected Sources",
+  "review.browse.alsoInLibrary.one": "1 set also includes files outside the selected Sources",
   "review.browse.alsoInLibrary.rule":
-    "Your library holds these copies in folders this run is not reading, so it cannot compare them and leaves them alone. To decide them, add those folders on the Sources screen and preview again.",
+    "Review compares only the folders selected on Sources. MediaSorter found related copies in its library index, but it will not read, compare, move, or remove those outside files. Add their folders as Sources and preview again only if you want them included.",
   "review.browse.openSources": "Open Sources",
   "review.resolve.position": "Set {index} of {total}",
   "review.resolve.previous": "Previous set",
@@ -1480,7 +1480,7 @@ export const en = {
   "review.ruleImpact.apply": "Decide {count} sets",
   "review.detail.unknown": "unknown",
   "review.detail.dateFrom": "{date}, from {source}",
-  "review.detail.plannedState": "Planned state",
+  "review.detail.plannedState": "Expected outcome",
   "review.detail.fileType": "File type",
   "review.detail.source": "Comes from",
   "review.detail.destination": "Goes to",
@@ -1801,6 +1801,8 @@ export const de: Record<MessageKey, string> = {
   "review.stack.kind.exact": "identisch",
   "review.stack.kind.similar": "ähnlich",
   "review.stack.kind.burst": "Serie",
+  "review.stack.match.exact": "vollständig identisch",
+  "review.stack.match.similar": "zu {percent} % ähnlich",
   "review.stack.keeping": "behält {name}",
   "review.stack.keeperBaseline":
     "Dieser Satz enthält eine Referenzdatei, die immer gewinnt. Keine Regel ändert das.",
@@ -1823,7 +1825,7 @@ export const de: Record<MessageKey, string> = {
   "review.reason.duplicateKeeper": "Die behaltene Kopie von {count}.",
   "review.reason.duplicateCopy": "Eine Kopie von {kept}, daneben unter _copies/ abgelegt.",
   "review.reason.duplicateUndecided":
-    "Eine von {count} Kopien ohne Entscheidung — der Durchlauf lässt den ganzen Satz liegen.",
+    "Eine von {count} noch zu prüfenden Kopien — der Durchlauf lässt den ganzen Satz liegen.",
   "review.reason.duplicateProposed":
     "Eine von {count} durch eine Regel vorgeschlagenen Kopien — verbindlich wird sie erst nach Annahme.",
   "review.reason.notDuplicates":
@@ -2178,8 +2180,6 @@ export const de: Record<MessageKey, string> = {
     "Wähle die zu organisierenden Ordner. Dateien ändern sich erst, nachdem du den Plan geprüft und „Ausführen“ gewählt hast.",
   "app.tagline": "Erst prüfen. Dann sicher organisieren.",
   "app.history": "Verlauf",
-  "app.command": "Springen zu…",
-  "app.commandSearch": "Schritte durchsuchen",
   "app.sortHistory": "Sortierverlauf",
   "app.back": "Zurück",
   "app.next": "Weiter",
@@ -3033,7 +3033,7 @@ export const de: Record<MessageKey, string> = {
   "config.folder.previewAttribution": "Das Ergebnis aller Einstellungen unter Sortieren.",
   "config.folder.previewExample": "Beispieldateinamen — Vorschau starten, um eigene zu sehen",
   "config.folder.previewStaysInPlace":
-    "Alles andere bleibt genau dort, wo es ist; nur diese Ordner kommen hinzu.",
+    "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Aussortierte Kopien landen in den hier gezeigten Prüfordnern.",
   "config.example.camera": "Pixel 9 Pro",
   "config.example.category": "Reise",
   "config.criteria.year": "Jahr",
@@ -3145,12 +3145,12 @@ export const de: Record<MessageKey, string> = {
   "review.mode.browse": "Ergebnis durchsehen",
   "review.mode.resolve": "Duplikate entscheiden",
   "review.browse.stays": "Bleibt, wo es ist",
-  "review.browse.stays.undecided": "Sätze ohne Entscheidung",
+  "review.browse.stays.undecided": "Zu prüfende Sätze",
   "review.browse.stays.undecided.rule":
-    "Einen unentschiedenen Duplikatsatz überspringt der Durchlauf komplett — jede Kopie bleibt liegen, auch die, die er behalten hätte.",
-  "review.browse.stays.proposed": "Regelvorschläge warten auf Annahme",
+    "Diese Sätze haben eine wahrscheinliche beste Kopie, brauchen aber noch deine Prüfung. Bis dahin überspringt der Durchlauf jede Kopie im Satz.",
+  "review.browse.stays.proposed": "Vorgeschlagene Auswahl",
   "review.browse.stays.proposed.rule":
-    "Eine Behaltregel hat diese Sätze eingeordnet, doch erst die Annahme macht den Vorschlag verbindlich.",
+    "Eine intelligente Behaltregel hat je Satz eine wahrscheinliche beste Kopie ausgewählt. Prüfe und bestätige den Vorschlag, um ihn anzuwenden.",
   "review.browse.stays.baseline": "Referenzordner",
   "review.browse.stays.baseline.rule":
     "Referenzordner dienen nur zum Vergleich und werden nie beschrieben.",
@@ -3169,7 +3169,7 @@ export const de: Record<MessageKey, string> = {
   "review.browse.statusReady": "bereit",
   "review.browse.openInResolve": "Im Duplikat-Tab prüfen",
   "review.browse.openResult": "Ergebnis öffnen",
-  "review.browse.setUndecided": "noch nicht entschieden",
+  "review.browse.setUndecided": "Prüfung nötig",
   "review.stack.state.open": "offen",
   "review.stack.state.decided": "entschieden",
   "review.browse.setProposed": "Vorschlag: {name} behalten · {rule}",
@@ -3189,10 +3189,11 @@ export const de: Record<MessageKey, string> = {
   "review.viewer.zoomOut": "Verkleinern",
   "review.viewer.fitToWindow": "An Fenster anpassen",
   "review.viewer.fit": "Angepasst",
-  "review.browse.alsoInLibrary": "{count} Gruppen haben Kopien außerhalb dieses Durchlaufs",
-  "review.browse.alsoInLibrary.one": "1 Gruppe hat Kopien außerhalb dieses Durchlaufs",
+  "review.browse.alsoInLibrary":
+    "{count} Sätze enthalten auch Dateien außerhalb der gewählten Quellen",
+  "review.browse.alsoInLibrary.one": "1 Satz enthält auch Dateien außerhalb der gewählten Quellen",
   "review.browse.alsoInLibrary.rule":
-    "Deine Sammlung hält diese Kopien in Ordnern, die dieser Durchlauf nicht liest — er kann sie nicht vergleichen und lässt sie in Ruhe. Um sie zu entscheiden, füge diese Ordner auf der Quellen-Seite hinzu und erstelle die Vorschau neu.",
+    "Die Prüfung vergleicht nur die unter Quellen gewählten Ordner. MediaSorter kennt verwandte Kopien aus dem Sammlungsindex, liest, vergleicht, verschiebt oder entfernt diese externen Dateien aber nicht. Füge ihre Ordner nur dann als Quellen hinzu und erstelle die Vorschau neu, wenn du sie einbeziehen möchtest.",
   "review.browse.openSources": "Quellen öffnen",
   "review.resolve.position": "Satz {index} von {total}",
   "review.resolve.previous": "Vorheriger Satz",
@@ -3262,7 +3263,7 @@ export const de: Record<MessageKey, string> = {
   "review.ruleImpact.apply": "{count} Stapel entscheiden",
   "review.detail.unknown": "unbekannt",
   "review.detail.dateFrom": "{date}, aus {source}",
-  "review.detail.plannedState": "Geplanter Zustand",
+  "review.detail.plannedState": "Erwartetes Ergebnis",
   "review.detail.fileType": "Dateityp",
   "review.detail.source": "Kommt aus",
   "review.detail.destination": "Geht nach",

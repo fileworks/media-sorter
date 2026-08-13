@@ -83,6 +83,7 @@ export interface SetEntry {
   decisionKind: import("@/lib/duplicateDecisions").DuplicateDecision["kind"] | null;
   proposedKeeper: ReviewRow | null;
   proposalPolicy: import("@/services/api").KeeperPolicyId | null;
+  similarity: number | null;
   folder: string;
 }
 
@@ -151,6 +152,7 @@ export function duplicateSetEntries(rows: readonly ReviewRow[], root = ""): SetE
         decisionKind: row.stack.decisionKind,
         proposedKeeper: null,
         proposalPolicy: row.stack.proposalPolicy,
+        similarity: row.stack.similarity ?? null,
         folder: "",
       };
       setIndex.set(row.stack.id, entry);

@@ -30,6 +30,30 @@ function filesMatching(pattern: RegExp): string[] {
     .sort();
 }
 
+function sourceOf(path: string): string {
+  return PRODUCT.find(([candidate]) => candidate === path)?.[1] ?? "";
+}
+
+describe("stable workflow chrome", () => {
+  it("keeps selection actions out of document flow", () => {
+    expect(sourceOf("src/components/screens/review/SelectionBar.tsx")).toMatch(
+      /className="[^"]*fixed[^"]*bottom-/,
+    );
+  });
+
+  it("uses the stage controls without a second progress indicator", () => {
+    const stepper = sourceOf("src/components/shell/StageStepper.tsx");
+    expect(stepper).not.toContain("scaleX(");
+    expect(stepper).not.toContain("progress");
+  });
+
+  it("has no global Jump to command palette", () => {
+    const main = sourceOf("src/pages/MainPage.tsx");
+    expect(main).not.toContain('t("app.command")');
+    expect(main).not.toContain("setCommandOpen");
+  });
+});
+
 describe("the confirmation policy", () => {
   /**
    * The six permitted cases, and where each one lives. Four are dialogs; the

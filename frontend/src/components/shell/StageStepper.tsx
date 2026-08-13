@@ -77,30 +77,12 @@ export function StageStepper({
   onSelect,
 }: StageStepperProps) {
   const { t } = useI18n();
-  const activeIndex = VISUAL_STEPS.findIndex((entry) =>
-    entry.id === "plan"
-      ? current === "review" && reviewView === "plan"
-      : entry.id === "review"
-        ? current === "review" && reviewView === "review"
-        : entry.stage === current,
-  );
-  const progress = Math.max(0, activeIndex) / (VISUAL_STEPS.length - 1);
-
   return (
     <nav
       aria-label={t("stage.navigation")}
       className="relative h-16 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
     >
-      <div
-        className="pointer-events-none absolute inset-x-4 bottom-1 mx-auto h-0.5 max-w-workspace overflow-hidden rounded-full bg-border"
-        aria-hidden
-      >
-        <span
-          className="block h-full origin-left rounded-full bg-primary transition-transform duration-300"
-          style={{ transform: `scaleX(${progress})` }}
-        />
-      </div>
-      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-1 px-3 pb-2 pt-1.5 md:min-w-[48rem] md:grid-cols-6 md:px-4">
+      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-1 px-3 py-1.5 md:min-w-[48rem] md:grid-cols-6 md:px-4">
         {VISUAL_STEPS.map((entry, index) => {
           const active =
             entry.id === "plan"

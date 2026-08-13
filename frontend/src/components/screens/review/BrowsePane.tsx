@@ -455,7 +455,13 @@ function SetHeader({
             </span>
           </span>
           <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-3xs text-muted-foreground">
-            <span>{t(`review.stack.kind.${entry.setKind}`)}</span>
+            <span>
+              {entry.setKind === "exact"
+                ? t("review.stack.match.exact")
+                : entry.setKind === "similar" && entry.similarity !== null
+                  ? t("review.stack.match.similar", { percent: entry.similarity })
+                  : t(`review.stack.kind.${entry.setKind}`)}
+            </span>
             <span aria-hidden>·</span>
             <span className="tabular-nums">{formatBytes(bytes, { locale })}</span>
             {entry.hasBaseline && (

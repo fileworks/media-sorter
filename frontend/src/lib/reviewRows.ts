@@ -71,6 +71,8 @@ export interface RowStack {
   /** The candidate a rule ranked without binding. */
   isProposedKeeper: boolean;
   proposalPolicy: import("@/services/api").KeeperPolicyId | null;
+  /** Group similarity as a percentage; exact matches are always 100. */
+  similarity?: number | null;
 }
 
 export interface ReviewRow {
@@ -389,6 +391,15 @@ function planStacks(
     const keeper = chosen !== undefined && members.includes(chosen) ? chosen : members[0];
     const proposal = proposals.get(set.id);
     const state = decisionState(set.id, decisions, proposals);
+    const measuredSimilarity = items
+      .filter((item) => members.includes(item.source) && item.duplicate_similarity != null)
+      .map((item) => item.duplicate_similarity as number);
+    const similarity =
+      set.kind === "exact"
+        ? 100
+        : measuredSimilarity.length > 0
+          ? Math.round(Math.min(...measuredSimilarity))
+          : null;
     for (const source of members) {
       const isKeeper = source === keeper;
       stacks.set(source, {
@@ -404,10 +415,25 @@ function planStacks(
         isProposedKeeper: proposal?.memberId === source,
         proposalPolicy: proposal?.policy ?? null,
         origin: "plan",
+        similarity,
       });
     }
   }
   return stacks;
+}
+
+/** The weakest measured member match is the honest similarity for the set. */
+function catalogSimilarity(group: DuplicateGroup): number | null {
+  if (group.kind === "exact") return 100;
+  if (group.kind !== "similar") return null;
+
+  const measured = group.members.flatMap((member) => {
+    const distance = member.evidence.distance;
+    const bits = (member.evidence.signature?.length ?? 0) * 4;
+    if (distance === null || bits === 0) return [];
+    return [Math.max(0, Math.min(100, Math.round((1 - distance / bits) * 100)))];
+  });
+  return measured.length > 0 ? Math.min(...measured) : null;
 }
 
 /**
@@ -444,6 +470,7 @@ export function toReviewRows(
     const hasBaseline = group.members.some((member) => member.role === "reference");
     const proposal = proposals.get(group.group_id);
     const state = decisionState(group.group_id, decisions, proposals);
+    const similarity = catalogSimilarity(group);
     for (const member of group.members) {
       const isKeeper = member.member_id === keeperId;
       stackBySource.set(member.observed_path, {
@@ -459,6 +486,7 @@ export function toReviewRows(
         isProposedKeeper: proposal?.memberId === member.member_id,
         proposalPolicy: proposal?.policy ?? null,
         origin: "catalog",
+        similarity,
       });
     }
   }
