@@ -137,8 +137,6 @@ export const en = {
     "Files that are not duplicates stay in their source folders. Duplicate copies are copied to _copies in the destination; the source copies remain untouched.",
   "config.runMode.deduplicateMoveNote":
     "Files that are not duplicates stay in their source folders. Duplicate copies move to _copies in the destination after verification.",
-  "config.runMode.deduplicateNote":
-    "Everything that is not a duplicate stays exactly where it is. The destination is used only for the review folders.",
   "config.runMode.organizeNote":
     "Every file that is kept is placed into the destination under the folder structure set below.",
   "config.keeper.best_quality.help":
@@ -1219,7 +1217,6 @@ export const en = {
   "config.subtitle": "Every setting has a safe default — skim through or dig in.",
   "config.rail.label": "Settings",
   "config.rail.overview": "Settings overview",
-  "config.rail.jumpTo": "Jump to a setting",
   "config.rail.resetGroup": "Reset this group to defaults",
   "config.rail.groupHasError": "A setting in this group needs attention",
   "config.rail.transfer": "Transfer",
@@ -1892,8 +1889,6 @@ export const de: Record<MessageKey, string> = {
     "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach _copies im Ziel kopiert; die Quelldateien bleiben unverändert.",
   "config.runMode.deduplicateMoveNote":
     "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach der Prüfung nach _copies im Ziel verschoben.",
-  "config.runMode.deduplicateNote":
-    "Alles, was kein Duplikat ist, bleibt genau dort liegen. Der Zielordner wird nur für die Prüfordner verwendet.",
   "config.runMode.organizeNote":
     "Jede behaltene Datei wird im Zielordner nach der unten eingestellten Ordnerstruktur abgelegt.",
   "config.keeper.best_quality.help":
@@ -3013,7 +3008,6 @@ export const de: Record<MessageKey, string> = {
     "Jede Einstellung hat eine sichere Voreinstellung — überfliegen oder vertiefen.",
   "config.rail.label": "Einstellungen",
   "config.rail.overview": "Einstellungsübersicht",
-  "config.rail.jumpTo": "Zu einer Einstellung springen",
   "config.rail.resetGroup": "Gruppe zurücksetzen",
   "config.rail.groupHasError": "Eine Einstellung in dieser Gruppe braucht Aufmerksamkeit",
   "config.rail.transfer": "Übertragung",

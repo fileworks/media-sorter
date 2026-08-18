@@ -60,17 +60,21 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)]">
-        <article className="rounded-xl border border-border bg-card p-5">
+        <article className="relative overflow-hidden rounded-xl border border-success/30 bg-gradient-to-br from-tint-success/70 via-card to-tint-primary/35 p-5">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full border-[28px] border-success/5"
+          />
           <span className="inline-flex rounded-md bg-tint-success px-2 py-1 text-3xs font-bold text-success">
             {t("plan.complete")}
           </span>
-          <h2 className="mt-3 text-lg font-semibold text-foreground">
+          <h2 className="relative mt-3 text-lg font-semibold text-foreground">
             {t("plan.summary.title", { count: result.stats.total.toLocaleString(locale) })}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="relative mt-1 text-xs text-muted-foreground">
             {t("plan.summary.detail", { count: duplicateCount })}
           </p>
-          <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-4">
+          <dl className="relative mt-5 grid grid-cols-2 gap-4 border-t border-success/20 pt-4 sm:grid-cols-4">
             {metrics.map(([value, label]) => (
               <div key={label}>
                 <dd className="text-lg font-semibold tabular-nums text-foreground">{value}</dd>

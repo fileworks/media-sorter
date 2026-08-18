@@ -1,12 +1,4 @@
-/**
- * 02 Clean — duplicates and junk. Nothing here ever deletes anything.
- *
- * Every setting in this group sets files *aside*, into a review folder inside
- * the destination, and the group's subtitle says so once rather than each row
- * repeating the reassurance. The set-aside locations are shown as read-only
- * values because knowing where the losing copies went is the entire reason the
- * promise is believable.
- */
+/** Clean — duplicate and junk handling; nothing here deletes files. */
 
 import type { SectionProps } from "@/components/config/constants";
 import { MAX_FILE_SIZE_INPUT, clampFileSize } from "@/components/config/constants";
@@ -25,7 +17,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n/I18nContext";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
 
-export function CleanGroup({ config, updateConfig }: SectionProps) {
+export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
   const { t } = useI18n();
 
   const excludePatterns = config.exclude_patterns ?? [];
@@ -39,9 +31,10 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
   return (
     <SettingGroup
       id="group-clean"
-      ordinal="02"
       title={t("config.group.clean.label")}
       subtitle={t("config.group.clean.description")}
+      onReset={onReset}
+      resetLabel={t("config.rail.resetGroup")}
     >
       <SettingRow
         id="setting-duplicates"

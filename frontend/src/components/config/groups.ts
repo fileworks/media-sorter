@@ -1,15 +1,4 @@
-/**
- * Three groups, in the order the work actually happens.
- *
- * 01 Sort decides how a file travels and where it lands. 02 Clean decides what
- * is set aside on the way. 03 Enrich decides what is added once it has landed.
- * That ordering is not a filing convention — it is the pipeline, and naming the
- * groups after it is why somebody can predict which group a setting is in.
- *
- * Each rail entry is an anchor to a row plus a one-line summary of that row's
- * current value, so the rail answers "what is this run going to do?" without
- * anything being expanded.
- */
+/** Configure groups in pipeline order, with compact summaries for the rail. */
 
 import type { SectionId } from "@/components/config/constants";
 import { PROVENANCE_DECISION_KINDS, type ProvenanceDecision } from "@/services/api";
@@ -18,15 +7,14 @@ export type GroupId = "sort" | "clean" | "enrich";
 
 export interface GroupMeta {
   id: GroupId;
-  ordinal: string;
   /** Config sections whose defaults this group's "reset" restores. */
   sections: SectionId[];
 }
 
 export const CONFIG_GROUPS: GroupMeta[] = [
-  { id: "sort", ordinal: "01", sections: ["essentials", "folders", "rename"] },
-  { id: "clean", ordinal: "02", sections: ["duplicates", "filters"] },
-  { id: "enrich", ordinal: "03", sections: ["conversion", "ai", "rules", "other"] },
+  { id: "sort", sections: ["essentials", "folders", "rename"] },
+  { id: "clean", sections: ["duplicates", "filters"] },
+  { id: "enrich", sections: ["conversion", "ai", "rules", "other"] },
 ];
 
 export interface RailEntry {

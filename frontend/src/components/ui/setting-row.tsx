@@ -21,14 +21,18 @@ import { Fragment, useId, type ReactNode } from "react";
 import { FiLock, FiRotateCcw } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
-import { useSettingsDiff } from "@/context/settings-diff-context";
+import { useSettingsDiff, type NestedConfigField } from "@/context/settings-diff-context";
 import { useI18n } from "@/i18n/I18nContext";
 import { configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import { cn } from "@/lib/utils";
 import type { Config } from "@/types/api";
 
 /** The `Config` field a row edits, or the several it edits as one decision. */
-export type SettingField = keyof Config | readonly (keyof Config)[];
+export type SettingField = keyof Config | readonly (keyof Config)[] | NestedConfigField;
+
+function isNestedConfigField(field: SettingField): field is NestedConfigField {
+  return !Array.isArray(field) && typeof field === "object" && "property" in field;
+}
 
 interface SettingRowProps {
   label: ReactNode;
@@ -92,20 +96,28 @@ function ChangedMarker({ field }: { field: SettingField }) {
   const diff = useSettingsDiff();
   if (!diff) return null;
 
-  const fields: readonly (keyof Config)[] = Array.isArray(field) ? field : [field as keyof Config];
+  const nested = isNestedConfigField(field) ? field : null;
+  const fields: readonly (keyof Config)[] = nested
+    ? []
+    : Array.isArray(field)
+      ? field
+      : [field as keyof Config];
   const changed = fields.filter((key) => diff.changed.has(key));
-  if (changed.length === 0) return null;
+  const nestedDiff = nested ? diff.nested(nested) : null;
+  if (nested ? !nestedDiff?.changed : changed.length === 0) return null;
 
   // With one field the row's own label already names it. Where the row writes
   // several — "min and max size", "format and quality" — a bare value would not
   // say which of them moved, so each is named even when only one has.
-  const defaultValue = changed
-    .map((key) =>
-      fields.length === 1
-        ? formatConfigValue(diff.defaults[key])
-        : `${configFieldLabel(key)}: ${formatConfigValue(diff.defaults[key])}`,
-    )
-    .join(" · ");
+  const defaultValue = nested
+    ? formatConfigValue(nestedDiff?.defaultValue)
+    : changed
+        .map((key) =>
+          fields.length === 1
+            ? formatConfigValue(diff.defaults[key])
+            : `${configFieldLabel(key)}: ${formatConfigValue(diff.defaults[key])}`,
+        )
+        .join(" · ");
 
   // A dot with a halo, at the size the mockup gives it: this is the one mark
   // that has to be findable while scrolling past forty settings.
@@ -140,7 +152,7 @@ function ChangedMarker({ field }: { field: SettingField }) {
     <Tooltip label={t("config.changed.revert", named)}>
       <button
         type="button"
-        onClick={() => diff.revert(fields)}
+        onClick={() => (nested ? diff.revertNested(nested) : diff.revert(fields))}
         aria-label={t("config.changed.revert", named)}
         className="group/revert grid h-8 w-8 shrink-0 place-items-center rounded-control text-primary transition-colors hover:bg-tint-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -189,16 +201,19 @@ export function SettingRow({
         className={cn("flex flex-col gap-3", !stacked && "sm:flex-row sm:items-center sm:gap-5")}
       >
         <div className="min-w-0 flex-1">
-          <Label
-            {...(htmlFor ? { htmlFor } : {})}
-            className={cn(
-              "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
-              htmlFor && !disabled && "cursor-pointer",
-            )}
-          >
-            {label}
-            {badge}
-          </Label>
+          <div className="flex min-h-8 flex-wrap items-center gap-1.5">
+            <Label
+              {...(htmlFor ? { htmlFor } : {})}
+              className={cn(
+                "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
+                htmlFor && !disabled && "cursor-pointer",
+              )}
+            >
+              {label}
+              {badge}
+            </Label>
+            {field !== undefined && <ChangedMarker field={field} />}
+          </div>
           {description && (
             <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>
           )}
@@ -211,16 +226,6 @@ export function SettingRow({
         >
           {children}
         </div>
-        {/* The marker ends the row rather than following the label: it reverts
-            the control, so it belongs next to the control. It is also outside
-            the `<label>` on purpose — a `<label>` forwards every click to its
-            input, so a revert button nested in one would also flip the toggle
-            it is meant to put back. */}
-        {field !== undefined && (
-          <div className={cn("flex items-center justify-end", stacked ? "w-full" : "sm:shrink-0")}>
-            <ChangedMarker field={field} />
-          </div>
-        )}
       </div>
 
       {/* Why it cannot be changed comes before what it currently does: a reader
@@ -269,46 +274,36 @@ export function SubSetting({
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
       <div className="min-w-0 flex-1">
-        <Label
-          {...(htmlFor ? { htmlFor } : {})}
-          className={cn("block text-xs font-medium text-foreground", htmlFor && "cursor-pointer")}
-        >
-          {label}
-        </Label>
+        <div className="flex min-h-8 items-center gap-1.5">
+          <Label
+            {...(htmlFor ? { htmlFor } : {})}
+            className={cn("block text-xs font-medium text-foreground", htmlFor && "cursor-pointer")}
+          >
+            {label}
+          </Label>
+          {field !== undefined && <ChangedMarker field={field} />}
+        </div>
         {description && <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>}
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:shrink-0">{children}</div>
-      {field !== undefined && (
-        <div className="flex items-center justify-end sm:shrink-0">
-          <ChangedMarker field={field} />
-        </div>
-      )}
     </div>
   );
 }
 
-/**
- * One numbered group of settings. The ordinal is not decoration: Sort → Clean →
- * Enrich is the order the work actually happens in, and numbering it is what
- * makes the sequence legible at a glance.
- *
- * The header sticks to the top of the page while its rows are being read, so
- * "which group is this setting in?" never needs a scroll back up. That is also
- * why the card cannot clip its overflow: `overflow: hidden` makes the section
- * its own scroll container, and a sticky child of a box that never scrolls
- * never sticks. The corners are rounded on the header instead.
- */
+/** A settings group with a sticky heading and a stable inline reset slot. */
 export function SettingGroup({
-  ordinal,
   title,
   subtitle,
   id,
+  onReset,
+  resetLabel,
   children,
 }: {
-  ordinal: string;
   title: string;
   subtitle: string;
   id?: string;
+  onReset?: () => void;
+  resetLabel?: string;
   children: ReactNode;
 }) {
   const headingId = useId();
@@ -318,17 +313,25 @@ export function SettingGroup({
       aria-labelledby={headingId}
       className={cn("rounded-xl border border-border bg-card", id && "scroll-mt-4")}
     >
-      {/* Ordinal above, title under it: the number is context for the heading,
-          not a word in it, and stacking them is what stops the three group
-          headers reading as one long sentence when scrolled past quickly. */}
       <header className="sticky top-0 z-10 rounded-t-xl border-b border-border bg-card px-5 py-3">
-        <span className="block font-mono text-3xs font-bold tracking-[0.09em] text-primary">
-          {ordinal}
-        </span>
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h2 id={headingId} className="text-sm font-bold tracking-tight text-foreground">
             {title}
           </h2>
+          <span className="grid h-7 w-7 shrink-0 place-items-center" aria-hidden={!onReset}>
+            {onReset && (
+              <Tooltip label={resetLabel ?? title}>
+                <button
+                  type="button"
+                  onClick={onReset}
+                  aria-label={resetLabel ?? title}
+                  className="grid h-7 w-7 place-items-center rounded-control text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <FiRotateCcw className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </Tooltip>
+            )}
+          </span>
           <span className="text-xs text-faint">{subtitle}</span>
         </div>
       </header>
@@ -358,6 +361,7 @@ export function Segmented<T extends string>({
   onChange,
   label,
   disabled = false,
+  compact = false,
 }: {
   name: string;
   value: T;
@@ -365,12 +369,13 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
   label: string;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <fieldset
       className={cn(
         "flex max-w-full overflow-hidden rounded-control border border-border bg-card",
-        disabled && "opacity-50",
+        disabled && "bg-muted",
       )}
       disabled={disabled}
     >
@@ -380,12 +385,14 @@ export function Segmented<T extends string>({
         const control = (
           <label
             className={cn(
-              "flex min-h-[2.375rem] min-w-0 flex-1 cursor-pointer items-center justify-center px-3 py-1.5 text-center text-2xs font-medium leading-snug transition-colors sm:flex-none sm:whitespace-nowrap sm:px-3.5",
+              "flex min-w-0 flex-1 cursor-pointer items-center justify-center text-center text-2xs font-medium leading-snug transition-colors sm:flex-none sm:whitespace-nowrap",
+              compact ? "min-h-8 px-2.5 py-1" : "min-h-[2.375rem] px-3 py-1.5 sm:px-3.5",
               index > 0 && "border-l border-border",
               active
                 ? "bg-primary font-semibold text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              (option.disabled || disabled) && "cursor-not-allowed opacity-60",
+              (option.disabled || disabled) &&
+                "cursor-not-allowed border-border bg-muted text-faint opacity-100 hover:bg-muted hover:text-faint",
               "focus-within:outline-none focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring",
             )}
           >

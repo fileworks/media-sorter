@@ -61,8 +61,22 @@ export function useSettingsBaseline(
     const selected = recipes.find((recipe) => recipe.id === selectedId);
     if (!selected) return { values: defaults, origin: null };
 
+    const values: Partial<Config> = { ...defaults, ...selected.fields(config) };
+    // Recipes choose the preservation posture but never the user's timestamp
+    // preference. Their profile builders preserve that property from `config`
+    // so applying a recipe is non-destructive; using the same dynamic value as
+    // a comparison baseline would make a direct timestamp edit look unchanged.
+    // Keep that one preference anchored to the backend default instead.
+    if (values.preservation_profile && defaults.preservation_profile) {
+      values.preservation_profile = {
+        ...values.preservation_profile,
+        preserve_filesystem_timestamps:
+          defaults.preservation_profile.preserve_filesystem_timestamps,
+      };
+    }
+
     return {
-      values: { ...defaults, ...selected.fields(config) },
+      values,
       origin: { id: selected.id, labelKey: selected.labelKey, custom: selected.custom === true },
     };
   }, [config, defaults, savedRecipes]);
