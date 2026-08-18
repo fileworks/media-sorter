@@ -35,6 +35,7 @@ from app.services.conversion_publication import (
     ConversionPublication,
     promote_no_clobber,
     publish_converted_file,
+    record_conversion,
     stage_directory,
 )
 from app.services.conversion_service import (
@@ -56,6 +57,7 @@ from app.services.duplicate_service import (
     DuplicateMatch,
     DuplicateRegistry,
     DuplicateService,
+    destination_keeper_still_holds,
     quality_processing_order,
 )
 from app.services.extraction_service import DateExtractionService
@@ -168,21 +170,6 @@ def _merge_tags(tags: list[str]) -> list[str]:
             seen.add(key)
             merged.append(tag)
     return merged
-
-
-def _record_conversion(record: dict[str, Any], publication: ConversionPublication) -> None:
-    """Carry the conversion's evidence onto the file's report row."""
-    if not publication.converted:
-        if publication.kept_original_because is not None:
-            record["conversion_kept_original_because"] = publication.kept_original_because
-        return
-    record["conversion_proof"] = None if publication.proof is None else publication.proof.detail
-    record["conversion_output_bytes"] = (
-        None if publication.proof is None else publication.proof.size_bytes
-    )
-    if publication.quarantine_record is not None:
-        record["conversion_original_quarantine_id"] = publication.quarantine_record.record_id
-        record["conversion_original_bytes"] = publication.quarantine_record.size_bytes
 
 
 class SortingService(SortingSupportMixin):
@@ -1121,14 +1108,42 @@ class SortingService(SortingSupportMixin):
                 )
 
                 if match.scope == "destination":
-                    # Identical verified content is already present. Report the
-                    # skip, but do not manufacture another copy of it.
-                    record.update(
-                        status="already_in_destination",
-                        dest_path=None,
-                        provenance=provenance.model_dump(mode="json"),
+                    # D-09: "already in the destination" is a claim about the
+                    # filesystem *now*, and the index that produced it was built
+                    # earlier in this run. If the keeper has since been deleted
+                    # or rewritten, skipping leaves the source unsorted while
+                    # telling the user it was already handled — the file simply
+                    # never arrives, and nothing says so.
+                    #
+                    # I-02: a cached hash is a candidate hint, never proof. So
+                    # the keeper is re-read here rather than trusted.
+                    keeper_path = Path(str(match.original_path))
+                    if destination_keeper_still_holds(keeper_path, record.get("content_sha256")):
+                        # Identical verified content is already present. Report
+                        # the skip, but do not manufacture another copy of it.
+                        record.update(
+                            status="already_in_destination",
+                            dest_path=None,
+                            provenance=provenance.model_dump(mode="json"),
+                        )
+                        return record
+
+                    logger.warning(
+                        "Destination keeper no longer verifiable; sorting the file normally",
+                        path=str(file_path),
+                        keeper=str(keeper_path),
                     )
-                    return record
+                    record["duplicate_evaluation"] = "unknown"
+                    record["duplicate_unknown_reason"] = "destination_keeper_unverified"
+                    match = DuplicateMatch(
+                        False,
+                        match_type=match.match_type,
+                        similarity=match.similarity,
+                        original_path=match.original_path,
+                        evaluation="unknown",
+                        unknown_reason="destination_keeper_unverified",
+                        content_sha256=match.content_sha256,
+                    )
 
                 keeper = Path(str(match.original_path))
                 keeper_destination = (planned_destinations or {}).get(str(keeper))
@@ -1401,7 +1416,7 @@ class SortingService(SortingSupportMixin):
                         ),
                         expected_suffix=predicted_image_suffix(dest.suffix, config.image_format),
                     )
-                    _record_conversion(record, publication)
+                    record_conversion(record, publication)
 
                 # Apply video conversion if configured
                 if config.convert_videos and is_video(dest):
@@ -1420,7 +1435,7 @@ class SortingService(SortingSupportMixin):
                         ),
                         expected_suffix=predicted_video_suffix(dest.suffix, config.video_format),
                     )
-                    _record_conversion(record, publication)
+                    record_conversion(record, publication)
 
                 # Conversion/rename planning chooses the final name before any
                 # mutation. When conversion already published onto the planned

@@ -19,6 +19,8 @@ from app.utils.media_utils import is_image, is_video
 if TYPE_CHECKING:
     from app.background_tasks.task_manager import CancellationToken, Task
 
+from app.services.verified_transfer import stream_sha256
+
 logger = get_logger(__name__)
 
 # Minimum Euclidean distance between mean RGB values (0-255 each channel)
@@ -249,7 +251,14 @@ class DuplicateService:
             if destination_registry is not None:
                 already_there = destination_registry.find_exact(h)
                 if already_there is not None:
-                    return DuplicateMatch(True, "exact", 100, already_there, scope="destination")
+                    # Carry the digest. It is the source's, and for an exact
+                    # match it is also what the destination keeper must still
+                    # hash to — which is what `P1-FS-008` re-checks before
+                    # skipping the file. Omitting it left that check with
+                    # nothing to compare against.
+                    return DuplicateMatch(
+                        True, "exact", 100, already_there, scope="destination", content_sha256=h
+                    )
             seen_this_run = registry.find_exact(h)
             # A file is never a duplicate of itself. In an ordinary run the
             # registry only ever holds files seen *before* this one, so the
@@ -680,3 +689,23 @@ def quality_processing_order(
         if task is not None:
             task.update_progress(i + 1)
     return sorted(range(len(files)), key=lambda i: keys[i], reverse=True)
+
+
+def destination_keeper_still_holds(keeper: Path, expected_sha256: str | None) -> bool:
+    """Whether the indexed destination keeper still has the bytes it was indexed with.
+
+    Returns `False` for every uncertainty — missing, unreadable, a symlink, or
+    no recorded digest to compare against. The consequence of a wrong `False` is
+    that a file gets sorted normally, which is the outcome the user asked for
+    anyway. The consequence of a wrong `True` is a file that never arrives and a
+    report saying it was already there.
+    """
+    if not expected_sha256:
+        return False
+    try:
+        if keeper.is_symlink() or not keeper.is_file():
+            return False
+        digest, _size = stream_sha256(keeper)
+    except OSError:
+        return False
+    return bool(digest == expected_sha256)
