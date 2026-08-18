@@ -46,6 +46,12 @@ jobs:
       - name: Report reviewed module growth
         run: python scripts/check_module_growth.py
 
+      # The frontend's status union is erased at build time, so this generated
+      # artifact is the only thing the two vocabularies can both be compared
+      # against. A backend status added without regenerating fails here.
+      - name: Verify the review-status contract is not stale
+        run: python scripts/generate_review_status_contract.py --check
+
       - name: Lint — ruff
         working-directory: backend
         run: python -m ruff check app tests

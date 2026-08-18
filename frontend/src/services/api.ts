@@ -7,6 +7,7 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import { invoke } from "@tauri-apps/api/core";
 import type { RecoveryOperation } from "@/lib/startupRecovery";
+import type { PreviewItemStatus } from "@/lib/reviewStatuses";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -680,19 +681,13 @@ export interface PreviewItem {
   tags: string[];
   /** Predicted Smart Categorization folder, or null (→ _uncategorized). */
   category?: string | null;
-  status:
-    | "sort"
-    | "unknown_date"
-    | "future_date"
-    | "duplicate"
-    | "failed"
-    | "suspicious_date"
-    | "junk"
-    | "already_in_destination"
-    | "duplicate_unknown"
-    | "review_only"
-    /** `deduplicate_only` run mode: neither duplicate nor junk, so it stays put. */
-    | "keep_in_place";
+  /**
+   * One of {@link PreviewItemStatus}. Declared as a runtime array in
+   * `lib/reviewStatuses.ts` rather than inline here, so `reviewStatuses.test.ts`
+   * can hold it against the backend's generated contract — an inline union is
+   * erased at build time and nothing could compare it.
+   */
+  status: PreviewItemStatus;
   file_size?: number;
   /** Why the junk filter quarantined this file (junk status only). */
   quarantine_reason?: string | null;
