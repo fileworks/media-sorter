@@ -59,7 +59,7 @@ import type { Config, PreviewResult } from "@/types/api";
 interface ReviewScreenProps {
   result: PreviewResult;
   config: Config;
-  /** Jump to Configure, scrolled to a specific setting row. */
+  /** Open Configure at the setting that produced an outcome. */
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
   onOpenSources?: () => void;
@@ -75,6 +75,8 @@ interface ReviewScreenProps {
 interface Comparison {
   a: ComparableFile;
   b: ComparableFile;
+  alternatives: ComparableFile[];
+  alternativeIndex: number;
   keeperId: string | null;
   setId: string | null;
   recommendedId: string | null;
@@ -240,6 +242,15 @@ export function ReviewScreen({
       const proposedFile = proposedRow === null ? null : comparableFor(proposedRow);
       const leftFile = comparableFor(left);
       const rightFile = comparableFor(right);
+      const alternatives = sharedEntry
+        ? sharedEntry.rows
+            .filter((row) => row.source !== left.source)
+            .map((row) => comparableFor(row))
+        : [rightFile];
+      const alternativeIndex = Math.max(
+        0,
+        alternatives.findIndex((file) => file.path === right.source),
+      );
       const confirmedRow =
         sharedEntry?.hasBaseline === true || sharedEntry?.decisionKind === "keeper"
           ? sharedEntry.keeper
@@ -248,12 +259,9 @@ export function ReviewScreen({
       setComparing({
         a: leftFile,
         b: rightFile,
-        keeperId:
-          confirmedRow?.source === left.source
-            ? leftFile.id
-            : confirmedRow?.source === right.source
-              ? rightFile.id
-              : null,
+        alternatives,
+        alternativeIndex,
+        keeperId: confirmedRow ? comparableFor(confirmedRow).id : null,
         setId: sharedSet,
         recommendedId: proposedFile?.id ?? null,
         recommendedLabel: proposedRow?.name ?? null,
@@ -267,6 +275,20 @@ export function ReviewScreen({
     },
     [allSets, comparableFor, t],
   );
+
+  const moveComparison = useCallback((delta: number) => {
+    setComparing((current) => {
+      if (current === null || current.alternatives.length < 2) return current;
+      const alternativeIndex =
+        (current.alternativeIndex + delta + current.alternatives.length) %
+        current.alternatives.length;
+      return {
+        ...current,
+        b: current.alternatives[alternativeIndex],
+        alternativeIndex,
+      };
+    });
+  }, []);
 
   /** Compare a set's members independently of the current filter. */
   const compareSet = useCallback(
@@ -612,7 +634,7 @@ export function ReviewScreen({
             />
           ) : (
             <div className="grid min-h-[32rem] min-w-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
-              <div className="min-w-0 overflow-hidden border-b border-border bg-card lg:border-b-0 lg:border-r">
+              <div className="min-w-0 overflow-hidden border-b border-border bg-card lg:sticky lg:top-0 lg:self-start lg:border-b-0 lg:border-r">
                 <DestinationTree
                   root={tree}
                   destinationRoot={config.target_directory}
@@ -813,6 +835,16 @@ export function ReviewScreen({
           }
           onNextSet={
             comparisonNavigation.next ? () => compareSet(comparisonNavigation.next!) : null
+          }
+          comparisonPosition={
+            comparing.alternatives.length > 1
+              ? {
+                  index: comparing.alternativeIndex,
+                  total: comparing.alternatives.length,
+                  onPrevious: () => moveComparison(-1),
+                  onNext: () => moveComparison(1),
+                }
+              : null
           }
         />
       )}

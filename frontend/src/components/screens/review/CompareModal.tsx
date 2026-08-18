@@ -40,6 +40,13 @@ interface CompareModalProps {
   /** Move between comparable duplicate groups without leaving the dialog. */
   onPreviousSet?: (() => void) | null;
   onNextSet?: (() => void) | null;
+  /** Cycle every other member of this set against side A. */
+  comparisonPosition?: {
+    index: number;
+    total: number;
+    onPrevious: () => void;
+    onNext: () => void;
+  } | null;
 }
 
 /** Identify a fact's winning side with both text and styling. */
@@ -153,6 +160,7 @@ export function CompareModal({
   onEnlarge,
   onPreviousSet,
   onNextSet,
+  comparisonPosition = null,
 }: CompareModalProps) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<Mode>("side");
@@ -161,7 +169,7 @@ export function CompareModal({
   const [draftId, setDraftId] = useState<string | null>(keeperId);
 
   useEffect(() => {
-    setDraftId(keeperId);
+    setDraftId(keeperId === a.id || keeperId === b.id ? keeperId : null);
     setMode("side");
     setSplit(50);
     setZoom(100);
@@ -575,6 +583,32 @@ export function CompareModal({
             t("review.compare.notOneSet")
           )}
         </span>
+        {comparisonPosition && (
+          <div className="flex items-center gap-1 border-r border-border pr-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t("review.compare.previousCopy")}
+              onClick={comparisonPosition.onPrevious}
+            >
+              <FiChevronLeft className="h-4 w-4" aria-hidden />
+            </Button>
+            <span className="whitespace-nowrap text-3xs tabular-nums text-muted-foreground">
+              {t("review.compare.copyPosition", {
+                index: comparisonPosition.index + 1,
+                total: comparisonPosition.total,
+              })}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t("review.compare.nextCopy")}
+              onClick={comparisonPosition.onNext}
+            >
+              <FiChevronRight className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+        )}
         {(onPreviousSet || onNextSet) && (
           <div className="flex items-center gap-1 sm:border-r sm:border-border sm:pr-2">
             <Button

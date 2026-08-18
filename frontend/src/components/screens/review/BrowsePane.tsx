@@ -142,6 +142,7 @@ export function BrowsePane({
     maxHeight,
     overscan: 10,
     anchorKey: lines[0]?.key ?? null,
+    measurementKey: lines,
   });
 
   if (view === "grid") {
@@ -153,9 +154,14 @@ export function BrowsePane({
         aria-label={t("review.items")}
       >
         {groups.map((group) => (
-          <section key={group.path} className="border-b border-border last:border-b-0">
+          <section
+            key={group.path}
+            className="border-b border-border last:border-b-0"
+            style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
+          >
             {group.direct ? (
-              <h3 className="px-3 py-2 text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
+              <h3 className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-success/20 bg-tint-success/60 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.08em] text-success">
+                <FiCornerDownRight className="h-3 w-3" aria-hidden />
                 {t("review.browse.landsHere")}
               </h3>
             ) : (
@@ -178,6 +184,7 @@ export function BrowsePane({
                         selected={selected.has(entry.row.source)}
                         onToggle={(shiftKey) => onToggle(entry.row.source, shiftKey)}
                         onOpenDetail={() => onOpenDetail(entry.row.source)}
+                        onEnlarge={() => onEnlarge(entry.row.source)}
                       />
                     </li>
                   ) : (
@@ -555,14 +562,23 @@ function SetCopies({
     <div className="border-b border-border bg-muted/20 px-3 py-3">
       <ul className="flex flex-wrap gap-2.5">
         {copies.map((row) => {
-          const isKeeper = entry.keeper?.source === row.source;
           const locked = row.status === "baseline";
+          const distinct = entry.decisionKind === "keep_all";
+          const confirmedKeeper =
+            (entry.hasBaseline || entry.decisionKind === "keeper") &&
+            entry.keeper?.source === row.source;
+          const kept = distinct || confirmedKeeper;
+          const suggested = !kept && !locked && entry.proposedKeeper?.source === row.source;
           return (
             <li
               key={row.source}
               className={cn(
                 "w-[10.5rem] overflow-hidden rounded-lg border bg-card",
-                isKeeper ? "border-success" : "border-border",
+                kept || locked
+                  ? "border-success"
+                  : suggested
+                    ? "border-dashed border-primary"
+                    : "border-border",
               )}
             >
               <div className="relative">
@@ -589,9 +605,22 @@ function SetCopies({
                     className="h-3.5 w-3.5 rounded border-border bg-card/90 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
                   />
                 </span>
-                {isKeeper && (
-                  <span className="absolute right-1 top-1 rounded-full bg-success px-1.5 py-0.5 text-3xs font-semibold text-background">
-                    {t("review.resolve.kept")}
+                {(kept || locked || suggested) && (
+                  <span
+                    className={cn(
+                      "absolute right-1 top-1 rounded-full px-1.5 py-0.5 text-3xs font-semibold",
+                      suggested
+                        ? "border border-primary/40 bg-card text-primary"
+                        : "bg-success text-background",
+                    )}
+                  >
+                    {t(
+                      locked
+                        ? "review.resolve.protected"
+                        : suggested
+                          ? "review.resolve.suggested"
+                          : "review.resolve.kept",
+                    )}
                   </span>
                 )}
               </div>
@@ -632,13 +661,13 @@ function SetCopies({
                 ) : (
                   <Button
                     size="sm"
-                    variant={isKeeper ? "outline" : "default"}
+                    variant={kept ? "outline" : "default"}
                     className="w-full"
-                    disabled={isKeeper}
-                    aria-description={isKeeper ? t("review.resolve.alreadyKeeper") : undefined}
+                    disabled={kept}
+                    aria-description={kept ? t("review.resolve.alreadyKeeper") : undefined}
                     onClick={() => onKeep(entry.id, row.source)}
                   >
-                    {isKeeper ? t("review.resolve.kept") : t("review.detail.makeKeeper")}
+                    {kept ? t("review.resolve.kept") : t("review.detail.makeKeeper")}
                   </Button>
                 )}
               </div>
@@ -849,11 +878,13 @@ function GridTile({
   selected,
   onToggle,
   onOpenDetail,
+  onEnlarge,
 }: {
   row: ReviewRow;
   selected: boolean;
   onToggle: (shiftKey: boolean) => void;
   onOpenDetail: () => void;
+  onEnlarge: () => void;
 }) {
   const { t } = useI18n();
   const locked = row.status === "baseline";
@@ -865,13 +896,19 @@ function GridTile({
         selected ? "border-primary" : "border-border hover:border-faint",
       )}
     >
+      <Thumbnail
+        path={row.source}
+        maxPx={240}
+        className="aspect-square w-full"
+        onOpen={onEnlarge}
+        openLabel={t("review.viewer.open", { name: row.name })}
+      />
       <Tooltip label={`${row.name} — ${t(row.reason.key, row.reason.params)}`}>
         <button
           type="button"
           onClick={onOpenDetail}
           className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          <Thumbnail path={row.source} maxPx={240} className="aspect-square w-full" />
           <span className="block truncate px-2 py-1 text-3xs font-medium text-foreground">
             {row.name}
           </span>

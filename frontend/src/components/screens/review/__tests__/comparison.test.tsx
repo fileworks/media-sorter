@@ -132,6 +132,31 @@ describe("duplicate comparison", () => {
     );
   });
 
+  it("cycles every other copy in a set without leaving comparison", () => {
+    const onPrevious = vi.fn();
+    const onNext = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("b", facts({ width: 1000, height: 1500 }))}
+          keeperId={null}
+          setId="set-1"
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+          comparisonPosition={{ index: 1, total: 3, onPrevious, onNext }}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Copy 2 of 3")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next copy" }));
+    expect(onPrevious).toHaveBeenCalledOnce();
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
   it("uses the portrait aspect ratio throughout all three viewport-scaled modes", () => {
     renderComparison(
       file("a", facts({ width: 2000, height: 3000 })),

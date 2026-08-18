@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Thumbnail } from "@/components/ui/thumbnail";
+import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useI18n } from "@/i18n/I18nContext";
 import { isDecidedState, isProposedState, sourceFolder } from "@/lib/duplicateDecisions";
 import { formatBytes } from "@/lib/formatters";
@@ -117,7 +118,6 @@ export function ResolveQueue({
   const [preferredFolder, setPreferredFolder] = useState("");
   const [draftSource, setDraftSource] = useState<string | null>(null);
   const [editingDecision, setEditingDecision] = useState(false);
-  const [queueLimit, setQueueLimit] = useState(40);
   const [ruleImpactOpen, setRuleImpactOpen] = useState(false);
 
   const currentResolved =
@@ -129,14 +129,32 @@ export function ResolveQueue({
     setEditingDecision(false);
   }, [confirmedSource, current?.id]);
 
-  // Render large queues incrementally in the screen-wide order.
   const orderedSets = useMemo(() => sortSets(allSets, sort, locale), [allSets, locale, sort]);
+  const setWindow = useVirtualWindow({
+    count: orderedSets.length,
+    estimateSize: 64,
+    maxHeight: 512,
+    overscan: 6,
+    anchorKey: orderedSets[0]?.id ?? null,
+  });
 
+  // Opening a set from Browse also brings its row into the virtualized index.
   useEffect(() => {
-    if (current === null) return;
+    if (current === null || setWindow.scrollRef.current === null) return;
     const currentIndex = orderedSets.findIndex((entry) => entry.id === current.id);
-    if (currentIndex >= queueLimit) setQueueLimit(currentIndex + 1);
-  }, [current, orderedSets, queueLimit]);
+    if (currentIndex < 0) return;
+    const top = currentIndex * 64;
+    const bottom = top + 64;
+    const element = setWindow.scrollRef.current;
+    const moveTo = (nextTop: number) => {
+      if (typeof element.scrollTo === "function") element.scrollTo({ top: nextTop });
+      else element.scrollTop = nextTop;
+    };
+    if (top < element.scrollTop) moveTo(top);
+    else if (bottom > element.scrollTop + element.clientHeight) {
+      moveTo(bottom - element.clientHeight);
+    }
+  }, [current, orderedSets, setWindow.scrollRef]);
 
   const selectableSetIds = useMemo(
     () => allSets.filter((entry) => !entry.hasBaseline).map((entry) => entry.id),
@@ -245,8 +263,6 @@ export function ResolveQueue({
     return openSets.find((entry) => entry.id !== current.id);
   }, [allSets, current, openSets]);
   const proposedRow = current?.rows.find((row) => row.stack?.isProposedKeeper === true) ?? null;
-  const listedSets = orderedSets.slice(0, queueLimit);
-  const remainingSets = Math.max(0, orderedSets.length - listedSets.length);
   const candidates = current === null ? [] : sortRows(current.rows, sort, locale);
 
   // Measure the rule across open sets without touching manual decisions.
@@ -354,6 +370,12 @@ export function ResolveQueue({
         </div>
       </div>
 
+      {openCount > 0 && (
+        <p className="border-b border-border bg-muted/25 px-3 py-2 text-3xs leading-relaxed text-muted-foreground">
+          {t("review.resolve.openStatesHelp")}
+        </p>
+      )}
+
       <RuleImpactModal
         open={ruleImpactOpen}
         ruleLabel={t(`config.keeper.${rule}`)}
@@ -426,60 +448,63 @@ export function ResolveQueue({
               {t("review.resolve.openCount", { count: openCount })}
             </Badge>
           </div>
-          <ul className="grid max-h-[min(32rem,60dvh)] gap-1 overflow-y-auto overscroll-contain p-1.5 sm:grid-cols-2 lg:grid-cols-1">
-            {listedSets.map((entry) => {
-              const active = current?.id === entry.id;
-              const decided = entry.hasBaseline || isDecidedState(entry.decisionState);
-              const proposed = isProposedState(entry.decisionState);
-              return (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenSet(entry.id)}
-                    className={cn(
-                      "grid min-h-[3.75rem] w-full grid-cols-[2.625rem_minmax(0,1fr)_auto] items-center gap-2 rounded-panel p-1.5 text-left transition-colors",
-                      active ? "bg-tint-primary" : "hover:bg-muted",
-                    )}
+          <div
+            ref={setWindow.scrollRef}
+            onScroll={setWindow.onScroll}
+            className="max-h-[min(32rem,60dvh)] overflow-y-auto overscroll-contain"
+          >
+            <ul className="relative" style={{ height: setWindow.totalSize }}>
+              {setWindow.virtualItems.map((virtual) => {
+                const entry = orderedSets[virtual.index];
+                if (entry === undefined) return null;
+                const active = current?.id === entry.id;
+                const decided = entry.hasBaseline || isDecidedState(entry.decisionState);
+                const proposed = isProposedState(entry.decisionState);
+                return (
+                  <li
+                    key={entry.id}
+                    className="absolute inset-x-0 h-16 p-1.5"
+                    style={{ transform: `translateY(${virtual.start}px)` }}
                   >
-                    <StackVisual paths={entry.rows.map((row) => row.source)} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold text-foreground">
-                        {entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id}
+                    <button
+                      type="button"
+                      onClick={() => onOpenSet(entry.id)}
+                      className={cn(
+                        "grid h-full w-full grid-cols-[2.625rem_minmax(0,1fr)_auto] items-center gap-2 rounded-panel p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        active ? "bg-tint-primary" : "hover:bg-muted",
+                      )}
+                    >
+                      <StackVisual paths={entry.rows.map((row) => row.source)} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-foreground">
+                          {entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id}
+                        </span>
+                        <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
+                          {decided
+                            ? t("review.resolve.queueDecided")
+                            : proposed
+                              ? t("review.resolve.queueProposed")
+                              : entry.setKind === "exact"
+                                ? t("review.stack.match.exact")
+                                : entry.setKind === "similar" && entry.similarity !== null
+                                  ? t("review.stack.match.similar", {
+                                      percent: entry.similarity,
+                                    })
+                                  : t(`review.stack.kind.${entry.setKind}`)}
+                        </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
-                        {decided
-                          ? t("review.resolve.queueDecided")
-                          : proposed
-                            ? t("review.resolve.queueProposed")
-                            : entry.setKind === "exact"
-                              ? t("review.stack.match.exact")
-                              : entry.setKind === "similar" && entry.similarity !== null
-                                ? t("review.stack.match.similar", {
-                                    percent: entry.similarity,
-                                  })
-                                : t(`review.stack.kind.${entry.setKind}`)}
-                      </span>
-                    </span>
-                    <span
-                      className={cn("h-2 w-2 rounded-full", decided ? "bg-success" : "bg-primary")}
-                    />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {remainingSets > 0 && (
-            <div className="border-t border-border p-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full"
-                onClick={() => setQueueLimit((limit) => limit + 40)}
-              >
-                {t("review.resolve.showMoreSets", { count: Math.min(40, remainingSets) })}
-              </Button>
-            </div>
-          )}
+                      <span
+                        className={cn(
+                          "h-2 w-2 rounded-full",
+                          decided ? "bg-success" : "bg-primary",
+                        )}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </aside>
 
         <div className="min-w-0 p-2.5 sm:p-3">
