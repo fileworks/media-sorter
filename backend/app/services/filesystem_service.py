@@ -61,6 +61,13 @@ from app.utils.path_utils import is_excluded_by_pattern, path_relationship, vali
 
 logger = get_logger(__name__)
 
+#: A finite ceiling for `max_recursion_depth: None` (C-05). "No limit" is a
+#: reasonable thing for a user to ask for and an unreasonable thing for a
+#: recursive walk to promise: a directory cycle turns it into a `RecursionError`
+#: that aborts the whole scan. 64 is far deeper than any real media library and
+#: far shallower than Python's recursion limit.
+MAX_TRAVERSAL_DEPTH = 64
+
 _CHUNK = 1024 * 1024  # 1 MB
 
 # Bucketing for type-breakdown charts (Analysis "by_type" and Report
@@ -553,10 +560,34 @@ class FileSystemService:
         exclusions: tuple[Path, ...],
         *,
         is_root: bool,
+        visited: set[tuple[int, int]] | None = None,
     ) -> None:
         if cancel_token is not None and cancel_token.is_set():
             result.cancelled = True
             return
+        # C-05: a directory cycle — `a/loop -> ..`, a bind mount, a hardlinked
+        # directory — used to recurse until `RecursionError`, because
+        # `entry.is_dir()` follows symlinks and `max_depth` defaults to None.
+        # Identity is `(st_dev, st_ino)` rather than the path, so a cycle formed
+        # by any of those routes is recognised as the same directory.
+        if visited is None:
+            visited = set()
+        try:
+            marker = current.stat()
+            identity = (marker.st_dev, marker.st_ino)
+        except OSError as exc:
+            result.issues.append(TraversalIssue(str(current), type(exc).__name__, str(exc)))
+            return
+        if identity in visited:
+            result.issues.append(
+                TraversalIssue(
+                    str(current),
+                    "DirectoryCycle",
+                    "already visited in this traversal; not descending again",
+                )
+            )
+            return
+        visited.add(identity)
         try:
             entries: list[Path] = []
             for entry in current.iterdir():
@@ -647,21 +678,31 @@ class FileSystemService:
                     logger.debug("Excluded directory", path=str(entry))
                     result.excluded_directories += 1
                     continue
-                if max_depth is None or depth < max_depth:
-                    self._walk_result(
-                        root,
-                        entry,
-                        recursive,
-                        max_depth,
-                        depth + 1,
-                        result,
-                        exclude_patterns,
-                        min_file_size_kb,
-                        max_file_size_mb,
-                        cancel_token,
-                        exclusions,
-                        is_root=False,
+                effective_depth = MAX_TRAVERSAL_DEPTH if max_depth is None else max_depth
+                if depth >= effective_depth:
+                    result.issues.append(
+                        TraversalIssue(
+                            str(entry),
+                            "MaxDepthReached",
+                            f"stopped at depth {effective_depth}",
+                        )
                     )
+                    continue
+                self._walk_result(
+                    root,
+                    entry,
+                    recursive,
+                    max_depth,
+                    depth + 1,
+                    result,
+                    exclude_patterns,
+                    min_file_size_kb,
+                    max_file_size_mb,
+                    cancel_token,
+                    exclusions,
+                    is_root=False,
+                    visited=visited,
+                )
 
     def _walk(
         self,
