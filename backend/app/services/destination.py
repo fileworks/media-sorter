@@ -13,6 +13,13 @@ from datetime import date
 from pathlib import Path
 
 from app.core.config import UNCATEGORIZED_FOLDER, Config
+from app.core.destination_paths import (
+    CONTEXTUAL_COPY_FOLDER,
+    QUARANTINE_FOLDERS,
+    companion_destination,
+    copy_destination,
+    reserve_destination,
+)
 from app.core.rules import append_contained_route
 from app.services.conversion_service import predicted_image_suffix, predicted_video_suffix
 from app.utils.media_utils import is_image, is_video
@@ -26,16 +33,6 @@ _RENAME_TOKEN_RE = re.compile(r"YYYY|MM|DD|NAME|TYPE")
 # Duplicate copies are deliberately absent: `copy_destination` places those
 # beside their keeper. A destination match is absent too because no second file
 # is written when identical content is already present.
-QUARANTINE_FOLDERS: dict[str, str] = {
-    "unknown": "_undated",
-    "future": "_undated",
-    "failed": "_corrupted",
-    "corrupted": "_corrupted",
-    "junk": "_junk",
-}
-
-CONTEXTUAL_COPY_FOLDER = "_copies"
-
 # Read-only recognition for destinations created by older versions. New runs
 # never choose these names, but indexing their contents as ordinary library
 # media would make old set-aside copies become keepers on the next run.
@@ -66,27 +63,6 @@ def quarantine_dir(dest_root: Path, reason: str, file_path: Path, source_root: P
     except ValueError:
         return base
     return base / rel if str(rel) != "." else base
-
-
-def copy_destination(
-    keeper_destination: Path,
-    keeper_source: Path,
-    copy_source: Path,
-    source_root: Path,
-) -> Path:
-    """Return the contextual, unreserved destination for a duplicate copy.
-
-    The caller applies the shared collision reservation, exactly as for every
-    other planned path. The leaf name makes both relationships readable on
-    disk: which file won and which input root supplied this copy.
-    """
-    if keeper_destination.parent.name == CONTEXTUAL_COPY_FOLDER:
-        raise ValueError("a duplicate keeper cannot itself be inside _copies")
-
-    root_label = sanitize_path_segment(source_root.name) or "source"
-    keeper_label = sanitize_path_segment(keeper_source.stem) or "keeper"
-    filename = f"{keeper_label} — from {root_label}{copy_source.suffix}"
-    return keeper_destination.parent / CONTEXTUAL_COPY_FOLDER / filename
 
 
 def build_dest_dir(
@@ -138,18 +114,6 @@ def build_dest_dir(
     return dest_dir
 
 
-def reserve_destination(path: Path, reserved: set[Path]) -> Path:
-    """Return and reserve the first collision-free deterministic path."""
-    candidate = path
-    stem, suffix = path.stem, path.suffix
-    counter = 0
-    while candidate.exists() or candidate.resolve(strict=False) in reserved:
-        counter += 1
-        candidate = path.parent / f"{stem}_{counter:03d}{suffix}"
-    reserved.add(candidate.resolve(strict=False))
-    return candidate
-
-
 def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:
     """Substitute rename tokens and return one safe, portable filename stem.
 
@@ -195,6 +159,17 @@ def predicted_filename(file_path: Path, extracted_date: date, config: Config) ->
     return stem + suffix
 
 
-def companion_destination(primary_destination: Path, companion: Path) -> Path:
-    """Place a member beside its primary, inheriting its final collision stem."""
-    return primary_destination.with_name(primary_destination.stem + companion.suffix)
+# Re-exported so every existing import keeps working. The definitions moved to
+# `app.core.destination_paths` because `core/sort_plan.py` needs them and
+# `core` must not import `services` (A-01).
+__all__ = [
+    "CONTEXTUAL_COPY_FOLDER",
+    "QUARANTINE_FOLDERS",
+    "build_dest_dir",
+    "companion_destination",
+    "copy_destination",
+    "predicted_filename",
+    "quarantine_dir",
+    "rename_stem",
+    "reserve_destination",
+]

@@ -17,17 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
-from app.core.exceptions import ConflictError, PlanAuthorizationError
-from app.core.integrity import MutationActionKind, SourceEffect
-from app.core.provenance import OutcomeProvenance
-from app.services.destination import (
+from app.core.destination_paths import (
     CONTEXTUAL_COPY_FOLDER,
     QUARANTINE_FOLDERS,
     companion_destination,
+    contextualize_copy,
     copy_destination,
     reserve_destination,
 )
-from app.services.outcome_provenance import contextualize_copy
+from app.core.exceptions import ConflictError, PlanAuthorizationError
+from app.core.integrity import MutationActionKind, SourceEffect
+from app.core.provenance import OutcomeProvenance
 
 PlannedDisposition = Literal[
     "sort",

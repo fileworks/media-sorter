@@ -1160,7 +1160,7 @@ class SortingService(SortingSupportMixin):
                     )
                     dest = reserve_destination(proposed, reservations)
 
-                from app.services.outcome_provenance import contextualize_copy
+                from app.core.destination_paths import contextualize_copy
 
                 provenance = contextualize_copy(
                     provenance,

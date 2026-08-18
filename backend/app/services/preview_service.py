@@ -876,8 +876,8 @@ class PreviewService:
                 camera=camera,
             )
         if status == "duplicate" and dest is not None and dup_of is not None:
+            from app.core.destination_paths import contextualize_copy
             from app.core.provenance import OutcomeProvenance
-            from app.services.outcome_provenance import contextualize_copy
 
             item["provenance"] = contextualize_copy(
                 OutcomeProvenance.model_validate(item["provenance"]),
