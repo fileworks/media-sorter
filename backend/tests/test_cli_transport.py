@@ -223,3 +223,119 @@ def test_analysis_command_surfaces_actionable_source_failure() -> None:
     assert result.exit_code == 1
     assert "check that the drive is mounted" in result.output
     assert "SOURCE_UNAVAILABLE" in result.output
+
+
+class TestLiveSortHandshake:
+    """C-03 at the CLI boundary.
+
+    `mediasort sort start` sent `{"dry_run": false}` and nothing else. It was
+    the one entry point that could mutate a whole library with no reviewed plan
+    behind it — the interface offered no way to produce one. It now runs the
+    preview itself and hands the resulting plan to the sort.
+    """
+
+    def _client(self) -> MagicMock:
+        client = MagicMock(spec=APIClient)
+        client.start_preview.return_value = "preview-task"
+        client.get_preview_progress.return_value = {"status": "completed"}
+        client.reviewed_plan_id.return_value = "plan-abc"
+        client.start_sorting.return_value = "sort-task"
+        return client
+
+    def _invoke(self, client: MagicMock, *args: str) -> Any:
+        # The group callback builds its own `APIClient`, so the constructor is
+        # what has to be replaced — passing `obj=` would be overwritten.
+        with patch("cli.main.APIClient", return_value=client):
+            return CliRunner().invoke(cli, ["sort", "start", *args])
+
+    def test_a_live_start_previews_first_and_passes_the_plan(self) -> None:
+        client = self._client()
+
+        result = self._invoke(client)
+
+        assert result.exit_code == 0, result.output
+        client.start_preview.assert_called_once()
+        client.start_sorting.assert_called_once_with(dry_run=False, plan_id="plan-abc")
+        assert "plan-abc" in result.output
+
+    def test_a_dry_run_needs_no_preview(self) -> None:
+        """A preview mutates nothing, so requiring a plan for it would be circular."""
+        client = self._client()
+
+        result = self._invoke(client, "--dry-run")
+
+        assert result.exit_code == 0, result.output
+        client.start_preview.assert_not_called()
+        client.start_sorting.assert_called_once_with(dry_run=True, plan_id=None)
+
+    def test_a_preview_that_yields_no_plan_starts_nothing(self) -> None:
+        client = self._client()
+        client.reviewed_plan_id.return_value = None
+
+        result = self._invoke(client)
+
+        assert result.exit_code == 1
+        client.start_sorting.assert_not_called()
+
+    def test_a_failed_preview_starts_nothing(self) -> None:
+        client = self._client()
+        client.get_preview_progress.return_value = {"status": "failed", "error": "disk gone"}
+
+        result = self._invoke(client)
+
+        assert result.exit_code == 1
+        client.start_sorting.assert_not_called()
+
+
+def _client_with(handler: Any) -> APIClient:
+    client = APIClient()
+    client._http.close()
+    client._http = httpx.Client(
+        base_url=client.base_url, transport=httpx.MockTransport(handler), timeout=0.1
+    )
+    return client
+
+
+def test_the_api_client_omits_plan_id_when_there_is_none() -> None:
+    """A dry run must not send `plan_id: null` and imply one was considered."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return _response(request, 200, {"task_id": "t1"})
+
+    with patch("cli.utils.api_client.time.sleep"):
+        assert _client_with(handler).start_sorting(dry_run=True) == "t1"
+
+    assert captured["dry_run"] is True
+    assert "plan_id" not in captured
+
+
+def test_the_api_client_sends_plan_id_for_a_live_run() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return _response(request, 200, {"task_id": "t1"})
+
+    with patch("cli.utils.api_client.time.sleep"):
+        assert _client_with(handler).start_sorting(dry_run=False, plan_id="plan-abc") == "t1"
+
+    assert captured["dry_run"] is False
+    assert captured["plan_id"] == "plan-abc"
+
+
+def test_the_reviewed_plan_id_helper_reads_the_preview_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _response(request, 200, {"status": "completed", "result": {"plan_id": "plan-xyz"}})
+
+    with patch("cli.utils.api_client.time.sleep"):
+        assert _client_with(handler).reviewed_plan_id("preview-task") == "plan-xyz"
+
+
+def test_the_reviewed_plan_id_helper_returns_none_without_a_plan() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _response(request, 200, {"status": "completed", "result": {}})
+
+    with patch("cli.utils.api_client.time.sleep"):
+        assert _client_with(handler).reviewed_plan_id("preview-task") is None

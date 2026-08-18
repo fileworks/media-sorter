@@ -268,13 +268,29 @@ class APIClient:
         )
 
     def start_sorting(
-        self, dry_run: bool = False, idempotency_key: str | None = None
+        self,
+        dry_run: bool = False,
+        idempotency_key: str | None = None,
+        plan_id: str | None = None,
     ) -> str:
-        return self._start(
-            "sort",
-            idempotency_key=idempotency_key,
-            extra={"dry_run": dry_run},
-        )
+        """Start a sort. A live run needs the `plan_id` a preview produced.
+
+        The backend refuses a live start without one (C-03); sending it is the
+        client's half of that handshake.
+        """
+        extra: dict[str, Any] = {"dry_run": dry_run}
+        if plan_id is not None:
+            extra["plan_id"] = plan_id
+        return self._start("sort", idempotency_key=idempotency_key, extra=extra)
+
+    def reviewed_plan_id(self, task_id: str) -> str | None:
+        """The plan id a completed preview froze, if it published one."""
+        progress = self.get_preview_progress(task_id)
+        result = progress.get("result")
+        if not isinstance(result, dict):
+            return None
+        plan_id = result.get("plan_id")
+        return plan_id if isinstance(plan_id, str) and plan_id else None
 
     def get_sorting_progress(
         self, task_id: str, *, after_sequence: int = 0

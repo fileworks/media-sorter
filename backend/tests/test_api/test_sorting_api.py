@@ -38,15 +38,34 @@ def test_start_sorting_returns_task_id(client: TestClient) -> None:
     assert len(data["task_id"]) > 0
 
 
-def test_start_sorting_dry_run_flag_accepted(client: TestClient) -> None:
+def test_a_live_start_without_a_reviewed_plan_is_refused(client: TestClient) -> None:
+    """C-03. These two tests used to assert the defect.
+
+    `dry_run: False` with no `plan_id` returned 200 and began mutating the
+    filesystem with `frozen_plan=None` — no plan guard, no authorised effects,
+    and nothing recording what the user had agreed to. "Reviewed" was a property
+    the product hoped for rather than one it enforced.
+    """
     response = client.post("/api/sorting/start", json={"dry_run": False})
+
+    assert response.status_code == 409
+    assert response.json()["details"]["reason"] == "plan_required"
+
+
+def test_the_default_start_is_live_and_therefore_also_refused(client: TestClient) -> None:
+    """The default has no `dry_run`, so it is a live run and needs a plan."""
+    response = client.post("/api/sorting/start", json={})
+
+    assert response.status_code == 409
+    assert response.json()["details"]["reason"] == "plan_required"
+
+
+def test_a_dry_run_still_needs_no_plan(client: TestClient) -> None:
+    """A preview mutates nothing, so requiring a plan for it would be circular."""
+    response = client.post("/api/sorting/start", json={"dry_run": True})
+
     assert response.status_code == 200
     assert "task_id" in response.json()
-
-
-def test_start_sorting_default_not_dry_run(client: TestClient) -> None:
-    response = client.post("/api/sorting/start", json={})
-    assert response.status_code == 200
 
 
 def test_changed_config_invalidates_reviewed_preview(client: TestClient) -> None:
