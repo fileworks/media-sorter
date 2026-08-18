@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.api.deps import ContainerDep
+from app.api.deps import ConfigDep, ContainerDep
 from app.core.library_profiles import CatalogPlacement
 from app.core.optimization_contracts import (
     CONTRACTS,
@@ -330,10 +330,22 @@ async def list_quarantine(
 
 
 @router.get("/quarantine/summary")
-async def quarantine_summary() -> dict[str, Any]:
-    """Counts, bytes, and ages — never a path."""
+async def quarantine_summary(config: ConfigDep) -> dict[str, Any]:
+    """Counts, bytes, ages, and whether the store has outgrown its budget.
+
+    Diagnostics only — see `QuarantineStore.summary`. `P0-SAFE-001` retains an
+    original for every converted file, so this is where that growth becomes
+    visible instead of accumulating unremarked against a never-delete posture.
+    """
     store = store_for_state_root(resolve_app_paths().data_dir)
-    return await asyncio.to_thread(store.summary)
+    try:
+        return await asyncio.to_thread(
+            store.summary,
+            budget_bytes=config.quarantine_budget_bytes,
+            warning_age_days=config.quarantine_warning_age_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 class RestoreRequest(BaseModel):

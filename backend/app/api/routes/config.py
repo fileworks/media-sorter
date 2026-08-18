@@ -294,6 +294,23 @@ async def validate_config(config: ConfigDep) -> ValidateConfigResponse:
             )
         )
 
+    # ── Quarantine retention budget ────────────────────────────────────────────
+    # Diagnostics, but a non-positive value is not a lenient setting — it is a
+    # budget that can never be satisfied, so it is refused rather than silently
+    # treated as "unlimited" or "always over".
+    if config.quarantine_budget_bytes <= 0:
+        err(
+            "quarantine_budget_bytes",
+            "The quarantine budget must be a positive number of bytes.",
+            "config.quarantine.budgetPositive",
+        )
+    if config.quarantine_warning_age_days <= 0:
+        err(
+            "quarantine_warning_age_days",
+            "The quarantine warning age must be a positive number of days.",
+            "config.quarantine.agePositive",
+        )
+
     # ── Typed library roots ────────────────────────────────────────────────────
     profile = config.library_profile
     if profile is None or not profile.inputs:

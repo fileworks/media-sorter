@@ -553,21 +553,65 @@ class QuarantineStore:
     # Reporting                                                        #
     # -------------------------------------------------------------- #
 
-    def summary(self) -> dict[str, object]:
-        """Counts and bytes the quarantine manager renders, without paths."""
+    def summary(
+        self,
+        *,
+        budget_bytes: int | None = None,
+        warning_age_days: int | None = None,
+    ) -> dict[str, object]:
+        """Counts, bytes and ages the quarantine manager renders, without paths.
+
+        With a budget and an age threshold this also reports whether the store
+        has outgrown either, and recommends a cleanup. It **never deletes**:
+        quarantine is the reason optimization and deduplication are safe to run,
+        and a store that prunes itself is not a safety net. The recommendation
+        is the whole output — acting on it is `permanently_remove`'s job, behind
+        its own acknowledgement.
+        """
         records = self.records()
         retained = [record for record in records if record.retention == "retained"]
         by_reason: dict[str, int] = {}
         for record in retained:
             by_reason[record.reason] = by_reason.get(record.reason, 0) + 1
-        return {
+        retained_bytes = sum(record.size_bytes for record in retained)
+        oldest_age_days = max((record.age_days for record in retained), default=0.0)
+
+        result: dict[str, object] = {
             "record_count": len(records),
             "retained_count": len(retained),
             "restored_count": sum(1 for r in records if r.retention == "restored"),
-            "retained_bytes": sum(record.size_bytes for record in retained),
-            "oldest_age_days": max((record.age_days for record in retained), default=0.0),
+            "retained_bytes": retained_bytes,
+            "oldest_age_days": oldest_age_days,
             "by_reason": by_reason,
         }
+        if budget_bytes is None or warning_age_days is None:
+            return result
+
+        if budget_bytes <= 0:
+            raise ValueError("quarantine_budget_bytes must be a positive number of bytes")
+        if warning_age_days <= 0:
+            raise ValueError("quarantine_warning_age_days must be a positive number of days")
+
+        over_budget = retained_bytes > budget_bytes
+        over_age = oldest_age_days > warning_age_days
+        recommendations: list[str] = []
+        if over_budget:
+            recommendations.append("over_budget")
+        if over_age:
+            recommendations.append("older_than_warning_age")
+
+        result.update(
+            {
+                "budget_bytes": budget_bytes,
+                "warning_age_days": warning_age_days,
+                "over_budget": over_budget,
+                "over_warning_age": over_age,
+                # Advisory only. Nothing in this product acts on it by itself.
+                "cleanup_recommended": bool(recommendations),
+                "cleanup_reasons": tuple(recommendations),
+            }
+        )
+        return result
 
 
 def store_for_state_root(state_root: Path) -> QuarantineStore:
