@@ -69,6 +69,20 @@ class RefreshStats:
     cancelled: bool = False
 
 
+def _is_within(candidate: str, root: Path) -> bool:
+    """Whether an indexed path belongs to the root a refresh is authoritative for.
+
+    Compared on resolved paths so a symlinked or relative spelling of the same
+    root still matches, and tolerant of an unresolvable path: a row that cannot
+    be placed is left alone rather than pruned, because deleting it would be the
+    very over-pruning this scoping exists to prevent.
+    """
+    try:
+        return Path(candidate).resolve(strict=False).is_relative_to(root.resolve(strict=False))
+    except (OSError, ValueError):
+        return False
+
+
 class DedupIndex:
     """SQLite-backed store of destination file signatures."""
 
@@ -281,15 +295,25 @@ class DedupIndex:
                 cancel_event is not None and cancel_event.is_set()
             )
             complete = not issues and not cancellation_observed
-            removed = (
-                conn.execute(
-                    "DELETE FROM files "
-                    "WHERE NOT EXISTS (SELECT 1 FROM seen_paths "
-                    "WHERE seen_paths.path = files.path)"
-                ).rowcount
-                if complete
-                else 0
-            )
+            # C-16: the prune is scoped to the root this refresh walked.
+            #
+            # Unscoped, it deleted every row not seen *this time* — so indexing
+            # the destination and then a reference library evicted the whole
+            # destination, and a file already present there stopped being
+            # recognised as a duplicate. The two refreshes share one index by
+            # design; each is only authoritative about its own root.
+            removed = 0
+            if complete:
+                stale = [
+                    (row["path"],)
+                    for row in conn.execute(
+                        "SELECT path FROM files WHERE NOT EXISTS "
+                        "(SELECT 1 FROM seen_paths WHERE seen_paths.path = files.path)"
+                    )
+                    if _is_within(row["path"], dest_root)
+                ]
+                conn.executemany("DELETE FROM files WHERE path = ?", stale)
+                removed = len(stale)
 
         stats = RefreshStats(
             indexed=indexed,
