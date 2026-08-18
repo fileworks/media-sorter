@@ -44,7 +44,19 @@ def _websocket_capability(headers: dict[str, str]) -> str:
 
 
 class LocalApiSecurityMiddleware:
-    """Reject unauthenticated HTTP/WebSocket traffic before route dispatch."""
+    """Reject unauthenticated HTTP/WebSocket traffic before route dispatch.
+
+    One exemption exists, and it is narrow: a **genuine CORS preflight** — an
+    `OPTIONS` request that carries both an allowed `Origin` and an
+    `Access-Control-Request-Method`. Browsers cannot attach the capability
+    header to a preflight, so refusing it would break the packaged client.
+
+    Both halves of that test are load-bearing. Exempting every `OPTIONS`
+    dispatched requests with **no `Origin` at all** to the application
+    unauthenticated, because the origin check above only runs when an origin is
+    present. The resource request that follows a real preflight is still
+    authenticated normally.
+    """
 
     def __init__(
         self,
@@ -73,9 +85,17 @@ class LocalApiSecurityMiddleware:
             )
             return
 
-        # Browsers cannot include the secret header in a preflight. Exact-origin
-        # CORS may proceed; the actual resource request remains authenticated.
-        if scope_type == "http" and scope.get("method") == "OPTIONS":
+        # Browsers cannot include the secret header in a preflight, so an
+        # exact-origin CORS preflight may proceed; the resource request that
+        # follows it remains authenticated. All three conditions are required —
+        # an `OPTIONS` with no `Origin`, or with no requested method, is not a
+        # preflight and must not reach the application unauthenticated.
+        if (
+            scope_type == "http"
+            and scope.get("method") == "OPTIONS"
+            and origin is not None
+            and headers.get("access-control-request-method") is not None
+        ):
             await self.app(scope, receive, send)
             return
 
@@ -84,7 +104,14 @@ class LocalApiSecurityMiddleware:
             if scope_type == "http"
             else _websocket_capability(headers)
         )
-        if not secrets.compare_digest(supplied, self.capability):
+        # Compare bytes, not text. `compare_digest` raises `TypeError` on a
+        # string containing a byte >= 0x80, and `supplied` is attacker-supplied
+        # header content decoded as latin-1 — so a single high byte used to
+        # escape this middleware as an unenveloped 500 instead of a 401.
+        # Re-encoding as latin-1 reproduces the exact bytes that arrived.
+        if not secrets.compare_digest(
+            supplied.encode("latin-1", "replace"), self.capability.encode("utf-8")
+        ):
             await self._reject(
                 scope_type, send, status=401, reason="Authentication required", origin=origin
             )
