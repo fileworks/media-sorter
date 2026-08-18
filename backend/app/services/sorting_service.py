@@ -1053,7 +1053,6 @@ class SortingService(SortingSupportMixin):
                 )
 
             if match.is_duplicate:
-
                 duplicate_category_result = CategoryResult(None, 0.0, 0.0)
                 duplicate_category: str | None = None
                 duplicate_camera = ""
