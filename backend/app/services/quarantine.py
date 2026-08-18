@@ -29,6 +29,7 @@ from app.services.verified_transfer import stream_sha256, transfer_path
 logger = get_logger(__name__)
 
 RECORDS_FILE = "records.jsonl"
+INTENTS_FILE = "intents.jsonl"
 QUARANTINE_DIRECTORY_NAME = "quarantine"
 
 QuarantineReason = Literal[
@@ -41,10 +42,45 @@ QuarantineReason = Literal[
     "user_request",
 ]
 RetentionState = Literal["retained", "restored", "removed"]
+#: An intent is *declared* before the file moves and *committed* after the
+#: record exists. Anything still ``pending`` after a crash is an original whose
+#: fate is unknown — reported as pending, never as removed.
+IntentState = Literal["pending", "committed", "abandoned"]
 
 
 class QuarantineError(RuntimeError):
     """A quarantine operation could not be completed safely."""
+
+
+@dataclass(frozen=True)
+class QuarantineIntent:
+    """A durable "I am about to move this original" note.
+
+    `quarantine()` transfers the file and *then* appends its record. That order
+    is right — a record must never describe a file that does not exist — but it
+    leaves a window: a crash between the transfer and the append puts a file in
+    the store that no record mentions. Recovery could not tell that from a file
+    that was never touched.
+
+    The intent closes the window from the other side. It is written and fsynced
+    *before* the transfer, so every original that might have moved is named on
+    disk beforehand. After the record lands the intent is committed; if the
+    transfer fails it is abandoned. A ``pending`` intent found at startup is
+    exactly the crash window, and `pending_intents()` reports it.
+    """
+
+    intent_id: str
+    operation_id: str
+    reason: QuarantineReason
+    original_path: str
+    declared_at: str
+    state: IntentState = "pending"
+    expected_sha256: str | None = None
+    keeper_path: str | None = None
+    #: Set when the intent is committed, so an auditor can walk intent → record.
+    record_id: str | None = None
+    #: Set when the intent is abandoned, so "nothing happened" is also evidence.
+    abandoned_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +136,7 @@ class QuarantineStore:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.records_path = root / RECORDS_FILE
+        self.intents_path = root / INTENTS_FILE
 
     # -------------------------------------------------------------- #
     # Reading                                                          #
@@ -148,6 +185,101 @@ class QuarantineStore:
     # -------------------------------------------------------------- #
     # Writing                                                          #
     # -------------------------------------------------------------- #
+
+    # -------------------------------------------------------------- #
+    # Durable intent: declared before the move, resolved after it       #
+    # -------------------------------------------------------------- #
+
+    def declare_intent(
+        self,
+        source: Path,
+        *,
+        operation_id: str,
+        reason: QuarantineReason,
+        expected_sha256: str | None = None,
+        keeper_path: Path | None = None,
+    ) -> QuarantineIntent:
+        """Record, durably, that *source* is about to be quarantined.
+
+        Returns only after the note is on disk and fsynced. A caller that moves
+        the file before this returns has reopened the very window this closes.
+        """
+        intent = QuarantineIntent(
+            intent_id=f"qti_{uuid.uuid4().hex[:16]}",
+            operation_id=operation_id,
+            reason=reason,
+            original_path=str(source),
+            declared_at=utc_now().isoformat(),
+            expected_sha256=expected_sha256,
+            keeper_path=None if keeper_path is None else str(keeper_path),
+        )
+        return self._append_intent(intent)
+
+    def commit_intent(self, intent: QuarantineIntent, record: QuarantineRecord) -> QuarantineIntent:
+        """Resolve an intent against the record that fulfilled it."""
+        return self._append_intent(replace(intent, state="committed", record_id=record.record_id))
+
+    def abandon_intent(self, intent: QuarantineIntent, reason: str) -> QuarantineIntent:
+        """Resolve an intent that never happened, so silence is not the record."""
+        return self._append_intent(replace(intent, state="abandoned", abandoned_reason=reason))
+
+    def intents(self) -> tuple[QuarantineIntent, ...]:
+        return tuple(self._iter_intents())
+
+    def pending_intents(self) -> tuple[QuarantineIntent, ...]:
+        """Originals whose fate a crash left unknown.
+
+        An intent is pending when its latest state says so *and* no record
+        claims it. Both halves matter: a committed intent whose record line was
+        lost to a torn write is still unresolved, and must not read as done.
+        """
+        claimed = {record.record_id for record in self._iter_records()}
+        return tuple(
+            intent
+            for intent in self._iter_intents()
+            if intent.state == "pending"
+            or (intent.state == "committed" and intent.record_id not in claimed)
+        )
+
+    def _append_intent(self, intent: QuarantineIntent) -> QuarantineIntent:
+        self.root.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(asdict(intent), ensure_ascii=False)
+        try:
+            with self.intents_path.open("a", encoding="utf-8") as handle:
+                handle.write(payload + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError as exc:
+            raise QuarantineError(f"Could not record quarantine intent: {exc}") from exc
+        return intent
+
+    def _iter_intents(self) -> Iterator[QuarantineIntent]:
+        """Yield the newest state of every intent, skipping damaged lines."""
+        if not self.intents_path.is_file():
+            return
+        latest: dict[str, QuarantineIntent] = {}
+        order: list[str] = []
+        damaged = 0
+        try:
+            with self.intents_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        intent = QuarantineIntent(**json.loads(line))
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        damaged += 1
+                        continue
+                    if intent.intent_id not in latest:
+                        order.append(intent.intent_id)
+                    latest[intent.intent_id] = intent
+        except OSError as exc:
+            raise QuarantineError(f"Could not read quarantine intents: {exc}") from exc
+        if damaged:
+            logger.warning("quarantine.damaged_intent_lines", count=damaged)
+        for intent_id in order:
+            yield latest[intent_id]
 
     def _append(self, record: QuarantineRecord) -> QuarantineRecord:
         self.root.mkdir(parents=True, exist_ok=True)

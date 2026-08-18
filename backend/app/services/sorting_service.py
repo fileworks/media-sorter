@@ -9,7 +9,7 @@ import os
 import tempfile
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,7 +30,18 @@ from app.core.sort_plan import FrozenSortPlan
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
 from app.services.config_service import ConfigService
-from app.services.conversion_service import ConversionService
+from app.services.conversion_guard import MediaClass
+from app.services.conversion_publication import (
+    ConversionPublication,
+    promote_no_clobber,
+    publish_converted_file,
+    stage_directory,
+)
+from app.services.conversion_service import (
+    ConversionService,
+    predicted_image_suffix,
+    predicted_video_suffix,
+)
 from app.services.dedup_index import DedupIndex, resolve_index_path
 from app.services.destination import (
     build_dest_dir,
@@ -56,6 +67,7 @@ from app.services.junk_filter import classify_junk
 from app.services.metadata_service import MetadataService
 from app.services.operation_execution import OperationExecution
 from app.services.outcome_provenance import build_outcome_provenance
+from app.services.quarantine import store_for_state_root
 from app.services.repair_service import RepairService
 from app.services.rule_engine_service import RuleEngineService
 from app.services.sorting_support import SortingSupportMixin, root_identifier
@@ -158,6 +170,21 @@ def _merge_tags(tags: list[str]) -> list[str]:
     return merged
 
 
+def _record_conversion(record: dict[str, Any], publication: ConversionPublication) -> None:
+    """Carry the conversion's evidence onto the file's report row."""
+    if not publication.converted:
+        if publication.kept_original_because is not None:
+            record["conversion_kept_original_because"] = publication.kept_original_because
+        return
+    record["conversion_proof"] = None if publication.proof is None else publication.proof.detail
+    record["conversion_output_bytes"] = (
+        None if publication.proof is None else publication.proof.size_bytes
+    )
+    if publication.quarantine_record is not None:
+        record["conversion_original_quarantine_id"] = publication.quarantine_record.record_id
+        record["conversion_original_bytes"] = publication.quarantine_record.size_bytes
+
+
 class SortingService(SortingSupportMixin):
     def __init__(
         self,
@@ -189,6 +216,56 @@ class SortingService(SortingSupportMixin):
         self._rules = rule_engine_service
         self._ai = ai_tagging_service
         self._classifier = category_classifier_service
+
+    def _publish_conversion(
+        self,
+        dest: Path,
+        *,
+        media: MediaClass,
+        operation_id: str,
+        execution: OperationExecution | None,
+        planned_final: Path,
+        convert: Callable[[Path, Path], Path],
+        expected_suffix: str,
+    ) -> tuple[Path, ConversionPublication]:
+        """Convert a placed file through the proven publish protocol.
+
+        `dest` is already the *published* file: in move mode it is the only
+        copy the user has left. So it is never unlinked to make room for a
+        candidate — it is proven-against, quarantined, and only then displaced.
+
+        Without an `OperationExecution` there is no state root, hence no managed
+        quarantine and no journal, so there is nowhere safe to put the original.
+        Conversion is skipped rather than performed unprotected.
+        """
+        if execution is None:
+            logger.warning(
+                "conversion.skipped_without_execution_context",
+                path=str(dest),
+                reason="no managed quarantine is available to protect the original",
+            )
+            return dest, ConversionPublication(
+                published_path=dest,
+                converted=False,
+                kept_original_because="no execution context to protect the original",
+            )
+
+        stage = stage_directory(dest, operation_id)
+        target = (
+            planned_final
+            if planned_final.suffix.casefold() == expected_suffix.casefold()
+            else dest.with_suffix(expected_suffix)
+        )
+        publication = publish_converted_file(
+            dest,
+            convert=lambda source: convert(source, stage),
+            expected_suffix=expected_suffix,
+            media=media,
+            quarantine=store_for_state_root(execution.state_root),
+            operation_id=operation_id,
+            final_path=self._fs.find_available_filename(target),
+        )
+        return publication.published_path, publication
 
     async def run(
         self,
@@ -1275,53 +1352,53 @@ class SortingService(SortingSupportMixin):
                 # policy guard, never a bare config boolean, is the boundary.
                 if config.convert_images and is_image(dest):
                     authorization.require("conversion")
-                    try:
-                        converted = self._conversion.convert_image(
-                            source=dest,
+                    dest, publication = self._publish_conversion(
+                        dest,
+                        media="image",
+                        operation_id=operation_id,
+                        execution=execution,
+                        planned_final=planned_final,
+                        convert=lambda source, stage: self._conversion.convert_image(
+                            source=source,
                             target_format=config.image_format,
                             quality=config.image_quality,
                             preserve_exif=True,
-                        )
-                        if converted != dest:
-                            dest.unlink(missing_ok=True)
-                            dest = converted
-                    except Exception as exc:
-                        logger.warning(
-                            "Image conversion failed; keeping original",
-                            path=str(dest),
-                            error=str(exc),
-                        )
+                            output_dir=stage,
+                        ),
+                        expected_suffix=predicted_image_suffix(dest.suffix, config.image_format),
+                    )
+                    _record_conversion(record, publication)
 
                 # Apply video conversion if configured
                 if config.convert_videos and is_video(dest):
                     authorization.require("conversion")
-                    try:
-                        converted = self._conversion.convert_video(
-                            source=dest,
+                    dest, publication = self._publish_conversion(
+                        dest,
+                        media="video",
+                        operation_id=operation_id,
+                        execution=execution,
+                        planned_final=planned_final,
+                        convert=lambda source, stage: self._conversion.convert_video(
+                            source=source,
                             target_format=config.video_format,
                             quality=config.video_quality,
-                        )
-                        if converted != dest:
-                            dest.unlink(missing_ok=True)
-                            dest = converted
-                    except Exception as exc:
-                        logger.warning(
-                            "Video conversion failed; keeping original",
-                            path=str(dest),
-                            error=str(exc),
-                        )
+                            output_dir=stage,
+                        ),
+                        expected_suffix=predicted_video_suffix(dest.suffix, config.video_format),
+                    )
+                    _record_conversion(record, publication)
 
                 # Conversion/rename planning chooses the final name before any
-                # mutation. If conversion kept the expected suffix, move to that
-                # reserved name; a post-preview destination mutation simply
-                # advances the deterministic suffix and is reported below.
+                # mutation. When conversion already published onto the planned
+                # name there is nothing left to do; otherwise move to the
+                # reserved name with the same no-clobber promise the
+                # publication uses, because `Path.rename` would silently
+                # replace a file that appeared after the precheck (C-09).
                 if (
                     dest.suffix.casefold() == planned_final.suffix.casefold()
                     and dest != planned_final
                 ):
-                    target = self._fs.find_available_filename(planned_final)
-                    dest.rename(target)
-                    dest = target
+                    dest = promote_no_clobber(dest, self._fs.find_available_filename(planned_final))
 
                 # Override EXIF creation date if configured. This rewrites media
                 # bytes, so Organize Only records the correction in the report

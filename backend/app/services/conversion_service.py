@@ -68,6 +68,14 @@ def _ext_for(fmt: str) -> str:
     return fmt
 
 
+def _candidate_path(source: Path, suffix: str, output_dir: Path | None) -> Path:
+    """Where a converted candidate is written, beside the source or staged."""
+    if output_dir is None:
+        return find_available_filename(source.with_suffix(suffix))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return find_available_filename(output_dir / (source.stem + suffix))
+
+
 def predicted_image_suffix(suffix: str, target_format: str) -> str:
     """Predict the suffix ``convert_image`` would leave a file with — pure.
 
@@ -95,6 +103,7 @@ class ConversionService:
         target_format: str,
         quality: int = 90,
         preserve_exif: bool = True,
+        output_dir: Path | None = None,
     ) -> Path:
         """Convert *source* to *target_format* (jpeg/png/webp/tiff), including RAW/HEIC
         sources decoded via ``open_image``.
@@ -102,6 +111,11 @@ class ConversionService:
         Returns a NEW collision-free path on disk (caller is responsible for
         swapping it in place of the original), or *source* unchanged when the
         file is already in the target format (no-op).
+
+        *output_dir* places the candidate somewhere other than beside the
+        source. The sort path uses it to stage into a private directory on the
+        destination filesystem, so a half-written or rejected candidate is never
+        visible in the published tree.
 
         Raises:
             ValueError  — unknown *target_format*.
@@ -122,7 +136,7 @@ class ConversionService:
         if source.suffix.lower() in _IMAGE_FORMAT_EXTS[fmt]:
             return source
 
-        dest = find_available_filename(source.with_suffix("." + _ext_for(fmt)))
+        dest = _candidate_path(source, "." + _ext_for(fmt), output_dir)
 
         # JPEG and TIFF EXIF: load via piexif before opening the source image so we can
         # write it back after saving (piexif.insert supports both JPEG and TIFF containers).
@@ -175,6 +189,7 @@ class ConversionService:
         source: Path,
         target_format: str,
         quality: str = "medium",
+        output_dir: Path | None = None,
     ) -> Path:
         """Transcode *source* to *target_format* container using a sensible codec.
 
@@ -198,13 +213,23 @@ class ConversionService:
         if source.suffix.lower() in _VIDEO_FORMAT_EXTS[fmt]:
             return source
 
-        dest = find_available_filename(source.with_suffix("." + fmt))
+        dest = _candidate_path(source, "." + fmt, output_dir)
         crf = str(_QUALITY_CRF.get(quality, _QUALITY_CRF["medium"]))
 
         video_args_template, audio_args = _VIDEO_CODECS[fmt]
         video_args = [a.replace("{crf}", crf) for a in video_args_template]
 
-        cmd = ["ffmpeg", "-i", str(source)] + video_args + audio_args + ["-y", str(dest)]
+        # Map every stream this product promises to preserve, rather than
+        # letting ffmpeg pick one video and one audio track by default and
+        # silently drop the rest. The `?` suffix makes each optional, so a file
+        # without audio or subtitles still converts. Subtitles are copied
+        # through; a container that refuses them fails the conversion, and the
+        # caller keeps the original — which is the correct outcome, because the
+        # alternative is losing them without saying so.
+        stream_map = ["-map", "0:v?", "-map", "0:a?", "-map", "0:s?", "-c:s", "copy"]
+        cmd = (
+            ["ffmpeg", "-i", str(source)] + stream_map + video_args + audio_args + ["-y", str(dest)]
+        )
 
         try:
             result = subprocess.run(

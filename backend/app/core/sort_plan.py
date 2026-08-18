@@ -133,7 +133,20 @@ class FrozenSortImpact(BaseModel):
     skip_count: int
     source_mutations: int
     required_bytes: int
+    #: Permanently 0 since `P0-SAFE-001`. Conversion no longer discards the
+    #: file it replaces: the original is quarantined, recorded and restorable
+    #: before the converted file is published. The field is kept rather than
+    #: removed because older persisted plans carry it, and a preflight that
+    #: silently dropped a warning field would be indistinguishable from one
+    #: that never had it.
     conversion_without_originals: int
+    #: Originals retained in quarantine because conversion replaced them.
+    conversion_originals_retained: int = 0
+    #: Deterministic plan-time estimate of the bytes conversion will write.
+    #: Execution journals the candidate's actual size; this is what preflight
+    #: budgets against, and `source_size_bytes` is the honest estimate because
+    #: a transcode may grow a file.
+    estimated_converted_bytes: int = 0
     companions_left_in_place: int
     embedded_tag_count: int
     unresolved_count: int
@@ -597,8 +610,19 @@ def build_impact(
         skip_count=skip_count,
         source_mutations=sum(action.source_effect != "retained" for action in actions),
         required_bytes=(sum(action.expected_size_bytes for action in actions) if copy_mode else 0),
-        conversion_without_originals=(
-            sortable_primaries if not copy_mode and converts_media else 0
+        # Permanently 0: `P0-SAFE-001` routes conversion through quarantine, so
+        # no conversion discards its original. The counter that drove the
+        # "originals will not be retained" warning now drives nothing.
+        conversion_without_originals=0,
+        conversion_originals_retained=sortable_primaries if converts_media else 0,
+        estimated_converted_bytes=(
+            sum(
+                action.expected_size_bytes
+                for action in actions
+                if action.disposition == "sort" and action.companion_role is None
+            )
+            if converts_media
+            else 0
         ),
         companions_left_in_place=companions_left_in_place,
         embedded_tag_count=sortable_primaries if embeds_tags else 0,

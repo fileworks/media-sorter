@@ -190,6 +190,14 @@ export interface PreflightInput {
   freeBytes: number | null;
   requiredBytes: number;
   quarantineWritable: boolean;
+  /**
+   * Permanently 0 since `P0-SAFE-001`: conversion quarantines the file it
+   * replaces instead of discarding it, so there is no longer a case where an
+   * original "will not be retained". Kept on the input so an older backend's
+   * preflight still type-checks, and asserted to stay 0 rather than deleted —
+   * a field that silently disappeared would look the same as one that was
+   * never sent.
+   */
   conversionWithoutOriginals: number;
   companionsLeftInPlace: number;
   embeddedTagCount: number;
@@ -289,14 +297,6 @@ export function preflight(input: PreflightInput): Preflight {
       tone: "warning",
       messageKey: "preflight.irreversible.quarantine",
       params: { count: input.quarantineCount, bytes: formatBytes(input.quarantineBytes) },
-    });
-  }
-  if (input.conversionWithoutOriginals > 0) {
-    irreversible.push({
-      text: `${input.conversionWithoutOriginals} original file(s) will not be retained after conversion.`,
-      tone: "warning",
-      messageKey: "preflight.irreversible.conversion",
-      params: { count: input.conversionWithoutOriginals },
     });
   }
   if (input.companionsLeftInPlace > 0) {

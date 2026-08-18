@@ -858,7 +858,12 @@ export interface PlanImpact {
   skip_count: number;
   source_mutations: number;
   required_bytes: number;
+  /** Permanently 0 since P0-SAFE-001 — conversion retains its originals. */
   conversion_without_originals: number;
+  /** Originals held in quarantine because conversion replaced them. */
+  conversion_originals_retained?: number;
+  /** Plan-time estimate of the bytes conversion will write. */
+  estimated_converted_bytes?: number;
   companions_left_in_place: number;
   embedded_tag_count: number;
   unresolved_count: number;
