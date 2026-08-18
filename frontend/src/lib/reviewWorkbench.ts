@@ -12,6 +12,30 @@ import type { KeeperPolicyId } from "@/services/api";
 
 /** Three kinds of stack, one shape. Mirrors the backend's `GroupKind`. */
 export type GroupKind = "exact" | "similar" | "burst";
+
+/**
+ * Whether the catalog can produce burst stacks at all.
+ *
+ * `burst_groups` reads perceptual signatures and media facts out of the
+ * catalog, and nothing in production writes either one: `catalog_indexing`
+ * runs discovery and hashing only, and `store_signature` / `store_media_facts`
+ * have test callers exclusively. The catalog-backed burst view is therefore
+ * empty *by construction*, not by configuration — so offering a switch for it
+ * promises a result the product cannot produce.
+ *
+ * This says nothing about the direct `POST /api/review/bursts/detect`
+ * endpoint, which hashes and reads EXIF from the filesystem and does honor
+ * `burst_detection_enabled` exactly as before. That contract is untouched.
+ *
+ * `P2-DEDUP-D3` lands the signature/facts producer and `P2-DEDUP-D9` flips
+ * this back. Nothing gated by it writes to the configuration, so a persisted
+ * `burst_detection_enabled: true` survives untouched and neither direction
+ * needs a data migration.
+ *
+ * Typed `boolean` rather than left to literal inference so the disabled branch
+ * stays type-checked instead of being narrowed away.
+ */
+export const CATALOG_BURST_GROUPS_AVAILABLE: boolean = false;
 export type RootRole = "input" | "reference" | "destination";
 export type DecisionAction = "keep" | "quarantine" | "skip" | "replace_keeper" | "keep_additional";
 export type OutcomeKind =

@@ -103,3 +103,54 @@ def test_burst_plan_requires_preflight_and_persists_exportable_report(
         assert "frame_id,unit_id,original_path,quarantine_path" in exported.text
     finally:
         container.set_config(original)
+
+
+def test_direct_detect_route_honors_the_stored_burst_setting(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    """The direct API reads `burst_detection_enabled`; only the catalog view is gated.
+
+    `W0-UI-001` hides the burst control and stops the catalog-backed Review path
+    from asking for burst stacks, because nothing in production writes the
+    signatures and media facts that path reads. That is a statement about the
+    *catalog* producer. This route hashes and reads EXIF from the filesystem and
+    is unaffected — the frontend gate must never be mistaken for a backend one,
+    and `P2-DEDUP-D9` re-enables the control against this unchanged contract.
+    """
+    source = tmp_path / "input"
+    source.mkdir()
+    first = source / "a.jpg"
+    second = source / "b.jpg"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+
+    container = client.app.state.container  # type: ignore[attr-defined]
+    original = Config.from_dict(container.config.to_dict())
+    body = {"root": str(source), "paths": [str(first), str(second)]}
+
+    def configured(*, enabled: bool) -> Config:
+        """Identical in every respect except the one setting under test."""
+        return Config(
+            source_directory=str(source),
+            target_directory=str(tmp_path / "destination"),
+            burst_detection_enabled=enabled,
+            burst_time_window_seconds=3,
+            burst_perceptual_distance=12,
+            burst_require_camera_identity=True,
+        )
+
+    try:
+        container.set_config(configured(enabled=False))
+        disabled = client.post("/api/review/bursts/detect", json=body)
+        assert disabled.status_code == 200
+        assert disabled.json() == []
+
+        container.set_config(configured(enabled=True))
+        enabled = client.post("/api/review/bursts/detect", json=body)
+        assert enabled.status_code == 200
+        groups = enabled.json()
+        assert len(groups) == 1
+        assert len(groups[0]["frames"]) == 2
+    finally:
+        container.set_config(original)

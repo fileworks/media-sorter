@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 
-import type { GroupKind } from "@/lib/reviewWorkbench";
+import { CATALOG_BURST_GROUPS_AVAILABLE, type GroupKind } from "@/lib/reviewWorkbench";
 import type { PlanDuplicateSet } from "@/lib/reviewRows";
 import { duplicateTally, type DuplicateTally } from "@/lib/reviewPlan";
 import { api } from "@/services/api";
@@ -17,9 +17,12 @@ const LIMIT = 200;
  * list counted what the catalog holds. TanStack dedupes the query keys, so
  * sharing this costs no extra requests.
  *
- * Bursts are the third kind, fetched on the same terms as the other two and
- * only when burst detection is switched on: asking for them otherwise would
- * make the catalog scan for a result that is empty by construction.
+ * Bursts are the third kind, fetched on the same terms as the other two — but
+ * only while the catalog can actually produce them. Today it cannot: nothing
+ * in production writes the signatures and media facts `burst_groups` reads, so
+ * the request is a scan for a result that is empty by construction. The user's
+ * `burst_detection_enabled` is still read and still passed in; it is simply not
+ * sufficient on its own. See `CATALOG_BURST_GROUPS_AVAILABLE`.
  */
 export function useReviewGroups(
   /** Source paths this run acts on, so the tally can be scoped to it. */
@@ -38,7 +41,10 @@ export function useReviewGroups(
     planSets?: readonly PlanDuplicateSet[];
   } = {},
 ) {
-  const kinds: GroupKind[] = options.bursts ? ["exact", "similar", "burst"] : ["exact", "similar"];
+  const kinds: GroupKind[] =
+    options.bursts && CATALOG_BURST_GROUPS_AVAILABLE
+      ? ["exact", "similar", "burst"]
+      : ["exact", "similar"];
 
   // `combine` rather than reading the result array directly: the array itself
   // is new on every render, so it can never be a stable `useMemo` dependency.
