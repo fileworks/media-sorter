@@ -82,13 +82,21 @@ class TestRefusals:
         assert held.is_symlink()
 
     def test_a_replacement_inode_is_refused(self, store: QuarantineStore, tmp_path: Path) -> None:
-        """Same path, different object. The digest is what settles it."""
+        """Same path, different object. The digest is what settles it.
+
+        Deliberately no inode assertion: an earlier version of this test checked
+        that the replacement got a *different* `st_ino`, which holds on APFS and
+        does not on ext4 — CI reused the number and the test failed on a
+        precondition that had nothing to do with the behaviour under test. What
+        matters is that the bytes differ from the ones recorded, and that is
+        what `permanently_remove` checks.
+        """
         record_id = _quarantined(store, tmp_path)
         held = Path(store.find(record_id).quarantine_path)  # type: ignore[union-attr]
-        before = held.stat().st_ino
+        original_bytes = held.read_bytes()
         held.unlink()
         held.write_bytes(b"a different file at the same path")
-        assert held.stat().st_ino != before
+        assert held.read_bytes() != original_bytes
 
         outcome = _remove(store, record_id)
 
