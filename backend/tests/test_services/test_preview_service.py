@@ -125,6 +125,42 @@ async def test_preview_keeps_higher_resolution_duplicate_regardless_of_order(
 
 
 @pytest.mark.asyncio
+async def test_deduplicate_only_keeps_keeper_in_place_and_plans_copy_folder(
+    tmp_path: Path,
+) -> None:
+    PIL_Image = pytest.importorskip("PIL.Image")
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    keeper = source / "photo.jpg"
+    duplicate = source / "photo-copy.jpg"
+    PIL_Image.new("RGB", (64, 64), color=(120, 80, 40)).save(keeper, format="JPEG")
+    duplicate.write_bytes(keeper.read_bytes())
+
+    cfg = _make_config(
+        source,
+        target,
+        run_mode="deduplicate_only",
+        remove_duplicates=True,
+        duplicate_exact_enabled=True,
+        duplicate_perceptual_enabled=False,
+    )
+    svc = _make_preview_service(cfg)
+    with patch.object(
+        svc._extraction,
+        "extract_detailed",
+        return_value=ExtractionResult(extracted_date=date(2024, 1, 1), source="exif"),
+    ):
+        result = await svc.preview(cfg)
+
+    by_status = {item["status"]: item for item in result["items"]}
+    assert by_status["keep_in_place"]["destination"] is None
+    assert by_status["duplicate"]["duplicate_of"] == by_status["keep_in_place"]["source"]
+    assert Path(by_status["duplicate"]["destination"]).parent.name == "_copies"
+
+
+@pytest.mark.asyncio
 async def test_preview_destination_empty_after_run(tmp_path: Path) -> None:
     piexif = pytest.importorskip("piexif")
     PIL_Image = pytest.importorskip("PIL.Image")

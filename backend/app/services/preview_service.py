@@ -456,7 +456,7 @@ class PreviewService:
         # costs the richer view, never the plan.
         await asyncio.to_thread(
             index_library_roots,
-            config.library_profile,
+            library,
             data_dir=resolve_app_paths().data_dir,
             recursive=config.recursive_scan,
             max_depth=config.max_recursion_depth,
@@ -686,7 +686,16 @@ class PreviewService:
             else:
                 status = "duplicate"
                 keeper_item = (planned_items or {}).get(str(dup_of))
-                keeper_destination = keeper_item.get("destination") if keeper_item else None
+                # In deduplicate-only mode the keeper deliberately has no real
+                # destination: it remains in its source folder. Its predicted
+                # organize path is still recorded as `would_be_destination` so
+                # duplicate copies can use the same contextual `_copies`
+                # placement as the executor without pretending the keeper moves.
+                keeper_destination = (
+                    keeper_item.get("destination") or keeper_item.get("would_be_destination")
+                    if keeper_item
+                    else None
+                )
                 if not keeper_destination or dup_of is None:
                     raise RuntimeError("duplicate keeper has no planned destination")
                 dest = str(
