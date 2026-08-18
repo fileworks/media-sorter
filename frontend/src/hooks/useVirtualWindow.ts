@@ -48,6 +48,8 @@ interface VirtualWindowOptions {
   overscan?: number;
   /** Changes when filtering/reordering should preserve the current anchor. */
   anchorKey?: string | null;
+  /** Identity of the ordered rows; invalidates measurements when rows move. */
+  measurementKey?: unknown;
 }
 
 /**
@@ -63,10 +65,17 @@ export function useVirtualWindow({
   emptyHeight = 96,
   overscan = 6,
   anchorKey = null,
+  measurementKey = count,
 }: VirtualWindowOptions) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sizesRef = useRef(new Map<number, number>());
-  const observersRef = useRef(new Map<Element, ResizeObserver>());
+  const measurement = useMemo(
+    () => ({
+      key: measurementKey,
+      sizes: new Map<number, number>(),
+      observers: new Map<Element, ResizeObserver>(),
+    }),
+    [measurementKey],
+  );
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(maxHeight);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -81,6 +90,7 @@ export function useVirtualWindow({
       setViewportWidth(element.clientWidth);
     };
     measure();
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
@@ -88,10 +98,10 @@ export function useVirtualWindow({
 
   useEffect(
     () => () => {
-      for (const observer of observersRef.current.values()) observer.disconnect();
-      observersRef.current.clear();
+      for (const observer of measurement.observers.values()) observer.disconnect();
+      measurement.observers.clear();
     },
-    [],
+    [measurement],
   );
 
   useEffect(() => {
@@ -102,7 +112,7 @@ export function useVirtualWindow({
   }, [anchorKey]);
 
   const layout = useMemo(() => {
-    if (sizesRef.current.size === 0) {
+    if (measurement.sizes.size === 0) {
       return {
         starts: [] as number[],
         sizes: [] as number[],
@@ -115,14 +125,14 @@ export function useVirtualWindow({
     let cursor = 0;
     for (let index = 0; index < count; index += 1) {
       starts[index] = cursor;
-      const size = sizesRef.current.get(index) ?? estimateSize;
+      const size = measurement.sizes.get(index) ?? estimateSize;
       sizes[index] = size;
       cursor += size;
     }
     return { starts, sizes, totalSize: cursor, fixed: false };
     // measurementVersion is the invalidation signal for the mutable size map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count, estimateSize, measurementVersion]);
+  }, [count, estimateSize, measurement, measurementVersion]);
 
   const virtualItems = useMemo(() => {
     if (count === 0) return [];
@@ -146,21 +156,29 @@ export function useVirtualWindow({
     return items;
   }, [count, estimateSize, layout, overscan, scrollTop, viewportHeight]);
 
-  const measureElement = useCallback((element: HTMLElement | null) => {
-    if (!element || observersRef.current.has(element)) return;
-    const update = () => {
-      const index = Number(element.dataset.virtualIndex);
-      if (!Number.isInteger(index)) return;
-      const next = element.getBoundingClientRect().height;
-      if (next <= 0 || sizesRef.current.get(index) === next) return;
-      sizesRef.current.set(index, next);
-      setMeasurementVersion((version) => version + 1);
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    observersRef.current.set(element, observer);
-  }, []);
+  const measureElement = useCallback(
+    (element: HTMLElement | null) => {
+      if (!element || measurement.observers.has(element)) return undefined;
+      const update = () => {
+        const index = Number(element.dataset.virtualIndex);
+        if (!Number.isInteger(index)) return;
+        const next = element.getBoundingClientRect().height;
+        if (next <= 0 || measurement.sizes.get(index) === next) return;
+        measurement.sizes.set(index, next);
+        setMeasurementVersion((version) => version + 1);
+      };
+      update();
+      if (typeof ResizeObserver === "undefined") return undefined;
+      const observer = new ResizeObserver(update);
+      observer.observe(element);
+      measurement.observers.set(element, observer);
+      return () => {
+        observer.disconnect();
+        measurement.observers.delete(element);
+      };
+    },
+    [measurement],
+  );
 
   const onScroll = useCallback<UIEventHandler<HTMLDivElement>>((event) => {
     setScrollTop(event.currentTarget.scrollTop);

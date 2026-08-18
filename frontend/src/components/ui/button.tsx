@@ -55,7 +55,7 @@ export function Button({
         // The press is a nudge downward, not a shrink: at these sizes a scale
         // reflows the label and the icon beside it reads as a stutter.
         "active:translate-y-px active:transition-none",
-        "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0",
+        "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0",
         variantClasses[variant],
         sizeClasses[size],
         className,

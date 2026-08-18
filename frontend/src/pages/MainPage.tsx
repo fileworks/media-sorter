@@ -531,7 +531,7 @@ export default function MainPage() {
     embeddedTagCount: impact?.embedded_tag_count ?? 0,
   };
 
-  /** Jump to Configure and scroll to a named setting row once it has mounted. */
+  /** Open Configure and focus a named setting row once it has mounted. */
   const openSetting = useCallback((anchorId: string, nav: StageNav) => {
     setPendingSettingAnchor(anchorId);
     nav.go("configure");
