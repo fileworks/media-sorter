@@ -21,11 +21,18 @@ export function useLogs(): UseLogsReturn {
   const connect = useCallback(() => {
     if (unmountedRef.current) return;
 
-    // Resolve the WebSocket URL (uses the already-resolved baseURL after api.init,
-    // or the built-in fallback of ws://127.0.0.1:8000/api/logs).
+    // Both are `null` until the session resolves. Opening a socket against a
+    // guessed `ws://127.0.0.1:8000` with the bare `mediasorter.` subprotocol —
+    // which is what the old 200 ms timer raced towards — points the log stream
+    // at whatever owns port 8000 on the user's machine.
     const url = api.getWebSocketUrl();
+    const protocol = api.getWebSocketProtocol();
+    if (url === null || protocol === null) {
+      reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
+      return;
+    }
 
-    const ws = new WebSocket(url, api.getWebSocketProtocol());
+    const ws = new WebSocket(url, protocol);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -63,14 +70,22 @@ export function useLogs(): UseLogsReturn {
   useEffect(() => {
     unmountedRef.current = false;
 
-    // Delay the first connection slightly so api.init() has time to resolve the
-    // backend port. The fallback (port 8000) is fine for dev mode, but this
-    // avoids an extra failed connection attempt in unusual setups.
-    const startTimer = setTimeout(connect, 200);
+    // Await the resolved session rather than racing it. The old code waited
+    // 200 ms and hoped; a hope is not a happens-before edge, and on a slow
+    // start the socket opened against the dev fallback with an empty
+    // capability. A startup failure is typed and handled — the stream simply
+    // never connects, which is the honest outcome when there is no backend.
+    void api
+      .whenReady()
+      .then(() => {
+        if (!unmountedRef.current) connect();
+      })
+      .catch(() => {
+        if (!unmountedRef.current) setIsConnected(false);
+      });
 
     return () => {
       unmountedRef.current = true;
-      clearTimeout(startTimer);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
     };

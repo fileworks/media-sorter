@@ -1113,10 +1113,23 @@ function isTimeoutError(error: unknown): boolean {
 
 // ── Client ─────────────────────────────────────────────────────────────────────
 
+/** The local API could not be resolved, and the client refuses to guess at one. */
+export class ApiInitializationError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "ApiInitializationError";
+    this.cause = cause;
+  }
+}
+
 export class MediaSorterApiClient {
   private http: AxiosInstance;
   private ready: Promise<void>;
   private capability = "";
+  private resolved: { baseUrl: string; capability: string } | null = null;
+  private initFailure: ApiInitializationError | null = null;
 
   constructor() {
     this.http = axios.create({ timeout: 30_000 });
@@ -1132,17 +1145,44 @@ export class MediaSorterApiClient {
     this.ready = this.init();
   }
 
+  /**
+   * Resolve the backend session, or fail closed.
+   *
+   * The IPC failure used to fall through to `http://127.0.0.1:8000` in *every*
+   * build. In a packaged app that is not a dev convenience — it is the client
+   * pointing its capability token and every request at whatever process happens
+   * to own port 8000 on the user's machine. The fallback now exists only under
+   * `import.meta.env.DEV`, which Vite replaces with a literal at build time, so
+   * a production bundle does not contain the branch at all.
+   *
+   * This never rejects: an unhandled rejection on a constructor-issued promise
+   * is its own bug. The failure is recorded and re-thrown from `ensureReady`
+   * and `whenReady`, where a caller is actually waiting for it.
+   */
   private async init(): Promise<void> {
     try {
       const session = await invoke<{ port: number; capability: string }>("get_api_session");
-      this.http.defaults.baseURL = `http://127.0.0.1:${session.port}`;
-      this.capability = session.capability;
-    } catch {
-      // Running outside Tauri (browser dev mode) or IPC not yet ready —
-      // fall back to the default dev-mode port.
-      this.http.defaults.baseURL = `http://127.0.0.1:8000`;
-      this.capability = import.meta.env.VITE_MEDIASORT_API_CAPABILITY ?? "";
+      this.resolved = {
+        baseUrl: `http://127.0.0.1:${session.port}`,
+        capability: session.capability,
+      };
+    } catch (cause) {
+      if (import.meta.env.DEV) {
+        this.resolved = {
+          baseUrl: `http://127.0.0.1:8000`,
+          capability: import.meta.env.VITE_MEDIASORT_API_CAPABILITY ?? "",
+        };
+      } else {
+        this.initFailure = new ApiInitializationError(
+          "The backend session could not be resolved. The application cannot " +
+            "reach its local API, and will not guess at one.",
+          cause,
+        );
+        return;
+      }
     }
+    this.http.defaults.baseURL = this.resolved.baseUrl;
+    this.capability = this.resolved.capability;
     if (this.capability) {
       this.http.defaults.headers.common["X-MediaSorter-Capability"] = this.capability;
     }
@@ -1151,6 +1191,40 @@ export class MediaSorterApiClient {
   /** Ensure the client has resolved the backend port before any call. */
   private async ensureReady(): Promise<void> {
     await this.ready;
+    if (this.initFailure) throw this.initFailure;
+  }
+
+  /**
+   * Await a resolved session, for callers that build URLs themselves.
+   *
+   * `useLogs` used to `setTimeout(connect, 200)` and hope. A hope is not a
+   * happens-before edge: on a slow start the socket opened against the dev
+   * fallback with an empty capability.
+   */
+  async whenReady(): Promise<void> {
+    await this.ensureReady();
+  }
+
+  /** True once a session is resolved. Never true after a failed startup. */
+  get isReady(): boolean {
+    return this.resolved !== null && this.initFailure === null;
+  }
+
+  /** The typed startup failure, if initialization has already failed. */
+  get startupFailure(): ApiInitializationError | null {
+    return this.initFailure;
+  }
+
+  /**
+   * The resolved session, or `null` while it is unknown.
+   *
+   * Synchronous URL builders return `null` rather than throwing: they are
+   * called during render, and a throw there takes out the component tree. Every
+   * caller already has a placeholder state for "no image yet"; `null` routes
+   * into it instead of inventing a production URL.
+   */
+  private session(): { baseUrl: string; capability: string } | null {
+    return this.initFailure === null ? this.resolved : null;
   }
 
   /**
@@ -1779,13 +1853,22 @@ export class MediaSorterApiClient {
 
   // ── WebSocket ─────────────────────────────────────────────────────────────────
 
-  getWebSocketUrl(): string {
-    const base = this.http.defaults.baseURL ?? "http://127.0.0.1:8000";
-    return base.replace(/^http/, "ws") + "/api/logs";
+  getWebSocketUrl(): string | null {
+    const session = this.session();
+    return session === null ? null : session.baseUrl.replace(/^http/, "ws") + "/api/logs";
   }
 
-  getWebSocketProtocol(): string {
-    return `mediasorter.${this.capability}`;
+  /**
+   * The authenticated subprotocol, or `null`.
+   *
+   * It used to return the bare prefix `"mediasorter."` when the capability was
+   * still empty, which is a subprotocol the backend cannot authenticate and a
+   * connection attempt that can only be refused.
+   */
+  getWebSocketProtocol(): string | null {
+    const session = this.session();
+    if (session === null || !session.capability) return null;
+    return `mediasorter.${session.capability}`;
   }
 
   // ── AI utilities ─────────────────────────────────────────────────────────────
@@ -1806,8 +1889,10 @@ export class MediaSorterApiClient {
    * `onError` and the caller can show a placeholder. Lazy by nature — nothing is
    * fetched until the element mounts.
    */
-  thumbnailUrl(path: string, maxPx?: number): string {
-    const base = this.http.defaults.baseURL ?? "http://127.0.0.1:8000";
+  thumbnailUrl(path: string, maxPx?: number): string | null {
+    const session = this.session();
+    if (session === null) return null;
+    const base = session.baseUrl;
     // `maxPx` is the longest-edge size the caller wants rendered. Callers should
     // pass roughly 2× their CSS display size so the image stays crisp on HiDPI
     // displays. Omit it to keep the backend's small default (hover thumbnails).
@@ -1849,8 +1934,10 @@ export class MediaSorterApiClient {
    * `<img>` src in the duplicate comparison. Non-image inputs respond 415 so the
    * `<img>` fires `onError` and the caller can hide the diff affordance.
    */
-  diffUrl(a: string, b: string, maxPx?: number): string {
-    const base = this.http.defaults.baseURL ?? "http://127.0.0.1:8000";
+  diffUrl(a: string, b: string, maxPx?: number): string | null {
+    const session = this.session();
+    if (session === null) return null;
+    const base = session.baseUrl;
     const size = maxPx ? `&size=${Math.round(maxPx)}` : "";
     return `${base}/api/media/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}${size}`;
   }
