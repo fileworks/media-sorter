@@ -24,6 +24,7 @@ from pathlib import Path
 import structlog
 
 from app.core.library_profiles import CatalogPlacement, LibraryProfile
+from app.core.library_validation import ValidatedLibraryProfile
 from app.services.catalog import MediaCatalog
 from app.services.catalog_location import open_catalog
 from app.services.discovery import TraversalRules, discover_many
@@ -32,7 +33,7 @@ logger = structlog.get_logger(__name__)
 
 
 def index_library_roots(
-    profile: LibraryProfile | None,
+    library: ValidatedLibraryProfile | LibraryProfile | None,
     *,
     data_dir: Path,
     recursive: bool = True,
@@ -48,9 +49,87 @@ def index_library_roots(
 
     Returns the file count per root, for logging and for the caller to report.
     """
-    if profile is None:
+    if library is None:
         return {}
 
+    # Keep the indexing seam compatible while callers migrate to the validated
+    # profile contract. PreviewService on the first baseline commit still
+    # supplies the persisted LibraryProfile; preserve its existing advisory
+    # path until the next commit moves that caller to validation.
+    if isinstance(library, LibraryProfile):
+        return _index_legacy_profile(
+            library,
+            data_dir=data_dir,
+            recursive=recursive,
+            max_depth=max_depth,
+            exclude_patterns=exclude_patterns,
+            cancel=cancel,
+        )
+
+    indexable = [root for root in (*library.inputs, *library.references) if root.canonical_path]
+    if not indexable:
+        return {}
+
+    placement = library.profile.catalog or CatalogPlacement()
+    if placement.mode != "application_data":
+        placement = CatalogPlacement()
+
+    targets = [
+        (
+            root.root.root_id,
+            root.canonical_path,
+            TraversalRules(
+                recursive=recursive,
+                max_depth=max_depth,
+                exclusions=root.exclusions,
+                exclude_patterns=tuple(exclude_patterns),
+            ),
+        )
+        for root in indexable
+    ]
+
+    try:
+        with open_catalog(placement, data_dir=data_dir) as catalog:
+            # A generation is keyed to a root row, so the root has to exist
+            # before the walk starts — otherwise the first insert fails on a
+            # foreign key and the whole pass is lost. Registration is
+            # idempotent, so re-previewing the same library is free.
+            for root in indexable:
+                catalog.register_root(
+                    root.root.root_id,
+                    root.canonical_path,
+                    role=root.root.role,
+                    volume_id=root.identity.volume_id,
+                )
+            results = discover_many(catalog, targets, cancel=cancel)
+            hashed = _hash_indexed_files(
+                catalog,
+                {root.root.root_id: root.canonical_path for root in indexable},
+                cancel=cancel,
+            )
+    except Exception as error:  # pragma: no cover - defensive, see module docstring
+        logger.warning(
+            "catalog.indexing_failed",
+            error=str(error),
+            roots=[root_id for root_id, _, _ in targets],
+        )
+        return {}
+
+    counts = {root_id: stats.files for root_id, stats in results.items()}
+    logger.info("catalog.indexed", roots=counts, hashed=hashed)
+    return counts
+
+
+def _index_legacy_profile(
+    profile: LibraryProfile,
+    *,
+    data_dir: Path,
+    recursive: bool,
+    max_depth: int | None,
+    exclude_patterns: tuple[str, ...],
+    cancel: Callable[[], bool] | None,
+) -> dict[str, int]:
+    """Retain the pre-validation indexing seam for the first baseline commit."""
     indexable = [
         root for root in profile.roots if root.role in {"input", "reference"} and root.path
     ]
@@ -77,10 +156,6 @@ def index_library_roots(
 
     try:
         with open_catalog(placement, data_dir=data_dir) as catalog:
-            # A generation is keyed to a root row, so the root has to exist
-            # before the walk starts — otherwise the first insert fails on a
-            # foreign key and the whole pass is lost. Registration is
-            # idempotent, so re-previewing the same library is free.
             for root in indexable:
                 catalog.register_root(
                     root.root_id,
