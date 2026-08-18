@@ -202,4 +202,6 @@ export interface SectionProps {
    * has produced any.
    */
   samples: readonly SampleFile[];
+  /** Reset this group to the active recipe/default baseline. */
+  onReset?: () => void;
 }

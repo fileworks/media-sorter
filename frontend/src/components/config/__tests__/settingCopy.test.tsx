@@ -90,23 +90,63 @@ describe("a description does not change under the reader", () => {
 });
 
 describe("revealed sub-settings render as their own block", () => {
+  // The burst row used to be this behaviour's vehicle. It is gated off until
+  // the catalog can produce burst stacks (see the suite below), so the junk
+  // filter — the other row that reveals labelled sub-settings — carries it now.
   it("gives each reveal a label of its own rather than the parent's row", () => {
-    renderClean({ burst_detection_enabled: true });
+    renderClean({ junk_filter_enabled: true });
 
-    const row = rowFor(translate("en", "config.bursts.detect"));
-    expect(row.textContent).toContain(translate("en", "config.bursts.window"));
-    expect(row.textContent).toContain(translate("en", "config.bursts.distance"));
+    const row = rowFor(translate("en", "config.filters.junk"));
+    expect(row.textContent).toContain(translate("en", "config.filters.junkSize"));
+    expect(row.textContent).toContain(translate("en", "config.filters.resolution"));
 
     // The revealed inputs are labelled, so they are reachable by name rather
     // than only by the aria-label they used to carry inside the parent's
     // control container.
-    expect(screen.getByLabelText(translate("en", "config.bursts.window"))).toBeTruthy();
-    expect(screen.getByLabelText(translate("en", "config.bursts.distance"))).toBeTruthy();
+    expect(screen.getByLabelText(translate("en", "config.filters.junkSize"))).toBeTruthy();
+    expect(screen.getByLabelText(translate("en", "config.filters.resolution"))).toBeTruthy();
   });
 
   it("shows no sub-block while the parent is off", () => {
-    renderClean({ burst_detection_enabled: false });
+    renderClean({ junk_filter_enabled: false });
 
-    expect(screen.queryByLabelText(translate("en", "config.bursts.window"))).toBeNull();
+    expect(screen.queryByLabelText(translate("en", "config.filters.junkSize"))).toBeNull();
+  });
+});
+
+/**
+ * A control that cannot deliver its result is worse than an absent one: it
+ * reports a setting as active while the feature behind it is empty by
+ * construction. The catalog has no signature or media-fact producer yet
+ * (`P2-DEDUP-D3`), so the burst view can never return a group.
+ *
+ * Hiding it must not touch the stored value — `P2-DEDUP-D9` restores the
+ * control, and a user who enabled bursts should find it enabled.
+ */
+describe("the burst control stays hidden while the catalog cannot produce bursts", () => {
+  it("renders no burst row, in either stored state", () => {
+    for (const enabled of [true, false]) {
+      renderClean({ burst_detection_enabled: enabled });
+      expect(screen.queryByText(translate("en", "config.bursts.detect"))).toBeNull();
+      expect(screen.queryByLabelText(translate("en", "config.bursts.window"))).toBeNull();
+      expect(screen.queryByLabelText(translate("en", "config.bursts.distance"))).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("never rewrites the stored value it stopped showing", () => {
+    const writes: Partial<Config>[] = [];
+    render(
+      <I18nProvider initialLocale="en">
+        <CleanGroup
+          config={{ ...TEST_CONFIG, burst_detection_enabled: true }}
+          updateConfig={(patch) => writes.push(patch)}
+          fieldErrors={new Map()}
+          samples={INVENTED_SAMPLES}
+        />
+      </I18nProvider>,
+    );
+
+    expect(writes).toEqual([]);
   });
 });

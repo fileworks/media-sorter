@@ -1,10 +1,9 @@
 /**
  * Screen 1 — where the media is, and what each folder is *for*.
  *
- * The three roles are three columns rather than a radio group on every card,
- * because the role is the consequential choice on this screen: a reference
- * folder is never written to, a destination always is, and reading that off the
- * layout is faster and harder to misread than reading it off a control.
+ * Input and baseline folders share one stable list. Marking a folder as a
+ * baseline changes its inline badge and facts without moving the card away from
+ * the pointer or keyboard focus that changed it.
  *
  * Changing a role is still possible — from the card's own menu — and still
  * previews its conflicts before it applies, because "I put that in the wrong
@@ -368,7 +367,10 @@ export function SourcesScreen({
   const conflicts = useMemo(() => validateRoots(active), [active]);
 
   const inputs = useMemo(() => cards.filter((card) => card.role === "input"), [cards]);
-  const references = useMemo(() => cards.filter((card) => card.role === "reference"), [cards]);
+  const sourceCards = useMemo(
+    () => cards.filter((card) => card.role === "input" || card.role === "reference"),
+    [cards],
+  );
   const destination = useMemo(
     () => cards.find((card) => card.role === "destination") ?? null,
     [cards],
@@ -456,7 +458,14 @@ export function SourcesScreen({
     <FolderCard
       key={card.rootId}
       card={card}
-      facts={factLines(card, analysis, false, config.copy_instead_of_move, t, locale)}
+      facts={factLines(
+        card,
+        analysis,
+        card.role === "input" && card.rootId === inputs[0]?.rootId,
+        config.copy_instead_of_move,
+        t,
+        locale,
+      )}
       conflicts={conflicts}
       excluded={excludedForRun.includes(card.rootId)}
       disabled={disabled}
@@ -500,75 +509,64 @@ export function SourcesScreen({
                   id="sources-inputs"
                   className="text-3xs font-bold uppercase tracking-[0.09em] text-faint"
                 >
-                  {t("sources.inputFolders")}
+                  {t("sources.sourceFolders")}
                 </h2>
-                <p className="mt-0.5 text-3xs text-faint">
-                  {t("sources.role.input.description", undefined, ROLE_DESCRIPTION.input)}
-                </p>
+                <p className="mt-0.5 text-3xs text-faint">{t("sources.sourceFoldersHelp")}</p>
               </div>
               <span className="flex-1" />
-              {inputs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onAddFolder("input")}
-                  disabled={disabled}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                >
-                  <FiPlus className="h-3.5 w-3.5" aria-hidden />
-                  {t("sources.addFolder")}
-                </button>
-              )}
-            </div>
-
-            {inputs.length === 0 ? (
-              <button
-                type="button"
-                onClick={() => onAddFolder("input")}
-                disabled={disabled}
-                className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {/* The section heading immediately above already says what an
-                    input folder is for; the dropzone only has to offer the
-                    action. It used to repeat that sentence word for word. */}
-                <FiFolder className="h-5 w-5 text-faint" aria-hidden />
-                <span className="text-xs font-medium text-foreground">
-                  {t("sources.empty.input")}
-                </span>
-              </button>
-            ) : (
-              <ul className="space-y-2.5">{inputs.map((card) => cardFor(card, false))}</ul>
-            )}
-          </section>
-
-          {references.length > 0 && (
-            <section aria-labelledby="sources-references" className="min-w-0">
-              <div className="mb-2 flex items-end gap-2">
-                <div>
-                  <h2
-                    id="sources-references"
-                    className="text-3xs font-bold uppercase tracking-[0.09em] text-faint"
+              {sourceCards.length > 0 && (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onAddFolder("input")}
+                    disabled={disabled}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
-                    {t("sources.baseline")}
-                  </h2>
-                  <p className="mt-0.5 text-3xs text-faint">{t("sources.baselineHelp")}</p>
-                </div>
-                <span className="flex-1" />
-                {references.length > 0 && (
+                    <FiPlus className="h-3.5 w-3.5" aria-hidden />
+                    {t("sources.addFolder")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => onAddFolder("reference")}
                     disabled={disabled}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
                     <FiPlus className="h-3.5 w-3.5" aria-hidden />
-                    {t("sources.empty.reference")}
+                    {t("sources.addBaseline")}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              <ul className="space-y-2.5">{references.map((card) => cardFor(card, false))}</ul>
-            </section>
-          )}
+            {sourceCards.length === 0 ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => onAddFolder("input")}
+                  disabled={disabled}
+                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
+                >
+                  <FiFolder className="h-5 w-5 text-faint" aria-hidden />
+                  <span className="text-xs font-medium text-foreground">
+                    {t("sources.empty.input")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAddFolder("reference")}
+                  disabled={disabled}
+                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-info/30 bg-tint-info/25 px-4 py-6 text-center transition-colors hover:border-info/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
+                >
+                  <FiFolder className="h-5 w-5 text-info" aria-hidden />
+                  <span className="text-xs font-medium text-foreground">
+                    {t("sources.empty.reference")}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-2.5">{sourceCards.map((card) => cardFor(card, false))}</ul>
+            )}
+          </section>
 
           <section aria-labelledby="sources-destination" className="min-w-0">
             <div className="mb-2">

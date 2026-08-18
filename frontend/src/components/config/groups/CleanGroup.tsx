@@ -1,12 +1,4 @@
-/**
- * 02 Clean — duplicates and junk. Nothing here ever deletes anything.
- *
- * Every setting in this group sets files *aside*, into a review folder inside
- * the destination, and the group's subtitle says so once rather than each row
- * repeating the reassurance. The set-aside locations are shown as read-only
- * values because knowing where the losing copies went is the entire reason the
- * promise is believable.
- */
+/** Clean — duplicate and junk handling; nothing here deletes files. */
 
 import type { SectionProps } from "@/components/config/constants";
 import { MAX_FILE_SIZE_INPUT, clampFileSize } from "@/components/config/constants";
@@ -23,9 +15,10 @@ import {
 } from "@/components/ui/setting-row";
 import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n/I18nContext";
+import { CATALOG_BURST_GROUPS_AVAILABLE } from "@/lib/reviewWorkbench";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
 
-export function CleanGroup({ config, updateConfig }: SectionProps) {
+export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
   const { t } = useI18n();
 
   const excludePatterns = config.exclude_patterns ?? [];
@@ -39,9 +32,10 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
   return (
     <SettingGroup
       id="group-clean"
-      ordinal="02"
       title={t("config.group.clean.label")}
       subtitle={t("config.group.clean.description")}
+      onReset={onReset}
+      resetLabel={t("config.rail.resetGroup")}
     >
       <SettingRow
         id="setting-duplicates"
@@ -226,67 +220,74 @@ export function CleanGroup({ config, updateConfig }: SectionProps) {
         </>
       )}
 
-      <SettingRow
-        field="burst_detection_enabled"
-        label={t("config.bursts.detect")}
-        description={
-          <>
-            {t("config.bursts.detectHelp")} {t("config.bursts.reviewFirst")}
-          </>
-        }
-        htmlFor="detect-bursts"
-        sub={
-          config.burst_detection_enabled ? (
-            <>
-              <SubSetting
-                field="burst_time_window_seconds"
-                label={t("config.bursts.window")}
-                htmlFor="burst-window"
-              >
-                <Input
-                  id="burst-window"
-                  type="number"
-                  min={0.1}
-                  max={30}
-                  step={0.1}
-                  value={config.burst_time_window_seconds}
-                  onChange={(event) =>
-                    updateConfig({ burst_time_window_seconds: Number(event.target.value) })
-                  }
-                  className="w-24"
-                />
-                <span className="text-xs text-faint">{t("config.unit.seconds")}</span>
-              </SubSetting>
-
-              <SubSetting
-                field="burst_perceptual_distance"
-                label={t("config.bursts.distance")}
-                htmlFor="burst-distance"
-              >
-                <Input
-                  id="burst-distance"
-                  type="number"
-                  min={0}
-                  max={16}
-                  value={config.burst_perceptual_distance}
-                  onChange={(event) =>
-                    updateConfig({ burst_perceptual_distance: Number(event.target.value) })
-                  }
-                  className="w-24"
-                />
-                <span className="text-xs text-faint">{t("config.unit.distance")}</span>
-              </SubSetting>
-            </>
-          ) : undefined
-        }
-      >
-        <Toggle
-          id="detect-bursts"
+      {/* The catalog cannot produce burst stacks until `P2-DEDUP-D3` lands the
+          signature/media-fact producer, so this control would promise a result the
+          product cannot deliver. Hidden, not reset: a persisted or recipe-supplied
+          `burst_detection_enabled` is left exactly as the user set it, and
+          `P2-DEDUP-D9` restores the control with no migration. */}
+      {CATALOG_BURST_GROUPS_AVAILABLE && (
+        <SettingRow
+          field="burst_detection_enabled"
           label={t("config.bursts.detect")}
-          checked={config.burst_detection_enabled}
-          onChange={(value) => updateConfig({ burst_detection_enabled: value })}
-        />
-      </SettingRow>
+          description={
+            <>
+              {t("config.bursts.detectHelp")} {t("config.bursts.reviewFirst")}
+            </>
+          }
+          htmlFor="detect-bursts"
+          sub={
+            config.burst_detection_enabled ? (
+              <>
+                <SubSetting
+                  field="burst_time_window_seconds"
+                  label={t("config.bursts.window")}
+                  htmlFor="burst-window"
+                >
+                  <Input
+                    id="burst-window"
+                    type="number"
+                    min={0.1}
+                    max={30}
+                    step={0.1}
+                    value={config.burst_time_window_seconds}
+                    onChange={(event) =>
+                      updateConfig({ burst_time_window_seconds: Number(event.target.value) })
+                    }
+                    className="w-24"
+                  />
+                  <span className="text-xs text-faint">{t("config.unit.seconds")}</span>
+                </SubSetting>
+
+                <SubSetting
+                  field="burst_perceptual_distance"
+                  label={t("config.bursts.distance")}
+                  htmlFor="burst-distance"
+                >
+                  <Input
+                    id="burst-distance"
+                    type="number"
+                    min={0}
+                    max={16}
+                    value={config.burst_perceptual_distance}
+                    onChange={(event) =>
+                      updateConfig({ burst_perceptual_distance: Number(event.target.value) })
+                    }
+                    className="w-24"
+                  />
+                  <span className="text-xs text-faint">{t("config.unit.distance")}</span>
+                </SubSetting>
+              </>
+            ) : undefined
+          }
+        >
+          <Toggle
+            id="detect-bursts"
+            label={t("config.bursts.detect")}
+            checked={config.burst_detection_enabled}
+            onChange={(value) => updateConfig({ burst_detection_enabled: value })}
+          />
+        </SettingRow>
+      )}
 
       <SettingRow
         id="setting-scan"

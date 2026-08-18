@@ -503,6 +503,20 @@ describe("resolve", () => {
     ]);
   });
 
+  it("draws an unaccepted proposal as a suggestion, not as a kept file", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
+    await waitForReview();
+
+    const header = screen.getAllByRole("button", {
+      name: new RegExp(en("review.stack.copies", { count: 2 })),
+    })[0];
+    fireEvent.click(header);
+
+    expect(screen.getByText(en("review.resolve.suggested"))).toBeTruthy();
+    expect(screen.queryByText(en("review.resolve.kept"))).toBeNull();
+    expect(screen.getAllByRole("button", { name: en("review.detail.makeKeeper") })).toHaveLength(2);
+  });
+
   it("accepts one proposal and re-proposes only the outstanding sets when the rule changes", async () => {
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();

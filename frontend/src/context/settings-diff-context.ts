@@ -2,6 +2,19 @@ import { createContext, useContext } from "react";
 
 import type { Config } from "@/types/api";
 
+/** One editable property inside an object-valued Config field. */
+export interface NestedConfigField {
+  key: keyof Config;
+  property: string;
+  /** Human-readable row name used by the reset comparison. */
+  label: string;
+}
+
+export interface NestedConfigDiff {
+  changed: boolean;
+  defaultValue: unknown;
+}
+
 /**
  * What a `SettingRow` needs to say "you changed this" and to offer a way back.
  *
@@ -35,6 +48,9 @@ export interface SettingsDiffValue {
    * change. Never writes without confirmation.
    */
   revert: (fields: readonly (keyof Config)[]) => void;
+  /** Inspect and revert one property without replacing its whole parent profile. */
+  nested: (field: NestedConfigField) => NestedConfigDiff | null;
+  revertNested: (field: NestedConfigField) => void;
   /** Settings are locked while an operation runs; the marker stays, the control goes. */
   locked: boolean;
 }

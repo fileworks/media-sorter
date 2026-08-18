@@ -127,6 +127,54 @@ describe.each<Locale>(["en", "de"])("folder card stability (%s)", (locale) => {
     expect(cardShape()).toBe(before);
   });
 
+  it("keeps a card at the same list position when it becomes a baseline", () => {
+    const second = { ...INPUT, rootId: "root-second", path: "/Volumes/Photos/Phone" };
+    let current = [INPUT, second, DESTINATION];
+    const rendered = render(
+      <I18nProvider initialLocale={locale}>
+        <SourcesScreen
+          cards={current}
+          excludedForRun={[]}
+          analysis={ANALYSIS}
+          config={TEST_CONFIG}
+          onChange={(cards) => {
+            current = cards;
+          }}
+          onExcludeForRun={() => undefined}
+          onAddFolder={() => undefined}
+          onChangeFolder={() => undefined}
+          onRemove={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(within(inputCard()).getByRole("checkbox"));
+    rendered.rerender(
+      <I18nProvider initialLocale={locale}>
+        <SourcesScreen
+          cards={current}
+          excludedForRun={[]}
+          analysis={ANALYSIS}
+          config={TEST_CONFIG}
+          onChange={(cards) => {
+            current = cards;
+          }}
+          onExcludeForRun={() => undefined}
+          onAddFolder={() => undefined}
+          onChangeFolder={() => undefined}
+          onRemove={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    const sourceList = rendered.container.querySelector("#sources-inputs")?.closest("section");
+    const paths = [...(sourceList?.querySelectorAll("li") ?? [])].map((item) =>
+      item.querySelector("p[title]")?.getAttribute("title"),
+    );
+    expect(paths).toEqual([INPUT.path, second.path]);
+    expect(current[0].role).toBe("reference");
+  });
+
   it("renders no empty paragraph while the card has no notice", () => {
     renderSources(locale, [INPUT, DESTINATION]);
 

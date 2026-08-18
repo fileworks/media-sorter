@@ -133,6 +133,7 @@ describe("measured rows in a mixed-height list", () => {
       estimateSize,
       maxHeight: 400,
       overscan: 40,
+      measurementKey: rows,
     });
     return (
       <div ref={windowing.scrollRef} data-testid="viewport" onScroll={windowing.onScroll}>
@@ -186,6 +187,29 @@ describe("measured rows in a mixed-height list", () => {
         }
         expected += row.height;
       }
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
+  });
+
+  it("drops index measurements when filtering moves different rows into those indexes", () => {
+    const first = [
+      { id: "short", height: 24 },
+      { id: "tall", height: 80 },
+    ];
+    const second = [{ id: "tall", height: 80 }];
+    const byId = new Map(first.map((row) => [row.id, row.height]));
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function rect(this: HTMLElement) {
+      const height = byId.get(this.textContent ?? "") ?? 0;
+      return { height, width: 0, top: 0, left: 0, right: 0, bottom: height, x: 0, y: 0 } as DOMRect;
+    };
+
+    try {
+      const rendered = render(<MeasuredHarness rows={first} estimateSize={56} />);
+      expect(Number.parseInt(rendered.getByTestId("spacer").style.height, 10)).toBe(104);
+      rendered.rerender(<MeasuredHarness rows={second} estimateSize={56} />);
+      expect(Number.parseInt(rendered.getByTestId("spacer").style.height, 10)).toBe(80);
     } finally {
       HTMLElement.prototype.getBoundingClientRect = original;
     }

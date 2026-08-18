@@ -1,12 +1,4 @@
-/**
- * 03 Enrich — optional work done to files while they are being sorted.
- *
- * This is the only group whose settings rewrite bytes, so it is the only one
- * with a real cost to getting wrong. The headline rows stay short and the
- * consequential detail — cloud credentials, label vocabularies, thresholds —
- * sits behind a disclosure, which is the progressive-disclosure rule the design
- * asks for: a group at its defaults should be one line, not forty.
- */
+/** Enrich — optional conversion, tagging, and repair work. */
 
 import {
   DEFAULT_AI_LABELS,
@@ -35,7 +27,7 @@ import type { AiModelTier, Config } from "@/types/api";
 
 const AI_TIERS: Exclude<AiModelTier, "auto" | "off">[] = ["lite", "standard", "max"];
 
-export function EnrichGroup({ config, updateConfig }: SectionProps) {
+export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
   const { t } = useI18n();
   const { hardware } = useHardware();
   const { inventory } = useAiModels();
@@ -66,9 +58,10 @@ export function EnrichGroup({ config, updateConfig }: SectionProps) {
   return (
     <SettingGroup
       id="group-enrich"
-      ordinal="03"
       title={t("config.group.enrich.label")}
       subtitle={t("config.group.enrich.description")}
+      onReset={onReset}
+      resetLabel={t("config.rail.resetGroup")}
     >
       <SettingRow
         id="setting-conversion"

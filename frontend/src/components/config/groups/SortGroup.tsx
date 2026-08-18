@@ -1,11 +1,4 @@
-/**
- * 01 Sort — how files travel and where they land.
- *
- * "Verify after transfer" is shown here as a stated guarantee rather than as a
- * switch. It is not configurable, and rendering it as a toggle somebody could
- * reach for and fail to move would be worse than saying plainly that every file
- * is re-read and checksummed before it counts as done.
- */
+/** Sort — how files travel and where they land. */
 
 import { DISK_BYTES_OPTS } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
@@ -32,7 +25,7 @@ function structureKey(criteria: string[]): string {
   return "year";
 }
 
-export function SortGroup({ config, updateConfig, samples }: SectionProps) {
+export function SortGroup({ config, updateConfig, samples, onReset }: SectionProps) {
   const { t } = useI18n();
   const { diskSpace } = useDiskSpace();
 
@@ -70,9 +63,10 @@ export function SortGroup({ config, updateConfig, samples }: SectionProps) {
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,26rem)] xl:items-start">
       <SettingGroup
         id="group-sort"
-        ordinal="01"
         title={t("config.group.sort.label")}
         subtitle={t("config.group.sort.description")}
+        onReset={onReset}
+        resetLabel={t("config.rail.resetGroup")}
       >
         <SettingRow
           id="setting-run-mode"
@@ -81,7 +75,9 @@ export function SortGroup({ config, updateConfig, samples }: SectionProps) {
           description={t("config.runMode.help")}
           consequence={t(
             config.run_mode === "deduplicate_only"
-              ? "config.runMode.deduplicateNote"
+              ? config.copy_instead_of_move
+                ? "config.runMode.deduplicateCopyNote"
+                : "config.runMode.deduplicateMoveNote"
               : "config.runMode.organizeNote",
           )}
         >
@@ -105,6 +101,7 @@ export function SortGroup({ config, updateConfig, samples }: SectionProps) {
           consequence={transferConsequence}
         >
           <Segmented
+            compact
             name="transfer-mode"
             label={t("config.copyMove")}
             value={config.copy_instead_of_move ? "copy" : "move"}
@@ -126,7 +123,11 @@ export function SortGroup({ config, updateConfig, samples }: SectionProps) {
         </SettingRow>
 
         <SettingRow
-          field="preservation_profile"
+          field={{
+            key: "preservation_profile",
+            property: "preserve_filesystem_timestamps",
+            label: t("config.transfer.timestamps"),
+          }}
           label={t("config.transfer.timestamps")}
           description={t("config.transfer.timestampsHelp")}
           htmlFor="preserve-timestamps"

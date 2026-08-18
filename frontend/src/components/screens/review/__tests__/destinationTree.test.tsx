@@ -88,3 +88,32 @@ describe("out-of-scope duplicate disclosure", () => {
     ).toBeTruthy();
   });
 });
+
+describe("large destination trees", () => {
+  it("keeps only the visible window mounted", () => {
+    const children = Array.from({ length: 200 }, (_, index): TreeNode => ({
+      path: `folder-${index}`,
+      name: `folder-${index}`,
+      count: 1,
+      children: [],
+      isNew: true,
+      isReview: false,
+      undecidedSets: 0,
+    }));
+    const root = { ...EMPTY_TREE, count: children.length, children };
+    const rendered = render(
+      <I18nProvider initialLocale="en">
+        <DestinationTree
+          root={root}
+          selectedPath={null}
+          onSelect={() => undefined}
+          outOfScopeSets={0}
+        />
+      </I18nProvider>,
+    );
+
+    expect(rendered.container.querySelectorAll("li").length).toBeLessThan(60);
+    expect(screen.getByText("folder-0")).toBeTruthy();
+    expect(screen.queryByText("folder-199")).toBeNull();
+  });
+});

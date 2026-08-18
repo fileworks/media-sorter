@@ -34,7 +34,7 @@ export function SelectionBar({
         aria-label={label}
         aria-description={!enabled ? reason : undefined}
         onClick={onClick}
-        className="rounded-lg px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
       >
         {label}
       </button>

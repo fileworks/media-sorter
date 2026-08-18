@@ -23,7 +23,9 @@ offload blocking work per the rule above
 `asyncio.to_thread`
 
 ❌ `ALTER TABLE … DROP/RENAME COLUMN`, or any destructive migration ✅ Additive `ADD
-COLUMN` in `DatabaseManager.init_schema()`, wrapped in `suppress(Exception)` (idempotent
+COLUMN` in `DatabaseManager.init_schema()`, after the `user_version` guard and verified backup;
+each migration uses an explicit transaction with rollback on error, and after the versioned commits
+the migrated database passes `PRAGMA integrity_check` before initialization completes (idempotent
 re-runs)
 
 ❌ Hard-cancelling background work (`asyncio.Task.cancel()`) from an API route ✅

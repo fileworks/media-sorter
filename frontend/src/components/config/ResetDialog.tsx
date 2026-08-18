@@ -171,7 +171,7 @@ export function ResetDialog({ open, title, destinations, onClose, onConfirm }: R
       open={open}
       onClose={onClose}
       title={title}
-      size="md"
+      size="lg"
       // Reopening for a different group must not carry the previous choice.
       key={title}
     >

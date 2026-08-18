@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiSearch } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 import { STAYS_PATH, isStaysPath, staysDivisionFor } from "@/lib/reviewBrowse";
@@ -79,11 +80,12 @@ function Row({
   const division = staysDivisionFor(node.path);
 
   return (
-    <li>
+    <>
       <div
         className={cn(
-          "flex items-center gap-1 rounded-lg pr-1 text-xs",
+          "flex items-center gap-1 rounded-lg border-l-2 pr-1 text-xs",
           selected ? "bg-tint-primary" : "hover:bg-muted",
+          selected ? "border-primary" : stays ? "border-faint bg-muted/35" : "border-transparent",
         )}
         style={{ paddingLeft: `${depth * 0.9}rem` }}
       >
@@ -154,27 +156,18 @@ function Row({
           {t(`review.browse.stays.${division}.rule`)}
         </p>
       )}
-
-      {hasChildren && isOpen && (
-        <ul>
-          {node.children.map((child) => (
-            <Row
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              expanded={expanded}
-              onToggle={onToggle}
-              selectedPath={selectedPath}
-              onSelect={onSelect}
-              locale={locale}
-              label={label}
-              t={t}
-            />
-          ))}
-        </ul>
-      )}
-    </li>
+    </>
   );
+}
+
+function visibleNodes(root: TreeNode, expanded: ReadonlySet<string>) {
+  const rows: Array<{ node: TreeNode; depth: number }> = [];
+  const visit = (node: TreeNode, depth: number) => {
+    rows.push({ node, depth });
+    if (expanded.has(node.path)) node.children.forEach((child) => visit(child, depth + 1));
+  };
+  visit(root, 0);
+  return rows;
 }
 
 /** Paths worth opening on first paint: the root and its immediate children. */
@@ -236,6 +229,18 @@ export function DestinationTree({
     walk(filtered);
     return all;
   }, [expanded, filtered, needle]);
+  const visible = useMemo(
+    () => (filtered ? visibleNodes(filtered, effectiveExpanded) : []),
+    [effectiveExpanded, filtered],
+  );
+  const treeWindow = useVirtualWindow({
+    count: visible.length,
+    estimateSize: 32,
+    maxHeight: 416,
+    overscan: 8,
+    anchorKey: visible[0]?.node.path ?? null,
+    measurementKey: visible,
+  });
 
   const toggle = (path: string) =>
     setExpanded((current) => {
@@ -250,7 +255,12 @@ export function DestinationTree({
       aria-label={t("review.tree.title")}
       className={cn("bg-card", embedded ? "" : "rounded-xl border border-border p-3.5")}
     >
-      <div className={cn("flex items-start gap-2", embedded && "border-b border-border p-3")}>
+      <div
+        className={cn(
+          "sticky top-0 z-20 flex items-start gap-2 bg-card",
+          embedded && "border-b border-border p-3",
+        )}
+      >
         <div className="min-w-0 flex-1">
           <h2 className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
             {t("review.tree.title")}
@@ -276,7 +286,7 @@ export function DestinationTree({
       <div className={cn(embedded && "p-2")}>
         <label className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
           <FiSearch className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
-          <span className="sr-only">{t("review.tree.jumpTo")}</span>
+          <span className="sr-only">{t("review.tree.filter")}</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -286,25 +296,46 @@ export function DestinationTree({
               event.stopPropagation();
               setQuery("");
             }}
-            placeholder={t("review.tree.jumpTo")}
+            placeholder={t("review.tree.filter")}
             className="min-w-0 flex-1 bg-transparent text-xs placeholder:text-faint focus-visible:outline-none"
           />
         </label>
 
         {filtered && filtered.count > 0 ? (
-          <ul className="max-h-[min(26rem,45dvh)] overflow-y-auto">
-            <Row
-              node={filtered}
-              depth={0}
-              expanded={effectiveExpanded}
-              onToggle={toggle}
-              selectedPath={selectedPath}
-              onSelect={onSelect}
-              locale={locale}
-              label={label}
-              t={t}
-            />
-          </ul>
+          <div
+            ref={treeWindow.scrollRef}
+            onScroll={treeWindow.onScroll}
+            className="max-h-[min(26rem,45dvh)] overflow-y-auto overscroll-contain"
+            style={{ height: treeWindow.containerHeight }}
+          >
+            <ul className="relative" style={{ height: treeWindow.totalSize }}>
+              {treeWindow.virtualItems.map((virtual) => {
+                const line = visible[virtual.index];
+                if (line === undefined) return null;
+                return (
+                  <li
+                    key={line.node.path}
+                    ref={treeWindow.measureElement}
+                    data-virtual-index={virtual.index}
+                    className="absolute inset-x-0"
+                    style={{ transform: `translateY(${virtual.start}px)` }}
+                  >
+                    <Row
+                      node={line.node}
+                      depth={line.depth}
+                      expanded={effectiveExpanded}
+                      onToggle={toggle}
+                      selectedPath={selectedPath}
+                      onSelect={onSelect}
+                      locale={locale}
+                      label={label}
+                      t={t}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ) : (
           <p className="px-1 py-3 text-xs text-faint">
             {needle ? t("review.tree.noMatches", { query }) : t("review.tree.empty")}

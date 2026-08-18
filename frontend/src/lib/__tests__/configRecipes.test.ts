@@ -481,3 +481,48 @@ describe("applying a recipe as a clean starting point", () => {
     }
   });
 });
+
+/**
+ * Hiding the burst control (`W0-UI-001`) must not quietly drop the setting.
+ *
+ * A recipe that stopped capturing `burst_detection_enabled` would reset it to
+ * the shipped default the next time the user applied one, and `P2-DEDUP-D9`
+ * would then restore a control whose value had already been thrown away. The
+ * value survives because nothing was removed here — this test is what says so.
+ */
+describe("burst settings survive the hidden control", () => {
+  const burstKeys = [
+    "burst_detection_enabled",
+    "burst_time_window_seconds",
+    "burst_perceptual_distance",
+    "burst_require_camera_identity",
+  ] as const;
+
+  it("still captures every burst field into a saved recipe", () => {
+    const captured = captureRecipeSettings({
+      ...(base as unknown as Config),
+      burst_detection_enabled: true,
+      burst_time_window_seconds: 2.5,
+      burst_perceptual_distance: 7,
+      burst_require_camera_identity: false,
+    });
+
+    for (const key of burstKeys) {
+      expect(captured).toHaveProperty(key);
+    }
+    expect(captured.burst_detection_enabled).toBe(true);
+    expect(captured.burst_time_window_seconds).toBe(2.5);
+    expect(captured.burst_perceptual_distance).toBe(7);
+    expect(captured.burst_require_camera_identity).toBe(false);
+  });
+
+  it("has no shipped recipe that turns burst detection off behind the user", () => {
+    for (const recipe of CONFIG_RECIPES) {
+      const patch = recipe.fields({
+        ...(base as unknown as Config),
+        burst_detection_enabled: true,
+      });
+      expect(Object.keys(patch)).not.toContain("burst_detection_enabled");
+    }
+  });
+});

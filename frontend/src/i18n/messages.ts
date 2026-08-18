@@ -133,12 +133,14 @@ export const en = {
   "config.runMode.help": "What this run is for.",
   "config.runMode.organize": "Organise into folders",
   "config.runMode.deduplicate_only": "Only remove duplicates (keep my structure)",
-  "config.runMode.deduplicateNote":
-    "Everything that is not a duplicate stays exactly where it is. The destination is used only for the review folders.",
+  "config.runMode.deduplicateCopyNote":
+    "Files that are not duplicates stay in their source folders. Duplicate copies are copied to _copies in the destination; the source copies remain untouched.",
+  "config.runMode.deduplicateMoveNote":
+    "Files that are not duplicates stay in their source folders. Duplicate copies move to _copies in the destination after verification.",
   "config.runMode.organizeNote":
     "Every file that is kept is placed into the destination under the folder structure set below.",
   "config.keeper.best_quality.help":
-    "Compares resolution, then file size, then capture date, and keeps whichever copy wins on the most of them.",
+    "Prefers the highest resolution, then the largest file, then the newest modification time; final ties are resolved deterministically.",
   "config.keeper.newest.help": "Keeps the copy with the most recent capture date.",
   "config.keeper.oldest.help":
     "Keeps the copy with the earliest capture date — usually the original.",
@@ -170,6 +172,10 @@ export const en = {
   "recipes.wouldNotValidate":
     "This would leave a configuration the app cannot run: {settings}. Turn those off, or choose a recipe that allows them.",
   "sources.inputFolders": "Input folders",
+  "sources.sourceFolders": "Source folders",
+  "sources.sourceFoldersHelp":
+    "Folders are scanned in this order. Mark any read-only library as a baseline inline; its card stays in place.",
+  "sources.addBaseline": "Add baseline",
   "sources.baseline": "Baseline",
   "sources.baselineHelp": "Compared against, never written to",
   "sources.boundary.title": "Clear write boundary",
@@ -1210,7 +1216,7 @@ export const en = {
   "config.changeRecipe": "Change recipe",
   "config.subtitle": "Every setting has a safe default — skim through or dig in.",
   "config.rail.label": "Settings",
-  "config.rail.jumpTo": "Jump to a setting",
+  "config.rail.overview": "Settings overview",
   "config.rail.resetGroup": "Reset this group to defaults",
   "config.rail.groupHasError": "A setting in this group needs attention",
   "config.rail.transfer": "Transfer",
@@ -1421,9 +1427,12 @@ export const en = {
   "review.resolve.openCount": "{count} open",
   "review.resolve.queueDecided": "confirmed",
   "review.resolve.queueProposed": "proposal waiting",
+  "review.resolve.openStatesHelp":
+    "Sets to review have no accepted keep choice. A proposal waiting already has a rule-ranked suggestion, but it still changes nothing until accepted.",
   "review.resolve.showMoreSets": "Show {count} more sets",
   "review.resolve.keepThis": "Keep {name} — press {number}",
   "review.resolve.kept": "kept",
+  "review.resolve.suggested": "suggested",
   "review.resolve.protected": "protected",
   "review.resolve.keepAll": "These are not duplicates",
   "review.resolve.noDate": "no date read",
@@ -1508,6 +1517,7 @@ export const en = {
   "review.detail.openSetting": "Open setting",
   "review.detail.openSettingFor": "Open the setting for {decision}",
   "review.detail.evidence.date": "Date evidence",
+  "review.detail.evidence.show": "Show supporting evidence",
   "review.detail.evidence.category": "Categorization",
   "review.detail.evidence.rules": "Rules",
   "review.detail.evidence.duplicate": "Duplicate evaluation",
@@ -1553,7 +1563,7 @@ export const en = {
   "review.compare.noPartner":
     "This set has only one copy left to compare — nothing to put beside it.",
   "review.tree.collapseAll": "collapse all",
-  "review.tree.jumpTo": "Jump to folder…",
+  "review.tree.filter": "Filter folders…",
   "review.tree.empty": "No folders yet — the plan places nothing.",
   "review.tree.noMatches": "No folder matches “{query}”.",
   "review.tree.note": "A preview — folders are created only when you run step 6.",
@@ -1657,6 +1667,9 @@ export const en = {
   "review.compare.back": "Back",
   "review.compare.previousSet": "Previous set",
   "review.compare.nextSet": "Next set",
+  "review.compare.previousCopy": "Previous copy",
+  "review.compare.nextCopy": "Next copy",
+  "review.compare.copyPosition": "Copy {index} of {total}",
   "review.compare.zoom": "Zoom",
   "review.warning.unreadable.title": "{count} unreadable files",
   "review.warning.unreadable.outcome": "Could not be opened — skipped, and listed in the report.",
@@ -1871,12 +1884,14 @@ export const de: Record<MessageKey, string> = {
   "config.runMode.help": "Wofür dieser Durchlauf gedacht ist.",
   "config.runMode.organize": "In Ordner einsortieren",
   "config.runMode.deduplicate_only": "Nur Duplikate entfernen (Struktur behalten)",
-  "config.runMode.deduplicateNote":
-    "Alles, was kein Duplikat ist, bleibt genau dort liegen. Der Zielordner wird nur für die Prüfordner verwendet.",
+  "config.runMode.deduplicateCopyNote":
+    "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach _copies im Ziel kopiert; die Quelldateien bleiben unverändert.",
+  "config.runMode.deduplicateMoveNote":
+    "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach der Prüfung nach _copies im Ziel verschoben.",
   "config.runMode.organizeNote":
     "Jede behaltene Datei wird im Zielordner nach der unten eingestellten Ordnerstruktur abgelegt.",
   "config.keeper.best_quality.help":
-    "Vergleicht Auflösung, dann Dateigröße, dann Aufnahmedatum und behält die Kopie, die am häufigsten gewinnt.",
+    "Bevorzugt die höchste Auflösung, dann die größte Datei und dann die jüngste Änderungszeit; verbleibende Gleichstände werden stabil aufgelöst.",
   "config.keeper.newest.help": "Behält die Kopie mit dem jüngsten Aufnahmedatum.",
   "config.keeper.oldest.help":
     "Behält die Kopie mit dem ältesten Aufnahmedatum — meist das Original.",
@@ -1910,6 +1925,10 @@ export const de: Record<MessageKey, string> = {
   "recipes.wouldNotValidate":
     "Das ergäbe eine Konfiguration, die die App nicht ausführen kann: {settings}. Schalte diese aus oder wähle ein Rezept, das sie erlaubt.",
   "sources.inputFolders": "Eingabeordner",
+  "sources.sourceFolders": "Quellordner",
+  "sources.sourceFoldersHelp":
+    "Ordner werden in dieser Reihenfolge gelesen. Eine schreibgeschützte Bibliothek kann direkt als Referenz markiert werden; ihre Karte bleibt an Ort und Stelle.",
+  "sources.addBaseline": "Referenz hinzufügen",
   "sources.baseline": "Referenz",
   "sources.baselineHelp": "Wird nur verglichen, nie verändert",
   "sources.boundary.title": "Klare Schreibgrenze",
@@ -2987,7 +3006,7 @@ export const de: Record<MessageKey, string> = {
   "config.subtitle":
     "Jede Einstellung hat eine sichere Voreinstellung — überfliegen oder vertiefen.",
   "config.rail.label": "Einstellungen",
-  "config.rail.jumpTo": "Zu einer Einstellung springen",
+  "config.rail.overview": "Einstellungsübersicht",
   "config.rail.resetGroup": "Gruppe zurücksetzen",
   "config.rail.groupHasError": "Eine Einstellung in dieser Gruppe braucht Aufmerksamkeit",
   "config.rail.transfer": "Übertragung",
@@ -3204,9 +3223,12 @@ export const de: Record<MessageKey, string> = {
   "review.resolve.openCount": "{count} offen",
   "review.resolve.queueDecided": "bestätigt",
   "review.resolve.queueProposed": "Vorschlag wartet",
+  "review.resolve.openStatesHelp":
+    "Zu prüfende Sätze haben noch keine bestätigte Auswahl. Bei „Vorschlag wartet“ gibt es bereits eine regelbasierte Empfehlung, die bis zur Bestätigung nichts ändert.",
   "review.resolve.showMoreSets": "{count} weitere Sätze anzeigen",
   "review.resolve.keepThis": "{name} behalten — Taste {number}",
   "review.resolve.kept": "behalten",
+  "review.resolve.suggested": "vorgeschlagen",
   "review.resolve.protected": "geschützt",
   "review.resolve.keepAll": "Das sind keine Duplikate",
   "review.resolve.noDate": "kein Datum gelesen",
@@ -3292,6 +3314,7 @@ export const de: Record<MessageKey, string> = {
   "review.detail.openSetting": "Einstellung öffnen",
   "review.detail.openSettingFor": "Einstellung für {decision} öffnen",
   "review.detail.evidence.date": "Datumsbelege",
+  "review.detail.evidence.show": "Belege anzeigen",
   "review.detail.evidence.category": "Kategorisierung",
   "review.detail.evidence.rules": "Regeln",
   "review.detail.evidence.duplicate": "Duplikatprüfung",
@@ -3339,7 +3362,7 @@ export const de: Record<MessageKey, string> = {
   "review.compare.noPartner":
     "In diesem Satz ist nur noch eine Kopie da — es gibt nichts danebenzustellen.",
   "review.tree.collapseAll": "alle einklappen",
-  "review.tree.jumpTo": "Zu Ordner springen…",
+  "review.tree.filter": "Ordner filtern…",
   "review.tree.empty": "Noch keine Ordner — der Plan legt nichts ab.",
   "review.tree.noMatches": "Kein Ordner passt zu „{query}“.",
   "review.tree.note": "Eine Vorschau — Ordner entstehen erst beim Ausführen in Schritt 6.",
@@ -3443,6 +3466,9 @@ export const de: Record<MessageKey, string> = {
   "review.compare.back": "Zurück",
   "review.compare.previousSet": "Vorheriger Satz",
   "review.compare.nextSet": "Nächster Satz",
+  "review.compare.previousCopy": "Vorherige Kopie",
+  "review.compare.nextCopy": "Nächste Kopie",
+  "review.compare.copyPosition": "Kopie {index} von {total}",
   "review.compare.zoom": "Zoom",
   "review.warning.unreadable.title": "{count} nicht lesbare Dateien",
   "review.warning.unreadable.outcome":

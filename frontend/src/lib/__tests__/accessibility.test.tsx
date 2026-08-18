@@ -493,19 +493,17 @@ describe.each(["light", "dark"] as const)("in the %s theme", (theme) => {
 });
 
 describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
-  it("offers exactly one way to add a folder per empty section", () => {
+  it("offers source and inline-baseline entry points without a separate section", () => {
     const rendered = renderWithProviders(<SourcesScreen {...SOURCES_PROPS} />, locale);
 
-    // Two sections, not three: a baseline is a checkbox on an input folder, so
-    // there is no separate reference column to add one to.
-    for (const role of ["input", "destination"] as const) {
+    // Source and baseline actions share one section; destination remains its
+    // own write boundary.
+    for (const role of ["input", "reference", "destination"] as const) {
       expect(
         within(rendered.container).getAllByText(translate(locale, `sources.empty.${role}`)),
       ).toHaveLength(1);
     }
-    expect(
-      within(rendered.container).queryByText(translate(locale, "sources.empty.reference")),
-    ).toBeNull();
+    expect(rendered.container.querySelector("#sources-references")).toBeNull();
   });
 
   it("has no automated violations in the navigation shell", async () => {

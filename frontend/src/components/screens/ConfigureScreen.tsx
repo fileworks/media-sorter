@@ -1,20 +1,4 @@
-/**
- * Screen 3 — fine-tune the recipe.
- *
- * The heading names the recipe being fine-tuned and links back to it, because
- * every setting below is read against that recipe: the "you changed this" marker
- * measures from the recipe, not from what the product shipped with, and a reader
- * who cannot see which recipe is in force cannot read the markers at all.
- *
- * The rail on the left is not navigation for its own sake: each entry carries
- * the *current value* of the setting it jumps to, so reading the rail top to
- * bottom answers "what is this run going to do?" without opening anything. That
- * is the screen's real job; the jumping is a side effect.
- *
- * Settings that deviate from the defaults are marked in the rail and can be put
- * back one group at a time, because a user who has been experimenting needs a
- * way out that is narrower than "reset everything".
- */
+/** Screen 3 — fine-tune the active recipe against its named baseline. */
 
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -34,8 +18,12 @@ import { SECTION_DEFAULTS, type SectionId } from "@/components/config/constants"
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
-import { Tooltip } from "@/components/ui/tooltip";
-import { SettingsDiffContext, type SettingsDiffValue } from "@/context/settings-diff-context";
+import {
+  SettingsDiffContext,
+  type NestedConfigDiff,
+  type NestedConfigField,
+  type SettingsDiffValue,
+} from "@/context/settings-diff-context";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults, useSettingsBaseline } from "@/hooks/useConfigDefaults";
 import { useConfigSections } from "@/hooks/useConfigSections";
@@ -80,6 +68,12 @@ const STICKY_HEADER_OFFSET = 88;
 
 /** Every anchor the rail can point at, in document order. */
 const SPY_ANCHORS = CONFIG_RAIL.map((entry) => entry.id);
+
+/** Read one object-valued config section without pretending arrays are records. */
+function configRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  return Object.fromEntries(Object.entries(value));
+}
 
 export function ConfigureScreen({
   disabled = false,
@@ -226,6 +220,74 @@ export function ConfigureScreen({
     [askToReset, t],
   );
 
+  const inspectNested = useCallback(
+    (field: NestedConfigField): NestedConfigDiff | null => {
+      if (!config || !baseline.values) return null;
+      const currentParent = configRecord(config[field.key]);
+      const defaultParent = configRecord(baseline.values[field.key]);
+      if (!currentParent || !defaultParent) return null;
+      const currentValue = currentParent[field.property];
+      const defaultValue = defaultParent[field.property];
+      return {
+        changed: JSON.stringify(currentValue) !== JSON.stringify(defaultValue),
+        defaultValue,
+      };
+    },
+    [baseline.values, config],
+  );
+
+  const nestedDestinationFor = useCallback(
+    (
+      id: string,
+      label: string,
+      values: Partial<Config> | undefined,
+      field: NestedConfigField,
+    ): ResetDestination | null => {
+      if (!config || !values) return null;
+      const currentRecord = configRecord(config[field.key]);
+      const targetParent = configRecord(values[field.key]);
+      if (!currentRecord || !targetParent) return null;
+      const targetValue = targetParent[field.property];
+      const currentValue = currentRecord[field.property];
+      const patch: Partial<Config> = {
+        [field.key]: { ...currentRecord, [field.property]: targetValue },
+      } as Partial<Config>;
+      const changedValue = JSON.stringify(currentValue) !== JSON.stringify(targetValue);
+      return {
+        id,
+        label,
+        rows: changedValue
+          ? [
+              {
+                key: `${String(field.key)}.${field.property}`,
+                setting: field.label,
+                current: formatConfigValue(currentValue),
+                result: formatConfigValue(targetValue),
+              },
+            ]
+          : [],
+        patch,
+        unavailable: changedValue ? undefined : t("config.reset.alreadyThere", { target: label }),
+      };
+    },
+    [config, t],
+  );
+
+  const revertNested = useCallback(
+    (field: NestedConfigField) => {
+      const destinations = [
+        baseline.origin
+          ? nestedDestinationFor("baseline", baselineLabel, baseline.values, field)
+          : null,
+        nestedDestinationFor("defaults", t("config.baseline.defaults"), defaults, field),
+      ].filter((destination): destination is ResetDestination => destination !== null);
+      if (destinations.length > 0) {
+        setPendingReset({ title: t("config.reset.rowTitle"), destinations });
+      }
+    },
+    [baseline.origin, baseline.values, baselineLabel, defaults, nestedDestinationFor, t],
+  );
+
   const settingsDiff = useMemo<SettingsDiffValue | null>(
     () =>
       changed && baseline.values
@@ -234,10 +296,12 @@ export function ConfigureScreen({
             defaults: baseline.values,
             baselineLabel,
             revert: revertFields,
+            nested: inspectNested,
+            revertNested,
             locked: disabled,
           }
         : null,
-    [changed, baseline.values, baselineLabel, revertFields, disabled],
+    [changed, baseline.values, baselineLabel, revertFields, inspectNested, revertNested, disabled],
   );
 
   // A server-side validation error can land on a field the user is not looking
@@ -260,11 +324,11 @@ export function ConfigureScreen({
     [changed, sectionFields],
   );
 
-  const jumpTo = (anchorId: string) => {
+  const openSetting = (anchorId: string) => {
     const target = document.getElementById(anchorId);
     if (!target) return;
-    // On a narrow window the rail is a disclosure; jumping means it has done
-    // its job and should get out of the way of what it jumped to.
+    // On a narrow window the rail is a disclosure; selecting a row closes it so
+    // the requested setting is immediately visible.
     setRailOpen(false);
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     // Move focus too, so keyboard users end up where the click sent everyone else.
@@ -357,7 +421,7 @@ export function ConfigureScreen({
             onClick={() => setRailOpen((open) => !open)}
             className="mb-2 flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
           >
-            {t("config.rail.jumpTo")}
+            {t("config.rail.overview")}
             <span className="flex-1" />
             <FiChevronDown
               aria-hidden
@@ -374,7 +438,6 @@ export function ConfigureScreen({
             {CONFIG_GROUPS.map((group) => (
               <div key={group.id}>
                 <div className="flex items-baseline gap-2 px-2.5 pb-1 pt-3">
-                  <span className="font-mono text-3xs font-bold text-primary">{group.ordinal}</span>
                   <span
                     className={cn(
                       "text-3xs font-bold uppercase tracking-[0.1em]",
@@ -383,57 +446,30 @@ export function ConfigureScreen({
                   >
                     {t(`config.group.${group.id}.label`)}
                   </span>
-                  <span className="flex-1" />
                   {groupHasError(group.id) && (
                     <FiAlertCircle
                       className="h-3 w-3 text-error"
                       aria-label={t("config.rail.groupHasError")}
                     />
                   )}
-                  {groupIsChanged(group.id) && !disabled && (
-                    <Tooltip label={t("config.rail.resetGroup")}>
-                      <button
-                        type="button"
-                        onClick={() => resetGroup(group.id)}
-                        className="rounded-md p-1 text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <FiRotateCcw className="h-3 w-3" aria-hidden />
-                      </button>
-                    </Tooltip>
-                  )}
                 </div>
                 <ul className="grid gap-0.5">
                   {CONFIG_RAIL.filter((entry) => entry.group === group.id).map((entry) => {
                     const current = activeAnchor === entry.id;
-                    // Numbered across the whole rail, not within each group:
-                    // the number is a table-of-contents position, and one that
-                    // restarts three times is not one.
-                    const index = String(CONFIG_RAIL.indexOf(entry) + 1).padStart(2, "0");
                     return (
                       <li key={entry.id}>
                         <button
                           type="button"
-                          onClick={() => jumpTo(entry.id)}
+                          onClick={() => openSetting(entry.id)}
                           aria-current={current ? "true" : undefined}
                           className={cn(
-                            "grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors",
+                            "block w-full rounded-control px-2.5 py-1.5 text-left transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             current
                               ? "bg-tint-primary shadow-[inset_3px_0_0_hsl(var(--primary))]"
                               : "hover:bg-muted",
                           )}
                         >
-                          <span
-                            aria-hidden
-                            className={cn(
-                              "grid h-6 w-6 place-items-center rounded-full border font-mono text-3xs",
-                              current
-                                ? "border-primary/45 text-primary"
-                                : "border-border text-faint",
-                            )}
-                          >
-                            {index}
-                          </span>
                           <span className="min-w-0">
                             <span
                               className={cn(
@@ -534,6 +570,9 @@ export function ConfigureScreen({
                   updateConfig={disabled ? () => {} : onSaveConfig}
                   fieldErrors={fieldErrors}
                   samples={samples && samples.length > 0 ? samples : INVENTED_SAMPLES}
+                  onReset={
+                    groupIsChanged(group.id) && !disabled ? () => resetGroup(group.id) : undefined
+                  }
                 />
               );
             })}

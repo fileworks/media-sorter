@@ -104,6 +104,90 @@ describe("per-row changed markers", () => {
       .getAllByRole("button")
       .filter((button) => button.getAttribute("aria-label")?.startsWith("Changed from"));
     expect(markers).toHaveLength(3);
+
+    const copyControl = screen.getByRole("radio", { name: translate("en", "config.copy") });
+    expect(
+      markers[0].compareDocumentPosition(copyControl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not attribute an unrelated preservation-profile change to timestamps", async () => {
+    vi.spyOn(api, "getConfig").mockResolvedValue({
+      ...TEST_CONFIG,
+      preservation_profile: {
+        ...TEST_CONFIG.preservation_profile,
+        mode: "explicit_mutation",
+      },
+    });
+
+    renderConfigure();
+    const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
+    const row = timestamp.closest("[class*='px-5']");
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement)
+        .queryAllByRole("button")
+        .some((button) => button.getAttribute("aria-label")?.startsWith("Changed from")),
+    ).toBe(false);
+  });
+
+  it("marks and narrowly reverts a changed timestamp preference", async () => {
+    const onSaveConfig = vi.fn();
+    vi.spyOn(api, "getConfig").mockResolvedValue({
+      ...TEST_CONFIG,
+      preservation_profile: {
+        ...TEST_CONFIG.preservation_profile,
+        mode: "explicit_mutation",
+        preserve_filesystem_timestamps: false,
+      },
+    });
+
+    renderConfigure({ onSaveConfig });
+    const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
+    const row = timestamp.closest("[class*='px-5']");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: markerName("On") }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(translate("en", "config.transfer.timestamps"))).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: translate("en", "config.reset.confirm", { count: 1 }),
+      }),
+    );
+    expect(onSaveConfig).toHaveBeenCalledWith({
+      preservation_profile: {
+        ...TEST_CONFIG.preservation_profile,
+        mode: "explicit_mutation",
+        preserve_filesystem_timestamps: true,
+      },
+    });
+  });
+
+  it("keeps the timestamp baseline stable when the configuration matches another recipe", async () => {
+    const duplicatesOnly = CONFIG_RECIPES.find((recipe) => recipe.id === "find_duplicates_only");
+    expect(duplicatesOnly).toBeDefined();
+    const recipeConfig = {
+      ...TEST_CONFIG,
+      ...applyRecipe(TEST_CONFIG, duplicatesOnly as (typeof CONFIG_RECIPES)[number]),
+    };
+    vi.spyOn(api, "getConfig").mockResolvedValue({
+      ...recipeConfig,
+      preservation_profile: {
+        ...recipeConfig.preservation_profile,
+        preserve_filesystem_timestamps: false,
+      },
+    });
+
+    renderConfigure();
+    const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
+    const row = timestamp.closest("[class*='px-5']");
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByRole("button", {
+        name: markerName("On", "recipe Find duplicates only"),
+      }),
+    ).toBeTruthy();
   });
 
   it("reverting one row asks first, listing only that setting", async () => {

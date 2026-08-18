@@ -38,7 +38,18 @@ PlannedDisposition = Literal[
 #:
 #: This is the one list, read rather than restated wherever the question "does
 #: this file go to a review folder?" is asked — `preview_service` derives its
-#: own set from it, and `reviewStatuses.test.ts` pins the frontend to it.
+#: own set from it, and the frontend is pinned to it through a generated
+#: artifact rather than through a TypeScript union, which is erased at build
+#: time and so could never be compared with anything:
+#:
+#: * `app/core/review_status_contract.py` exports this set plus the four
+#:   deliberately non-quarantining statuses;
+#: * `scripts/generate_review_status_contract.py` freezes both into
+#:   `contracts/review-statuses.json` and gates staleness in CI with `--check`;
+#: * `backend/tests/test_review_status_contract.py` and
+#:   `frontend/src/lib/__tests__/reviewStatuses.test.ts` both assert against
+#:   that one artifact.
+#:
 #: Restating it was how `suspicious_date` came to be previewed into the undated
 #: folder while the plan authorized nothing: the run then reached the
 #: whitelist with an unplanned placement, recorded the file as *failed*, and

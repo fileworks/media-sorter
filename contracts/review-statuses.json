@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "generated_by": "scripts/generate_review_status_contract.py",
+  "non_quarantining_preview_statuses": [
+    "duplicate_unknown",
+    "keep_in_place",
+    "review_only",
+    "sort"
+  ],
+  "planned_quarantine_statuses": [
+    "already_in_destination",
+    "duplicate",
+    "failed",
+    "future_date",
+    "junk",
+    "suspicious_date",
+    "unknown_date"
+  ],
+  "preview_statuses": [
+    "already_in_destination",
+    "duplicate",
+    "duplicate_unknown",
+    "failed",
+    "future_date",
+    "junk",
+    "keep_in_place",
+    "review_only",
+    "sort",
+    "suspicious_date",
+    "unknown_date"
+  ],
+  "source_of_truth": "backend/app/core/review_status_contract.py"
+}

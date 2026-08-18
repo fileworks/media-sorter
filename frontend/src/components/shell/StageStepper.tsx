@@ -123,7 +123,8 @@ export function StageStepper({
                     !active &&
                       reachable &&
                       "hover:border-border hover:bg-muted hover:text-foreground",
-                    !reachable && "cursor-not-allowed",
+                    !reachable &&
+                      "cursor-not-allowed border-dashed border-border bg-muted/45 text-faint",
                   )}
                 >
                   <span
