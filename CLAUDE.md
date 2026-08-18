@@ -39,7 +39,7 @@ loaded every session and drifts unnoticed.
 6. **Dependency injection via Depends.** Use `Annotated` type aliases. Never bare `Request` injection. → See `docs/kb-backend.md`
 7. **Error handling standardized.** Custom exceptions inherit from `MediaSortException`; the global handler returns the `{"error", "code", "details"}` envelope. → See `docs/kb-api-contract.md`
 8. **Config via the `Config` dataclass + `ConfigLoader`.** Persisted as `config.json` (platformdirs); `MEDIASORT_<FIELD>` env vars override; never hardcode secrets. → See `docs/kb-backend.md`
-9. **Schema migrations in `DatabaseManager`.** New columns are added additively via `ALTER TABLE … ADD COLUMN` inside `DatabaseManager.init_schema()`. The manager refuses a newer `user_version`, makes and integrity-checks a pre-upgrade backup, and wraps each migration in an explicit transaction with rollback on failure; re-runs are idempotent through schema introspection. Never drop or rename columns. → See `backend/app/core/database.py`
+9. **Schema migrations in `DatabaseManager`.** New columns are added additively via `ALTER TABLE … ADD COLUMN` inside `DatabaseManager.init_schema()`. The manager refuses a newer `user_version`, makes and integrity-checks a pre-upgrade backup, wraps each migration in an explicit transaction with rollback on failure, and integrity-checks the migrated database after the versioned commits before initialization completes; re-runs are idempotent through schema introspection. Never drop or rename columns. → See `backend/app/core/database.py`
 10. **Test isolated.** Unit tests (services with mocked collaborators), integration tests (HTTP + real temp DB). Aim >80% coverage on business logic. → See `docs/kb-testing.md`
 
 ---

@@ -25,7 +25,7 @@
 ## Database — raw sqlite3 via DatabaseManager
 There is **no ORM**. `core/database.py` owns SQLite:
 - `DatabaseManager._connect()` context manager: fresh connection per operation, `Row` factory, WAL mode, `busy_timeout=5000`, `foreign_keys=ON`, commit-on-success/rollback-on-error
-- **Migrations are additive only**: new columns via `ALTER TABLE … ADD COLUMN` inside `init_schema()`, with a `user_version` guard that refuses a newer schema, a verified pre-upgrade backup, and explicit transaction/rollback handling. The migration introspects existing columns so re-runs are idempotent, then runs `PRAGMA integrity_check` before publication. Never drop or rename columns
+- **Migrations are additive only**: new columns via `ALTER TABLE … ADD COLUMN` inside `init_schema()`, with a `user_version` guard that refuses a newer schema, a verified pre-upgrade backup, and explicit transaction/rollback handling. The migration introspects existing columns so re-runs are idempotent; after the versioned commits, `init_schema()` runs `PRAGMA integrity_check` on the migrated database before it completes. Never drop or rename columns
 - All DB work is synchronous → services expose a sync core (`_get_report_sync`) called via `asyncio.to_thread`
 - Row → JSON coercions live in `core/serializers.py` (`suspicious` 0/1→bool, `tags` JSON-or-legacy-CSV→list); every reader must go through it
 - Never query SQLite from a route — only through `DatabaseManager`
