@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.background_tasks.task_manager import CancellationToken
 from app.core.exceptions import (
+    CorruptedFileError,
     InsufficientStorageError,
     IntegrityTransferError,
     MediaSortException,
@@ -118,6 +119,48 @@ def register_heif() -> None:
         pass  # HEIC just won't be openable; callers handle None
 
 
+#: Ceiling on the sensor dimensions a RAW file may *declare* (F-06).
+#:
+#: `Image.MAX_IMAGE_PIXELS` is Pillow's decompression-bomb guard and LibRaw
+#: honours none of it: `raw.postprocess()` allocates height x width x 3 from
+#: numbers the file itself supplies. A crafted RAW claiming an enormous sensor
+#: therefore asks for an allocation bounded only by the header it wrote.
+#:
+#: 300 megapixels is roughly twice the largest medium-format sensor shipping
+#: today, so no real camera comes close, and the worst-case allocation stays
+#: bounded. `half_size=True` means the decode itself produces a quarter of this.
+MAX_RAW_DECLARED_PIXELS = 300_000_000
+
+
+def _refuse_absurd_raw_dimensions(path: Path, raw: Any) -> None:
+    """Check the declared sensor size before LibRaw allocates from it."""
+    sizes = getattr(raw, "sizes", None)
+
+    def _dimension(primary: str, fallback: str) -> object:
+        # `or` would be wrong here: a declared 0 is exactly the case worth
+        # refusing, and `0 or fallback` silently reads the other field instead.
+        value = getattr(sizes, primary, None)
+        return getattr(sizes, fallback, None) if value is None else value
+
+    height = _dimension("raw_height", "height")
+    width = _dimension("raw_width", "width")
+    if not isinstance(height, int) or not isinstance(width, int):
+        # Nothing to check against. Decoding is no more dangerous than before,
+        # and refusing every RAW whose bindings expose no sizes would be worse.
+        return
+    if height <= 0 or width <= 0:
+        raise CorruptedFileError(
+            f"RAW declares a non-positive sensor size ({width}x{height})",
+            str(path),
+        )
+    if height * width > MAX_RAW_DECLARED_PIXELS:
+        raise CorruptedFileError(
+            f"RAW declares {width}x{height} = {height * width} pixels, above the "
+            f"{MAX_RAW_DECLARED_PIXELS} ceiling; refusing to decode it",
+            str(path),
+        )
+
+
 def _open_raw(path: Path) -> Image | None:
     """Decode a RAW file to a PIL.Image.
 
@@ -141,6 +184,7 @@ def _open_raw(path: Path) -> Image | None:
                     return Image.open(io.BytesIO(thumb.data)).convert("RGB")
             except Exception:
                 pass
+            _refuse_absurd_raw_dimensions(path, raw)
             rgb = raw.postprocess(use_camera_wb=True, half_size=True, no_auto_bright=False)
             return Image.fromarray(rgb)
     except Exception as exc:
