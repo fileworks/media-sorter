@@ -27,6 +27,7 @@ from app.core.destination_paths import (
 )
 from app.core.exceptions import ConflictError, PlanAuthorizationError
 from app.core.integrity import MutationActionKind, SourceEffect
+from app.core.paths import path_identity_key
 from app.core.provenance import OutcomeProvenance
 
 PlannedDisposition = Literal[
@@ -409,7 +410,7 @@ def _rewrite_reviewed_set(
     rewritten = list(actions)
     affected = _unit_indices(actions, primary_indices)
     reserved = {
-        Path(action.reviewed_destination_path).resolve(strict=False)
+        path_identity_key(str(Path(action.reviewed_destination_path).resolve(strict=False)))
         for index, action in enumerate(actions)
         if index not in affected
     }
@@ -519,7 +520,7 @@ def _rewrite_distinct_set(
     rewritten = list(actions)
     affected = _unit_indices(actions, primary_indices)
     reserved = {
-        Path(action.reviewed_destination_path).resolve(strict=False)
+        path_identity_key(str(Path(action.reviewed_destination_path).resolve(strict=False)))
         for index, action in enumerate(actions)
         if index not in affected
     }

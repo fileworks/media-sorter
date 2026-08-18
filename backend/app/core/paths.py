@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,6 +127,24 @@ def resolve_legacy_paths(
     )
 
 
+def path_identity_key(value: str, *, case_sensitive: bool = False) -> str:
+    """One answer to "are these two names the same file?" (C-06).
+
+    Four places asked that question and three answered it differently, none of
+    them normalising Unicode. macOS stores filenames decomposed (NFD) while a
+    name arriving from Windows, a camera, or a zip is usually composed (NFC), so
+    ``café.jpg`` written one way and read the other produced two different
+    `casefold()` results — and a RAW/JPEG pair or an `.aae` sidecar with an
+    accented name was split into two media units, orphaning the sidecar.
+
+    NFC is applied always; case is folded unless the caller says the context is
+    case-sensitive. Ported from `unpacksort/src/unpacksort/safety.py`'s
+    `collision_key`, which solved the same problem for archive members.
+    """
+    normalized = unicodedata.normalize("NFC", value)
+    return normalized if case_sensitive else normalized.casefold()
+
+
 def paths_refer_to_same_file(first: Path, second: Path) -> bool:
     """Compare existing aliases safely, with a normalized fallback."""
 
@@ -137,4 +156,11 @@ def paths_refer_to_same_file(first: Path, second: Path) -> bool:
 
     first_resolved = first.expanduser().resolve(strict=False)
     second_resolved = second.expanduser().resolve(strict=False)
-    return os.path.normcase(str(first_resolved)) == os.path.normcase(str(second_resolved))
+    # NFC, then `normcase` for the *case* dimension. Case is deliberately left
+    # to the platform here: `normcase` folds it on Windows and not on POSIX,
+    # where `A.jpg` and `a.jpg` really are two files. Unicode form is not a
+    # platform preference in the same way — the same name stored two ways is
+    # one file everywhere.
+    return os.path.normcase(path_identity_key(str(first_resolved), case_sensitive=True)) == (
+        os.path.normcase(path_identity_key(str(second_resolved), case_sensitive=True))
+    )

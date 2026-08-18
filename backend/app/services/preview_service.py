@@ -326,7 +326,8 @@ class PreviewService:
         )
         slots: list[dict[str, Any] | None] = [None] * len(units)
         planned_items: dict[str, dict[str, Any]] = {}
-        reserved_destinations: set[Path] = set()
+        # Identity keys, not paths (C-06).
+        reserved_destinations: set[str] = set()
         operation_rules = (
             self._rules.for_operation(config)
             if isinstance(self._rules, RuleEngineService)

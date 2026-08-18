@@ -140,7 +140,7 @@ def _seeded_run(
     registry = DuplicateRegistry()
     registry.exact[hashlib.sha256(keeper.read_bytes()).hexdigest()] = str(keeper)
     outcome = {}
-    reserved: set[Path] = set()
+    reserved: set[str] = set()
     planned: dict[str, Path] = {}
     for source in sources:
         record = service._process_file(

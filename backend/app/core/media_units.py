@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from app.core.paths import path_identity_key
 from app.utils.media_utils import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_media
 
 CompanionRole = Literal[
@@ -82,9 +83,15 @@ class UnmatchedCompanion:
 
 
 def _key(path: Path, *, case_sensitive: bool) -> tuple[str, str]:
-    parent = str(path.parent)
-    stem = path.stem
-    return (parent, stem) if case_sensitive else (parent.casefold(), stem.casefold())
+    """Group members of one media unit. NFC always; case per the filesystem.
+
+    `casefold()` alone left an accented RAW and its JPEG in different units when
+    one name was stored NFC and the other NFD (C-06).
+    """
+    return (
+        path_identity_key(str(path.parent), case_sensitive=case_sensitive),
+        path_identity_key(path.stem, case_sensitive=case_sensitive),
+    )
 
 
 def _primary_rank(path: Path) -> tuple[int, str]:
@@ -109,7 +116,9 @@ def _unit_id(root: Path, primary: Path) -> str:
         relative = primary.relative_to(root)
     except ValueError:
         relative = primary
-    identity = f"{relative.parent.as_posix().casefold()}/{relative.stem.casefold()}"
+    # The unit id is persisted and compared across runs, so it must not depend
+    # on which Unicode form the filesystem happened to hand back (C-06).
+    identity = f"{path_identity_key(relative.parent.as_posix())}/{path_identity_key(relative.stem)}"
     return f"unit_{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:20]}"
 
 

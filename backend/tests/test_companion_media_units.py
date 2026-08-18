@@ -419,7 +419,7 @@ def test_every_fixture_companion_inherits_its_primary_destination(tmp_path: Path
     service = _sorting_service(tmp_path, Mock())
     config = service._config
     config.remove_duplicates = False
-    reserved: set[Path] = set()
+    reserved: set[str] = set()
 
     for unit in units:
         records = service._process_unit(

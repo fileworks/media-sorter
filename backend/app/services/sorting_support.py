@@ -200,7 +200,7 @@ class SortingSupportMixin:
         category: str | None = None,
         camera: str = "",
         route_suffix: str | None = None,
-        reserved_destinations: set[Path] | None = None,
+        reserved_destinations: set[str] | None = None,
     ) -> tuple[Path, Path]:
         """Compute a collision-free destination path without mutating storage."""
         dest_dir = build_dest_dir(

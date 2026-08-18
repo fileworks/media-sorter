@@ -23,7 +23,7 @@ from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionRole, MediaUnit
-from app.core.paths import resolve_app_paths
+from app.core.paths import path_identity_key, resolve_app_paths
 from app.core.rules import normalized_key
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortPlan
@@ -506,7 +506,9 @@ class SortingService(SortingSupportMixin):
             )
         )
         records: list[list[dict[str, Any]] | None] = [None] * len(units)
-        reserved_destinations: set[Path] = set()
+        # Identity keys, not paths (C-06): two Unicode spellings of one
+        # accented name must reserve the same slot.
+        reserved_destinations: set[str] = set()
         # The frozen plan is the authority during execution and also makes a
         # reviewed keeper's destination available before processing order
         # reaches that file. Dry runs fill the same map as each keeper is seen.
@@ -704,7 +706,7 @@ class SortingService(SortingSupportMixin):
         registry: DuplicateRegistry,
         operation_id: str,
         dest_registry: DuplicateRegistry | None,
-        reserved_destinations: set[Path],
+        reserved_destinations: set[str],
         planned_destinations: dict[str, Path] | None = None,
         operation_rules: RuleEngineService | None,
         operation_ai: AITaggingService | None,
@@ -877,7 +879,7 @@ class SortingService(SortingSupportMixin):
         registry: DuplicateRegistry,
         operation_id: str,
         dest_registry: DuplicateRegistry | None = None,
-        reserved_destinations: set[Path] | None = None,
+        reserved_destinations: set[str] | None = None,
         planned_destinations: dict[str, Path] | None = None,
         operation_rules: RuleEngineService | None = None,
         operation_ai: AITaggingService | None = None,
@@ -1147,7 +1149,9 @@ class SortingService(SortingSupportMixin):
                 if reviewed_copy is not None:
                     dest = reviewed_copy
                     if reserved_destinations is not None:
-                        reserved_destinations.add(dest.resolve(strict=False))
+                        reserved_destinations.add(
+                            path_identity_key(str(dest.resolve(strict=False)))
+                        )
                 else:
                     proposed = copy_destination(
                         keeper_destination,
@@ -1305,7 +1309,9 @@ class SortingService(SortingSupportMixin):
             if reviewed_final is not None:
                 planned_final = reviewed_final
                 if reserved_destinations is not None:
-                    reserved_destinations.add(planned_final.resolve(strict=False))
+                    reserved_destinations.add(
+                        path_identity_key(str(planned_final.resolve(strict=False)))
+                    )
                 initial_dest = planned_final.with_suffix(file_path.suffix)
             else:
                 initial_dest, planned_final = self._plan_dest(

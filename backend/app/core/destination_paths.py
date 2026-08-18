@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.paths import path_identity_key
 from app.core.provenance import OutcomeProvenance, PathSegmentProvenance
 from app.utils.path_utils import sanitize_path_segment
 
@@ -59,16 +60,31 @@ def copy_destination(
     return keeper_destination.parent / CONTEXTUAL_COPY_FOLDER / filename
 
 
-def reserve_destination(path: Path, reserved: set[Path]) -> Path:
-    """Return and reserve the first collision-free deterministic path."""
+def reserve_destination(path: Path, reserved: set[str]) -> Path:
+    """Return and reserve the first collision-free deterministic path.
+
+    The reservation set holds `path_identity_key` strings rather than `Path`
+    objects (C-06). Keyed by `Path`, two spellings of one accented name — NFC
+    from a camera, NFD from macOS — reserved separately and both planned onto
+    the same file.
+
+    Folding case here is deliberately the conservative direction: on a
+    case-sensitive filesystem it can add a `_001` suffix that was not strictly
+    needed, which is a cosmetic cost. Not folding it would let two planned
+    files collide on the case-insensitive filesystems most users have.
+    """
     candidate = path
     stem, suffix = path.stem, path.suffix
     counter = 0
-    while candidate.exists() or candidate.resolve(strict=False) in reserved:
+    while candidate.exists() or _reservation_key(candidate) in reserved:
         counter += 1
         candidate = path.parent / f"{stem}_{counter:03d}{suffix}"
-    reserved.add(candidate.resolve(strict=False))
+    reserved.add(_reservation_key(candidate))
     return candidate
+
+
+def _reservation_key(path: Path) -> str:
+    return path_identity_key(str(path.resolve(strict=False)))
 
 
 def companion_destination(primary_destination: Path, companion: Path) -> Path:
