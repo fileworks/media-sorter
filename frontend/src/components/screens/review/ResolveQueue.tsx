@@ -1,6 +1,6 @@
 /** Duplicate resolver with explicit draft and confirmed states. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiArrowRight, FiCheck, FiLock } from "react-icons/fi";
 
 import { RuleImpactModal, type RuleImpact } from "@/components/screens/review/RuleImpactModal";
@@ -115,6 +115,7 @@ export function ResolveQueue({
   onSort,
 }: ResolveQueueProps) {
   const { t, locale } = useI18n();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [preferredFolder, setPreferredFolder] = useState("");
   const [draftSource, setDraftSource] = useState<string | null>(null);
   const [editingDecision, setEditingDecision] = useState(false);
@@ -217,8 +218,28 @@ export function ResolveQueue({
     [current],
   );
 
+  // Activating Resolve moves focus into the queue, the standard tab-to-panel
+  // behaviour. Without it the shortcuts below — now scoped to focus-within —
+  // would be dead until the user tabbed in, which is how a correct
+  // accessibility fix turns into a usability regression.
+  useEffect(() => {
+    containerRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // WCAG 2.1.4 (Character Key Shortcuts, Level A): a shortcut bound to a single
+  // unmodified character must be switchable off, remappable, or **active only
+  // while the relevant component has focus**. This takes the third option.
+  //
+  // Widening the tag-exclusion list below would not have satisfied it. The
+  // criterion is about *where focus is*, not about which element type happens
+  // to swallow the key — and this queue commits keeper decisions, so a stray
+  // `3` typed at a button elsewhere on the screen used to change which file the
+  // next confirmation would keep.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const container = containerRef.current;
+      if (container === null || !container.contains(document.activeElement)) return;
+
       const target = event.target as HTMLElement | null;
       if (
         target?.isContentEditable ||
@@ -281,7 +302,10 @@ export function ResolveQueue({
   };
 
   return (
-    <div>
+    // `tabIndex={-1}` so the queue is a focus target in its own right: the
+    // shortcuts below are scoped to focus-within, and a region the user cannot
+    // focus is a region whose shortcuts they could never reach.
+    <div ref={containerRef} tabIndex={-1} className="outline-none">
       <p id="review-set-selection-empty" className="sr-only">
         {t("review.setSelection.none")}
       </p>
