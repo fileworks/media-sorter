@@ -12,6 +12,7 @@ import time
 from collections.abc import Iterable, Sequence
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
@@ -120,6 +121,21 @@ def _outcome_payload(item: dict[str, Any]) -> dict[str, Any]:
         "candidates": date_record.get("candidates", []),
         "provenance": provenance,
     }
+
+
+def _catalog_generation_for(config: Config) -> int:
+    """The catalog generation behind this preview, or 0 when there is no catalog.
+
+    Zero is the honest answer for a library with no catalog, and it is also the
+    value `/sorting/start` treats as "not recorded" — so a preview that could
+    not name a generation never causes a start to be refused.
+    """
+    from app.services.catalog_location import live_catalog_generation
+
+    try:
+        return live_catalog_generation(SimpleNamespace(config=config))
+    except Exception:  # pragma: no cover - a missing catalog is not a preview failure
+        return 0
 
 
 class PreviewService:
@@ -496,7 +512,11 @@ class PreviewService:
         self._latest_config_fingerprint = fingerprint
         self._latest_excluded_root_ids = scope.excluded_root_ids
         self._outcomes.replace(items)
-        plan = build_frozen_sort_plan(items, config)
+        # C-04: stamp the plan with the catalog generation it was computed
+        # against, so `/sorting/start` can tell that the destination moved on.
+        plan = build_frozen_sort_plan(
+            items, config, catalog_generation=_catalog_generation_for(config)
+        )
         # Only the current reviewed plan remains executable in memory. A stale
         # identifier can therefore never silently select an older set of
         # consequences. The store keeps it across a restart, where the same rule

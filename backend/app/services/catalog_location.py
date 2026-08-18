@@ -12,10 +12,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from app.core.library_profiles import CatalogFreshness, CatalogPlacement
 from app.core.logging_config import get_logger
+from app.core.paths import resolve_app_paths
 from app.services.catalog import CatalogDiagnostics, MediaCatalog
 
 logger = get_logger(__name__)
@@ -145,3 +146,22 @@ def reset_catalog(path: Path) -> bool:
         except OSError as exc:
             logger.warning("Could not remove catalog file", path=str(candidate), error=str(exc))
     return removed
+
+
+def open_configured_catalog(container: Any) -> MediaCatalog:
+    """The catalog the current configuration points at.
+
+    Lifted out of `api/routes/review.py` so the sort route can ask the same
+    question without a second, subtly different answer (C-04).
+    """
+    profile = getattr(container.config, "library_profile", None)
+    placement = getattr(profile, "catalog", None) or CatalogPlacement()
+    if placement.mode != "application_data":
+        placement = CatalogPlacement()
+    return open_catalog(placement, data_dir=resolve_app_paths().data_dir)
+
+
+def live_catalog_generation(container: Any) -> int:
+    """What the catalog currently says, as one comparable scalar."""
+    with open_configured_catalog(container) as catalog:
+        return catalog.current_generation()

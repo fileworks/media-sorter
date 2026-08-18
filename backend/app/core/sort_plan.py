@@ -194,6 +194,19 @@ class FrozenSortPlan(BaseModel):
     copy_mode: bool = True
     converts_media: bool = False
     embeds_tags: bool = False
+    #: The catalog generation this plan was computed against (C-04).
+    #:
+    #: The configuration fingerprint answers "did the user change the settings?"
+    #: and nothing else. A file appearing in the *destination* after the preview
+    #: changes neither the settings nor the source, so a plan built before it
+    #: arrived was accepted and then failed that one file at execution time,
+    #: mid-run, with a per-file `destination_exists` report. The destination is
+    #: half of what a sort plan is about, and staleness has to mean both halves.
+    #:
+    #: `0` means "no catalog generation was recorded", which is how plans from
+    #: before this field are read: they are not refused, because refusing every
+    #: older plan is a worse answer than the one defect this prevents.
+    catalog_generation: int = 0
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
@@ -634,6 +647,8 @@ def build_impact(
 def build_frozen_sort_plan(
     items: list[dict[str, Any]],
     config: Config,
+    *,
+    catalog_generation: int = 0,
 ) -> FrozenSortPlan:
     """Freeze preview outcomes and derive their impact from those same actions."""
     actions: list[FrozenSortAction] = []
@@ -767,6 +782,7 @@ def build_frozen_sort_plan(
     return FrozenSortPlan(
         plan_id=f"sortplan_{uuid.uuid4().hex[:20]}",
         config_fingerprint=config_fingerprint(config),
+        catalog_generation=catalog_generation,
         actions=tuple(actions),
         impact=build_impact(
             actions,

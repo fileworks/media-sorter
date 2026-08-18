@@ -1,5 +1,6 @@
 """Sorting routes — start, status, cancel, and report."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Header, Query
@@ -16,6 +17,7 @@ from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortImpact, ReviewedSet
+from app.services.catalog_location import live_catalog_generation
 
 router = APIRouter()
 
@@ -107,6 +109,25 @@ async def start_sorting(
             raise ConflictError(
                 "The configuration changed after preview; generate and review a new plan.",
                 details={"reason": "stale_plan", "plan_id": request.plan_id},
+            )
+        # C-04: the destination is half of what a sort plan is about, and the
+        # configuration fingerprint says nothing about it. A file that appeared
+        # in the destination after the preview left the plan looking fresh, and
+        # the run then failed that one file mid-execution with a per-file
+        # `destination_exists` report — a whole run started on a plan already
+        # known to be wrong. A plan recorded before this field existed carries
+        # generation 0 and is not refused: refusing every older plan would be a
+        # worse answer than the one defect this prevents.
+        live_generation = await asyncio.to_thread(live_catalog_generation, container)
+        if frozen_plan.catalog_generation and frozen_plan.catalog_generation != live_generation:
+            raise ConflictError(
+                "The destination changed after preview; generate and review a new plan.",
+                details={
+                    "reason": "stale_catalog",
+                    "plan_id": request.plan_id,
+                    "plan_catalog_generation": frozen_plan.catalog_generation,
+                    "current_catalog_generation": live_generation,
+                },
             )
         if request.reviewed_sets:
             frozen_plan = frozen_plan.with_reviewed_sets(
