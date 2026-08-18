@@ -117,11 +117,15 @@ async def test_preview_keeps_higher_resolution_duplicate_regardless_of_order(
     # Output order is preserved (alphabetical from list_files), despite quality-
     # ordered processing under the hood.
     assert [Path(it["source"]).name for it in result["items"]] == ["a_low.jpg", "b_high.jpg"]
+    # DEC-01: preview must agree with execution that a perceptual match places
+    # nothing. Both files preview as an ordinary sort; the relationship survives
+    # as report evidence so the user can still see it.
     assert by_name["b_high.jpg"]["status"] == "sort"
-    assert by_name["a_low.jpg"]["status"] == "duplicate"
+    assert by_name["a_low.jpg"]["status"] == "sort"
     assert by_name["a_low.jpg"]["duplicate_of"] == str(high)
-    assert result["stats"]["will_sort"] == 1
-    assert result["stats"]["will_skip_duplicate"] == 1
+    assert by_name["a_low.jpg"]["duplicate_type"] == "perceptual"
+    assert result["stats"]["will_sort"] == 2
+    assert result["stats"]["will_skip_duplicate"] == 0
 
 
 @pytest.mark.asyncio

@@ -648,6 +648,24 @@ class PreviewService:
         dup_evaluation = match.evaluation
         dup_unknown_reason = match.unknown_reason
 
+        # DEC-01: preview and execution must agree about what a perceptual match
+        # means, or the reviewed plan would authorise a placement the run then
+        # declines to make (or worse, the other way round). The evidence fields
+        # are kept; the placement authority is not.
+        if match.is_duplicate and match.match_type != "exact":
+            dup_type = match.match_type
+            dup_similarity = match.similarity
+            dup_of = match.original_path
+            match = DuplicateMatch(
+                False,
+                match_type=match.match_type,
+                similarity=match.similarity,
+                original_path=match.original_path,
+                evaluation=match.evaluation,
+                unknown_reason=match.unknown_reason,
+                content_sha256=match.content_sha256,
+            )
+
         if match.is_duplicate:
             dup_type = match.match_type
             dup_similarity = match.similarity

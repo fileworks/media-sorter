@@ -698,8 +698,18 @@ def build_frozen_sort_plan(
                     would_be_destination_path=str(
                         item.get("would_be_destination") or reviewed_destination
                     ),
+                    # Gated on status, not merely on `duplicate_of` being set.
+                    # Under DEC-01 a perceptual match keeps `duplicate_of` as
+                    # *report evidence* while sorting normally, so an ungated
+                    # copy would put `keeper_path` on a `disposition="sort"`
+                    # action for the first time — and `_planned_keeper_index`
+                    # uses `keeper_path is None` as its last-resort keeper test.
+                    # `keeper_path` means "this file follows another copy", and
+                    # only a quarantining status means that.
                     keeper_path=(
-                        str(item["duplicate_of"]) if item.get("duplicate_of") is not None else None
+                        str(item["duplicate_of"])
+                        if status in quarantine_statuses and item.get("duplicate_of") is not None
+                        else None
                     ),
                 )
             )

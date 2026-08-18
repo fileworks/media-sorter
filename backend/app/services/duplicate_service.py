@@ -368,7 +368,14 @@ class DuplicateService:
             if match is not None:
                 match.scope = scope
                 if h is not None:
-                    registry.exact[h] = match.original_path or str(file_path)
+                    # C-15: map this digest to *this* file, never to the keeper.
+                    # The old mapping pointed the hashed file's digest at the
+                    # matched original, whose bytes differ whenever the match was
+                    # perceptual. That was survivable only while a perceptual
+                    # duplicate was quarantined out of the way; under DEC-01 it
+                    # stays in place, so a later byte-identical file would have
+                    # resolved to a file it is not identical to.
+                    registry.exact[h] = str(file_path)
                 return match
         return None
 

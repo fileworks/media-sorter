@@ -1021,9 +1021,38 @@ class SortingService(SortingSupportMixin):
                 record["content_sha256"] = match.content_sha256
 
             if match.is_duplicate:
+                # Evidence is recorded either way — the relationship is real and
+                # the report shows it. What changes is whether it may *place* a
+                # file (DEC-01).
                 record["duplicate_type"] = match.match_type
                 record["duplicate_similarity"] = match.similarity
                 record["duplicate_of"] = match.original_path
+
+            # DEC-01: only exact byte-identity may move a file out of its
+            # ordinary destination. A perceptual match is a *suggestion* — it
+            # looks alike, which is not the same as being the same file — and
+            # acting on it destroyed originals that were merely similar. The
+            # match keeps its evidence fields above and the file sorts normally,
+            # so nothing new enters the frozen-plan status vocabulary.
+            if match.is_duplicate and match.match_type != "exact":
+                logger.info(
+                    "Perceptual match recorded as evidence, not as placement",
+                    path=str(file_path),
+                    similarity=match.similarity,
+                    original=match.original_path,
+                    scope=match.scope or "run",
+                )
+                match = DuplicateMatch(
+                    False,
+                    match_type=match.match_type,
+                    similarity=match.similarity,
+                    original_path=match.original_path,
+                    evaluation=match.evaluation,
+                    unknown_reason=match.unknown_reason,
+                    content_sha256=match.content_sha256,
+                )
+
+            if match.is_duplicate:
 
                 duplicate_category_result = CategoryResult(None, 0.0, 0.0)
                 duplicate_category: str | None = None
