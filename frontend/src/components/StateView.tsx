@@ -6,7 +6,19 @@ import { severityClass, type PresentationSeverity } from "@/lib/statusPresentati
 import { cn } from "@/lib/utils";
 
 export type StateViewVariant =
-  "empty" | "loading" | "error" | "blocked" | "success" | "info" | "warning";
+  | "empty"
+  | "loading"
+  | "error"
+  | "blocked"
+  | "success"
+  | "info"
+  | "warning"
+  /** The run finished, but not all of the work it described was done. */
+  | "partial"
+  /** Shown values were derived from inputs that have since changed (I-14). */
+  | "stale-derived"
+  /** The user stopped it. Nothing went wrong, so this is not a warning. */
+  | "cancelled";
 
 /**
  * `inline` sits in the flow, as one panel among several. `page` is the whole
@@ -25,7 +37,37 @@ const VARIANT_SEVERITY: Record<StateViewVariant, PresentationSeverity> = {
   success: "success",
   info: "info",
   warning: "warning",
+  // Matching `presentOutcome`, which is where this vocabulary already lives:
+  // a partial run is a warning, a cancelled one is information. A second
+  // opinion about the same words is how two screens start disagreeing.
+  partial: "warning",
+  "stale-derived": "warning",
+  cancelled: "info",
 };
+
+/**
+ * The accessibility contract, as a table rather than a chain of ternaries.
+ *
+ * `alert` is assertive: it interrupts whatever the screen reader is saying, so
+ * it is reserved for the one variant that reports something broken. Every other
+ * variant that appears in response to work finishing, stopping, or going stale
+ * is announced politely — it is news, not an emergency — and the states that
+ * are simply how a panel started render silently.
+ */
+const ANNOUNCED: ReadonlySet<StateViewVariant> = new Set<StateViewVariant>([
+  "loading",
+  "partial",
+  "stale-derived",
+  "cancelled",
+]);
+
+function roleFor(variant: StateViewVariant): "alert" | "status" {
+  return variant === "error" ? "alert" : "status";
+}
+
+function ariaLiveFor(variant: StateViewVariant): "polite" | undefined {
+  return ANNOUNCED.has(variant) ? "polite" : undefined;
+}
 
 interface StateViewProps {
   variant: StateViewVariant;
@@ -35,6 +77,13 @@ interface StateViewProps {
   code?: string | null;
   action?: ReactNode;
   onRetry?: () => void;
+  /**
+   * Whether this state can be recovered from. Orthogonal to `variant`: an
+   * error may be either, and so may a partial run. `false` suppresses the
+   * retry affordance, because offering a retry that cannot work is worse than
+   * offering none. Left undefined, a supplied `onRetry` is shown as before.
+   */
+  recoverable?: boolean;
   compact?: boolean;
   layout?: StateViewLayout;
   children?: ReactNode;
@@ -54,6 +103,7 @@ export function StateView({
   code,
   action,
   onRetry,
+  recoverable,
   compact = false,
   layout = "inline",
   children,
@@ -63,6 +113,7 @@ export function StateView({
   const safeTitle = variant === "error" ? userFacingError(title) : title;
   const safeDetail = variant === "error" && detail ? userFacingError(detail) : detail;
   const centred = !compact;
+  const retry = recoverable === false ? undefined : onRetry;
 
   const card = (
     <div
@@ -74,8 +125,8 @@ export function StateView({
         className,
       )}
       data-severity={VARIANT_SEVERITY[variant]}
-      role={variant === "error" ? "alert" : "status"}
-      aria-live={variant === "loading" ? "polite" : undefined}
+      role={roleFor(variant)}
+      aria-live={ariaLiveFor(variant)}
       aria-busy={variant === "loading" || undefined}
     >
       {layout === "page" ? (
@@ -91,12 +142,12 @@ export function StateView({
           {code && <code className={cn("font-mono", safeDetail && "ml-1.5")}>{code}</code>}
         </p>
       )}
-      {(onRetry || action) && (
+      {(retry || action) && (
         <div className={cn("mt-3 flex flex-wrap gap-2", centred && "justify-center")}>
-          {onRetry && (
+          {retry && (
             <button
               type="button"
-              onClick={onRetry}
+              onClick={retry}
               className="rounded-lg border border-current px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {t("state.retry")}

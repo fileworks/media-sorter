@@ -12,6 +12,7 @@ import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { FiTrash2, FiAlertTriangle, FiSearch } from "react-icons/fi";
 import { useI18n } from "@/i18n/I18nContext";
+import { presentOutcome, type StatusTone } from "@/lib/statusPresentation";
 import type { OperationOutcome, OperationReport } from "@/types/api";
 
 // ── Report Modal ──────────────────────────────────────────────────────────────
@@ -132,14 +133,26 @@ function ClearHistoryButton() {
 
 const PAGE_SIZE = 10;
 
-const OUTCOME_CLASSES: Record<OperationOutcome, string> = {
-  completed: "border-success/40 bg-success/10 text-success",
-  completed_with_warnings: "border-warning/40 bg-warning/10 text-warning",
-  partial: "border-warning/40 bg-warning/10 text-warning",
-  cancelled: "border-info/40 bg-info/10 text-info",
-  failed: "border-error/40 bg-error/10 text-error",
-  unknown: "border-border bg-muted text-muted-foreground",
+/**
+ * Chip colours per tone. A chip is not a `StateView` — it is one cell in a
+ * table of past runs — so it keeps its denser treatment, but it no longer holds
+ * a second opinion about *which* tone each outcome deserves. That decision
+ * belongs to `presentOutcome`, which the report and the outcome banner already
+ * read, and restating it here is how the same run ends up amber in one place
+ * and blue in another.
+ */
+const TONE_CLASSES: Record<StatusTone | "neutral", string> = {
+  success: "border-success/40 bg-success/10 text-success",
+  warning: "border-warning/40 bg-warning/10 text-warning",
+  info: "border-info/40 bg-info/10 text-info",
+  error: "border-error/40 bg-error/10 text-error",
+  neutral: "border-border bg-muted text-muted-foreground",
 };
+
+function outcomeChipClass(outcome: OperationOutcome): string {
+  if (outcome === "unknown") return TONE_CLASSES.neutral;
+  return TONE_CLASSES[presentOutcome(outcome, 0).tone];
+}
 
 export function HistoryPanel() {
   const { t, locale, formatNumber } = useI18n();
@@ -270,7 +283,7 @@ export function HistoryPanel() {
                         {sourceLabel} → {op.dest_path}
                       </p>
                       <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold ${OUTCOME_CLASSES[op.outcome]}`}
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold ${outcomeChipClass(op.outcome)}`}
                       >
                         {t(`report.outcome.${op.outcome}`)}
                       </span>

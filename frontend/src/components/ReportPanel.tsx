@@ -11,7 +11,8 @@ import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { useCountUp } from "@/hooks/useCountUp";
-import type { OperationReport, FileOperationRecord } from "@/types/api";
+import { presentOutcome, type StatusTone } from "@/lib/statusPresentation";
+import type { OperationOutcome, OperationReport, FileOperationRecord } from "@/types/api";
 import { useI18n } from "@/i18n/I18nContext";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -604,6 +605,26 @@ function FileTableSection({
 
 // ── Main Export ───────────────────────────────────────────────────────────────
 
+/**
+ * The outcome banner's colours, keyed by tone rather than by outcome.
+ *
+ * This was a third table restating which outcome deserves which colour, after
+ * `presentOutcome` and the history chip. Same words, three opinions — and the
+ * banner is the one the user reads first.
+ */
+const OUTCOME_BANNER: Record<StatusTone | "neutral", string> = {
+  success: "border-success/40 bg-tint-success",
+  warning: "border-warning/40 bg-tint-warning",
+  info: "border-info/40 bg-info/5",
+  error: "border-error/40 bg-tint-error",
+  neutral: "border-border bg-muted/30",
+};
+
+function outcomeBannerClass(outcome: OperationOutcome): string {
+  if (outcome === "unknown") return OUTCOME_BANNER.neutral;
+  return OUTCOME_BANNER[presentOutcome(outcome, 0).tone];
+}
+
 export function ReportPanel({ report }: ReportPanelProps) {
   const { toast } = useToast();
   const { t, locale } = useI18n();
@@ -653,14 +674,6 @@ export function ReportPanel({ report }: ReportPanelProps) {
           },
         ];
   const outcome = report.outcome ?? "unknown";
-  const outcomeClass: Record<typeof outcome, string> = {
-    completed: "border-success/40 bg-tint-success",
-    completed_with_warnings: "border-warning/40 bg-tint-warning",
-    partial: "border-warning/40 bg-tint-warning",
-    cancelled: "border-info/40 bg-info/5",
-    failed: "border-error/40 bg-tint-error",
-    unknown: "border-border bg-muted/30",
-  };
   const suspiciousCount = report.files.filter((f) => f.suspicious === true).length;
 
   return (
@@ -668,7 +681,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
       {/* ── Section A: Summary Cards ── */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div
-          className={cn("mb-4 rounded-xl border px-4 py-3", outcomeClass[outcome])}
+          className={cn("mb-4 rounded-xl border px-4 py-3", outcomeBannerClass(outcome))}
           role="status"
           aria-live="polite"
         >

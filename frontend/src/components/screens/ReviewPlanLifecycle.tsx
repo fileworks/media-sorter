@@ -71,7 +71,10 @@ export function ReviewPlanLifecycle({
         />
       ) : (
         <StateView
-          variant="blocked"
+          // A cancelled stage was not blocked: the user stopped it, and nothing
+          // is standing in the way of starting again. Swapping only the strings
+          // left it painted as a warning and announced as one.
+          variant={cancelled ? "cancelled" : "blocked"}
           layout="page"
           title={cancelled ? t("stage.review.cancelled") : t("stage.review.planNeeded")}
           detail={cancelled ? t("stage.review.cancelledHelp") : t("stage.gate.plan")}
