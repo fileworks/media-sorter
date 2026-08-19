@@ -8,6 +8,7 @@ small, exact authorization record to check before it writes anything.
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -78,12 +79,30 @@ PLANNED_QUARANTINE_STATUSES = frozenset(
 
 def source_fingerprint(path: Path) -> str:
     """Versioned non-destructive hint used only to detect preview drift."""
-    observed = path.stat()
+    return _fingerprint_of(path.stat())
+
+
+def _fingerprint_of(observed: os.stat_result) -> str:
     return (
         "v2:cache_hint:"
         f"{observed.st_size}:{observed.st_mtime_ns}:"
         f"{getattr(observed, 'st_ctime_ns', 0)}:{observed.st_ino}"
     )
+
+
+def measured_identity(path: Path) -> tuple[str, int]:
+    """The drift fingerprint and the size, from **one** stat.
+
+    They have to agree, and they used to come from different places: the
+    fingerprint from a stat here, the size from whatever the preview recorded
+    minutes earlier. When the preview could not stat a file it recorded `0`, and
+    that `0` was frozen into the plan even though this stat had just succeeded —
+    so execution measured the real size, the drift guard compared it against
+    `0`, and refused the file as `source_resized`. Nothing had resized; the plan
+    had simply written down a size nobody measured.
+    """
+    observed = path.stat()
+    return _fingerprint_of(observed), observed.st_size
 
 
 class FrozenSortAction(BaseModel):
@@ -681,17 +700,22 @@ def build_frozen_sort_plan(
                 else ("copy" if config.copy_instead_of_move else "move")
             )
             provenance = item.get("provenance")
+            planned_fingerprint, measured_size = measured_identity(source_path)
             actions.append(
                 FrozenSortAction(
                     source_path=str(source_path),
-                    source_fingerprint=source_fingerprint(source_path),
+                    source_fingerprint=planned_fingerprint,
                     destination_path=str(transfer_destination),
                     reviewed_destination_path=str(reviewed_destination),
                     kind=action_kind,
                     source_effect=(
                         "retained" if config.copy_instead_of_move else "remove_after_verification"
                     ),
-                    expected_size_bytes=int(item.get("file_size") or 0),
+                    # Measured here, not carried over from the preview record:
+                    # the stat above already succeeded, so there is no reason to
+                    # trust a number taken minutes ago that may have been a
+                    # fallback `0` for a file the preview could not read.
+                    expected_size_bytes=measured_size,
                     disposition="quarantine" if status in quarantine_statuses else "sort",
                     unit_id=item.get("unit_id"),
                     provenance=(
@@ -739,8 +763,7 @@ def build_frozen_sort_plan(
                 continue
             source_path = Path(str(companion_source))
             try:
-                companion_size = source_path.stat().st_size
-                companion_fingerprint = source_fingerprint(source_path)
+                companion_fingerprint, companion_size = measured_identity(source_path)
             except OSError:
                 # A scan and a preview are not the same instant. A sidecar that
                 # went in between is one companion the run cannot place, not a

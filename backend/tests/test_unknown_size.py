@@ -221,3 +221,57 @@ class TestAnUnreadableFileIsVisibleInTheRunStats:
 
         assert stats["unmatched_companions"] == 1
         assert stats["unknown_size_count"] == 0
+
+
+class TestThePreviewProducerAgrees:
+    """The second producer of a size, with the same rule (`P1-FS-006(b)`).
+
+    `_preview_file` recorded `0` for a file it could not stat, exactly as
+    `_safe_stat` did. The frozen plan no longer takes its word for a size — it
+    measures its own — but the preview record is still what the interface shows,
+    and `0` there is the same lie on a different surface.
+    """
+
+    def _preview(self, tmp_path: Path, target: Path) -> dict[str, Any]:
+        from app.services.duplicate_service import DuplicateRegistry, DuplicateService
+        from app.services.preview_service import PreviewService
+        from app.services.rule_engine_service import RuleEngineService
+
+        source = tmp_path / "source"
+        source.mkdir(exist_ok=True)
+        (tmp_path / "target").mkdir(exist_ok=True)
+        config = Config(
+            source_directory=str(source),
+            target_directory=str(tmp_path / "target"),
+            sort=True,
+            sort_criteria=["year"],
+        )
+        service = PreviewService(
+            filesystem_service=FileSystemService(),
+            extraction_service=DateExtractionService(),
+            rule_engine_service=RuleEngineService(config=config),
+            duplicate_service=DuplicateService(),
+        )
+        return service._preview_file(
+            target,
+            source,
+            tmp_path / "target",
+            config,
+            DuplicateRegistry(),
+            False,
+        )
+
+    def test_a_file_that_cannot_be_stat_ed_reports_no_size(self, tmp_path: Path) -> None:
+        item = self._preview(tmp_path, tmp_path / "source" / "never-existed.jpg")
+
+        assert item["file_size"] is None
+
+    def test_a_real_file_still_reports_its_size(self, tmp_path: Path) -> None:
+        """The guard against reporting every size as unknown."""
+        source = tmp_path / "source"
+        source.mkdir(exist_ok=True)
+        photo = _photo(source / "real.jpg")
+
+        item = self._preview(tmp_path, photo)
+
+        assert item["file_size"] == photo.stat().st_size

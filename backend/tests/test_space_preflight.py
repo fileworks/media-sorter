@@ -220,7 +220,9 @@ class TestTheStartRouteRefusesARunThatCannotFit:
                 "source": str(source / "big.jpg"),
                 "destination": str(Path(container.config.target_directory) / "2024" / "big.jpg"),
                 "status": "sort",
-                "file_size": 10_000_000,
+                # Descriptive only: since `P1-FS-006(b)` the plan measures its
+                # own sizes, so an inflated figure here would simply be ignored.
+                "file_size": 64,
             }
         ]
         return build_frozen_sort_plan(items, container.config, catalog_generation=0)
@@ -231,7 +233,9 @@ class TestTheStartRouteRefusesARunThatCannotFit:
         container = client.app.state.container  # type: ignore[attr-defined]
         plan = self._plan(client, tmp_path)
         monkeypatch.setattr(container.preview_service, "frozen_plan", lambda _id: plan)
-        monkeypatch.setattr(shutil, "disk_usage", _free_space({}, 1_000))
+        # Below the real requirement: the file is 64 bytes and the margin is
+        # 25%, so the run needs 80 and the volume reports 10.
+        monkeypatch.setattr(shutil, "disk_usage", _free_space({}, 10))
 
         source_file = Path(container.config.source_directory) / "big.jpg"
         assert source_file.is_file()

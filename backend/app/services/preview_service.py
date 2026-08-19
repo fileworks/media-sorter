@@ -588,9 +588,13 @@ class PreviewService:
         surfaced as a ``failed`` item so ``stats["will_fail"]`` stays meaningful.
         """
         try:
-            file_size = file_path.stat().st_size
+            file_size: int | None = file_path.stat().st_size
         except OSError:
-            file_size = 0
+            # `None`, not `0` (C-10 / I-10): a file whose size could not be read
+            # is not an empty file. The frozen plan measures its own sizes, so
+            # this figure is descriptive rather than authoritative — which is
+            # exactly why it must not invent one.
+            file_size = None
 
         # Classify cheaply up front, but defer the outcome until after duplicate
         # identity. A junk/thumbnail file may be the kept member of a set; its
