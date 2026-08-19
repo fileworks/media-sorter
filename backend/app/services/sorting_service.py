@@ -653,6 +653,7 @@ class SortingService(SortingSupportMixin):
         # needs attention. A cancellation leaves no record for work that never
         # started, which makes this an honest remaining-work count.
         stats["remaining"] = max(0, stats["total"] - len(file_records))
+        stats["unknown_size_count"] = self._unknown_size_count(file_records)
 
         duration = int(time.monotonic() - start_time)
         stats["operation_id"] = operation_id

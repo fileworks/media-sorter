@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -396,11 +397,28 @@ class SortingSupportMixin:
         execution.outcomes[-1] = execution.outcomes[-1].model_copy(update={"code": "quarantined"})
 
     @staticmethod
-    def _safe_stat(path: Path) -> int:
+    def _safe_stat(path: Path) -> int | None:
+        """The file's size, or `None` when it could not be read (I-10).
+
+        Returning `0` here made an unreadable file indistinguishable from a
+        genuinely empty one. Every caller builds a record for an unmatched,
+        failed or corrupted file — precisely where a file that cannot be
+        stat'd is most likely — so the conflation understated the bytes at
+        stake without ever saying it had guessed.
+        """
         try:
             return path.stat().st_size
         except OSError:
-            return 0
+            return None
+
+    @staticmethod
+    def _unknown_size_count(records: Iterable[Mapping[str, Any]]) -> int:
+        """How many reported files have a size nobody could read.
+
+        Derived from the records themselves rather than tallied at each call
+        site, so the count cannot drift from the rows it describes.
+        """
+        return sum(1 for record in records if record.get("file_size") is None)
 
     def _persist_operation(
         self,
