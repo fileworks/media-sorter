@@ -18,7 +18,11 @@ allowed to fail a dry run that otherwise succeeded.
 from __future__ import annotations
 
 import hashlib
+import os
+from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 import structlog
@@ -29,10 +33,22 @@ from app.core.library_validation import ValidatedLibraryProfile
 from app.services.catalog import FileRecord, MediaCatalog
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, TraversalRules, discover_many
-from app.services.signature_extraction import extract_signature
+from app.services.signature_extraction import MediaSignature, extract_signature
 from app.utils.media_utils import get_file_type
 
 logger = structlog.get_logger(__name__)
+
+#: Readers and decoders for the derive pass. Decoding is the expensive half
+#: — measured at roughly 7.3 ms per megapixel — and both Pillow and hashlib
+#: release the GIL while they work, so threads buy real parallelism here.
+#: Capped because the pass runs beside a UI, not instead of it.
+DERIVE_WORKERS = min(8, max(1, (os.cpu_count() or 2)))
+
+#: Reports ``(examined, total)`` as the derive pass works through a root.
+#: The total is the count the walk just finished producing, so it is known
+#: rather than estimated — which is what lets a caller show an honest ETA
+#: instead of an indeterminate bar (I-10, `TaskProgress.total_known`).
+DeriveProgress = Callable[[int, int], None]
 
 
 def index_library_roots(
@@ -43,6 +59,7 @@ def index_library_roots(
     max_depth: int | None = None,
     exclude_patterns: tuple[str, ...] = (),
     cancel: Callable[[], bool] | None = None,
+    on_progress: DeriveProgress | None = None,
 ) -> dict[str, int]:
     """Walk every input and reference root into the catalog.
 
@@ -67,6 +84,7 @@ def index_library_roots(
             max_depth=max_depth,
             exclude_patterns=exclude_patterns,
             cancel=cancel,
+            on_progress=on_progress,
         )
 
     indexable = [root for root in (*library.inputs, *library.references) if root.canonical_path]
@@ -111,7 +129,12 @@ def index_library_roots(
             def derive(root_id: str, stats: DiscoveryStats) -> None:
                 nonlocal hashed, skipped
                 computed, unread = _derive_root_facts(
-                    catalog, root_id, paths[root_id], stats, cancel=cancel
+                    catalog,
+                    root_id,
+                    paths[root_id],
+                    stats,
+                    cancel=cancel,
+                    on_progress=on_progress,
                 )
                 hashed += computed
                 skipped += unread
@@ -138,6 +161,7 @@ def _index_legacy_profile(
     max_depth: int | None,
     exclude_patterns: tuple[str, ...],
     cancel: Callable[[], bool] | None,
+    on_progress: DeriveProgress | None = None,
 ) -> dict[str, int]:
     """Retain the pre-validation indexing seam for the first baseline commit."""
     indexable = [
@@ -180,7 +204,12 @@ def _index_legacy_profile(
             def derive(root_id: str, stats: DiscoveryStats) -> None:
                 nonlocal hashed, skipped
                 computed, unread = _derive_root_facts(
-                    catalog, root_id, paths[root_id], stats, cancel=cancel
+                    catalog,
+                    root_id,
+                    paths[root_id],
+                    stats,
+                    cancel=cancel,
+                    on_progress=on_progress,
                 )
                 hashed += computed
                 skipped += unread
@@ -206,46 +235,120 @@ def _derive_root_facts(
     stats: DiscoveryStats,
     *,
     cancel: Callable[[], bool] | None = None,
+    workers: int | None = None,
+    on_progress: DeriveProgress | None = None,
 ) -> tuple[int, int]:
-    """Give every indexed file a content hash, skipping ones that already have one.
+    """Give every indexed file a content hash and a perceptual signature.
 
     Exact-duplicate grouping is a hash join, so a file without a hash is a file
     the duplicate workbench cannot see. The skip is not an optimisation detail:
-    a stored hash is only reused when the catalog's fingerprint still proves it
+    a stored fact is only reused when the catalog's fingerprint still proves it
     describes the same bytes, so re-previewing an unchanged library costs
     nothing and a changed file is always re-read.
 
     A file that cannot be read is recorded on *stats* rather than swallowed. The
     walk saw it, so nothing else would ever say it is missing from the index —
-    and a generation that hashed only some of its files has not learned what a
+    and a generation that derived only some of its files has not learned what a
     `complete` one claims to have learned.
 
-    Returns ``(hashed, skipped)`` — the second number is why the generation
-    may be `partial`, so it is reported rather than inferred from a log line.
+    Reading and decoding happen on a pool; **every catalog read and write stays
+    on this thread**, because the connection is single-threaded and because a
+    worker that cannot touch the database cannot corrupt it. Submission is
+    bounded by a window, so memory stays flat over a library of any size.
+
+    Returns ``(hashed, skipped)`` — the second number is why the generation may
+    be `partial`, so it is reported rather than inferred from a log line.
     """
     computed = 0
     skipped = 0
-    for record in catalog.iter_files(root_id):
-        if cancel is not None and cancel():
-            stats.cancelled = True
-            return computed, skipped
-        path = root_path / record.relative_path
-        if catalog.hash_for(record) is None:
-            try:
-                digest = _sha256_of(path)
-            except OSError as error:
-                logger.debug("catalog.hash_skipped", path=str(path), error=str(error))
-                stats.issues.append((str(path), "hash_unreadable"))
-                skipped += 1
-                continue
-            catalog.store_hash(record, digest)
+    examined = 0
+    total = stats.files
+    pending: deque[Future[_Derived]] = deque()
+
+    def write_one() -> None:
+        nonlocal computed, skipped
+        result = pending.popleft().result()
+        if result.unreadable is not None:
+            logger.debug("catalog.hash_skipped", path=str(result.path), error=result.unreadable)
+            stats.issues.append((str(result.path), "hash_unreadable"))
+            skipped += 1
+            return
+        if result.digest is not None:
+            catalog.store_hash(result.record, result.digest)
             computed += 1
-        _store_media_signature(catalog, record, path)
+        if result.signature is not None:
+            _write_media_signature(catalog, result.record, result.path, result.signature)
+
+    worker_count = DERIVE_WORKERS if workers is None else max(1, workers)
+    window = worker_count * 4
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="derive") as pool:
+        try:
+            for record in catalog.iter_files(root_id):
+                if cancel is not None and cancel():
+                    stats.cancelled = True
+                    break
+                path = root_path / record.relative_path
+                want_hash = catalog.hash_for(record) is None
+                want_signature = catalog.media_facts_for(record) is None
+                examined += 1
+                if on_progress is not None:
+                    on_progress(examined, total)
+                if not want_hash and not want_signature:
+                    continue
+                pending.append(
+                    pool.submit(
+                        _compute_facts,
+                        record,
+                        path,
+                        want_hash=want_hash,
+                        want_signature=want_signature,
+                    )
+                )
+                while len(pending) >= window:
+                    write_one()
+        finally:
+            if stats.cancelled:
+                # Whatever has not started need not start; the rest is already
+                # paid for, so its result is still worth storing.
+                for future in pending:
+                    future.cancel()
+            while pending:
+                if pending[0].cancelled():
+                    pending.popleft()
+                    continue
+                write_one()
     return computed, skipped
 
 
-def _store_media_signature(catalog: MediaCatalog, record: FileRecord, path: Path) -> None:
-    """Record what a perceptual pass can see, so review has groups to show.
+@dataclass(frozen=True)
+class _Derived:
+    """What one worker computed. Nothing here has touched the catalog."""
+
+    record: FileRecord
+    path: Path
+    digest: str | None
+    unreadable: str | None
+    signature: MediaSignature | None
+
+
+def _compute_facts(
+    record: FileRecord, path: Path, *, want_hash: bool, want_signature: bool
+) -> _Derived:
+    """The pure half: read bytes, hash them, decode a signature. No database."""
+    digest: str | None = None
+    if want_hash:
+        try:
+            digest = _sha256_of(path)
+        except OSError as error:
+            return _Derived(record, path, None, str(error), None)
+    signature = extract_signature(path) if want_signature else None
+    return _Derived(record, path, digest, None, signature)
+
+
+def _write_media_signature(
+    catalog: MediaCatalog, record: FileRecord, path: Path, signature: MediaSignature
+) -> None:
+    """Record what a perceptual pass saw, so review has groups to show.
 
     The media-facts row is written for every file, including one where nothing
     could be read: its presence is what says "this file has been looked at", so
@@ -255,9 +358,6 @@ def _store_media_signature(catalog: MediaCatalog, record: FileRecord, path: Path
     A file that cannot be *decoded* is not a file that cannot be *read*: it
     yields unknown facts, not an issue, and never downgrades the generation.
     """
-    if catalog.media_facts_for(record) is not None:
-        return
-    signature = extract_signature(path)
     catalog.store_media_facts(
         record,
         kind=get_file_type(path),

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import os
 import random
+import threading
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -20,13 +22,14 @@ from PIL.Image import Resampling
 
 from app.core.library_profiles import LibraryProfile, LibraryRoot
 from app.core.library_validation import ValidatedLibraryProfile, validate_library_profile
-from app.services import catalog_indexing
+from app.services import catalog_indexing, signature_extraction
 from app.services.catalog import MediaCatalog
 from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_indexing import index_library_roots
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, discover_into_catalog
 from app.services.duplicate_grouping import similar_groups
+from app.services.duplicate_service import DuplicateService
 
 
 def _library(media: Path) -> ValidatedLibraryProfile:
@@ -371,3 +374,102 @@ class TestTheReviewSurfaceIsNoLongerEmpty:
         assert len(groups) == 1
         members = sorted(member.relative_path for member in groups[0].members)
         assert members == ["a.jpg", "b.jpg"]
+
+
+class TestTheCostBudget:
+    """P2-DEDUP-D4. Concurrency is only safe because the catalog stays on one
+    thread, and only useful because it stays bounded."""
+
+    def test_the_catalog_is_only_ever_touched_from_the_calling_thread(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        media = tmp_path / "media"
+        media.mkdir()
+        for index in range(12):
+            _photo(media / f"{index}.jpg", colour=(index * 9, 40, 90))
+
+        threads: set[int] = set()
+        original = MediaCatalog.store_hash
+
+        def recording(self: MediaCatalog, record: object, sha256: str) -> None:
+            threads.add(threading.get_ident())
+            original(self, record, sha256)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(MediaCatalog, "store_hash", recording)
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        assert threads == {threading.get_ident()}
+
+    def test_submissions_in_flight_stay_bounded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Memory has to stay flat over a library of any size, so the pass may
+        never submit the whole root and hold every result waiting to be written.
+
+        The quantity that matters is *submitted but not yet written*, not how
+        many workers run at once — the pool caps the latter no matter how far
+        submission runs ahead.
+        """
+        media = tmp_path / "media"
+        media.mkdir()
+        for index in range(60):
+            _photo(media / f"{index}.jpg", colour=(index * 3, 40, 90))
+
+        counts = {"submitted": 0, "written": 0, "peak": 0}
+
+        class CountingPool(ThreadPoolExecutor):
+            def submit(self, fn, /, *args, **kwargs):  # type: ignore[no-untyped-def]
+                counts["submitted"] += 1
+                counts["peak"] = max(counts["peak"], counts["submitted"] - counts["written"])
+                return super().submit(fn, *args, **kwargs)
+
+        original_facts = MediaCatalog.store_media_facts
+
+        def counting_write(self: MediaCatalog, record: object, **facts: object) -> None:
+            counts["written"] += 1
+            original_facts(self, record, **facts)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(catalog_indexing, "ThreadPoolExecutor", CountingPool)
+        monkeypatch.setattr(MediaCatalog, "store_media_facts", counting_write)
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        assert counts["submitted"] == 60
+        assert counts["peak"] <= catalog_indexing.DERIVE_WORKERS * 4
+
+    def test_progress_reports_a_known_total(self, tmp_path: Path) -> None:
+        media = tmp_path / "media"
+        media.mkdir()
+        for index in range(5):
+            _photo(media / f"{index}.jpg", colour=(index * 20, 40, 90))
+
+        seen: list[tuple[int, int]] = []
+        index_library_roots(
+            _library(media),
+            data_dir=tmp_path / "state",
+            on_progress=lambda examined, total: seen.append((examined, total)),
+        )
+
+        assert [examined for examined, _total in seen] == [1, 2, 3, 4, 5]
+        # Known, not estimated: the walk finished counting before this ran.
+        assert {total for _examined, total in seen} == {5}
+
+    def test_a_picture_beyond_the_decode_ceiling_is_not_decoded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dimensions come from the header, so refusing is cheap; the file is
+        still catalogued, with an unknown phash that says why."""
+        photo = _photo(tmp_path / "huge.jpg")
+        monkeypatch.setattr(
+            signature_extraction, "image_dimensions", lambda path: (1_000_000, 1_000_000)
+        )
+
+        def refuse(*args: object, **kwargs: object) -> object:
+            raise AssertionError("decoded a picture beyond the ceiling")
+
+        monkeypatch.setattr(DuplicateService, "image_signature", refuse)
+        result = signature_extraction.extract_signature(photo)
+
+        assert result.phash.known is False
+        assert result.phash.issue is not None
+        assert "ceiling" in result.phash.issue
+        assert result.width.value == 1_000_000

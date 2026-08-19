@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,7 +22,11 @@ from app.core.duplicate_plans import FactValue
 from app.core.logging_config import get_logger
 from app.services.duplicate_service import DuplicateService
 from app.services.extraction_service import DateExtractionService
-from app.services.filesystem_service import image_dimensions, load_exif_dict
+from app.services.filesystem_service import (
+    MAX_RAW_DECLARED_PIXELS,
+    image_dimensions,
+    load_exif_dict,
+)
 from app.utils.ffmpeg_utils import run_ffprobe_json
 from app.utils.media_utils import is_image, is_video
 
@@ -38,6 +42,18 @@ _NO_MEAN_RGB = "the average colour could not be measured"
 #: sampled frames (`DuplicateService.video_signature`), which is a different
 #: shape from one hash and belongs to whoever persists it.
 _VIDEO_FRAMES = "a video is fingerprinted by sampled frames, not by a single perceptual hash"
+
+#: Above this the perceptual pass reads the header and stops (`P2-DEDUP-D4`).
+#: Decode time is linear in pixels — measured at ~7.3 ms/MP on this host, so
+#: 12 MP costs ~96 ms and 100 MP ~745 ms — and indexing runs over a whole
+#: library. This reuses F-06's ceiling rather than inventing a second number:
+#: it refuses nothing a real camera produces, and bounds what one crafted
+#: file can cost. The dimensions come from the header, so a refusal is cheap.
+MAX_PERCEPTUAL_DECODE_PIXELS: Final = MAX_RAW_DECLARED_PIXELS
+_TOO_LARGE = (
+    "the picture is larger than the perceptual decode ceiling of "
+    f"{MAX_PERCEPTUAL_DECODE_PIXELS} pixels"
+)
 
 
 class MediaSignature(BaseModel):
@@ -93,12 +109,13 @@ def extract_signature(
             captured_at=FactValue.unknown(_UNSUPPORTED),
         )
 
-    phash, mean_rgb = (
-        _image_signature(path, duplicates or DuplicateService(), cancel_token)
-        if image
-        else (FactValue.unknown(_VIDEO_FRAMES), FactValue.unknown(_VIDEO_FRAMES))
-    )
     width, height = _dimensions(path, image=image)
+    if not image:
+        phash, mean_rgb = FactValue.unknown(_VIDEO_FRAMES), FactValue.unknown(_VIDEO_FRAMES)
+    elif _exceeds_decode_ceiling(width, height):
+        phash, mean_rgb = FactValue.unknown(_TOO_LARGE), FactValue.unknown(_TOO_LARGE)
+    else:
+        phash, mean_rgb = _image_signature(path, duplicates or DuplicateService(), cancel_token)
     camera = (dates or DateExtractionService()).extract_camera_model(path)
     captured = capture_time(path)
 
@@ -114,6 +131,19 @@ def extract_signature(
             else FactValue.unknown(_NO_CAPTURE)
         ),
     )
+
+
+def _exceeds_decode_ceiling(width: FactValue, height: FactValue) -> bool:
+    """True only when the header *proves* the picture is too big to be worth it.
+
+    Unknown dimensions never refuse a decode: an unreadable header is exactly
+    the case where the pixels are the only evidence left.
+    """
+    if not (width.known and height.known):
+        return False
+    if not isinstance(width.value, int) or not isinstance(height.value, int):
+        return False
+    return width.value * height.value > MAX_PERCEPTUAL_DECODE_PIXELS
 
 
 def _image_signature(

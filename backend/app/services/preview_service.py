@@ -490,6 +490,12 @@ class PreviewService:
         # per-group evidence — sizes, dimensions, roles, confidence — comes
         # from the catalog, and nothing else populates it. Advisory: a failure
         # costs the richer view, never the plan.
+        def report_indexing(examined: int, total: int) -> None:
+            # The walk has finished counting by the time this runs, so the total
+            # is known rather than estimated and the ETA can be honest (I-10).
+            if task is not None:
+                task.update_progress(examined, total=total)
+
         await asyncio.to_thread(
             index_library_roots,
             library,
@@ -498,6 +504,7 @@ class PreviewService:
             max_depth=config.max_recursion_depth,
             exclude_patterns=tuple(config.exclude_patterns or ()),
             cancel=(lambda: task.cancel_event.is_set()) if task is not None else None,
+            on_progress=report_indexing if task is not None else None,
         )
 
         logger.info(
