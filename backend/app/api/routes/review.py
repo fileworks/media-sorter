@@ -9,6 +9,7 @@ the same guard the UI does.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -26,7 +27,14 @@ from app.services.catalog_location import (
     live_catalog_generation,
     open_configured_catalog,
 )
-from app.services.catalog_views import CursorError, ViewQuery, aggregate, query_page
+from app.services.catalog_views import (
+    CursorError,
+    ViewQuery,
+    aggregate,
+    decode_cursor,
+    encode_cursor,
+    query_page,
+)
 from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.keeper_policies import (
     HighConfidenceRule,
@@ -117,6 +125,11 @@ class GroupPage(BaseModel):
     groups: list[dict[str, Any]]
     next_cursor: str | None = None
     kind: str
+    #: There are more groups than this page holds. A page that ends because the
+    #: limit was reached looks exactly like one that ends because the library
+    #: ran out, and a review surface that cannot tell them apart tells the user
+    #: they are finished when they are not.
+    truncated: bool = False
 
 
 class OutcomeRequest(BaseModel):
@@ -156,6 +169,7 @@ async def list_groups(
     limit: int = Query(default=50, ge=1, le=500),
     max_distance: int = Query(default=DEFAULT_SIMILAR_DISTANCE, ge=0, le=16),
     excluded_roots: Annotated[list[str] | None, Query()] = None,
+    cursor: str | None = Query(default=None),
 ) -> GroupPage:
     """A bounded page of groups; members come with them but the library does not.
 
@@ -164,15 +178,19 @@ async def list_groups(
     happens to include capture time and camera, and it resolves through the same
     ``/review/decide`` and ``/review/policy/*`` routes as the other two.
     """
-    return await asyncio.to_thread(
-        _list_groups,
-        container,
-        config,
-        kind,
-        limit,
-        max_distance,
-        excluded_roots or [],
-    )
+    try:
+        return await asyncio.to_thread(
+            _list_groups,
+            container,
+            config,
+            kind,
+            limit,
+            max_distance,
+            excluded_roots or [],
+            cursor,
+        )
+    except CursorError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _list_groups(
@@ -182,8 +200,10 @@ def _list_groups(
     limit: int,
     max_distance: int,
     excluded_roots: list[str],
+    cursor: str | None = None,
 ) -> GroupPage:
     excluded_ids = frozenset(apply_run_scope(config, excluded_roots).excluded_root_ids)
+    identity = _group_query_identity(kind, max_distance, excluded_ids)
     with _catalog(container) as catalog:
         index = CatalogDuplicateIndex(catalog)
         generation = catalog.current_generation()
@@ -205,21 +225,76 @@ def _list_groups(
                 max_distance=max_distance,
                 generation=generation,
             )
-        scoped_groups = _take_scoped_groups(produced, excluded_ids, limit)
+        after = _resume_after(cursor, identity=identity, generation=generation)
+        scoped_groups, truncated = _take_scoped_groups(produced, excluded_ids, limit, after=after)
+    next_cursor = (
+        encode_cursor({"q": identity, "g": generation, "id": scoped_groups[-1].group_id})
+        if truncated and scoped_groups
+        else None
+    )
     return GroupPage(
         groups=[group.model_dump(mode="json") for group in scoped_groups],
         kind=kind,
+        next_cursor=next_cursor,
+        truncated=truncated,
     )
+
+
+def _group_query_identity(kind: str, max_distance: int, excluded_ids: frozenset[str]) -> str:
+    """Two group queries with the same identity may share a cursor; others may not.
+
+    `max_distance` is part of it for every kind, not only `similar`: a cursor
+    that survived a threshold change would resume a list that no longer exists.
+    """
+    return json.dumps(
+        {"kind": kind, "max_distance": max_distance, "excluded": sorted(excluded_ids)},
+        sort_keys=True,
+    )
+
+
+def _resume_after(cursor: str | None, *, identity: str, generation: int) -> str | None:
+    """The group id this page continues after, or None to start at the top."""
+    if not cursor:
+        return None
+    decoded = decode_cursor(cursor)
+    if decoded.get("q") != identity:
+        raise CursorError("this page marker belongs to a different list")
+    if decoded.get("g") != generation:
+        # The library was re-indexed under the reader. Resuming would page
+        # through a list that no longer exists, so the caller starts over
+        # rather than being handed a plausible-looking wrong page.
+        raise CursorError("the catalog changed since this page marker was made")
+    resume = decoded.get("id")
+    return str(resume) if resume else None
 
 
 def _take_scoped_groups(
     groups: Any,
     excluded_root_ids: frozenset[str],
     limit: int,
-) -> list[DuplicateGroup]:
-    """Drop excluded-root members before they can influence a review decision."""
+    *,
+    after: str | None = None,
+) -> tuple[list[DuplicateGroup], bool]:
+    """Drop excluded-root members before they can influence a review decision.
+
+    Returns the page and whether more groups follow it. Truncation is detected
+    by taking one group past the limit and dropping it, so "the page is full"
+    and "the library ended" stop looking identical.
+
+    Resumption re-runs the producer and skips to *after*. The producers are
+    deterministic over an unchanged catalog, so the continuation is exact — no
+    group appears twice and none is skipped. It costs a re-scan of the pages
+    already read, which is the price of not holding per-reader state on a
+    surface that a person pages through a few times.
+    """
     selected: list[DuplicateGroup] = []
+    truncated = False
+    resuming = after is not None
     for group in groups:
+        if resuming:
+            if group.group_id == after:
+                resuming = False
+            continue
         members = tuple(
             member for member in group.members if member.root_id not in excluded_root_ids
         )
@@ -238,9 +313,11 @@ def _take_scoped_groups(
                 }
             )
         )
-        if len(selected) >= limit:
+        if len(selected) > limit:
+            selected.pop()
+            truncated = True
             break
-    return selected
+    return selected, truncated
 
 
 # --------------------------------------------------------------------------- #
