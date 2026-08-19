@@ -22,12 +22,15 @@ from collections.abc import Callable
 from pathlib import Path
 
 import structlog
+from pydantic import JsonValue
 
 from app.core.library_profiles import CatalogPlacement, LibraryProfile
 from app.core.library_validation import ValidatedLibraryProfile
-from app.services.catalog import MediaCatalog
+from app.services.catalog import FileRecord, MediaCatalog
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, TraversalRules, discover_many
+from app.services.signature_extraction import extract_signature
+from app.utils.media_utils import get_file_type
 
 logger = structlog.get_logger(__name__)
 
@@ -107,7 +110,7 @@ def index_library_roots(
 
             def derive(root_id: str, stats: DiscoveryStats) -> None:
                 nonlocal hashed, skipped
-                computed, unread = _hash_root_files(
+                computed, unread = _derive_root_facts(
                     catalog, root_id, paths[root_id], stats, cancel=cancel
                 )
                 hashed += computed
@@ -176,7 +179,7 @@ def _index_legacy_profile(
 
             def derive(root_id: str, stats: DiscoveryStats) -> None:
                 nonlocal hashed, skipped
-                computed, unread = _hash_root_files(
+                computed, unread = _derive_root_facts(
                     catalog, root_id, paths[root_id], stats, cancel=cancel
                 )
                 hashed += computed
@@ -196,7 +199,7 @@ def _index_legacy_profile(
     return counts
 
 
-def _hash_root_files(
+def _derive_root_facts(
     catalog: MediaCatalog,
     root_id: str,
     root_path: Path,
@@ -226,19 +229,59 @@ def _hash_root_files(
         if cancel is not None and cancel():
             stats.cancelled = True
             return computed, skipped
-        if catalog.hash_for(record) is not None:
-            continue
         path = root_path / record.relative_path
-        try:
-            digest = _sha256_of(path)
-        except OSError as error:
-            logger.debug("catalog.hash_skipped", path=str(path), error=str(error))
-            stats.issues.append((str(path), "hash_unreadable"))
-            skipped += 1
-            continue
-        catalog.store_hash(record, digest)
-        computed += 1
+        if catalog.hash_for(record) is None:
+            try:
+                digest = _sha256_of(path)
+            except OSError as error:
+                logger.debug("catalog.hash_skipped", path=str(path), error=str(error))
+                stats.issues.append((str(path), "hash_unreadable"))
+                skipped += 1
+                continue
+            catalog.store_hash(record, digest)
+            computed += 1
+        _store_media_signature(catalog, record, path)
     return computed, skipped
+
+
+def _store_media_signature(catalog: MediaCatalog, record: FileRecord, path: Path) -> None:
+    """Record what a perceptual pass can see, so review has groups to show.
+
+    The media-facts row is written for every file, including one where nothing
+    could be read: its presence is what says "this file has been looked at", so
+    a second pass is a cache hit rather than a re-decode. An unknown fact is
+    stored as NULL and never as 0 (I-10).
+
+    A file that cannot be *decoded* is not a file that cannot be *read*: it
+    yields unknown facts, not an issue, and never downgrades the generation.
+    """
+    if catalog.media_facts_for(record) is not None:
+        return
+    signature = extract_signature(path)
+    catalog.store_media_facts(
+        record,
+        kind=get_file_type(path),
+        captured_at=signature.captured_at.value,
+        camera_model=signature.camera_model.value,
+        width=signature.width.value,
+        height=signature.height.value,
+    )
+    if signature.phash.known:
+        catalog.store_signature(
+            record,
+            "phash",
+            str(signature.phash.value),
+            mean_rgb=_mean_rgb_text(signature.mean_rgb.value),
+        )
+
+
+def _mean_rgb_text(mean: JsonValue) -> str | None:
+    """The comma-joined form `dedup_index` already stores, or None if unknown."""
+    if not isinstance(mean, list):
+        return None
+    return ",".join(
+        f"{float(channel):.3f}" for channel in mean if isinstance(channel, (int, float))
+    )
 
 
 def _sha256_of(path: Path, *, block_size: int = 1024 * 1024) -> str:

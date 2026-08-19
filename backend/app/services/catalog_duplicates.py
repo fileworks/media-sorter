@@ -193,7 +193,14 @@ class CatalogDuplicateIndex:
             # honest options are a full scan or a wrong answer.
             telemetry.degraded = True
             telemetry.degraded_reason = (
-                "threshold too loose for band lookup; every signature was examined"
+                # Two different causes land here and the cure differs: one is a
+                # caller's threshold, the other is the width of every signature
+                # the producer writes. Naming the wrong one sends a profiler
+                # after the wrong knob.
+                f"signature is {len(signature)} characters, not the "
+                f"{SIGNATURE_BANDS * 4} band lookup indexes; every signature was examined"
+                if len(bands) != SIGNATURE_BANDS
+                else "threshold too loose for band lookup; every signature was examined"
             )
             rows = self._scan_signatures(kind, roles)
         else:
