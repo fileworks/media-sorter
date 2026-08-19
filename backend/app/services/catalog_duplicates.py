@@ -37,11 +37,25 @@ DEFAULT_PAGE_SIZE = 500
 
 #: Indexes the duplicate queries need. Created on first use rather than in the
 #: base schema so an existing catalog gains them without a migration step.
+#: These cover 4-character bands, i.e. a 16-character signature; wider ones get
+#: their indexes from `_ensure_band_width` when a query first asks for them,
+#: because an expression index is only used when it matches the query's
+#: expression exactly.
 _BAND_INDEXES = tuple(
     f"CREATE INDEX IF NOT EXISTS idx_signatures_band{band} "
     f"ON signatures(kind, substr(value, {band * 4 + 1}, 4))"
     for band in range(SIGNATURE_BANDS)
 )
+
+
+def _band_index_statements(width: int) -> tuple[str, ...]:
+    if width == 4:
+        return _BAND_INDEXES
+    return tuple(
+        f"CREATE INDEX IF NOT EXISTS idx_signatures_w{width}_band{band} "
+        f"ON signatures(kind, substr(value, {band * width + 1}, {width}))"
+        for band in range(SIGNATURE_BANDS)
+    )
 
 
 @dataclass(frozen=True)
@@ -77,6 +91,9 @@ class CatalogDuplicateIndex:
     def __init__(self, catalog: MediaCatalog, *, page_size: int = DEFAULT_PAGE_SIZE) -> None:
         self.catalog = catalog
         self.page_size = page_size
+        #: Band widths this instance has created indexes for. 4 comes free with
+        #: the static set below.
+        self._indexed_widths: set[int] = set()
         self._ensure_indexes()
 
     def _ensure_indexes(self) -> None:
@@ -86,6 +103,16 @@ class CatalogDuplicateIndex:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_signatures_kind ON signatures(kind, file_id)"
             )
+        self._indexed_widths.add(4)
+
+    def _ensure_band_width(self, width: int) -> None:
+        """Index this band width, so the lookup below is a seek and not a scan."""
+        if width in self._indexed_widths:
+            return
+        with self.catalog.transaction() as connection:
+            for statement in _band_index_statements(width):
+                connection.execute(statement)
+        self._indexed_widths.add(width)
 
     # ------------------------------------------------------------------ #
     # Exact                                                               #
@@ -197,14 +224,15 @@ class CatalogDuplicateIndex:
                 # caller's threshold, the other is the width of every signature
                 # the producer writes. Naming the wrong one sends a profiler
                 # after the wrong knob.
-                f"signature is {len(signature)} characters, not the "
-                f"{SIGNATURE_BANDS * 4} band lookup indexes; every signature was examined"
+                f"signature of {len(signature)} characters does not divide into "
+                f"{SIGNATURE_BANDS} bands; every signature was examined"
                 if len(bands) != SIGNATURE_BANDS
                 else "threshold too loose for band lookup; every signature was examined"
             )
             rows = self._scan_signatures(kind, roles)
         else:
             telemetry.buckets_queried = SIGNATURE_BANDS
+            self._ensure_band_width(len(bands[0]))
             rows = self._band_rows(bands, kind, roles)
 
         results: list[DuplicateCandidate] = []
@@ -241,6 +269,7 @@ class CatalogDuplicateIndex:
         roles: Sequence[RootRole],
     ) -> sqlite3.Cursor:
         placeholders = ",".join("?" for _ in roles) or "''"
+        width = len(bands[0])
         branches: list[str] = []
         parameters: list[object] = []
         for index, band in enumerate(bands):
@@ -251,7 +280,7 @@ class CatalogDuplicateIndex:
                   JOIN files f ON f.file_id = s.file_id
                   JOIN roots r ON r.root_id = f.root_id
                  WHERE s.kind = ?
-                   AND substr(s.value, {index * 4 + 1}, 4) = ?
+                   AND substr(s.value, {index * width + 1}, {width}) = ?
                    AND s.fingerprint = f.fingerprint
                    AND f.fingerprint_version = ?
                    AND f.missing_since_generation IS NULL
@@ -311,10 +340,18 @@ def _candidate(row: sqlite3.Row) -> DuplicateCandidate:
 
 
 def _bands(signature: str) -> tuple[str, ...]:
-    """Split a 16-character signature into four 4-character bands."""
-    if len(signature) != SIGNATURE_BANDS * 4:
+    """Split a signature into four equal bands, whatever its width.
+
+    The pigeonhole guarantee is about the *number* of bands, not their size: if
+    two signatures differ by fewer bits than there are bands, at least one band
+    must be identical, so an equality lookup on that band cannot miss a match.
+    That holds for a 64-bit signature in 4-character bands and for the 256-bit
+    one the image extractor produces in 16-character bands alike.
+    """
+    width, remainder = divmod(len(signature), SIGNATURE_BANDS)
+    if width == 0 or remainder:
         return ()
-    return tuple(signature[index * 4 : index * 4 + 4] for index in range(SIGNATURE_BANDS))
+    return tuple(signature[index * width : (index + 1) * width] for index in range(SIGNATURE_BANDS))
 
 
 def hamming(left: str, right: str) -> int | None:

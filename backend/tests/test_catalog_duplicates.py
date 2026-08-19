@@ -314,3 +314,78 @@ class TestCatalogBackedRegistry:
 
         for digest in [*hashes, "f" * 64]:
             assert (backed.find_exact(digest) is None) == (materialized.find_exact(digest) is None)
+
+
+def _flip(signature: str, bits: int) -> str:
+    """The same signature with *bits* low bits flipped, at the same width."""
+    mask = (1 << bits) - 1
+    return format(int(signature, 16) ^ mask, f"0{len(signature)}x")
+
+
+class TestWideSignatures:
+    """`DuplicateService.image_signature` emits 64 hex characters — hash_size=16,
+    i.e. 256 bits. Band lookup must index those, not only the 16-character form,
+    or every perceptual query the writer feeds it degrades to a full scan."""
+
+    def test_a_wide_signature_is_answered_by_band_lookup(self, catalog: MediaCatalog) -> None:
+        base = "a1b2c3d4" * 8
+        _add(catalog, "dest", "a.jpg", signature=base)
+        _add(catalog, "dest", "b.jpg", signature=_flip(base, 2))
+        index = CatalogDuplicateIndex(catalog)
+        telemetry = LookupTelemetry()
+
+        results = index.perceptual_candidates(
+            base, max_distance=3, roles=("destination",), telemetry=telemetry
+        )
+
+        assert len(base) == 64
+        assert telemetry.degraded is False
+        assert telemetry.buckets_queried == 4
+        assert sorted(item.record.relative_path for item in results) == ["a.jpg", "b.jpg"]
+
+    def test_the_band_indexes_match_the_query_expression(self, catalog: MediaCatalog) -> None:
+        """An expression index is only used when it matches the query exactly."""
+        base = "a1b2c3d4" * 8
+        _add(catalog, "dest", "a.jpg", signature=base)
+        index = CatalogDuplicateIndex(catalog)
+        index.perceptual_candidates(base, max_distance=1, roles=("destination",))
+
+        names = {
+            str(row["name"])
+            for row in catalog._connection.execute(  # noqa: SLF001 - schema assertion
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        assert {f"idx_signatures_w16_band{band}" for band in range(4)} <= names
+
+    def test_the_indexed_answer_equals_the_exhaustive_one(self, catalog: MediaCatalog) -> None:
+        rng = random.Random(11)
+        for number in range(30):
+            _add(
+                catalog,
+                "dest",
+                f"{number}.jpg",
+                signature=format(rng.getrandbits(256), "064x"),
+            )
+        probe = format(rng.getrandbits(256), "064x")
+        _add(catalog, "dest", "near.jpg", signature=_flip(probe, 3))
+        index = CatalogDuplicateIndex(catalog)
+
+        results = index.perceptual_candidates(probe, max_distance=3, roles=("destination",))
+
+        indexed = sorted((item.record.file_id, item.distance) for item in results)
+        assert indexed == _brute_force(index, probe, 3, ("destination",))
+        assert indexed
+
+    def test_a_width_that_does_not_divide_into_bands_says_so(self, catalog: MediaCatalog) -> None:
+        _add(catalog, "dest", "a.jpg", signature="abcdef")
+        index = CatalogDuplicateIndex(catalog)
+        telemetry = LookupTelemetry()
+
+        index.perceptual_candidates(
+            "abcdefghij", max_distance=1, roles=("destination",), telemetry=telemetry
+        )
+
+        assert telemetry.degraded is True
+        assert telemetry.degraded_reason is not None
+        assert "does not divide" in telemetry.degraded_reason
