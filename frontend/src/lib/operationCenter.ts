@@ -188,7 +188,13 @@ export interface PreflightInput {
   /** Outcomes preview could not freeze safely; the whole sort must be reviewed again. */
   unplannedCount?: number;
   freeBytes: number | null;
-  requiredBytes: number;
+  /**
+   * Bytes the run needs, or `null` when nobody could work it out — no frozen
+   * impact yet, or a plan carrying sizes that could not be read. Unknown is not
+   * zero: coercing it to `0` made the capacity check below pass unconditionally
+   * and report an all-clear it had not earned (I-10).
+   */
+  requiredBytes: number | null;
   quarantineWritable: boolean;
   /**
    * Permanently 0 since `P0-SAFE-001`: conversion quarantines the file it
@@ -262,7 +268,13 @@ export function preflight(input: PreflightInput): Preflight {
       messageKey: "preflight.blocking.quarantine",
     });
   }
-  if (input.freeBytes !== null && input.freeBytes < input.requiredBytes) {
+  if (input.requiredBytes === null) {
+    blocking.push({
+      text: "How much space this run needs is not known yet, so it cannot be checked against the disk.",
+      tone: "warning",
+      messageKey: "preflight.blocking.spaceUnknown",
+    });
+  } else if (input.freeBytes !== null && input.freeBytes < input.requiredBytes) {
     blocking.push({
       text: `Not enough free space: ${formatBytes(input.requiredBytes)} needed, ${formatBytes(input.freeBytes)} available.`,
       tone: "error",
