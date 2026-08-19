@@ -20,6 +20,7 @@ import pytest
 from PIL import Image
 from PIL.Image import Resampling
 
+from app.core.duplicate_plans import DuplicateGroup
 from app.core.library_profiles import LibraryProfile, LibraryRoot
 from app.core.library_validation import ValidatedLibraryProfile, validate_library_profile
 from app.services import catalog_indexing, signature_extraction
@@ -28,8 +29,9 @@ from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_indexing import index_library_roots
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, discover_into_catalog
-from app.services.duplicate_grouping import similar_groups
+from app.services.duplicate_grouping import exact_groups, similar_groups
 from app.services.duplicate_service import DuplicateService
+from app.services.keeper_policies import PolicySettings, apply_policy
 
 
 def _library(media: Path) -> ValidatedLibraryProfile:
@@ -473,3 +475,74 @@ class TestTheCostBudget:
         assert result.phash.issue is not None
         assert "ceiling" in result.phash.issue
         assert result.width.value == 1_000_000
+
+
+class TestKeeperPoliciesCanNowDecide:
+    """P2-DEDUP-D5. `highest_resolution` refuses a group unless *every* member's
+    dimensions are readable, and nothing wrote `media_facts` in production
+    before D3 — so on real data it refused every group it was ever given.
+
+    Policies act only on exact groups (DEC-01: perceptual never mutates), whose
+    members are byte-identical and therefore equal on pixels. Deciding is still
+    the point: the choice falls through to the tie-breakers instead of landing
+    on a person's desk for a reason that was never about this group.
+    """
+
+    def _exact_group(self, tmp_path: Path) -> DuplicateGroup:
+        media = tmp_path / "media"
+        media.mkdir()
+        photo = _structured_image(seed=21)
+        photo.save(media / "a.jpg", quality=92)
+        (media / "b.jpg").write_bytes((media / "a.jpg").read_bytes())
+
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(exact_groups(catalog, CatalogDuplicateIndex(catalog), roles=("input",)))
+        assert len(groups) == 1
+        assert len(groups[0].members) == 2
+        return groups[0]
+
+    def test_highest_resolution_decides_instead_of_refusing(self, tmp_path: Path) -> None:
+        result = apply_policy(
+            self._exact_group(tmp_path), PolicySettings(policy_id="highest_resolution")
+        )
+
+        assert result.decided
+        assert result.reason == "highest pixel count"
+
+    def test_best_quality_decides_without_the_degraded_wording(self, tmp_path: Path) -> None:
+        result = apply_policy(self._exact_group(tmp_path), PolicySettings(policy_id="best_quality"))
+
+        assert result.decided
+        assert result.reason == "best quality (most pixels, then largest)"
+
+    def test_without_the_writer_the_same_group_is_undecidable(self, tmp_path: Path) -> None:
+        """What the two tests above actually depend on. Dropping the derived
+        facts puts the group back in its pre-D3 state, and the policy refuses."""
+        self._exact_group(tmp_path)
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            for record in catalog.iter_files("input"):
+                catalog.invalidate_derived(record, kinds=("media_facts",))
+            stripped = list(exact_groups(catalog, CatalogDuplicateIndex(catalog), roles=("input",)))
+
+        result = apply_policy(stripped[0], PolicySettings(policy_id="highest_resolution"))
+
+        assert result.outcome == "needs_review"
+        assert result.reason == "no member has readable dimensions"
+
+    def test_a_policy_never_claims_pixels_it_did_not_have(self, tmp_path: Path) -> None:
+        """The silent half of a silent degradation is the explanation."""
+        media = tmp_path / "media"
+        media.mkdir()
+        (media / "a.jpg").write_bytes(b"\x00" * 2048)
+        (media / "b.jpg").write_bytes(b"\x00" * 2048)
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(exact_groups(catalog, CatalogDuplicateIndex(catalog), roles=("input",)))
+
+        result = apply_policy(groups[0], PolicySettings(policy_id="best_quality"))
+
+        assert result.decided
+        assert result.reason == "no member's dimensions could be read; decided by size"

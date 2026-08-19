@@ -127,6 +127,18 @@ def _choose(
             members,
             key=lambda m: (-(m.facts.pixels or 0), -_size(m), -(_modified(m) or 0), _identity(m)),
         )
+        # The ranking above is the decision; what changes here is only whether
+        # the reason admits how much of it pixels actually decided. Claiming
+        # "most pixels" for a group where none were readable is the silent half
+        # of a silent degradation.
+        measured_count = sum(1 for member in members if member.facts.pixels is not None)
+        if measured_count == 0:
+            return ranked[0], "no member's dimensions could be read; decided by size"
+        if measured_count != len(members):
+            return ranked[0], (
+                f"best quality (most pixels, then largest); "
+                f"{len(members) - measured_count} of {len(members)} had unreadable dimensions"
+            )
         return ranked[0], "best quality (most pixels, then largest)"
 
     if policy in {"longest_filename", "shortest_filename"}:
