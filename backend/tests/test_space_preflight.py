@@ -55,36 +55,28 @@ def _free_space(mapping: dict[Path, int], default: int) -> Any:
     return _fake
 
 
-class _Stat:
-    """A stat result with an overridden `st_dev`, proxying everything else."""
-
-    def __init__(self, real: Any, device: int) -> None:
-        self._real = real
-        self.st_dev = device
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._real, name)
-
-
 def _separate_devices(mapping: dict[Path, int], monkeypatch: pytest.MonkeyPatch) -> None:
     """Report the given trees as distinct devices.
 
     A test cannot mount a second filesystem, and both temp roots really do share
-    one `st_dev` — which the same-device tests below rely on and measure. This
-    fakes only the device *number*, so the grouping logic is exercised exactly
-    as it would be against a real NAS destination.
-    """
-    real = Path.stat
+    one `st_dev` — which the same-device tests below rely on and measure. Only
+    the device *number* is faked, through the module's own `_device_of` seam.
 
-    def _stat(self: Path, *args: Any, **kwargs: Any) -> Any:
-        result = real(self, *args, **kwargs)
-        resolved = self.resolve()
+    An earlier version patched `pathlib.Path.stat` instead. It passed on Python
+    3.14 and crashed pytest itself on CI's 3.11 with `'PosixPath' object has no
+    attribute '_str'`: patching a pathlib method at class level disturbs caches
+    the interpreter maintains internally. Overriding the one fact the code
+    actually asks for touches nothing else.
+    """
+
+    def _device(path: Path) -> int:
+        resolved = path.resolve()
         for root, device in mapping.items():
             if resolved == root.resolve() or root.resolve() in resolved.parents:
-                return _Stat(result, device)
-        return result
+                return device
+        return 999
 
-    monkeypatch.setattr(Path, "stat", _stat)
+    monkeypatch.setattr("app.services.quarantine._device_of", _device)
 
 
 @pytest.fixture()

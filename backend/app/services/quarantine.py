@@ -741,6 +741,17 @@ def preflight(
     )
 
 
+def _device_of(path: Path) -> int:
+    """The device a path lives on.
+
+    A named seam rather than an inline `path.stat().st_dev`: a test cannot mount
+    a second filesystem, and patching `pathlib.Path.stat` to fake one corrupts
+    pathlib's internal caches on some interpreters. This is the one fact the
+    grouping needs, so it is the one thing worth overriding.
+    """
+    return path.stat().st_dev
+
+
 def _volume_requirements(
     demands: Sequence[tuple[Path, int]],
 ) -> tuple[tuple[VolumeRequirement, ...], list[str]]:
@@ -755,7 +766,7 @@ def _volume_requirements(
     for path, wanted in demands:
         try:
             path.mkdir(parents=True, exist_ok=True)
-            device = path.stat().st_dev
+            device = _device_of(path)
         except OSError as exc:
             errors.append(f"{path} could not be prepared: {exc}")
             continue
