@@ -264,7 +264,7 @@ def _stage_copy(
     before = _snapshot_source(request, source)
     requested_metadata = request.expected_metadata or _metadata_snapshot_of(before)
     _require_free_space(request, before.st_size)
-    stage = _stage_path(destination)
+    stage = _stage_path(destination, request.action_id)
     copied_digest = hashlib.sha256()
     copied_bytes = 0
     try:
@@ -1002,16 +1002,40 @@ def _same_volume(source: Path, destination_parent: Path) -> bool:
         return False
 
 
-def _stage_path(destination: Path) -> Path:
+def stage_token(action_id: str) -> str:
+    """A bounded, filesystem-safe token naming the action that owns a stage.
+
+    Derived rather than embedded because an action id has no length or charset
+    guarantee, and a stage name has both.
+    """
+    return hashlib.sha256(action_id.encode("utf-8")).hexdigest()[:10]
+
+
+def stage_glob(action_id: str) -> str:
+    """Match only the stages belonging to ``action_id``.
+
+    Recovery used `.*.ms-stage-*.tmp`, which matches every action's stage in the
+    directory — so one action's recovery could discard another's (C-08). The
+    token makes ownership readable from the name, which is what a directory
+    scan has to work with.
+    """
+    return f".*.ms-stage-{stage_token(action_id)}-*.tmp"
+
+
+def _stage_path(destination: Path, action_id: str) -> Path:
     """Return a hidden, collision-free stage name in the destination directory.
 
     The name is deliberately short and bounded: a stage that inherited the full
     destination name would push long paths past the limit on the very
-    filesystems where staging matters most. The journal, not the file name,
-    relates a leftover stage to its action.
+    filesystems where staging matters most. It now carries a 12-character token
+    for its owning action as well, because the journal alone cannot tell a
+    directory scan which leftover stage belongs to which action. The random
+    suffix stays: one action may legitimately stage more than once.
     """
     prefix = "".join(character for character in destination.stem if character.isalnum())[:12]
-    return destination.parent / f".{prefix}.ms-stage-{uuid.uuid4().hex[:16]}.tmp"
+    return destination.parent / (
+        f".{prefix}.ms-stage-{stage_token(action_id)}-{uuid.uuid4().hex[:8]}.tmp"
+    )
 
 
 def _fsync_directory(directory: Path) -> None:
