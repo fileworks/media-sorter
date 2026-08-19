@@ -508,7 +508,8 @@ function FileTableSection({
               </tr>
             ) : (
               pageFiles.map((f) => (
-                <tr key={f.id} className="transition-colors hover:bg-muted/40">
+                // `scroll-mt` clears the sticky `<thead>` above these rows.
+                <tr key={f.id} className="scroll-mt-8 transition-colors hover:bg-muted/40">
                   <td
                     className="max-w-[180px] truncate px-3 py-2 text-foreground"
                     title={f.source_path}

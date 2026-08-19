@@ -193,7 +193,11 @@ export function StageShell({
           of the app. Anchoring them here keeps `<main>` the only scroller. */}
       <main
         tabIndex={0}
-        className="relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--border-strong))]"
+        // `scroll-pb-actionzone` keeps a row the browser scrolls into view clear of
+        // the action bar and the selection bar floating over this scroller.
+        // Without it a focused row lands underneath them, and the keyboard user
+        // cannot see what they just focused.
+        className="relative min-h-0 flex-1 overflow-y-auto scroll-pb-actionzone focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--border-strong))]"
         style={{ scrollbarGutter: "stable" }}
         aria-labelledby="current-stage-heading"
       >

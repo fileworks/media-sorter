@@ -266,7 +266,7 @@ function FolderCard({
           {/* The section this card sits in already says what a baseline is for,
               so the toggle needs the word and not the explanation. */}
           {onToggleBaseline && (
-            <label className="mr-1 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <label className="mr-1 flex min-h-6 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={card.role === "reference"}
