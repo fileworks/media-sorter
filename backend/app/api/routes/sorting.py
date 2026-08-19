@@ -1,6 +1,7 @@
 """Sorting routes — start, status, cancel, and report."""
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, Query
@@ -15,11 +16,41 @@ from app.api.schemas import (
 )
 from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
+from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortImpact, ReviewedSet
 from app.services.catalog_location import live_catalog_generation
+from app.services.quarantine import PreflightResult, preflight, store_for_state_root
 
 router = APIRouter()
+
+
+def _space_preflight(target_directory: str, impact: FrozenSortImpact) -> PreflightResult:
+    """Budget one run against every volume it would actually write to.
+
+    Two different devices are involved and the plan's own totals do not say so:
+
+    * the **destination** receives copies, the converted outputs, and the
+      `_duplicates`/`_corrupted` folders — `quarantine_dir()` builds those under
+      the destination root, so they always share its volume;
+    * the **quarantine store** receives the originals conversion replaced, and
+      it lives under the app data directory (`state_root`), which on a NAS or
+      external-drive destination is a different device entirely.
+
+    `estimated_converted_bytes` is charged twice on purpose: once at the
+    destination for the file conversion writes, once in the store for the
+    original it sets aside. Both exist at the same moment, which is exactly when
+    the run can run out of room.
+    """
+    quarantine_root = store_for_state_root(resolve_app_paths().data_dir).root
+    return preflight(
+        destination_bytes=(
+            impact.required_bytes + impact.quarantine_bytes + impact.estimated_converted_bytes
+        ),
+        quarantine_bytes=impact.estimated_converted_bytes,
+        destination=Path(target_directory),
+        quarantine_root=quarantine_root,
+    )
 
 
 class StartSortRequest(TaskStartRequest):
@@ -134,6 +165,32 @@ async def start_sorting(
                 request.reviewed_sets,
                 source_root=scope.config.source_directory,
             )
+        # C-07: `quarantine.preflight()` existed but nothing called it, so a run
+        # whose destination could not hold it started anyway and failed part-way
+        # through — the worst moment to discover it, because half the library
+        # has already moved. Checked here, before any file is touched, and only
+        # for a live run: a dry run writes nothing to budget for.
+        if not request.dry_run:
+            readiness = await asyncio.to_thread(
+                _space_preflight, scope.config.target_directory, frozen_plan.impact
+            )
+            if not readiness.ready:
+                raise ConflictError(
+                    readiness.headline,
+                    details={
+                        "reason": "insufficient_space",
+                        "plan_id": request.plan_id,
+                        "blocked_reasons": list(readiness.blocked_reasons),
+                        "volumes": [
+                            {
+                                "path": str(volume.path),
+                                "required_bytes": volume.required_bytes,
+                                "available_bytes": volume.available_bytes,
+                            }
+                            for volume in readiness.volumes
+                        ],
+                    },
+                )
     task, replayed = container.task_manager.start_task(
         "sort",
         request.idempotency_key,
