@@ -27,7 +27,7 @@ from app.core.library_profiles import CatalogPlacement, LibraryProfile
 from app.core.library_validation import ValidatedLibraryProfile
 from app.services.catalog import MediaCatalog
 from app.services.catalog_location import open_catalog
-from app.services.discovery import TraversalRules, discover_many
+from app.services.discovery import DiscoveryStats, TraversalRules, discover_many
 
 logger = structlog.get_logger(__name__)
 
@@ -101,12 +101,19 @@ def index_library_roots(
                     role=root.root.role,
                     volume_id=root.identity.volume_id,
                 )
-            results = discover_many(catalog, targets, cancel=cancel)
-            hashed = _hash_indexed_files(
-                catalog,
-                {root.root.root_id: root.canonical_path for root in indexable},
-                cancel=cancel,
-            )
+            paths = {root.root.root_id: root.canonical_path for root in indexable}
+            hashed = 0
+            skipped = 0
+
+            def derive(root_id: str, stats: DiscoveryStats) -> None:
+                nonlocal hashed, skipped
+                computed, unread = _hash_root_files(
+                    catalog, root_id, paths[root_id], stats, cancel=cancel
+                )
+                hashed += computed
+                skipped += unread
+
+            results = discover_many(catalog, targets, cancel=cancel, derive=derive)
     except Exception as error:  # pragma: no cover - defensive, see module docstring
         logger.warning(
             "catalog.indexing_failed",
@@ -116,7 +123,7 @@ def index_library_roots(
         return {}
 
     counts = {root_id: stats.files for root_id, stats in results.items()}
-    logger.info("catalog.indexed", roots=counts, hashed=hashed)
+    logger.info("catalog.indexed", roots=counts, hashed=hashed, skipped=skipped)
     return counts
 
 
@@ -163,12 +170,19 @@ def _index_legacy_profile(
                     role=root.role,
                     volume_id=root.identity.volume_id if root.identity else None,
                 )
-            results = discover_many(catalog, targets, cancel=cancel)
-            hashed = _hash_indexed_files(
-                catalog,
-                {root.root_id: Path(root.path) for root in indexable},
-                cancel=cancel,
-            )
+            paths = {root.root_id: Path(root.path) for root in indexable}
+            hashed = 0
+            skipped = 0
+
+            def derive(root_id: str, stats: DiscoveryStats) -> None:
+                nonlocal hashed, skipped
+                computed, unread = _hash_root_files(
+                    catalog, root_id, paths[root_id], stats, cancel=cancel
+                )
+                hashed += computed
+                skipped += unread
+
+            results = discover_many(catalog, targets, cancel=cancel, derive=derive)
     except Exception as error:  # pragma: no cover - defensive, see module docstring
         logger.warning(
             "catalog.indexing_failed",
@@ -178,16 +192,18 @@ def _index_legacy_profile(
         return {}
 
     counts = {root_id: stats.files for root_id, stats in results.items()}
-    logger.info("catalog.indexed", roots=counts, hashed=hashed)
+    logger.info("catalog.indexed", roots=counts, hashed=hashed, skipped=skipped)
     return counts
 
 
-def _hash_indexed_files(
+def _hash_root_files(
     catalog: MediaCatalog,
-    roots: dict[str, Path],
+    root_id: str,
+    root_path: Path,
+    stats: DiscoveryStats,
     *,
     cancel: Callable[[], bool] | None = None,
-) -> int:
+) -> tuple[int, int]:
     """Give every indexed file a content hash, skipping ones that already have one.
 
     Exact-duplicate grouping is a hash join, so a file without a hash is a file
@@ -196,26 +212,33 @@ def _hash_indexed_files(
     describes the same bytes, so re-previewing an unchanged library costs
     nothing and a changed file is always re-read.
 
-    Returns how many hashes were newly computed.
+    A file that cannot be read is recorded on *stats* rather than swallowed. The
+    walk saw it, so nothing else would ever say it is missing from the index —
+    and a generation that hashed only some of its files has not learned what a
+    `complete` one claims to have learned.
+
+    Returns ``(hashed, skipped)`` — the second number is why the generation
+    may be `partial`, so it is reported rather than inferred from a log line.
     """
     computed = 0
-    for root_id, root_path in roots.items():
-        for record in catalog.iter_files(root_id):
-            if cancel is not None and cancel():
-                return computed
-            if catalog.hash_for(record) is not None:
-                continue
-            try:
-                digest = _sha256_of(root_path / record.relative_path)
-            except OSError as error:
-                # An unreadable file is already reported by discovery as an
-                # issue; failing the whole pass over one of them would lose
-                # every hash computed so far.
-                logger.debug("catalog.hash_skipped", error=str(error))
-                continue
-            catalog.store_hash(record, digest)
-            computed += 1
-    return computed
+    skipped = 0
+    for record in catalog.iter_files(root_id):
+        if cancel is not None and cancel():
+            stats.cancelled = True
+            return computed, skipped
+        if catalog.hash_for(record) is not None:
+            continue
+        path = root_path / record.relative_path
+        try:
+            digest = _sha256_of(path)
+        except OSError as error:
+            logger.debug("catalog.hash_skipped", path=str(path), error=str(error))
+            stats.issues.append((str(path), "hash_unreadable"))
+            skipped += 1
+            continue
+        catalog.store_hash(record, digest)
+        computed += 1
+    return computed, skipped
 
 
 def _sha256_of(path: Path, *, block_size: int = 1024 * 1024) -> str:
