@@ -52,6 +52,14 @@ jobs:
       - name: Verify the review-status contract is not stale
         run: python scripts/generate_review_status_contract.py --check
 
+      # Two implementations pick the keeper — `keeper_policies.py` and
+      # `reviewWorkbench.ts` — and drift between them is invisible, because both
+      # keep returning a keeper. The vector is generated from the backend and
+      # asserted by the frontend suite; this fails when a tie-break changes and
+      # the vector was not regenerated (A-02).
+      - name: Verify the keeper golden vector is not stale
+        run: python scripts/generate_keeper_golden_vector.py --check
+
       - name: Lint — ruff
         working-directory: backend
         run: python -m ruff check app tests

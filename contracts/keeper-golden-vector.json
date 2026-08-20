@@ -1,0 +1,1970 @@
+{
+  "cases": [
+    {
+      "group": {
+        "anchor_member_id": "small",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "small",
+            "observed_path": "/input/small.jpg",
+            "relative_path": "small.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 400
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 400
+              }
+            },
+            "member_id": "big",
+            "observed_path": "/input/big.jpg",
+            "relative_path": "big.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "big",
+      "name": "best_quality prefers pixels over bytes",
+      "outcome": "decided",
+      "policy": "best_quality",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "light",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "light",
+            "observed_path": "/input/light.jpg",
+            "relative_path": "light.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "heavy",
+            "observed_path": "/input/heavy.jpg",
+            "relative_path": "heavy.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "heavy",
+      "name": "best_quality falls back to size between equal pixels",
+      "outcome": "decided",
+      "policy": "best_quality",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "unreadable",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": "unreadable",
+                "known": false,
+                "value": null
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": "unreadable",
+                "known": false,
+                "value": null
+              }
+            },
+            "member_id": "unreadable",
+            "observed_path": "/input/unreadable.jpg",
+            "relative_path": "unreadable.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "readable",
+            "observed_path": "/input/readable.jpg",
+            "relative_path": "readable.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "readable",
+      "name": "best_quality ranks a measured member above an unmeasured one",
+      "outcome": "decided",
+      "policy": "best_quality",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "light",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "light",
+            "observed_path": "/input/light.jpg",
+            "relative_path": "light.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "heavy",
+            "observed_path": "/input/heavy.jpg",
+            "relative_path": "heavy.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "heavy",
+      "name": "largest wins on bytes",
+      "outcome": "decided",
+      "policy": "largest",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "light",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "light",
+            "observed_path": "/input/light.jpg",
+            "relative_path": "light.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "heavy",
+            "observed_path": "/input/heavy.jpg",
+            "relative_path": "heavy.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "light",
+      "name": "smallest is its mirror",
+      "outcome": "decided",
+      "policy": "smallest",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "a",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": "no mtime",
+                "known": false,
+                "value": null
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "a",
+            "observed_path": "/input/a.jpg",
+            "relative_path": "a.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": "no mtime",
+                "known": false,
+                "value": null
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "b",
+            "observed_path": "/input/b.jpg",
+            "relative_path": "b.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": null,
+      "name": "newest needs a modification time",
+      "outcome": "needs_review",
+      "policy": "newest",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "older",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "older",
+            "observed_path": "/input/older.jpg",
+            "relative_path": "older.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 900
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "newer",
+            "observed_path": "/input/newer.jpg",
+            "relative_path": "newer.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": "newer",
+      "name": "newest picks the later one",
+      "outcome": "decided",
+      "policy": "newest",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "older",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "older",
+            "observed_path": "/input/older.jpg",
+            "relative_path": "older.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 900
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "newer",
+            "observed_path": "/input/newer.jpg",
+            "relative_path": "newer.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": "older",
+      "name": "oldest picks the earlier one",
+      "outcome": "decided",
+      "policy": "oldest",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "small",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "small",
+            "observed_path": "/input/small.jpg",
+            "relative_path": "small.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 400
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 400
+              }
+            },
+            "member_id": "big",
+            "observed_path": "/input/big.jpg",
+            "relative_path": "big.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": "big",
+      "name": "highest_resolution decides when every member is measured",
+      "outcome": "decided",
+      "policy": "highest_resolution",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "unreadable",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": "unreadable",
+                "known": false,
+                "value": null
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 9000,
+              "width": {
+                "issue": "unreadable",
+                "known": false,
+                "value": null
+              }
+            },
+            "member_id": "unreadable",
+            "observed_path": "/input/unreadable.jpg",
+            "relative_path": "unreadable.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "readable",
+            "observed_path": "/input/readable.jpg",
+            "relative_path": "readable.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 10000
+      },
+      "keeper": null,
+      "name": "highest_resolution refuses a partly measured set",
+      "outcome": "needs_review",
+      "policy": "highest_resolution",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "short",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "short",
+            "observed_path": "/input/a.jpg",
+            "relative_path": "a.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "long",
+            "observed_path": "/input/a-final-edit.jpg",
+            "relative_path": "a-final-edit.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": "long",
+      "name": "longest_filename counts the name, not the path",
+      "outcome": "decided",
+      "policy": "longest_filename",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "short",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "short",
+            "observed_path": "/input/a.jpg",
+            "relative_path": "a.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "long",
+            "observed_path": "/input/a-final-edit.jpg",
+            "relative_path": "a-final-edit.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": "short",
+      "name": "shortest_filename is its mirror",
+      "outcome": "decided",
+      "policy": "shortest_filename",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "from-phone",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "from-phone",
+            "observed_path": "/phone/from-phone.jpg",
+            "relative_path": "from-phone.jpg",
+            "role": "input",
+            "root_id": "phone"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "from-camera",
+            "observed_path": "/camera/from-camera.jpg",
+            "relative_path": "from-camera.jpg",
+            "role": "input",
+            "root_id": "camera"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": null,
+      "name": "preferred_root without a configured order decides nothing",
+      "outcome": "needs_review",
+      "policy": "preferred_root",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "mutable",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "mutable",
+            "observed_path": "/input/mutable.jpg",
+            "relative_path": "mutable.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "reference",
+            "observed_path": "/ref/reference.jpg",
+            "relative_path": "reference.jpg",
+            "role": "reference",
+            "root_id": "ref"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": null,
+      "name": "protected_reference is not a choice a policy makes",
+      "outcome": "needs_review",
+      "policy": "protected_reference",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "b",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "b",
+            "observed_path": "/input/b.jpg",
+            "relative_path": "b.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "a",
+            "observed_path": "/input/a.jpg",
+            "relative_path": "a.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": null,
+      "name": "manual refuses by definition",
+      "outcome": "needs_review",
+      "policy": "manual",
+      "preferred_roots": []
+    },
+    {
+      "group": {
+        "anchor_member_id": "b",
+        "catalog_generation": 1,
+        "evidence_summary": "golden vector",
+        "group_id": "golden",
+        "kind": "exact",
+        "member_count": 2,
+        "members": [
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "b",
+            "observed_path": "/input/b.jpg",
+            "relative_path": "b.jpg",
+            "role": "input",
+            "root_id": "input"
+          },
+          {
+            "evidence": {
+              "algorithm": "sha256",
+              "algorithm_version": "1",
+              "confidence": "high",
+              "distance": null,
+              "extraction_issues": [],
+              "sha256": null,
+              "signature": null,
+              "threshold": null
+            },
+            "facts": {
+              "captured_at": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "codec": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "duration_seconds": {
+                "issue": null,
+                "known": false,
+                "value": null
+              },
+              "height": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              },
+              "media_kind": "image",
+              "modified_at": {
+                "issue": null,
+                "known": true,
+                "value": 1000
+              },
+              "size_bytes": 1000,
+              "width": {
+                "issue": null,
+                "known": true,
+                "value": 100
+              }
+            },
+            "member_id": "a",
+            "observed_path": "/input/a.jpg",
+            "relative_path": "a.jpg",
+            "role": "input",
+            "root_id": "input"
+          }
+        ],
+        "rule_version": "golden",
+        "schema_version": 1,
+        "total_bytes": 2000
+      },
+      "keeper": "a",
+      "name": "identity is the last tie-break, so order never decides",
+      "outcome": "decided",
+      "policy": "largest",
+      "preferred_roots": []
+    }
+  ],
+  "policies": [
+    "best_quality",
+    "largest",
+    "smallest",
+    "newest",
+    "oldest",
+    "highest_resolution",
+    "longest_filename",
+    "shortest_filename",
+    "preferred_root",
+    "protected_reference",
+    "manual"
+  ],
+  "version": 1
+}
