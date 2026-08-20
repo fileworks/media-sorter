@@ -115,25 +115,27 @@ def test_post_config_updates_ai_tagging_fields(client: TestClient) -> None:
         "/api/config",
         json={
             "ai_tagging_enabled": True,
-            "ai_tagging_provider": "imagga",
             "ai_tagging_labels": ["beach", "city"],
         },
     )
     assert response.status_code == 200
     body = response.json()
     assert body["ai_tagging_enabled"] is True
-    assert body["ai_tagging_provider"] == "imagga"
     assert body["ai_tagging_labels"] == ["beach", "city"]
+    # Retired with the cloud taggers: the response must not advertise a provider
+    # setting that no longer exists.
+    assert "ai_tagging_provider" not in body
 
 
 def test_post_config_rebuilds_ai_tagging_service(client: TestClient) -> None:
-    """Changing AI config must rebuild the cached AITaggingService (no stale provider)."""
+    """Changing AI config must rebuild the cached AITaggingService (no stale config)."""
     container = client.app.state.container  # type: ignore[attr-defined]
-    # Force the lazy service to exist, then change the provider.
+    # Force the lazy service to exist, then change the tagging config.
     _ = container.ai_tagging_service
-    client.post("/api/config", json={"ai_tagging_enabled": True, "ai_tagging_provider": "local"})
+    client.post("/api/config", json={"ai_tagging_enabled": True, "ai_tagging_max_tags": 7})
     assert container._ai_tagging_service is not None
-    assert container._ai_tagging_service._config.ai_tagging_provider == "local"
+    assert container._ai_tagging_service._config.ai_tagging_enabled is True
+    assert container._ai_tagging_service._config.ai_tagging_max_tags == 7
 
 
 def test_post_config_tier_change_invalidates_encoder(client: TestClient) -> None:

@@ -58,12 +58,10 @@ export interface Config {
   repair_enabled: boolean;
   rules_enabled: boolean;
   rule_set: RuleSet;
+  /** Derive-pass threads. `null` means "ask the machine" (min(8, cpu_count)). */
+  index_workers: number | null;
   ai_tagging_enabled: boolean;
-  ai_tagging_provider: "local" | "azure_vision" | "imagga" | "google_cloud_vision";
   ai_tagging_confidence_threshold: number;
-  ai_tagging_api_key: string | null;
-  ai_tagging_api_secret: string | null;
-  ai_tagging_endpoint: string | null;
   ai_tagging_max_tags: number;
   embed_tags_in_files: boolean;
   ai_tagging_labels: string[];

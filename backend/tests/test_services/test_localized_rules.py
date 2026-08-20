@@ -23,10 +23,6 @@ from app.core.rules import (
     validate_relative_route,
 )
 from app.services.ai.base_tagger import (
-    AzureVisionTagger,
-    CloudConsent,
-    GoogleCloudVisionTagger,
-    ImaggaTagger,
     LocalClipTagger,
 )
 from app.services.ai.encoder_protocol import VisionEncoder
@@ -262,62 +258,6 @@ def test_collision_reservation_covers_disk_and_same_batch(tmp_path: Path) -> Non
     assert first.name == "image_001.jpg"
     assert second.name == "image_002.jpg"
     assert destination.read_bytes() == b"existing"
-
-
-class _Response:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self.payload = payload
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict[str, Any]:
-        return self.payload
-
-
-def test_cloud_providers_request_or_map_german(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[dict[str, Any]] = []
-
-    def fake_post(_url: str, **kwargs: Any) -> _Response:
-        calls.append(kwargs)
-        if "files" in kwargs:
-            return _Response({"result": {"tags": [{"tag": {"de": " Straße "}, "confidence": 95}]}})
-        if "json" in kwargs:
-            return _Response(
-                {
-                    "responses": [
-                        {
-                            "labelAnnotations": [
-                                {"description": "Screenshot", "score": 0.9},
-                                {"description": "Unmapped Thing", "score": 0.8},
-                            ]
-                        }
-                    ]
-                }
-            )
-        return _Response({"tagsResult": {"values": [{"name": " Straße ", "confidence": 0.9}]}})
-
-    monkeypatch.setattr("app.services.ai.base_tagger.httpx.post", fake_post)
-    image = pytest.importorskip("PIL.Image").new("RGB", (2, 2))
-
-    # These taggers upload the picture, and since `D-06` they refuse to do that
-    # without a consent record naming the provider. What this test is about is
-    # localisation, so it grants consent rather than asserting the old
-    # no-questions-asked behaviour.
-    def consent(provider: str) -> CloudConsent:
-        return CloudConsent(provider=provider, consented_at="2026-08-20T00:00:00Z")
-
-    azure = AzureVisionTagger("https://azure", "key", locale="de", consent=consent("azure-vision"))
-    assert azure.tag(image) == [("Straße", 0.9)]
-    assert calls[-1]["params"]["language"] == "de"
-    imagga = ImaggaTagger("key", "secret", locale="de", consent=consent("imagga"))
-    assert imagga.tag(image) == [("Straße", 0.95)]
-    assert calls[-1]["data"]["language"] == "de"
-    google = GoogleCloudVisionTagger("key", locale="de", consent=consent("google-cloud-vision"))
-    assert google.tag(image) == [("Bildschirmfoto", 0.9)]
-    assert google.warnings == ("provider.google.unmapped_label:Unmapped Thing",)
 
 
 class _PromptCapture:

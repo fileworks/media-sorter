@@ -51,7 +51,6 @@ const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
   thumbnail_cache_budget_bytes: "Thumbnail cache budget",
   exif_sanity_check_enabled: "EXIF sanity check",
   ai_tagging_enabled: "AI content tagging",
-  ai_tagging_provider: "AI provider",
   ai_tagging_confidence_threshold: "Tag confidence",
   ai_tagging_max_tags: "Max tags per file",
   embed_tags_in_files: "Embed tags in files",

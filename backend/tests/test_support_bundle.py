@@ -95,9 +95,21 @@ def _config(tmp_path: Path) -> Config:
     return Config(
         source_directory=str(tmp_path / "Private Archive"),
         target_directory=str(tmp_path / "sorted"),
-        ai_tagging_api_key=_SECRET,
         convert_images=False,
     )
+
+
+#: A credential-shaped key that is not a Config field. Since AI tagging went
+#: local-only there is no credential setting left to use as a fixture, but the
+#: redactor's promise was never about one field: `NEVER_INCLUDED` matches key
+#: *substrings*, so anything credential-shaped in the mapping must be withheld.
+#: Testing it with a synthetic key checks the rule rather than one instance of
+#: it, and keeps the guarantee covered if a credential field ever returns.
+_CREDENTIAL_KEY = "third_party_api_key"
+
+
+def _config_map(tmp_path: Path) -> dict[str, object]:
+    return {**_config(tmp_path).to_dict(), _CREDENTIAL_KEY: _SECRET}
 
 
 def _contents(archive_path: Path) -> str:
@@ -150,7 +162,7 @@ def test_an_exported_bundle_carries_the_evidence_support_needs(tmp_path: Path) -
     archive_path = export_bundle(
         _state(tmp_path),
         tmp_path / "out" / "bundle.zip",
-        config=_config(tmp_path).to_dict(),
+        config=_config_map(tmp_path),
     )
 
     with zipfile.ZipFile(archive_path) as archive:
@@ -169,7 +181,7 @@ def test_a_credential_never_reaches_the_archive(tmp_path: Path) -> None:
     archive_path = export_bundle(
         _state(tmp_path),
         tmp_path / "out" / "bundle.zip",
-        config=_config(tmp_path).to_dict(),
+        config=_config_map(tmp_path),
     )
 
     contents = _contents(archive_path)
@@ -180,20 +192,20 @@ def test_a_configured_credential_is_reported_as_set_without_its_value(tmp_path: 
     archive_path = export_bundle(
         _state(tmp_path),
         tmp_path / "out" / "bundle.zip",
-        config=_config(tmp_path).to_dict(),
+        config=_config_map(tmp_path),
     )
 
     with zipfile.ZipFile(archive_path) as archive:
         shape = json.loads(archive.read("configuration-shape.json"))
-    assert shape["ai_tagging_api_key"] == {"type": "str", "configured": True}
-    assert "value" not in shape["ai_tagging_api_key"]
+    assert shape[_CREDENTIAL_KEY] == {"type": "str", "configured": True}
+    assert "value" not in shape[_CREDENTIAL_KEY]
 
 
 def test_paths_and_filenames_are_tokenized_by_default(tmp_path: Path) -> None:
     archive_path = export_bundle(
         _state(tmp_path),
         tmp_path / "out" / "bundle.zip",
-        config=_config(tmp_path).to_dict(),
+        config=_config_map(tmp_path),
     )
 
     contents = _contents(archive_path)
@@ -206,7 +218,7 @@ def test_real_paths_appear_only_when_explicitly_requested(tmp_path: Path) -> Non
     archive_path = export_bundle(
         _state(tmp_path),
         tmp_path / "out" / "bundle.zip",
-        config=_config(tmp_path).to_dict(),
+        config=_config_map(tmp_path),
         include_paths=True,
     )
 

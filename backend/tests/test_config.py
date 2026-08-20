@@ -149,27 +149,20 @@ def test_v2_modifying_config_migrates_to_blocked_review_profile(
 def test_ai_tagging_defaults() -> None:
     cfg = Config.defaults()
     assert cfg.ai_tagging_enabled is False
-    assert cfg.ai_tagging_provider == "local"  # offline, no-key default
     assert cfg.ai_tagging_embed_in_files is False
     assert cfg.ai_tagging_max_tags == 10
-    assert cfg.ai_tagging_api_key is None
     assert isinstance(cfg.ai_tagging_labels, list) and cfg.ai_tagging_labels
 
 
 def test_ai_tagging_round_trip(tmp_config_loader: ConfigLoader) -> None:
     cfg = Config(
         ai_tagging_enabled=True,
-        ai_tagging_provider="azure_vision",
-        ai_tagging_endpoint="https://x.cognitiveservices.azure.com",
-        ai_tagging_api_key="secret-key",
         ai_tagging_labels=["beach", "city"],
         ai_tagging_max_tags=5,
     )
     tmp_config_loader.save(cfg)
     loaded = tmp_config_loader.load()
-    assert loaded.ai_tagging_provider == "azure_vision"
-    assert loaded.ai_tagging_endpoint == "https://x.cognitiveservices.azure.com"
-    assert loaded.ai_tagging_api_key == "secret-key"
+    assert loaded.ai_tagging_enabled is True
     assert loaded.ai_tagging_labels == ["beach", "city"]
     assert loaded.ai_tagging_max_tags == 5
 

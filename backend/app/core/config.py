@@ -125,21 +125,13 @@ class Config:
     # Writes descriptive tags INTO files / the report. This group is *metadata*
     # only — it never changes where a file is placed. (Smart Categorization,
     # below, is the independent *folder routing* feature.)
-    # provider ∈ {"local", "azure_vision", "imagga", "google_cloud_vision"}.
-    # "local" is the offline, no-key default (CLIP zero-shot via fastembed).
+    # Tagging runs on this machine and nowhere else, so there is no provider to
+    # choose and no credential to store. The retired provider/credential keys are
+    # dropped from stored configs by ``from_dict`` (see ``RETIRED_CONFIG_KEYS``).
     ai_tagging_enabled: bool = False
-    ai_tagging_provider: str = "local"
-    # For the local CLIP tagger this is a per-label probability: how much more the
-    # label fits the image than a generic "a photo" background (0.5 = the natural
-    # midpoint). Cloud providers reuse it as their own confidence cut-off.
+    # A per-label probability from the local tagger: how much more the label fits
+    # the image than a generic "a photo" background (0.5 = the natural midpoint).
     ai_tagging_confidence_threshold: float = 0.5
-    # Cloud credentials (one simple shape across providers):
-    #   - api_key:      Azure subscription key / Imagga key / Google API key
-    #   - api_secret:   Imagga secret (unused by the others)
-    #   - endpoint:     Azure resource endpoint, e.g. https://<name>.cognitiveservices.azure.com
-    ai_tagging_api_key: str | None = None
-    ai_tagging_api_secret: str | None = None
-    ai_tagging_endpoint: str | None = None
     # Max tags written per file; whether to embed tags into the media files.
     ai_tagging_max_tags: int = 10
     embed_tags_in_files: bool = False
@@ -693,6 +685,13 @@ RETIRED_CONFIG_KEYS: frozenset[str] = frozenset(
         "analyze",
         # Duplicates are always quarantined, never deleted.
         "duplicate_action",
+        # AI tagging is local-only; there is no provider and no credential to
+        # send anywhere. Stored values are dropped rather than rejected so a
+        # config written before the cloud taggers were removed still loads.
+        "ai_tagging_provider",
+        "ai_tagging_api_key",
+        "ai_tagging_api_secret",
+        "ai_tagging_endpoint",
     }
 )
 

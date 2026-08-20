@@ -1,8 +1,8 @@
-"""Tests for AI tagging — providers, factory, and the orchestrator service.
+"""Tests for AI tagging — the local tagger, factory, and orchestrator service.
 
-These never load a real CLIP model or hit the network: cloud providers are
-exercised with a monkeypatched ``httpx.post`` and the local provider with
-injected fake embedders.
+These never load a real CLIP model and never touch the network: the local
+tagger is exercised with injected fake embedders. There is no cloud provider to
+test; ``test_local_only_tagging.py`` asserts there cannot be one.
 """
 
 from __future__ import annotations
@@ -16,13 +16,8 @@ import pytest
 from PIL import Image
 
 from app.core.config import Config
-from app.services.ai import base_tagger
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.base_tagger import (
-    AzureVisionTagger,
-    CloudConsent,
-    GoogleCloudVisionTagger,
-    ImaggaTagger,
     LocalClipTagger,
     build_tagger,
 )
@@ -31,29 +26,6 @@ from app.services.ai.clip_embedder import ClipEmbedder
 
 def _img() -> Image.Image:
     return Image.new("RGB", (64, 48), color=(120, 180, 90))
-
-
-class _FakeResp:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self._payload = payload
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict[str, Any]:
-        return self._payload
-
-
-def _patch_post(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Patch base_tagger.httpx.post to return *payload*; capture call kwargs."""
-    calls: list[dict[str, Any]] = []
-
-    def fake_post(url: str, **kwargs: Any) -> _FakeResp:
-        calls.append({"url": url, **kwargs})
-        return _FakeResp(payload)
-
-    monkeypatch.setattr(base_tagger.httpx, "post", fake_post)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
-    return calls
 
 
 # ------------------------------------------------------------------ #
@@ -66,96 +38,12 @@ def test_build_tagger_disabled_returns_none() -> None:
 
 
 def test_build_tagger_local_requires_shared_encoder() -> None:
-    cfg = Config(ai_tagging_enabled=True, ai_tagging_provider="local")
+    cfg = Config(ai_tagging_enabled=True)
     # No shared encoder (tier "off" / model unavailable) → no tagger, rather than
     # silently fabricating a fresh CLIP model the user opted out of.
     assert build_tagger(cfg) is None
     # With a shared encoder, the local CLIP tagger is built and reuses it.
     assert isinstance(build_tagger(cfg, ClipEmbedder()), LocalClipTagger)
-
-
-def test_build_tagger_azure_requires_endpoint_and_key() -> None:
-    cfg = Config(ai_tagging_enabled=True, ai_tagging_provider="azure_vision")
-    assert build_tagger(cfg) is None
-    cfg.ai_tagging_endpoint = "https://x.cognitiveservices.azure.com"
-    cfg.ai_tagging_api_key = "k"
-    assert isinstance(build_tagger(cfg), AzureVisionTagger)
-
-
-def test_build_tagger_imagga_requires_key_and_secret() -> None:
-    cfg = Config(ai_tagging_enabled=True, ai_tagging_provider="imagga", ai_tagging_api_key="k")
-    assert build_tagger(cfg) is None
-    cfg.ai_tagging_api_secret = "s"
-    assert isinstance(build_tagger(cfg), ImaggaTagger)
-
-
-def test_build_tagger_google_requires_key() -> None:
-    cfg = Config(ai_tagging_enabled=True, ai_tagging_provider="google_cloud_vision")
-    assert build_tagger(cfg) is None
-    cfg.ai_tagging_api_key = "k"
-    assert isinstance(build_tagger(cfg), GoogleCloudVisionTagger)
-
-
-def test_build_tagger_unknown_provider_returns_none() -> None:
-    cfg = Config(ai_tagging_enabled=True, ai_tagging_provider="nope")
-    assert build_tagger(cfg) is None
-
-
-# ------------------------------------------------------------------ #
-# Cloud providers — response parsing + error handling                  #
-# ------------------------------------------------------------------ #
-
-
-# `D-06`: these taggers upload the picture and refuse without a consent record
-# naming the provider. These tests are about parsing each provider's response,
-# so they grant it; the refusal itself is covered in `test_cloud_consent.py`.
-def _consent(provider: str) -> CloudConsent:
-    return CloudConsent(provider=provider, consented_at="2026-08-20T00:00:00Z")
-
-
-def test_azure_parses_tags_and_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {
-        "tagsResult": {
-            "values": [
-                {"name": "beach", "confidence": 0.91},
-                {"name": "blurry", "confidence": 0.05},  # below threshold
-            ]
-        }
-    }
-    calls = _patch_post(monkeypatch, payload)
-    tagger = AzureVisionTagger(
-        endpoint="https://x/", api_key="key", threshold=0.2, consent=_consent("azure-vision")
-    )
-    result = tagger.tag(_img())
-    assert result == [("beach", pytest.approx(0.91))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
-    assert calls[0]["headers"]["Ocp-Apim-Subscription-Key"] == "key"
-
-
-def test_imagga_scales_confidence_and_parses(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {"result": {"tags": [{"tag": {"en": "dog"}, "confidence": 80.0}]}}
-    _patch_post(monkeypatch, payload)
-    tagger = ImaggaTagger(api_key="k", api_secret="s", threshold=0.2, consent=_consent("imagga"))
-    result = tagger.tag(_img())
-    # `pytest.approx` compares fine at runtime; mypy sees `ApproxBase`
-    # against `float` and calls the comparison non-overlapping.
-    assert result == [("dog", pytest.approx(0.8))]  # type: ignore[comparison-overlap]
-
-
-def test_google_parses_label_annotations(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {"responses": [{"labelAnnotations": [{"description": "Sky", "score": 0.97}]}]}
-    _patch_post(monkeypatch, payload)
-    tagger = GoogleCloudVisionTagger(
-        api_key="k", threshold=0.2, consent=_consent("google-cloud-vision")
-    )
-    assert tagger.tag(_img()) == [("Sky", pytest.approx(0.97))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
-
-
-def test_cloud_provider_returns_empty_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def boom(url: str, **kwargs: Any) -> _FakeResp:
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(base_tagger.httpx, "post", boom)  # type: ignore[attr-defined]  # monkeypatching a module attribute the module imported but does not re-export
-    assert AzureVisionTagger(endpoint="https://x", api_key="k").tag(_img()) == []
 
 
 # ------------------------------------------------------------------ #
