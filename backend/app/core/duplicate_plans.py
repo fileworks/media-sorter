@@ -130,6 +130,24 @@ class FactValue(BaseModel):
         return self
 
 
+class AiProvenance(BaseModel):
+    """Everything that decides whether a stored AI answer is still the answer.
+
+    `D-05`. Named as one object rather than seven arguments because every field
+    is part of the cache key, and a caller that forgets one gets a stale label
+    rather than a type error.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    model_id: str
+    manifest_sha256: str
+    revision: str
+    prompt_version: str
+    threshold_version: str
+    locale: str
+
+
 class MemberFacts(BaseModel):
     """The normalized facts a person compares two copies by."""
 

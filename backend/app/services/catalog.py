@@ -35,6 +35,7 @@ from app.core.catalog_schema import (
     apply_schema,
     fingerprint,
 )
+from app.core.duplicate_plans import AiProvenance
 from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -429,6 +430,89 @@ class MediaCatalog:
             (record.file_id, record.fingerprint, HASH_EXTRACTOR_VERSION),
         ).fetchone()
         return None if row is None else str(row["sha256"])
+
+    def store_ai_fact(
+        self,
+        record: FileRecord,
+        *,
+        kind: str,
+        label: str | None,
+        confidence: float | None,
+        provenance: AiProvenance,
+    ) -> None:
+        """Remember one AI answer together with everything that produced it.
+
+        `D-05`. An AI answer is about the file *and* the model, prompt revision,
+        threshold and locale that produced it. Storing it keyed only by the file
+        would make a model upgrade silently reuse the old label — the wrong
+        answer, delivered confidently.
+        """
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO ai_facts (file_id, kind, label, confidence, model_id,
+                                      manifest_sha256, revision, prompt_version,
+                                      threshold_version, locale, fingerprint, computed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(file_id, kind, model_id, manifest_sha256, revision,
+                            prompt_version, threshold_version, locale)
+                DO UPDATE SET
+                    label = excluded.label,
+                    confidence = excluded.confidence,
+                    fingerprint = excluded.fingerprint,
+                    computed_at = excluded.computed_at
+                """,
+                (
+                    record.file_id,
+                    kind,
+                    label,
+                    confidence,
+                    provenance.model_id,
+                    provenance.manifest_sha256,
+                    provenance.revision,
+                    provenance.prompt_version,
+                    provenance.threshold_version,
+                    provenance.locale,
+                    record.fingerprint,
+                    _now(),
+                ),
+            )
+
+    def ai_fact_for(
+        self,
+        record: FileRecord,
+        *,
+        kind: str,
+        provenance: AiProvenance,
+    ) -> dict[str, Any] | None:
+        """A stored AI answer, only if it is still about this file and this model.
+
+        Any difference — the bytes, the model, the manifest digest, the prompt
+        revision, the threshold version, the locale — is a miss. Never a
+        recomputed-looking answer that nothing recomputed (I-14).
+        """
+        if record.fingerprint_version != FINGERPRINT_VERSION:
+            return None
+        row = self._connection.execute(
+            """
+            SELECT label, confidence, computed_at FROM ai_facts
+             WHERE file_id = ? AND kind = ? AND fingerprint = ?
+               AND model_id = ? AND manifest_sha256 = ? AND revision = ?
+               AND prompt_version = ? AND threshold_version = ? AND locale = ?
+            """,
+            (
+                record.file_id,
+                kind,
+                record.fingerprint,
+                provenance.model_id,
+                provenance.manifest_sha256,
+                provenance.revision,
+                provenance.prompt_version,
+                provenance.threshold_version,
+                provenance.locale,
+            ),
+        ).fetchone()
+        return None if row is None else dict(row)
 
     def store_media_facts(self, record: FileRecord, **facts: Any) -> None:
         with self.transaction() as connection:
