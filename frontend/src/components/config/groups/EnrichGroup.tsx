@@ -444,6 +444,40 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
       </SettingRow>
 
       <SettingRow
+        field="index_workers"
+        label={t("config.indexWorkers.label")}
+        description={t("config.indexWorkers.help")}
+        htmlFor="index-workers"
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            id="index-workers"
+            type="number"
+            min={0}
+            max={32}
+            // 0 and empty both mean "ask the machine", which is what the
+            // placeholder says. Storing null rather than a number is what keeps
+            // the setting automatic on a machine with a different core count.
+            value={config.index_workers ?? ""}
+            placeholder={t("config.indexWorkers.auto")}
+            onChange={(event) => {
+              const raw = Number(event.target.value);
+              updateConfig({
+                index_workers:
+                  event.target.value === "" || !Number.isFinite(raw) || raw <= 0
+                    ? null
+                    : Math.min(32, Math.trunc(raw)),
+              });
+            }}
+            className="w-28"
+          />
+          {config.index_workers === null && (
+            <span className="text-xs text-faint">{t("config.indexWorkers.auto")}</span>
+          )}
+        </div>
+      </SettingRow>
+
+      <SettingRow
         field="thumbnail_cache_enabled"
         label={t("config.thumbnailCache.label")}
         description={t("config.thumbnailCache.help")}

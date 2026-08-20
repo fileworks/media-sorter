@@ -666,6 +666,10 @@ export const en = {
   "config.conversion.videoFormat": "Video format",
   "config.other.fixDates": "Fix dates in metadata",
   "config.other.repair": "Repair corrupted files",
+  "config.indexWorkers.label": "Indexing threads",
+  "config.indexWorkers.help":
+    "How many files are read and decoded at once while indexing. Left empty, this matches your machine. Lower it to keep the computer responsive for other work; raise it only if indexing is the only thing running.",
+  "config.indexWorkers.auto": "Automatic",
   "config.thumbnailCache.label": "Cache thumbnails",
   "config.thumbnailCache.help":
     "Store disposable previews under the app data directory to avoid decoding media again.",
@@ -2423,6 +2427,10 @@ export const de: Record<MessageKey, string> = {
   "config.conversion.videoFormat": "Videoformat",
   "config.other.fixDates": "Datumsangaben in Metadaten korrigieren",
   "config.other.repair": "Beschädigte Dateien reparieren",
+  "config.indexWorkers.label": "Threads f\u00fcr die Indizierung",
+  "config.indexWorkers.help":
+    "Wie viele Dateien beim Indizieren gleichzeitig gelesen und dekodiert werden. Leer gelassen richtet sich der Wert nach Ihrem Rechner. Verringern Sie ihn, damit der Rechner f\u00fcr andere Arbeiten reaktionsf\u00e4hig bleibt; erh\u00f6hen Sie ihn nur, wenn sonst nichts l\u00e4uft.",
+  "config.indexWorkers.auto": "Automatisch",
   "config.thumbnailCache.label": "Vorschaubilder zwischenspeichern",
   "config.thumbnailCache.help":
     "Speichert löschbare Vorschaubilder im App-Datenordner, damit Medien nicht erneut dekodiert werden.",

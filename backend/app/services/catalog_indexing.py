@@ -45,6 +45,27 @@ logger = structlog.get_logger(__name__)
 #: Capped because the pass runs beside a UI, not instead of it.
 DERIVE_WORKERS = min(8, max(1, (os.cpu_count() or 2)))
 
+#: The most a person may ask for. Past this the pass stops being "beside a UI"
+#: and starts being "instead of it", and the measured return has flattened well
+#: before here anyway: concurrency recovered 2.95x on 12 CPUs, because the win
+#: is bounded by how much of the work actually releases the GIL, not by how many
+#: threads are asked for.
+MAX_DERIVE_WORKERS = 32
+
+
+def resolve_derive_workers(configured: int | None = None) -> int:
+    """How many derive threads to run: the machine's own answer, or the user's.
+
+    Auto-detection is right for almost everybody, which is why it stays the
+    default. It is wrong for the two cases it cannot see — a NAS that must stay
+    responsive to something else, and a laptop the user would rather keep quiet
+    — and neither could previously say so, because this was a module constant.
+    """
+    if configured is None or configured <= 0:
+        return DERIVE_WORKERS
+    return min(MAX_DERIVE_WORKERS, configured)
+
+
 #: Reports ``(examined, total)`` as the derive pass works through a root.
 #: The total is the count the walk just finished producing, so it is known
 #: rather than estimated — which is what lets a caller show an honest ETA
@@ -61,6 +82,7 @@ def index_library_roots(
     exclude_patterns: tuple[str, ...] = (),
     cancel: Callable[[], bool] | None = None,
     on_progress: DeriveProgress | None = None,
+    workers: int | None = None,
 ) -> dict[str, int]:
     """Walk every input and reference root into the catalog.
 
@@ -86,6 +108,7 @@ def index_library_roots(
             exclude_patterns=exclude_patterns,
             cancel=cancel,
             on_progress=on_progress,
+            workers=workers,
         )
 
     indexable = [root for root in (*library.inputs, *library.references) if root.canonical_path]
@@ -136,6 +159,7 @@ def index_library_roots(
                     stats,
                     cancel=cancel,
                     on_progress=on_progress,
+                    workers=workers,
                 )
                 hashed += computed
                 skipped += unread
@@ -163,6 +187,7 @@ def _index_legacy_profile(
     exclude_patterns: tuple[str, ...],
     cancel: Callable[[], bool] | None,
     on_progress: DeriveProgress | None = None,
+    workers: int | None = None,
 ) -> dict[str, int]:
     """Retain the pre-validation indexing seam for the first baseline commit."""
     indexable = [
@@ -211,6 +236,7 @@ def _index_legacy_profile(
                     stats,
                     cancel=cancel,
                     on_progress=on_progress,
+                    workers=workers,
                 )
                 hashed += computed
                 skipped += unread
@@ -280,7 +306,7 @@ def _derive_root_facts(
         if result.signature is not None:
             _write_media_signature(catalog, result.record, result.path, result.signature)
 
-    worker_count = DERIVE_WORKERS if workers is None else max(1, workers)
+    worker_count = resolve_derive_workers(workers)
     window = worker_count * 4
     with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="derive") as pool:
         try:

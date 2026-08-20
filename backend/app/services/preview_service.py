@@ -505,6 +505,7 @@ class PreviewService:
             exclude_patterns=tuple(config.exclude_patterns or ()),
             cancel=(lambda: task.cancel_event.is_set()) if task is not None else None,
             on_progress=report_indexing if task is not None else None,
+            workers=config.index_workers,
         )
 
         logger.info(

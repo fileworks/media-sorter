@@ -280,6 +280,13 @@ class Config:
     burst_perceptual_distance: int = 4
     burst_require_camera_identity: bool = True
 
+    # How many threads the indexing derive pass may use. `None` means "ask the
+    # machine" (min(8, cpu_count)), which is right for almost everybody. It is
+    # wrong for the two cases auto-detection cannot see — a NAS that must stay
+    # responsive to something else, and a laptop the user would rather keep
+    # quiet — and until this setting existed neither could say so.
+    index_workers: int | None = None
+
     # ── Quarantine retention budget ───────────────────────────────────────────
     # Diagnostics only. Quarantine is the reason optimization and deduplication
     # are safe to run at all, and the product never deletes from it on its own —

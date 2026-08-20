@@ -150,6 +150,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "update_check_enabled",
             "thumbnail_cache_enabled",
             "thumbnail_cache_budget_bytes",
+            "index_workers",
         ),
     ),
 )
