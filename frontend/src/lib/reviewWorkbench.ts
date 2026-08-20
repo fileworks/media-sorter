@@ -368,53 +368,6 @@ export function bulkImpactView(impact: BulkImpact, currentGeneration: string): B
   };
 }
 
-// ── Persistence ──────────────────────────────────────────────────────────────
-
-export interface ReviewUiState {
-  filters: ReviewFilters;
-  selectedGroupId: string | null;
-  scrollTop: number;
-  view: "overview" | "organization" | "exact" | "similar" | "validation" | "issues";
-}
-
-export const REVIEW_STATE_KEY = "mediasort_review_state";
-
-/**
- * Persisted UI state, deliberately without absolute paths.
- *
- * A restored session should reopen the same view and filter, not leak where
- * somebody's photos live into browser storage.
- */
-export function serializeUiState(state: ReviewUiState): string {
-  return JSON.stringify({
-    filters: { ...state.filters, search: "" },
-    selectedGroupId: state.selectedGroupId,
-    scrollTop: Math.round(state.scrollTop),
-    view: state.view,
-  });
-}
-
-export function deserializeUiState(raw: string | null): ReviewUiState {
-  const fallback: ReviewUiState = {
-    filters: DEFAULT_FILTERS,
-    selectedGroupId: null,
-    scrollTop: 0,
-    view: "overview",
-  };
-  if (!raw) return fallback;
-  try {
-    const parsed = JSON.parse(raw) as Partial<ReviewUiState>;
-    return {
-      filters: { ...DEFAULT_FILTERS, ...(parsed.filters ?? {}) },
-      selectedGroupId: parsed.selectedGroupId ?? null,
-      scrollTop: parsed.scrollTop ?? 0,
-      view: parsed.view ?? "overview",
-    };
-  } catch {
-    return fallback;
-  }
-}
-
 // ── Keep rules, decided here ─────────────────────────────────────────────────
 
 /**
