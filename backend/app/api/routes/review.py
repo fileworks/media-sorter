@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from itertools import chain
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -22,7 +23,12 @@ from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction, Du
 from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
 from app.services.catalog import MediaCatalog
-from app.services.catalog_duplicates import CatalogDuplicateIndex
+from app.services.catalog_duplicates import (
+    IMAGE_SIGNATURE_KIND,
+    VIDEO_MAX_DISTANCE,
+    VIDEO_SIGNATURE_KIND,
+    CatalogDuplicateIndex,
+)
 from app.services.catalog_location import (
     live_catalog_generation,
     open_configured_catalog,
@@ -219,14 +225,29 @@ def _list_groups(
                 generation=generation,
             )
         else:
-            produced = similar_groups(
-                catalog,
-                index,
-                max_distance=max_distance,
-                generation=generation,
+            # Images and videos are two passes, not one. Their signatures have
+            # different widths and need different thresholds, so a single query
+            # would either miss every video re-encode or loosen image matching
+            # to a threshold no photograph should be judged at.
+            produced = chain(
+                similar_groups(
+                    catalog,
+                    index,
+                    max_distance=max_distance,
+                    kind=IMAGE_SIGNATURE_KIND,
+                    generation=generation,
+                ),
+                similar_groups(
+                    catalog,
+                    index,
+                    max_distance=VIDEO_MAX_DISTANCE,
+                    kind=VIDEO_SIGNATURE_KIND,
+                    generation=generation,
+                ),
             )
         after = _resume_after(cursor, identity=identity, generation=generation)
         scoped_groups, truncated = _take_scoped_groups(produced, excluded_ids, limit, after=after)
+        partial_index = catalog.has_partial_generation()
     next_cursor = (
         encode_cursor({"q": identity, "g": generation, "id": scoped_groups[-1].group_id})
         if truncated and scoped_groups

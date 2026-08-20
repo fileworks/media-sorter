@@ -69,7 +69,12 @@ def _fake_dng(path: Path) -> Path:
     return path
 
 
-def _video(path: Path, *, created: str = "2021-05-04T10:11:12.000000Z") -> Path:
+def _video(
+    path: Path,
+    *,
+    created: str = "2021-05-04T10:11:12.000000Z",
+    seconds: float = 1,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
@@ -81,11 +86,59 @@ def _video(path: Path, *, created: str = "2021-05-04T10:11:12.000000Z") -> Path:
             "-f",
             "lavfi",
             "-i",
-            "testsrc=size=640x360:rate=10:duration=1",
+            f"testsrc=size=640x360:rate=10:duration={seconds}",
             "-pix_fmt",
             "yuv420p",
             "-metadata",
             f"creation_time={created}",
+            str(path),
+        ],
+        check=True,
+        timeout=_FFMPEG_TIMEOUT,
+    )
+    return path
+
+
+def _reencoded(source: Path, target: Path) -> Path:
+    """The same footage at a different size and frame rate."""
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source),
+            "-vf",
+            "scale=320:180",
+            "-r",
+            "15",
+            "-pix_fmt",
+            "yuv420p",
+            str(target),
+        ],
+        check=True,
+        timeout=_FFMPEG_TIMEOUT,
+    )
+    return target
+
+
+def _solid_video(path: Path) -> Path:
+    """Unrelated footage: a flat colour shares no structure with a test pattern."""
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:size=640x360:rate=10:duration=1",
+            "-pix_fmt",
+            "yuv420p",
             str(path),
         ],
         check=True,
@@ -107,7 +160,10 @@ class TestJpeg:
         assert signature.camera_model.value == "Canon-EOS-5D"
         assert signature.captured_at.value == "2022-08-15T12:00:00"
         assert isinstance(signature.phash.value, str) and signature.phash.value
-        assert all(fact.known for _name, fact in signature)
+        # A still image has no running time, so `duration_seconds` is unknown
+        # here by definition rather than by failure — every *other* fact is known.
+        assert signature.duration_seconds.known is False
+        assert all(fact.known for name, fact in signature if name != "duration_seconds")
 
     def test_mean_rgb_is_three_channels_of_the_actual_colour(self, tmp_path: Path) -> None:
         signature = extract_signature(_jpeg(tmp_path / "shot.jpg"))
@@ -174,14 +230,85 @@ class TestVideo:
         assert signature.height.value == 360
         assert signature.captured_at.value == "2021-05-04T10:11:12+00:00"
 
-    def test_a_video_reports_an_unknown_phash_with_a_reason(self, tmp_path: Path) -> None:
+    def test_the_running_time_is_read_from_the_container(self, tmp_path: Path) -> None:
+        """`media_facts.duration_seconds` was NULL for every file ever indexed.
+
+        The column existed from the first schema and the extractor never
+        produced a value, so a keeper choosing between two versions of a clip
+        could not see that one of them was shorter.
+        """
+        signature = extract_signature(_video(tmp_path / "clip.mp4", seconds=2))
+
+        assert signature.duration_seconds.known is True
+        assert isinstance(signature.duration_seconds.value, float)
+        assert signature.duration_seconds.value == pytest.approx(2, abs=0.3)
+
+    def test_a_still_image_has_no_running_time_and_says_why(self, tmp_path: Path) -> None:
+        signature = extract_signature(_jpeg(tmp_path / "shot.jpg"))
+
+        assert signature.duration_seconds.known is False
+        assert signature.duration_seconds.value is None, "0 would claim a zero-length clip"
+        assert "still image" in (signature.duration_seconds.issue or "")
+
+    def test_a_video_now_carries_a_comparable_frame_series(self, tmp_path: Path) -> None:
+        """`D2` returned "unknown by scope", which left the similar view images-only.
+
+        A library could hold five copies of one clip and Review had nothing to
+        say about them. The signature is the sampled frame hashes concatenated in
+        sample order, which is what lets the existing band index and `hamming`
+        work on a video unchanged.
+        """
         signature = extract_signature(_video(tmp_path / "clip.mp4"))
+
+        assert signature.phash.known is True
+        series = str(signature.phash.value)
+        # Five frames of a 256-bit phash: 5 x 64 hex characters.
+        assert len(series) == 320
+        assert all(character in "0123456789abcdef" for character in series)
+
+    def test_the_series_divides_into_the_four_bands_lookup_needs(self, tmp_path: Path) -> None:
+        """The pigeonhole guarantee is about the *number* of bands, not their width.
+
+        If a video signature did not divide into four, every perceptual lookup
+        against it would fall back to a full scan and be marked
+        `signature_malformed` — a correctness flag, not a cost one.
+        """
+        from app.services.catalog_duplicates import SIGNATURE_BANDS, _bands
+
+        signature = extract_signature(_video(tmp_path / "clip.mp4"))
+
+        bands = _bands(str(signature.phash.value))
+        assert len(bands) == SIGNATURE_BANDS
+        assert len({len(band) for band in bands}) == 1
+
+    def test_two_encodes_of_one_clip_are_close_and_two_clips_are_not(self, tmp_path: Path) -> None:
+        """The property the whole design rests on: frames align by duration fraction."""
+        from app.services.catalog_duplicates import hamming
+
+        original = extract_signature(_video(tmp_path / "a.mp4"))
+        # Same source, re-encoded at a different rate and size.
+        reencoded = extract_signature(_reencoded(tmp_path / "a.mp4", tmp_path / "a-small.mp4"))
+        different = extract_signature(_solid_video(tmp_path / "red.mp4"))
+
+        same = hamming(str(original.phash.value), str(reencoded.phash.value))
+        other = hamming(str(original.phash.value), str(different.phash.value))
+
+        assert same is not None and other is not None
+        assert same < other, "a re-encode must be nearer than an unrelated clip"
+
+    def test_a_video_whose_frames_cannot_be_decoded_stays_unknown(self, tmp_path: Path) -> None:
+        """Padding a failed frame with zeros would invent bits.
+
+        Two videos that each failed at the same sample position would then match
+        on fabricated evidence, which is worse than having no signature at all.
+        """
+        broken = tmp_path / "broken.mp4"
+        broken.write_bytes(b"not a video")
+
+        signature = extract_signature(broken)
 
         assert signature.phash.known is False
         assert signature.phash.issue
-        # The reason must name the mechanism, so a reader knows this is a scope
-        # boundary and not a decode failure.
-        assert "frame" in signature.phash.issue.lower()
 
     def test_a_video_without_a_creation_time_is_unknown_not_epoch(self, tmp_path: Path) -> None:
         path = tmp_path / "bare.mp4"

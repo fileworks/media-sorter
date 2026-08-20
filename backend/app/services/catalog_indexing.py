@@ -31,10 +31,11 @@ from pydantic import JsonValue
 from app.core.library_profiles import CatalogPlacement, LibraryProfile
 from app.core.library_validation import ValidatedLibraryProfile
 from app.services.catalog import FileRecord, MediaCatalog
+from app.services.catalog_duplicates import IMAGE_SIGNATURE_KIND, VIDEO_SIGNATURE_KIND
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, TraversalRules, discover_many
 from app.services.signature_extraction import MediaSignature, extract_signature
-from app.utils.media_utils import get_file_type
+from app.utils.media_utils import get_file_type, is_video
 
 logger = structlog.get_logger(__name__)
 
@@ -365,11 +366,15 @@ def _write_media_signature(
         camera_model=signature.camera_model.value,
         width=signature.width.value,
         height=signature.height.value,
+        duration_seconds=signature.duration_seconds.value,
     )
     if signature.phash.known:
+        # A video's signature is a frame series, not a single image hash: it has
+        # a different width and needs a different distance threshold, so it is
+        # stored under its own kind rather than mixed in with the images.
         catalog.store_signature(
             record,
-            "phash",
+            VIDEO_SIGNATURE_KIND if is_video(path) else IMAGE_SIGNATURE_KIND,
             str(signature.phash.value),
             mean_rgb=_mean_rgb_text(signature.mean_rgb.value),
         )

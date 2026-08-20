@@ -33,6 +33,31 @@ RootRole = Literal["input", "reference", "destination"]
 #: for distances up to three, which covers every threshold the UI offers.
 SIGNATURE_BANDS = 4
 
+#: Videos are stored under their own signature kind, never mixed with images.
+#: The two carry different widths (a video's is the concatenation of five frame
+#: hashes) and, more importantly, need different distance thresholds — so
+#: keeping them apart means a video's looser threshold can never loosen an
+#: image lookup.
+VIDEO_SIGNATURE_KIND = "vphash"
+IMAGE_SIGNATURE_KIND = "phash"
+
+#: Bit distance below which two videos are the same footage. Measured on
+#: ffmpeg-generated clips of 1,280-bit signatures (five 256-bit frame hashes):
+#:
+#:     0   remux / stream copy
+#:    10   same size, heavy re-compression (crf 35)
+#:    18   half resolution
+#:    44   half resolution and a different frame rate
+#:   635   unrelated (solid colour)
+#:   678   unrelated (test pattern)
+#:
+#: Unrelated pairs sit near 640, which is exactly what half of 1,280 random bits
+#: should be. 96 leaves better than twice the headroom over the worst duplicate
+#: measured and stays far below anything unrelated. It is deliberately not the
+#: image threshold: frame sampling introduces timing jitter that pixel noise in
+#: a re-saved photograph does not.
+VIDEO_MAX_DISTANCE = 96
+
 DEFAULT_PAGE_SIZE = 500
 
 #: Indexes the duplicate queries need. Created on first use rather than in the

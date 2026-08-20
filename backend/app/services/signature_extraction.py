@@ -37,11 +37,17 @@ _NO_PIXELS = "the pixels could not be decoded"
 _NO_DIMENSIONS = "the dimensions could not be read"
 _NO_CAMERA = "no camera make or model in the metadata"
 _NO_CAPTURE = "no capture timestamp in the metadata"
+_NO_DURATION = "the container states no duration"
+_NOT_TIMED = "a still image has no running time"
 _NO_MEAN_RGB = "the average colour could not be measured"
 #: Not a failure — a scope boundary. A clip's perceptual identity is a series of
 #: sampled frames (`DuplicateService.video_signature`), which is a different
 #: shape from one hash and belongs to whoever persists it.
 _VIDEO_FRAMES = "a video is fingerprinted by sampled frames, not by a single perceptual hash"
+_NO_FRAMES = "no frame of this video could be decoded"
+_PARTIAL_FRAMES = (
+    "at least one sampled frame could not be decoded, so the frame series is not comparable"
+)
 
 #: Above this the perceptual pass reads the header and stops (`P2-DEDUP-D4`).
 #: Decode time is linear in pixels — measured at ~7.3 ms/MP on this host, so
@@ -57,7 +63,7 @@ _TOO_LARGE = (
 
 
 class MediaSignature(BaseModel):
-    """The six facts one perceptual pass can learn about a file.
+    """The facts one perceptual pass can learn about a file.
 
     Every field is a `FactValue`, so "unknown" is representable and is never
     confused with zero, empty or epoch.
@@ -71,6 +77,11 @@ class MediaSignature(BaseModel):
     height: FactValue = Field(default_factory=FactValue)
     camera_model: FactValue = Field(default_factory=FactValue)
     captured_at: FactValue = Field(default_factory=FactValue)
+    #: Video running time. The column has existed since the first schema and was
+    #: written as NULL for every file, because the extractor never produced one —
+    #: so a keeper choosing between two versions of a clip had no way to see that
+    #: one of them was thirty seconds shorter.
+    duration_seconds: FactValue = Field(default_factory=FactValue)
 
 
 def capture_time(path: Path) -> datetime | None:
@@ -107,17 +118,19 @@ def extract_signature(
             height=FactValue.unknown(_UNSUPPORTED),
             camera_model=FactValue.unknown(_UNSUPPORTED),
             captured_at=FactValue.unknown(_UNSUPPORTED),
+            duration_seconds=FactValue.unknown(_UNSUPPORTED),
         )
 
     width, height = _dimensions(path, image=image)
     if not image:
-        phash, mean_rgb = FactValue.unknown(_VIDEO_FRAMES), FactValue.unknown(_VIDEO_FRAMES)
+        phash, mean_rgb = _video_signature(path, duplicates or DuplicateService(), cancel_token)
     elif _exceeds_decode_ceiling(width, height):
         phash, mean_rgb = FactValue.unknown(_TOO_LARGE), FactValue.unknown(_TOO_LARGE)
     else:
         phash, mean_rgb = _image_signature(path, duplicates or DuplicateService(), cancel_token)
     camera = (dates or DateExtractionService()).extract_camera_model(path)
     captured = capture_time(path)
+    duration = _duration_seconds(path) if video else None
 
     return MediaSignature(
         phash=phash,
@@ -129,6 +142,11 @@ def extract_signature(
             FactValue.of(captured.isoformat())
             if captured is not None
             else FactValue.unknown(_NO_CAPTURE)
+        ),
+        duration_seconds=(
+            FactValue.of(duration)
+            if duration is not None
+            else FactValue.unknown(_NO_DURATION if video else _NOT_TIMED)
         ),
     )
 
@@ -161,12 +179,86 @@ def _image_signature(
     )
 
 
+def _video_signature(
+    path: Path, duplicates: DuplicateService, cancel_token: Any
+) -> tuple[FactValue, FactValue]:
+    """One comparable signature for a video, built from its sampled frames.
+
+    `D2` returned "unknown by scope" here, which left the similar view
+    images-only: a library could hold five copies of the same clip and Review
+    had nothing to say about them. The design decision this settles is *how* a
+    video becomes one row in a table whose primary key is `(file_id, kind)`.
+
+    Rather than persist one row per frame, the frame hashes are **concatenated
+    in sample order** into a single wider signature. That choice is what lets
+    every existing mechanism work unchanged: `_bands` already splits a signature
+    into four bands "whatever its width", so the pigeonhole guarantee and the
+    band index hold; `hamming` already compares equal-length hex; and a bit
+    distance over the concatenation is exactly the sum of the per-frame
+    distances, which is the similarity measure a frame series wants.
+
+    Alignment is what makes concatenation meaningful: `DuplicateService` samples
+    at fixed interior *fractions* of duration, so frame i of one encode always
+    corresponds to frame i of another. Re-encodes and rescales line up; a
+    substantial trim does not, and is treated as a different video. That is an
+    accepted limit, not an oversight — and a safe one, because this path only
+    ever proposes, never mutates (`DEC-01`).
+
+    A partly-decoded video yields *unknown* rather than a padded signature:
+    substituting zeros for a frame that failed would invent bits, and two videos
+    that each failed at the same position would then match on fabricated
+    evidence. `hamming` compares by length, so a short signature is not merely
+    inaccurate, it is silently incomparable.
+    """
+    signature = duplicates.video_signature(path, cancel_token=cancel_token)
+    if signature is None:
+        return FactValue.unknown(_NO_FRAMES), FactValue.unknown(_NO_FRAMES)
+    if any(frame is None for frame in signature.frames):
+        return FactValue.unknown(_PARTIAL_FRAMES), FactValue.unknown(_PARTIAL_FRAMES)
+
+    series = "".join(str(frame[0]) for frame in signature.frames if frame is not None)
+    means = [frame[1] for frame in signature.frames if frame is not None and frame[1] is not None]
+    if not series:
+        return FactValue.unknown(_NO_FRAMES), FactValue.unknown(_NO_FRAMES)
+    if not means:
+        return FactValue.of(series), FactValue.unknown(_NO_MEAN_RGB)
+    # The clip's average colour, which is what the mean-colour gate compares.
+    # `strict`: every mean is an RGB triple, so a row of a different length
+    # is a bug in the extractor rather than something to average around.
+    averaged = [sum(channel) / len(means) for channel in zip(*means, strict=True)]
+    return FactValue.of(series), FactValue.of([float(channel) for channel in averaged])
+
+
 def _dimensions(path: Path, *, image: bool) -> tuple[FactValue, FactValue]:
     size = image_dimensions(path) if image else _video_dimensions(path)
     if size is None:
         return FactValue.unknown(_NO_DIMENSIONS), FactValue.unknown(_NO_DIMENSIONS)
     width, height = size
     return FactValue.of(width), FactValue.of(height)
+
+
+def _duration_seconds(path: Path) -> float | None:
+    """Running time from the container, or None when it does not state one.
+
+    Read from `format=duration` rather than from the video stream: a container
+    knows its own length even when a stream's duration field is absent, which is
+    common for fragmented and streamed recordings.
+    """
+    data = run_ffprobe_json(path, "format=duration")
+    raw = ((data or {}).get("format") or {}).get("duration")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        logger.debug("duration unreadable", path=str(path), error=str(exc))
+        return None
+    # ffprobe reports "N/A" as a NaN and a still image as 0. Neither is a
+    # duration, and storing 0 would claim a zero-length clip rather than an
+    # unknown one (I-10).
+    if value != value or value <= 0:
+        return None
+    return round(value, 3)
 
 
 def _video_dimensions(path: Path) -> tuple[int, int] | None:
