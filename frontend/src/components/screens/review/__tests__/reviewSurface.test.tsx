@@ -200,7 +200,7 @@ beforeEach(() => {
     groups: [],
     next_cursor: null,
     truncated: false,
-      partial_index: false,
+    partial_index: false,
     kind: "exact",
   });
 });
@@ -1158,7 +1158,9 @@ describe("the partial-index disclosure", () => {
 
     renderReview(result);
 
-    expect(await screen.findByText(en("review.partialIndex.detail"), { exact: false })).toBeTruthy();
+    expect(
+      await screen.findByText(en("review.partialIndex.detail"), { exact: false }),
+    ).toBeTruthy();
   });
 
   it("says nothing when the index is complete", async () => {
