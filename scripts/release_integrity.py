@@ -38,6 +38,23 @@ RESOURCES_DIR = TAURI_DIR / "resources"
 TARGET_RELEASE = TAURI_DIR / "target" / "release"
 BUNDLE_DIR = TARGET_RELEASE / "bundle"
 NATIVE_PROVENANCE_FILE = "native-tools-provenance.json"
+#: The tracked record of what a release is allowed to fetch (`DEC-06`).
+SOURCES_MANIFEST = REPO_ROOT / "scripts" / "ffmpeg-sources.json"
+
+# Re-exported so every existing caller and test keeps working: the provenance
+# checks moved to a cohesive module (the growth policy prefers that to a raised
+# baseline), and where they live is not a reason to break an import.
+#
+# The path insert is what makes a sibling import work when this file is loaded
+# by `spec_from_file_location` — which the tests do — as well as when it is run
+# as a script, where its own directory is already on `sys.path`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from native_provenance import (  # noqa: E402
+    ReleaseIntegrityError,
+    _verify_native_provenance,
+    _verify_zip_native_provenance,
+)
 
 APPLE_REQUIRED = (
     "APPLE_CERTIFICATE",
@@ -85,10 +102,6 @@ MACHO_MAGICS = {
 }
 ENV_PLACEHOLDER = re.compile(r"\{env:([A-Z][A-Z0-9_]*)\}")
 WINDOWS_GUI_SUBSYSTEM = 2
-
-
-class ReleaseIntegrityError(RuntimeError):
-    """A safe-to-display release preparation or verification failure."""
 
 
 @dataclass(frozen=True)
@@ -174,79 +187,6 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def _validate_native_provenance(
-    document: object,
-    *,
-    expected_platform: str,
-    observed_hashes: Mapping[str, str],
-) -> None:
-    if not isinstance(document, dict) or document.get("schema_version") != 1:
-        raise ReleaseIntegrityError("native tool provenance has an unsupported schema")
-    if document.get("platform") != expected_platform:
-        raise ReleaseIntegrityError(
-            "native tool provenance platform mismatch: "
-            f"expected {expected_platform}, observed {document.get('platform')!r}"
-        )
-    sources = document.get("sources")
-    if not isinstance(sources, list) or not sources:
-        raise ReleaseIntegrityError("native tool provenance has no source inventory")
-    for source in sources:
-        if (
-            not isinstance(source, dict)
-            or not isinstance(source.get("url"), str)
-            or "/latest/" in source["url"]
-            or re.fullmatch(r"[0-9a-f]{64}", str(source.get("sha256", ""))) is None
-        ):
-            raise ReleaseIntegrityError("native tool provenance contains a mutable source")
-    bundled = document.get("bundled_binaries")
-    if not isinstance(bundled, dict) or set(bundled) != set(observed_hashes):
-        raise ReleaseIntegrityError("native tool provenance binary inventory is incomplete")
-    for name, observed in observed_hashes.items():
-        entry = bundled.get(name)
-        if not isinstance(entry, dict) or entry.get("sha256") != observed:
-            raise ReleaseIntegrityError(f"packaged native binary does not match provenance: {name}")
-
-
-def _verify_native_provenance(root: Path, expected_platform: str) -> None:
-    provenance = root / NATIVE_PROVENANCE_FILE
-    _require_file(provenance)
-    try:
-        document = json.loads(provenance.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ReleaseIntegrityError(f"cannot read native tool provenance: {exc}") from exc
-    names = (
-        ("ffmpeg.exe", "ffprobe.exe")
-        if expected_platform == "windows"
-        else (
-            "ffmpeg",
-            "ffprobe",
-        )
-    )
-    _validate_native_provenance(
-        document,
-        expected_platform=expected_platform,
-        observed_hashes={name: _sha256(root / name) for name in names},
-    )
-
-
-def _verify_zip_native_provenance(zip_path: Path, required: Mapping[str, str]) -> None:
-    with zipfile.ZipFile(zip_path) as archive:
-        try:
-            document = json.loads(archive.read(required["provenance"]))
-        except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ReleaseIntegrityError(
-                f"cannot read portable native tool provenance: {exc}"
-            ) from exc
-        observed: dict[str, str] = {}
-        for key in ("ffmpeg", "ffprobe"):
-            digest = hashlib.sha256()
-            with archive.open(required[key]) as stream:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            observed[Path(required[key]).name] = digest.hexdigest()
-    _validate_native_provenance(document, expected_platform="windows", observed_hashes=observed)
 
 
 def normalize_payload_modes(root: Path, platform_name: str) -> None:
