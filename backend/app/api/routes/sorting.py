@@ -16,13 +16,47 @@ from app.api.schemas import (
 )
 from app.core.config_fingerprint import config_fingerprint
 from app.core.exceptions import ConflictError, TaskNotFoundError
+from app.core.filesystem_capabilities import (
+    FilesystemCapabilityReport,
+    probe_filesystem_capabilities,
+)
+from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortImpact, ReviewedSet
 from app.services.catalog_location import live_catalog_generation
 from app.services.quarantine import PreflightResult, preflight, store_for_state_root
 
+logger = get_logger(__name__)
 router = APIRouter()
+
+
+def _capability_degradations(report: FilesystemCapabilityReport) -> list[str]:
+    """What this destination cannot preserve, named once.
+
+    `C-11`. The probe existed and nothing called it, so a run onto exFAT or an
+    SMB share discovered each limitation one file at a time — as a per-file
+    warning repeated for every photograph, which is how a real signal becomes
+    noise a person scrolls past.
+
+    Only `unsupported` counts. `permission_denied` and `unknown` are the probe
+    saying it could not find out, and reporting those as lost capabilities would
+    warn about a destination that is probably fine.
+    """
+    observations: list[tuple[str, str]] = [
+        (report.timestamp.status, "modification times are not preserved"),
+        (report.permissions.status, "file permissions are not preserved"),
+        (
+            report.extended_attributes.status,
+            "extended attributes (tags, Finder comments) are not preserved",
+        ),
+        (
+            report.atomic_replace.status,
+            "atomic replace is unavailable, so an interrupted write is riskier",
+        ),
+        (report.symlinks.status, "symbolic links cannot be created"),
+    ]
+    return [detail for status, detail in observations if status == "unsupported"]
 
 
 def _space_preflight(target_directory: str, impact: FrozenSortImpact) -> PreflightResult:
@@ -191,6 +225,19 @@ async def start_sorting(
                         ],
                     },
                 )
+        # C-11: probe the destination once, before anything is written, and
+        # state what it cannot preserve. One report per run, not one per file.
+        capabilities = await asyncio.to_thread(
+            probe_filesystem_capabilities, Path(scope.config.target_directory)
+        )
+        degradations = _capability_degradations(capabilities)
+        if degradations:
+            logger.warning(
+                "destination.capabilities_degraded",
+                destination=scope.config.target_directory,
+                device_id=capabilities.device_id,
+                degradations=degradations,
+            )
     task, replayed = container.task_manager.start_task(
         "sort",
         request.idempotency_key,
