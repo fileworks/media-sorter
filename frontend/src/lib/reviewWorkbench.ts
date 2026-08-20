@@ -27,15 +27,22 @@ export type GroupKind = "exact" | "similar" | "burst";
  * endpoint, which hashes and reads EXIF from the filesystem and does honor
  * `burst_detection_enabled` exactly as before. That contract is untouched.
  *
- * `P2-DEDUP-D3` lands the signature/facts producer and `P2-DEDUP-D9` flips
- * this back. Nothing gated by it writes to the configuration, so a persisted
- * `burst_detection_enabled: true` survives untouched and neither direction
- * needs a data migration.
+ * `P2-DEDUP-D3` landed the signature/facts producer — indexing now writes a
+ * phash, a capture time and a camera model for every file — so `P2-DEDUP-D9`
+ * flipped this back on. `burst_detection_enabled` alone decides again, which is
+ * what a user setting should do. Proven rather than assumed: indexing two
+ * frames two seconds apart from one camera yields a burst group, and the same
+ * frames ninety minutes apart yield none
+ * (`backend/tests/test_indexing_completeness.py::TestBurstStacksCanBeProduced`).
  *
- * Typed `boolean` rather than left to literal inference so the disabled branch
- * stays type-checked instead of being narrowed away.
+ * Nothing gated by it ever wrote to the configuration, so a persisted
+ * `burst_detection_enabled` survived both flips untouched and neither
+ * direction needed a data migration.
+ *
+ * Typed `boolean` rather than left to literal inference so both branches stay
+ * type-checked instead of one being narrowed away.
  */
-export const CATALOG_BURST_GROUPS_AVAILABLE: boolean = false;
+export const CATALOG_BURST_GROUPS_AVAILABLE: boolean = true;
 export type RootRole = "input" | "reference" | "destination";
 export type DecisionAction = "keep" | "quarantine" | "skip" | "replace_keeper" | "keep_additional";
 export type OutcomeKind =

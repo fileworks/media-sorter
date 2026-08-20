@@ -115,26 +115,33 @@ describe("revealed sub-settings render as their own block", () => {
 });
 
 /**
- * A control that cannot deliver its result is worse than an absent one: it
- * reports a setting as active while the feature behind it is empty by
- * construction. The catalog has no signature or media-fact producer yet
- * (`P2-DEDUP-D3`), so the burst view can never return a group.
+ * The inverse of what this asserted under `W0-UI-001`, which hid the control
+ * because a setting that cannot deliver its result is worse than an absent one.
+ * `P2-DEDUP-D3` landed the producer, so the burst view can return groups and
+ * the control is back — `P2-DEDUP-D9`.
  *
- * Hiding it must not touch the stored value — `P2-DEDUP-D9` restores the
- * control, and a user who enabled bursts should find it enabled.
+ * That the *feature* works is proven where it lives, against a real indexed
+ * library, in `backend/tests/test_indexing_completeness.py`. What belongs here
+ * is only that the control renders and still writes nothing on its own.
  */
-describe("the burst control stays hidden while the catalog cannot produce bursts", () => {
-  it("renders no burst row, in either stored state", () => {
-    for (const enabled of [true, false]) {
-      renderClean({ burst_detection_enabled: enabled });
-      expect(screen.queryByText(translate("en", "config.bursts.detect"))).toBeNull();
-      expect(screen.queryByLabelText(translate("en", "config.bursts.window"))).toBeNull();
-      expect(screen.queryByLabelText(translate("en", "config.bursts.distance"))).toBeNull();
-      cleanup();
-    }
+describe("the burst control is back now that the catalog can produce bursts", () => {
+  it("renders the burst row again", () => {
+    renderClean({ burst_detection_enabled: true });
+
+    expect(screen.queryByText(translate("en", "config.bursts.detect"))).not.toBeNull();
+    expect(screen.queryByLabelText(translate("en", "config.bursts.window"))).not.toBeNull();
+    expect(screen.queryByLabelText(translate("en", "config.bursts.distance"))).not.toBeNull();
   });
 
-  it("never rewrites the stored value it stopped showing", () => {
+  it("keeps its sub-settings behind the parent switch", () => {
+    renderClean({ burst_detection_enabled: false });
+
+    expect(screen.queryByText(translate("en", "config.bursts.detect"))).not.toBeNull();
+    expect(screen.queryByLabelText(translate("en", "config.bursts.window"))).toBeNull();
+    expect(screen.queryByLabelText(translate("en", "config.bursts.distance"))).toBeNull();
+  });
+
+  it("never rewrites the stored value merely by rendering", () => {
     const writes: Partial<Config>[] = [];
     render(
       <I18nProvider initialLocale="en">

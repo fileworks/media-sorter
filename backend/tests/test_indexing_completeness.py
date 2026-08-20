@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import piexif
 import pytest
 from PIL import Image
 from PIL.Image import Resampling
@@ -29,7 +30,7 @@ from app.services.catalog_duplicates import CatalogDuplicateIndex
 from app.services.catalog_indexing import index_library_roots
 from app.services.catalog_location import open_catalog
 from app.services.discovery import DiscoveryStats, discover_into_catalog
-from app.services.duplicate_grouping import exact_groups, similar_groups
+from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.duplicate_service import DuplicateService
 from app.services.keeper_policies import PolicySettings, apply_policy
 
@@ -546,3 +547,123 @@ class TestKeeperPoliciesCanNowDecide:
 
         assert result.decided
         assert result.reason == "no member's dimensions could be read; decided by size"
+
+
+def _burst_frame(path: Path, *, taken: str, quality: int, seed: int = 33) -> Path:
+    """One frame of a burst: same camera, same scene, seconds apart."""
+    exif = piexif.dump(
+        {
+            "0th": {piexif.ImageIFD.Make: b"Canon", piexif.ImageIFD.Model: b"Canon EOS R5"},
+            "Exif": {piexif.ExifIFD.DateTimeOriginal: taken.encode()},
+        }
+    )
+    _structured_image(seed=seed).save(path, exif=exif, quality=quality)
+    return path
+
+
+class TestBurstStacksCanBeProduced:
+    """P2-DEDUP-D9 acceptance (2). `W0-UI-001` hid the burst controls because the
+    catalog could not produce burst groups: `burst_groups` reads a phash, a
+    capture time and a camera model, and nothing in production wrote any of
+    them. D3's writer does, so the setting can now demonstrably take effect."""
+
+    def test_indexing_a_burst_yields_a_burst_group(self, tmp_path: Path) -> None:
+        media = tmp_path / "media"
+        media.mkdir()
+        _burst_frame(media / "IMG_0001.jpg", taken="2024:05:04 10:00:00", quality=95)
+        _burst_frame(media / "IMG_0002.jpg", taken="2024:05:04 10:00:02", quality=60)
+
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(
+                burst_groups(
+                    catalog,
+                    CatalogDuplicateIndex(catalog),
+                    time_window_seconds=5,
+                    max_perceptual_distance=8,
+                    require_camera_identity=True,
+                    roles=("input",),
+                )
+            )
+
+        assert len(groups) == 1
+        assert sorted(member.relative_path for member in groups[0].members) == [
+            "IMG_0001.jpg",
+            "IMG_0002.jpg",
+        ]
+
+    def test_frames_too_far_apart_are_not_one_burst(self, tmp_path: Path) -> None:
+        """The control: a rule that groups everything would pass the test above."""
+        media = tmp_path / "media"
+        media.mkdir()
+        _burst_frame(media / "IMG_0001.jpg", taken="2024:05:04 10:00:00", quality=95)
+        _burst_frame(media / "IMG_0002.jpg", taken="2024:05:04 11:30:00", quality=60)
+
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(
+                burst_groups(
+                    catalog,
+                    CatalogDuplicateIndex(catalog),
+                    time_window_seconds=5,
+                    max_perceptual_distance=8,
+                    require_camera_identity=True,
+                    roles=("input",),
+                )
+            )
+
+        assert groups == []
+
+    def test_a_frame_without_a_camera_is_not_a_burst_candidate(self, tmp_path: Path) -> None:
+        """`require_camera_identity` needs `media_facts.camera_model`, which is
+        one of the columns that had no writer before D3."""
+        media = tmp_path / "media"
+        media.mkdir()
+        _burst_frame(media / "IMG_0001.jpg", taken="2024:05:04 10:00:00", quality=95)
+        no_camera = piexif.dump({"Exif": {piexif.ExifIFD.DateTimeOriginal: b"2024:05:04 10:00:02"}})
+        _structured_image(seed=33).save(media / "IMG_0002.jpg", exif=no_camera, quality=60)
+
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(
+                burst_groups(
+                    catalog,
+                    CatalogDuplicateIndex(catalog),
+                    time_window_seconds=5,
+                    max_perceptual_distance=8,
+                    require_camera_identity=True,
+                    roles=("input",),
+                )
+            )
+
+        assert groups == []
+
+    def test_a_frame_without_a_capture_time_is_not_a_burst_candidate(self, tmp_path: Path) -> None:
+        """`media_facts.captured_at` is the other column that had no writer
+        before D3. Without it there is no ordering and no window to be inside."""
+        media = tmp_path / "media"
+        media.mkdir()
+        _burst_frame(media / "IMG_0001.jpg", taken="2024:05:04 10:00:00", quality=95)
+        no_time = piexif.dump(
+            {"0th": {piexif.ImageIFD.Make: b"Canon", piexif.ImageIFD.Model: b"Canon EOS R5"}}
+        )
+        _structured_image(seed=33).save(media / "IMG_0002.jpg", exif=no_time, quality=60)
+
+        index_library_roots(_library(media), data_dir=tmp_path / "state")
+
+        with open_catalog(LibraryProfile().catalog, data_dir=tmp_path / "state") as catalog:
+            groups = list(
+                burst_groups(
+                    catalog,
+                    CatalogDuplicateIndex(catalog),
+                    time_window_seconds=5,
+                    max_perceptual_distance=8,
+                    require_camera_identity=True,
+                    roles=("input",),
+                )
+            )
+
+        assert groups == []
