@@ -464,16 +464,31 @@ describe("execute preflight", () => {
     const result = preflight({
       ...base,
       moveCount: 7,
-      conversionWithoutOriginals: 4,
       companionsLeftInPlace: 3,
       embeddedTagCount: 2,
     });
     const text = result.irreversible.map((line) => line.text).join(" ");
     expect(text).toMatch(/source file\(s\) will be removed/i);
-    expect(text).toMatch(/not be retained after conversion/i);
     expect(text).toMatch(/companion file\(s\).*remain/i);
     expect(text).toMatch(/embedded/i);
     expect(text).toMatch(/quarantine/i);
+  });
+
+  /**
+   * `P0-SAFE-001` made this consequence impossible rather than merely rare:
+   * conversion quarantines the original before publishing the converted file,
+   * so `conversion_without_originals` is now permanently 0 on the backend. A
+   * warning that can never fire is worse than no warning — it teaches the
+   * reader that the absence of the line means something.
+   */
+  it("no longer warns that conversion discards originals, even if asked to", () => {
+    const result = preflight({ ...base, moveCount: 7, conversionWithoutOriginals: 4 });
+    const text = result.irreversible.map((line) => line.text).join(" ");
+
+    expect(text).not.toMatch(/not be retained after conversion/i);
+    expect(result.irreversible.map((line) => line.messageKey)).not.toContain(
+      "preflight.irreversible.conversion",
+    );
   });
 
   it("states explicitly when a copy-only plan has no irreversible effects", () => {

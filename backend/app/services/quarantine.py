@@ -29,7 +29,12 @@ from app.services.verified_transfer import stream_sha256, transfer_path
 logger = get_logger(__name__)
 
 RECORDS_FILE = "records.jsonl"
+INTENTS_FILE = "intents.jsonl"
+REMOVALS_FILE = "removals.jsonl"
 QUARANTINE_DIRECTORY_NAME = "quarantine"
+#: Private, inside the store, so a tombstoned object is out of the browsable
+#: tree but still on the same filesystem — the move is a rename, not a copy.
+TOMBSTONE_DIRECTORY_NAME = ".tombstone"
 
 QuarantineReason = Literal[
     "duplicate",
@@ -41,10 +46,73 @@ QuarantineReason = Literal[
     "user_request",
 ]
 RetentionState = Literal["retained", "restored", "removed"]
+#: An intent is *declared* before the file moves and *committed* after the
+#: record exists. Anything still ``pending`` after a crash is an original whose
+#: fate is unknown — reported as pending, never as removed.
+IntentState = Literal["pending", "committed", "abandoned"]
 
 
 class QuarantineError(RuntimeError):
     """A quarantine operation could not be completed safely."""
+
+
+@dataclass(frozen=True)
+class RemovalIntent:
+    """A durable "I am about to destroy this" note, and how far it got.
+
+    Permanent removal is the one action in the product that cannot be undone,
+    and it used to be a bare `unlink(missing_ok=True)`: no hash check, no
+    identity check, and an absent path counted as a successful deletion. A crash
+    between the unlink and the record append left the record claiming
+    ``retained`` for a file that no longer existed.
+
+    The states are the protocol. ``pending`` means the object may be in the
+    tombstone and its fate is open; ``committed`` means the verified object was
+    unlinked and the record says so; ``abandoned`` means nothing was destroyed.
+    Recovery reports the first as pending and the last as retained — never as
+    removed.
+    """
+
+    intent_id: str
+    record_id: str
+    operation: str
+    original_quarantine_path: str
+    tombstone_path: str
+    expected_sha256: str
+    declared_at: str
+    state: IntentState = "pending"
+    abandoned_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class QuarantineIntent:
+    """A durable "I am about to move this original" note.
+
+    `quarantine()` transfers the file and *then* appends its record. That order
+    is right — a record must never describe a file that does not exist — but it
+    leaves a window: a crash between the transfer and the append puts a file in
+    the store that no record mentions. Recovery could not tell that from a file
+    that was never touched.
+
+    The intent closes the window from the other side. It is written and fsynced
+    *before* the transfer, so every original that might have moved is named on
+    disk beforehand. After the record lands the intent is committed; if the
+    transfer fails it is abandoned. A ``pending`` intent found at startup is
+    exactly the crash window, and `pending_intents()` reports it.
+    """
+
+    intent_id: str
+    operation_id: str
+    reason: QuarantineReason
+    original_path: str
+    declared_at: str
+    state: IntentState = "pending"
+    expected_sha256: str | None = None
+    keeper_path: str | None = None
+    #: Set when the intent is committed, so an auditor can walk intent → record.
+    record_id: str | None = None
+    #: Set when the intent is abandoned, so "nothing happened" is also evidence.
+    abandoned_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +168,9 @@ class QuarantineStore:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.records_path = root / RECORDS_FILE
+        self.intents_path = root / INTENTS_FILE
+        self.removals_path = root / REMOVALS_FILE
+        self.tombstone_root = root / TOMBSTONE_DIRECTORY_NAME
 
     # -------------------------------------------------------------- #
     # Reading                                                          #
@@ -148,6 +219,170 @@ class QuarantineStore:
     # -------------------------------------------------------------- #
     # Writing                                                          #
     # -------------------------------------------------------------- #
+
+    # -------------------------------------------------------------- #
+    # Durable intent: declared before the move, resolved after it       #
+    # -------------------------------------------------------------- #
+
+    def declare_intent(
+        self,
+        source: Path,
+        *,
+        operation_id: str,
+        reason: QuarantineReason,
+        expected_sha256: str | None = None,
+        keeper_path: Path | None = None,
+    ) -> QuarantineIntent:
+        """Record, durably, that *source* is about to be quarantined.
+
+        Returns only after the note is on disk and fsynced. A caller that moves
+        the file before this returns has reopened the very window this closes.
+        """
+        intent = QuarantineIntent(
+            intent_id=f"qti_{uuid.uuid4().hex[:16]}",
+            operation_id=operation_id,
+            reason=reason,
+            original_path=str(source),
+            declared_at=utc_now().isoformat(),
+            expected_sha256=expected_sha256,
+            keeper_path=None if keeper_path is None else str(keeper_path),
+        )
+        return self._append_intent(intent)
+
+    def commit_intent(self, intent: QuarantineIntent, record: QuarantineRecord) -> QuarantineIntent:
+        """Resolve an intent against the record that fulfilled it."""
+        return self._append_intent(replace(intent, state="committed", record_id=record.record_id))
+
+    def abandon_intent(self, intent: QuarantineIntent, reason: str) -> QuarantineIntent:
+        """Resolve an intent that never happened, so silence is not the record."""
+        return self._append_intent(replace(intent, state="abandoned", abandoned_reason=reason))
+
+    def intents(self) -> tuple[QuarantineIntent, ...]:
+        return tuple(self._iter_intents())
+
+    def pending_intents(self) -> tuple[QuarantineIntent, ...]:
+        """Originals whose fate a crash left unknown.
+
+        An intent is pending when its latest state says so *and* no record
+        claims it. Both halves matter: a committed intent whose record line was
+        lost to a torn write is still unresolved, and must not read as done.
+        """
+        claimed = {record.record_id for record in self._iter_records()}
+        return tuple(
+            intent
+            for intent in self._iter_intents()
+            if intent.state == "pending"
+            or (intent.state == "committed" and intent.record_id not in claimed)
+        )
+
+    # -------------------------------------------------------------- #
+    # Durable removal intent: the tombstone protocol                    #
+    # -------------------------------------------------------------- #
+
+    def declare_removal(self, record: QuarantineRecord, *, operation: str) -> RemovalIntent:
+        """Name the object about to be destroyed, durably, before touching it."""
+        intent = RemovalIntent(
+            intent_id=f"rmi_{uuid.uuid4().hex[:16]}",
+            record_id=record.record_id,
+            operation=operation,
+            original_quarantine_path=record.quarantine_path,
+            tombstone_path=str(self.tombstone_root / f"{record.record_id}"),
+            expected_sha256=record.sha256,
+            declared_at=utc_now().isoformat(),
+        )
+        return self._append_removal(intent)
+
+    def commit_removal(self, intent: RemovalIntent) -> RemovalIntent:
+        return self._append_removal(replace(intent, state="committed"))
+
+    def abandon_removal(self, intent: RemovalIntent, reason: str) -> RemovalIntent:
+        return self._append_removal(replace(intent, state="abandoned", abandoned_reason=reason))
+
+    def removals(self) -> tuple[RemovalIntent, ...]:
+        return tuple(self._iter_removals())
+
+    def pending_removals(self) -> tuple[RemovalIntent, ...]:
+        """Objects a crash left mid-destruction. Never reported as removed."""
+        return tuple(intent for intent in self._iter_removals() if intent.state == "pending")
+
+    def _append_removal(self, intent: RemovalIntent) -> RemovalIntent:
+        self.root.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(asdict(intent), ensure_ascii=False)
+        try:
+            with self.removals_path.open("a", encoding="utf-8") as handle:
+                handle.write(payload + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError as exc:
+            raise QuarantineError(f"Could not record removal intent: {exc}") from exc
+        return intent
+
+    def _iter_removals(self) -> Iterator[RemovalIntent]:
+        if not self.removals_path.is_file():
+            return
+        latest: dict[str, RemovalIntent] = {}
+        order: list[str] = []
+        damaged = 0
+        try:
+            with self.removals_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        intent = RemovalIntent(**json.loads(line))
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        damaged += 1
+                        continue
+                    if intent.intent_id not in latest:
+                        order.append(intent.intent_id)
+                    latest[intent.intent_id] = intent
+        except OSError as exc:
+            raise QuarantineError(f"Could not read removal intents: {exc}") from exc
+        if damaged:
+            logger.warning("quarantine.damaged_removal_lines", count=damaged)
+        for intent_id in order:
+            yield latest[intent_id]
+
+    def _append_intent(self, intent: QuarantineIntent) -> QuarantineIntent:
+        self.root.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(asdict(intent), ensure_ascii=False)
+        try:
+            with self.intents_path.open("a", encoding="utf-8") as handle:
+                handle.write(payload + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError as exc:
+            raise QuarantineError(f"Could not record quarantine intent: {exc}") from exc
+        return intent
+
+    def _iter_intents(self) -> Iterator[QuarantineIntent]:
+        """Yield the newest state of every intent, skipping damaged lines."""
+        if not self.intents_path.is_file():
+            return
+        latest: dict[str, QuarantineIntent] = {}
+        order: list[str] = []
+        damaged = 0
+        try:
+            with self.intents_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        intent = QuarantineIntent(**json.loads(line))
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        damaged += 1
+                        continue
+                    if intent.intent_id not in latest:
+                        order.append(intent.intent_id)
+                    latest[intent.intent_id] = intent
+        except OSError as exc:
+            raise QuarantineError(f"Could not read quarantine intents: {exc}") from exc
+        if damaged:
+            logger.warning("quarantine.damaged_intent_lines", count=damaged)
+        for intent_id in order:
+            yield latest[intent_id]
 
     def _append(self, record: QuarantineRecord) -> QuarantineRecord:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -318,21 +553,65 @@ class QuarantineStore:
     # Reporting                                                        #
     # -------------------------------------------------------------- #
 
-    def summary(self) -> dict[str, object]:
-        """Counts and bytes the quarantine manager renders, without paths."""
+    def summary(
+        self,
+        *,
+        budget_bytes: int | None = None,
+        warning_age_days: int | None = None,
+    ) -> dict[str, object]:
+        """Counts, bytes and ages the quarantine manager renders, without paths.
+
+        With a budget and an age threshold this also reports whether the store
+        has outgrown either, and recommends a cleanup. It **never deletes**:
+        quarantine is the reason optimization and deduplication are safe to run,
+        and a store that prunes itself is not a safety net. The recommendation
+        is the whole output — acting on it is `permanently_remove`'s job, behind
+        its own acknowledgement.
+        """
         records = self.records()
         retained = [record for record in records if record.retention == "retained"]
         by_reason: dict[str, int] = {}
         for record in retained:
             by_reason[record.reason] = by_reason.get(record.reason, 0) + 1
-        return {
+        retained_bytes = sum(record.size_bytes for record in retained)
+        oldest_age_days = max((record.age_days for record in retained), default=0.0)
+
+        result: dict[str, object] = {
             "record_count": len(records),
             "retained_count": len(retained),
             "restored_count": sum(1 for r in records if r.retention == "restored"),
-            "retained_bytes": sum(record.size_bytes for record in retained),
-            "oldest_age_days": max((record.age_days for record in retained), default=0.0),
+            "retained_bytes": retained_bytes,
+            "oldest_age_days": oldest_age_days,
             "by_reason": by_reason,
         }
+        if budget_bytes is None or warning_age_days is None:
+            return result
+
+        if budget_bytes <= 0:
+            raise ValueError("quarantine_budget_bytes must be a positive number of bytes")
+        if warning_age_days <= 0:
+            raise ValueError("quarantine_warning_age_days must be a positive number of days")
+
+        over_budget = retained_bytes > budget_bytes
+        over_age = oldest_age_days > warning_age_days
+        recommendations: list[str] = []
+        if over_budget:
+            recommendations.append("over_budget")
+        if over_age:
+            recommendations.append("older_than_warning_age")
+
+        result.update(
+            {
+                "budget_bytes": budget_bytes,
+                "warning_age_days": warning_age_days,
+                "over_budget": over_budget,
+                "over_warning_age": over_age,
+                # Advisory only. Nothing in this product acts on it by itself.
+                "cleanup_recommended": bool(recommendations),
+                "cleanup_reasons": tuple(recommendations),
+            }
+        )
+        return result
 
 
 def store_for_state_root(state_root: Path) -> QuarantineStore:
@@ -498,12 +777,97 @@ def preview_cleanup(
     )
 
 
+def _destroy_one(store: QuarantineStore, record: QuarantineRecord, *, operation: str) -> str | None:
+    """Destroy one verified object, or return why it was refused.
+
+    Returns `None` on success. Every early return leaves the file exactly where
+    it was: this function either destroys the object it proved, or nothing.
+
+    The order is the guarantee:
+
+    1. the path is a **regular file**, not a symlink and not a directory;
+    2. its **content still hashes to the recorded digest** — a tampered or
+       replaced file is refused, not deleted;
+    3. the **intent is durable** before anything moves;
+    4. the object is **renamed into a private tombstone**, which is atomic on
+       the same filesystem and takes it out of the browsable tree;
+    5. the tombstone is **re-identified** before the unlink, so the thing
+       destroyed is the thing that was proved;
+    6. the record is appended as ``removed``, and only then is the intent
+       committed.
+
+    A crash anywhere leaves a ``pending`` removal intent, which
+    `pending_removals()` reports. Nothing is ever silently removed.
+    """
+    path = Path(record.quarantine_path)
+
+    if path.is_symlink():
+        return "refused: quarantine path is a symlink"
+    if not path.exists():
+        # `missing_ok=True` used to count this as a successful deletion, adding
+        # its bytes to the freed total. An absent file is a discrepancy to
+        # report, not a job well done.
+        return "refused: quarantine path no longer exists"
+    if not path.is_file():
+        return "refused: quarantine path is not a regular file"
+
+    try:
+        observed_sha256, observed_size = stream_sha256(path)
+    except OSError as exc:
+        return f"{type(exc).__name__}: {exc}"
+    if observed_sha256 != record.sha256:
+        return "hash_drift"
+    if observed_size != record.size_bytes:
+        return "hash_drift"
+
+    intent = store.declare_removal(record, operation=operation)
+    tombstone = Path(intent.tombstone_path)
+    try:
+        tombstone.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(path, tombstone)
+    except OSError as exc:
+        store.abandon_removal(intent, f"{type(exc).__name__}: {exc}")
+        return f"{type(exc).__name__}: {exc}"
+
+    try:
+        tombstone_sha256, _ = stream_sha256(tombstone)
+    except OSError as exc:
+        # The object is in the tombstone and the intent stays pending, so
+        # recovery can still see it. It is not reported as removed.
+        return f"{type(exc).__name__}: {exc}"
+    if tombstone_sha256 != record.sha256:
+        return "hash_drift"
+
+    try:
+        tombstone.unlink()
+    except OSError as exc:
+        return f"{type(exc).__name__}: {exc}"
+
+    try:
+        store._append(  # noqa: SLF001 - the store owns its own journal format
+            replace(
+                record,
+                retention="removed",
+                notes=record.notes + ("permanently removed",),
+            )
+        )
+    except QuarantineError:
+        # The object is gone but the record could not be updated. The intent
+        # stays pending so this is reported rather than lost, and the caller
+        # sees a failure rather than a false success.
+        return "removed but the record could not be appended"
+
+    store.commit_removal(intent)
+    return None
+
+
 def permanently_remove(
     store: QuarantineStore,
     impact: CleanupImpact,
     *,
     acknowledged: bool,
     cancel: Callable[[], bool] | None = None,
+    operation_id: str | None = None,
 ) -> CleanupOutcome:
     """Delete quarantined files for good — the only path that ever does.
 
@@ -518,6 +882,7 @@ def permanently_remove(
     removed: list[str] = []
     failed: list[tuple[str, str]] = []
     bytes_removed = 0
+    operation = operation_id or f"cleanup_{uuid.uuid4().hex[:16]}"
 
     for record_id in impact.record_ids:
         if cancel is not None and cancel():
@@ -531,18 +896,12 @@ def permanently_remove(
         if record is None or record.retention != "retained":
             failed.append((record_id, "no longer eligible"))
             continue
-        try:
-            Path(record.quarantine_path).unlink(missing_ok=True)
-        except OSError as exc:
-            failed.append((record_id, f"{type(exc).__name__}: {exc}"))
+
+        outcome = _destroy_one(store, record, operation=operation)
+        if outcome is not None:
+            failed.append((record_id, outcome))
             continue
-        store._append(  # noqa: SLF001 - the store owns its own journal format
-            replace(
-                record,
-                retention="removed",
-                notes=record.notes + ("permanently removed",),
-            )
-        )
+
         removed.append(record_id)
         bytes_removed += record.size_bytes
 

@@ -35,6 +35,14 @@ def quarantine(tmp_path: Path) -> QuarantineStore:
     return store_for_state_root(tmp_path / "state")
 
 
+#: The digest of `_file`'s default content. An exact-duplicate group that
+#: reaches a quarantine now has to *prove* both sides freshly (`P0-SAFE-005`),
+#: so a fixture without recorded digests is refused rather than silently
+#: mutated. Carrying the real digest makes these fixtures exercise the proof
+#: alongside the mechanics they were written for.
+CONTENT_SHA256 = "ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73"
+
+
 def _file(path: Path, content: bytes = b"content") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
@@ -67,8 +75,8 @@ class TestExecution:
     ) -> None:
         source = _file(tmp_path / "library" / "copy.jpg")
         snapshot = _snapshot(
-            ResolvedOutcome(member_id="keep", kind="skip"),
-            ResolvedOutcome(member_id="dupe", kind="quarantine"),
+            ResolvedOutcome(member_id="keep", kind="skip", expected_sha256=CONTENT_SHA256),
+            ResolvedOutcome(member_id="dupe", kind="quarantine", expected_sha256=CONTENT_SHA256),
         )
 
         report = execute_snapshot(snapshot, quarantine=quarantine, source_for=lambda _id: source)
@@ -208,14 +216,22 @@ class TestRefusals:
 
 
 class TestFailureInjection:
-    def test_a_vanished_file_fails_only_its_own_action(
+    def test_a_vanished_member_stops_its_whole_group(
         self, tmp_path: Path, quarantine: QuarantineStore
     ) -> None:
+        """`P0-SAFE-005`: an exact group is proved two-sided, or not at all.
+
+        This used to assert that the *healthy* member was still quarantined
+        while its vanished sibling merely failed. But a group whose other side
+        cannot be re-hashed has no proof that these files are identical — and
+        "these are identical" is the entire justification for removing one of
+        them. So the group errors and nothing in it is mutated.
+        """
         present = _file(tmp_path / "library" / "here.jpg")
         missing = tmp_path / "library" / "gone.jpg"
         snapshot = _snapshot(
-            ResolvedOutcome(member_id="gone", kind="quarantine"),
-            ResolvedOutcome(member_id="here", kind="quarantine"),
+            ResolvedOutcome(member_id="gone", kind="quarantine", expected_sha256=CONTENT_SHA256),
+            ResolvedOutcome(member_id="here", kind="quarantine", expected_sha256=CONTENT_SHA256),
         )
         paths = {"gone": missing, "here": present}
 
@@ -223,9 +239,9 @@ class TestFailureInjection:
             snapshot, quarantine=quarantine, source_for=lambda member: paths[member]
         )
 
-        assert report.code == "partial"
-        assert report.counts == {"failed": 1, "completed": 1}
-        assert not present.exists()  # the healthy action still ran
+        assert report.code == "failed"
+        assert present.is_file(), "an unprovable group must not mutate its other members"
+        assert quarantine.records() == ()
 
     def test_an_unlocatable_member_is_reported_not_raised(
         self, tmp_path: Path, quarantine: QuarantineStore
@@ -244,12 +260,19 @@ class TestFailureInjection:
         self, tmp_path: Path, quarantine: QuarantineStore
     ) -> None:
         files = {f"m{index}": _file(tmp_path / "library" / f"{index}.jpg") for index in range(4)}
-        snapshot = _snapshot(*[ResolvedOutcome(member_id=key, kind="quarantine") for key in files])
-        calls = {"count": 0}
+        snapshot = _snapshot(
+            *[
+                ResolvedOutcome(member_id=key, kind="quarantine", expected_sha256=CONTENT_SHA256)
+                for key in files
+            ]
+        )
 
+        # Counted in *actions performed*, not in calls to this predicate. The
+        # two-sided proof (`P0-SAFE-005`) polls the same cancel token once per
+        # member before any mutation, so a raw call count would now trip during
+        # proving and mean something different from what this test is about.
         def cancel() -> bool:
-            calls["count"] += 1
-            return calls["count"] > 2
+            return len(quarantine.records()) >= 2
 
         report = execute_snapshot(
             snapshot,
@@ -354,3 +377,89 @@ class TestPrerequisiteContracts:
         )
 
         assert member.mutable is True
+
+
+class TestReferenceAnchoredProof:
+    """`P0-SAFE-005` / D-02: both sides are proved, including the side that stays.
+
+    A reference-anchored group is exactly the case where the surviving copy is
+    the one this run will not touch. Excluding `no_action_reference` members
+    from the re-hash meant the "two-sided" proof only ever measured the side
+    about to be quarantined — so the claim "these are identical" rested on a
+    snapshot taken earlier, not on the bytes present at the moment of mutation.
+
+    References are read here, never written: they participate as read-only
+    re-hash participants.
+    """
+
+    def test_a_reference_mutated_after_the_snapshot_stops_the_group(
+        self, tmp_path: Path, quarantine: QuarantineStore
+    ) -> None:
+        candidate = _file(tmp_path / "library" / "copy.jpg")
+        reference = _file(tmp_path / "reference" / "original.jpg")
+        snapshot = _snapshot(
+            ResolvedOutcome(
+                member_id="ref", kind="no_action_reference", expected_sha256=CONTENT_SHA256
+            ),
+            ResolvedOutcome(member_id="dupe", kind="quarantine", expected_sha256=CONTENT_SHA256),
+        )
+        paths = {"ref": reference, "dupe": candidate}
+
+        # The reference changes between snapshot and execute. Nothing about the
+        # candidate changed, so a one-sided proof would still have passed.
+        reference.write_bytes(b"the reference was edited after review")
+
+        report = execute_snapshot(
+            snapshot, quarantine=quarantine, source_for=lambda member: paths[member]
+        )
+
+        assert report.code == "failed"
+        assert candidate.is_file(), "the candidate was removed against a stale reference"
+        assert quarantine.records() == ()
+
+    def test_an_unchanged_reference_still_permits_the_quarantine(
+        self, tmp_path: Path, quarantine: QuarantineStore
+    ) -> None:
+        candidate = _file(tmp_path / "library" / "copy.jpg")
+        reference = _file(tmp_path / "reference" / "original.jpg")
+        snapshot = _snapshot(
+            ResolvedOutcome(
+                member_id="ref", kind="no_action_reference", expected_sha256=CONTENT_SHA256
+            ),
+            ResolvedOutcome(member_id="dupe", kind="quarantine", expected_sha256=CONTENT_SHA256),
+        )
+        paths = {"ref": reference, "dupe": candidate}
+
+        report = execute_snapshot(
+            snapshot, quarantine=quarantine, source_for=lambda member: paths[member]
+        )
+
+        assert report.code == "completed"
+        assert not candidate.exists()
+        # The reference is a participant in the proof, never a subject of it.
+        assert reference.is_file()
+        assert len(quarantine.records()) == 1
+
+    def test_a_candidate_without_a_recorded_digest_is_refused_not_skipped(
+        self, tmp_path: Path, quarantine: QuarantineStore
+    ) -> None:
+        """The hole this closes: no digest used to mean *no proof at all*.
+
+        The old guard `continue`d past the whole group, and execution then
+        mutated it unproven — the opposite of what skipping suggests.
+        """
+        candidate = _file(tmp_path / "library" / "copy.jpg")
+        keeper = _file(tmp_path / "library" / "keeper.jpg")
+        snapshot = _snapshot(
+            ResolvedOutcome(member_id="keep", kind="skip", expected_sha256=CONTENT_SHA256),
+            ResolvedOutcome(member_id="dupe", kind="quarantine"),  # no digest
+        )
+        paths = {"keep": keeper, "dupe": candidate}
+
+        report = execute_snapshot(
+            snapshot, quarantine=quarantine, source_for=lambda member: paths[member]
+        )
+
+        assert report.code == "failed"
+        assert candidate.is_file()
+        assert quarantine.records() == ()

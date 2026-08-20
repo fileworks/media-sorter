@@ -354,12 +354,16 @@ async def test_sort_integration_converts_jpeg_to_png(tmp_path: Path) -> None:
     PIL_Image = pytest.importorskip("PIL.Image")
 
     from app.core.config import Config
+    from app.core.config_fingerprint import config_fingerprint
+    from app.core.integrity_policy import authorize_config_mutations
     from app.services.config_service import ConfigService
     from app.services.conversion_service import ConversionService
     from app.services.duplicate_service import DuplicateRegistry, DuplicateService
     from app.services.extraction_service import DateExtractionService
     from app.services.filesystem_service import FileSystemService
     from app.services.metadata_service import MetadataService
+    from app.services.operation_execution import OperationExecution
+    from app.services.quarantine import store_for_state_root
     from app.services.repair_service import RepairService
     from app.services.sorting_service import SortingService
 
@@ -395,6 +399,20 @@ async def test_sort_integration_converts_jpeg_to_png(tmp_path: Path) -> None:
         db_manager=None,
     )
 
+    # Conversion displaces a published file, so it now requires the same
+    # journalled execution context production always has: `run()` builds one
+    # for every non-dry run, and the conversion block only executes when
+    # `dry_run` is False. Passing one here makes this test exercise the real
+    # path — including quarantining the original — rather than a shape that
+    # cannot occur in production.
+    execution = OperationExecution.start(
+        operation_id="op_conv_test",
+        state_root=tmp_path / "state",
+        preservation=cfg.preservation_profile,
+        authorization=authorize_config_mutations(cfg),
+        effective_config_sha256=config_fingerprint(cfg),
+    )
+
     record = svc._process_file(
         file_path=img_path,
         source_root=source_root,
@@ -403,10 +421,19 @@ async def test_sort_integration_converts_jpeg_to_png(tmp_path: Path) -> None:
         dry_run=False,
         registry=DuplicateRegistry(),
         operation_id="op_conv_test",
+        execution=execution,
     )
 
     assert record["status"] == "success"
     assert record["dest_path"].endswith(".png"), record["dest_path"]
+
+    # The pre-conversion original is not deleted; it is recorded and restorable.
+    store = store_for_state_root(tmp_path / "state")
+    quarantined = store.records()
+    assert len(quarantined) == 1
+    assert quarantined[0].reason == "optimization_original"
+    assert Path(quarantined[0].quarantine_path).is_file()
+    assert store.pending_intents() == ()
     # The intermediate .jpg copy should not remain at that path.
     dest = Path(record["dest_path"])
     assert dest.exists()

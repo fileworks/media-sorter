@@ -156,7 +156,14 @@ function viewportPriority(element: HTMLElement | null): number {
  * format that has no preview.
  */
 export function useQueuedThumbnail(
-  url: string,
+  /**
+   * The media URL, or `null` while the local API session is unresolved.
+   *
+   * `null` is not an error and not an empty image — it is "the client does not
+   * yet know where the backend is", and fetching anything at that point would
+   * mean guessing at a URL. It waits instead.
+   */
+  url: string | null,
   elementRef: RefObject<HTMLElement | null>,
 ): {
   objectUrl: string | null;
@@ -189,6 +196,13 @@ export function useQueuedThumbnail(
     installListeners();
     const id = ++requestId.current;
     setObjectUrl(null);
+    if (url === null) {
+      // The API session is not resolved. Hold in `loading` rather than
+      // fetching: there is no URL to fetch, and inventing one is the defect
+      // this guards (F-12).
+      setState("loading");
+      return;
+    }
     const cached = negativeCache.get(url);
     if (cached !== undefined && cached.until > Date.now()) {
       setState(cached.unavailable ? "unavailable" : "error");
@@ -257,7 +271,10 @@ export function useAuthorizedMedia(url: string | null): {
   useEffect(() => {
     if (!url) {
       setObjectUrl(null);
-      setState("error");
+      // Not an error: `null` means the local API session is still unresolved,
+      // and there is nothing to fetch yet. Reporting it as an error would show
+      // a failure placeholder for a request that was never made (F-12).
+      setState("loading");
       return;
     }
     let cancelled = false;

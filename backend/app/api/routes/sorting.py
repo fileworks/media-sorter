@@ -85,6 +85,17 @@ async def start_sorting(
             },
         )
     frozen_plan = None
+    # C-03: a mutating run must point at a plan somebody reviewed. `plan_id` was
+    # optional, so a live start could omit it and proceed with no frozen plan at
+    # all — no plan guard, no authorised effects, and no record of what the user
+    # actually agreed to. Copy mutates the filesystem as surely as move does (it
+    # writes destinations, converts, and rewrites metadata), so the requirement
+    # is on `dry_run`, not on the transfer mode.
+    if not request.dry_run and request.plan_id is None:
+        raise ConflictError(
+            "A live run needs a reviewed plan; generate a preview first.",
+            details={"reason": "plan_required", "dry_run": False},
+        )
     if request.plan_id is not None:
         frozen_plan = container.preview_service.frozen_plan(request.plan_id)
         if frozen_plan is None:

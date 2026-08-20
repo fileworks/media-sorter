@@ -287,6 +287,15 @@ class Config:
     burst_perceptual_distance: int = 4
     burst_require_camera_identity: bool = True
 
+    # ── Quarantine retention budget ───────────────────────────────────────────
+    # Diagnostics only. Quarantine is the reason optimization and deduplication
+    # are safe to run at all, and the product never deletes from it on its own —
+    # so these two numbers surface growth and recommend a cleanup, and nothing
+    # here ever removes a file. `P0-SAFE-001` retains an original per converted
+    # file, which is exactly the growth these make visible.
+    quarantine_budget_bytes: int = 10 * 1024**3
+    quarantine_warning_age_days: int = 30
+
     # Destination media are always indexed when duplicate removal is enabled.
     # Legacy persisted ``dedup_against_destination`` keys are ignored by
     # ``from_dict`` now that the unsafe opt-out has been removed.

@@ -423,7 +423,30 @@ describe("resolve", () => {
     ]);
   });
 
-  it("accepts a number shortcut while the Resolve mode tab retains focus", async () => {
+  /**
+   * This used to assert that a digit typed while the *mode tab* held focus
+   * selected a keeper. That is the WCAG 2.1.4 violation `P0-UI-001` fixes: the
+   * queue commits keeper decisions, and a stray `1` anywhere on the screen
+   * changed which file the next confirmation would keep.
+   *
+   * The shortcut is now scoped to focus-within the queue, and activating
+   * Resolve moves focus into it — so the reachable path this test covered is
+   * preserved, while the unreachable-from-anywhere behaviour is gone.
+   */
+  it("accepts a number shortcut once Resolve has taken focus", async () => {
+    renderReview(result);
+    await waitForReview();
+
+    fireEvent.click(screen.getByRole("tab", { name: en("review.mode.resolve") }));
+    fireEvent.keyDown(window, { key: "1" });
+
+    expect(decisions.reviewedSets).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
+
+    expect(decisions.reviewedSets).toEqual([{ keep: "/in/a.jpg", demote: ["/in/b.jpg"] }]);
+  });
+
+  it("ignores a number shortcut once focus leaves the queue for the mode tab", async () => {
     renderReview(result);
     await waitForReview();
     const resolveMode = screen.getByRole("tab", {
@@ -431,13 +454,16 @@ describe("resolve", () => {
     }) as HTMLButtonElement;
 
     fireEvent.click(resolveMode);
+    // Deliberately take focus back out of the queue.
     resolveMode.focus();
     fireEvent.keyDown(resolveMode, { key: "1" });
 
+    // Nothing was drafted, so there is nothing to confirm.
+    const confirm = screen.getByRole("button", {
+      name: en("review.resolve.confirmSelection"),
+    }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
     expect(decisions.reviewedSets).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
-
-    expect(decisions.reviewedSets).toEqual([{ keep: "/in/a.jpg", demote: ["/in/b.jpg"] }]);
   });
 
   it("records 'not duplicates' as a binding decision instead of clearing the set", async () => {

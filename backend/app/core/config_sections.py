@@ -176,5 +176,11 @@ UNGROUPED_FIELDS: frozenset[str] = frozenset(
         # Named snapshots of the settings above, managed through their own
         # endpoints rather than edited as a field on the settings screen.
         "saved_recipes",
+        # Retention diagnostics for the quarantine store, surfaced through
+        # `/api/quarantine/summary` rather than as settings-screen controls.
+        # They tune a *report*, never an action: nothing prunes quarantine
+        # automatically, so there is no destructive knob here to expose.
+        "quarantine_budget_bytes",
+        "quarantine_warning_age_days",
     }
 )

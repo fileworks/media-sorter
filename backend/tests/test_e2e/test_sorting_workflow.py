@@ -168,7 +168,17 @@ def test_sort_workflow_with_copy_produces_correct_structure(
         },
     )
 
-    start_resp = client.post("/api/sorting/start", json={"dry_run": False})
+    # C-03: a live run goes through the preview -> plan handshake. This used to
+    # start with no `plan_id` at all, which is the shape the fix refuses; going
+    # through the handshake makes this exercise the real user path rather than
+    # one no interface offers.
+    preview = client.post("/api/preview")
+    assert preview.status_code == 200
+    plan_id = preview.json()["plan_id"]
+    assert plan_id
+
+    start_resp = client.post("/api/sorting/start", json={"dry_run": False, "plan_id": plan_id})
+    assert start_resp.status_code == 200, start_resp.json()
     task_id = start_resp.json()["task_id"]
     final = _wait_for_completion(client, task_id, timeout=30)
     assert final["status"] == "completed"

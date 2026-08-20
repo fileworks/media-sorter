@@ -332,7 +332,25 @@ def sort_start(ctx: click.Context, dry_run: bool, watch: bool) -> None:
     """Start a sorting operation."""
     client: APIClient = ctx.obj["client"]
     try:
-        task_id = client.start_sorting(dry_run=dry_run)
+        # C-03: a live run must point at a plan somebody reviewed. The CLI had
+        # no way to produce one, so `mediasort sort start` was the one entry
+        # point that could mutate a library with nothing frozen behind it. It
+        # now runs the preview itself and hands over the resulting plan.
+        plan_id: str | None = None
+        if not dry_run:
+            click.echo("Generating a reviewed plan (preview)…")
+            preview_task = client.start_preview()
+            _await_preview(client, preview_task)
+            plan_id = client.reviewed_plan_id(preview_task)
+            if plan_id is None:
+                click.echo(
+                    "Error: the preview produced no reviewed plan; nothing was started.",
+                    err=True,
+                )
+                sys.exit(1)
+            click.echo(f"  Reviewed plan: {plan_id}")
+
+        task_id = client.start_sorting(dry_run=dry_run, plan_id=plan_id)
         mode = "dry-run" if dry_run else "live"
         click.echo(f"✓ Sort started ({mode}): {task_id}")
 
@@ -487,6 +505,25 @@ def _show_partial(envelope: dict[str, Any]) -> None:
     click.echo(
         f"Warning: result is partial ({len(issues)} inaccessible path(s)).", err=True
     )
+
+
+def _await_preview(client: APIClient, task_id: str, timeout: float = 3600.0) -> None:
+    """Block until the preview finishes, so its plan can be handed to the sort."""
+    deadline = time.time() + timeout
+    while True:
+        data = client.get_preview_progress(task_id)
+        status = data.get("status")
+        if status == "completed":
+            return
+        if status in ("failed", "cancelled"):
+            click.echo(
+                f"Error: preview {status}: {data.get('error', 'unknown error')}", err=True
+            )
+            sys.exit(1)
+        if time.time() > deadline:
+            click.echo("Error: preview did not finish in time; nothing was started.", err=True)
+            sys.exit(1)
+        time.sleep(1)
 
 
 def _watch_task(client: APIClient, task_id: str) -> None:

@@ -922,9 +922,18 @@ async def test_run_counts_duplicate_status(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_keeps_higher_resolution_duplicate_regardless_of_order(tmp_path: Path) -> None:
-    """Requirement: of a perceptual-duplicate group the higher-resolution copy is
-    kept (sorted into the date tree) and the lower-resolution copy is quarantined
-    as the duplicate — even when the lower-res file is processed first by name."""
+    """DEC-01: a perceptual match is evidence, never placement authority.
+
+    This test used to assert the opposite — that the lower-resolution copy was
+    quarantined into `_copies` under the higher-resolution keeper. That is the
+    behaviour `P0-SAFE-002a` removes: "looks alike" is not "is the same file",
+    and acting on it moved originals that were merely similar.
+
+    Both files now sort to their ordinary dated destination. The relationship
+    is still detected and still reported — `duplicate_type`,
+    `duplicate_similarity` and `duplicate_of` are populated exactly as before —
+    it simply no longer decides where a file goes.
+    """
     pytest.importorskip("imagehash")
     PIL_Image = pytest.importorskip("PIL.Image")
 
@@ -958,17 +967,16 @@ async def test_run_keeps_higher_resolution_duplicate_regardless_of_order(tmp_pat
     ):
         stats = await svc.run(_fake_task(), dry_run=False)
 
-    assert stats["sorted"] == 1
-    assert stats["duplicates"] == 1
-    # The HIGH-res copy is kept in the date tree; the LOW-res copy is quarantined.
-    assert (target / "2024" / "01" / "01" / "b_high.jpg").exists()
-    assert (target / "2024" / "01" / "01" / "_copies").is_dir()
-    assert any(
-        path.name.startswith("b_high — from source")
-        for path in (target / "2024" / "01" / "01" / "_copies").iterdir()
-    )
-    assert not (target / "2024" / "01" / "01" / "a_low.jpg").exists()
-    assert not (target / "_duplicates" / "b_high.jpg").exists()
+    dated = target / "2024" / "01" / "01"
+
+    assert stats["sorted"] == 2
+    assert stats["duplicates"] == 0
+    # Both copies reach the ordinary dated destination.
+    assert (dated / "b_high.jpg").exists()
+    assert (dated / "a_low.jpg").exists()
+    # And nothing was quarantined on perceptual evidence alone.
+    assert not (dated / "_copies").exists()
+    assert not (target / "_duplicates").exists()
 
 
 @pytest.mark.asyncio

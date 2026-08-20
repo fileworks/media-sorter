@@ -92,7 +92,12 @@ class OperationExecution:
             plan_guard=FrozenPlanGuard(frozen_plan) if frozen_plan is not None else None,
             events=EventRecorder(
                 operation_id,
-                plan_id=operation_id,
+                # The *reviewed plan's* id, not the operation's. Recording the
+                # operation id here meant the journal could not answer "which
+                # reviewed plan authorised this?" — it just repeated the
+                # question back. `None` when there is genuinely no plan, which
+                # after C-03 only happens on a dry run.
+                plan_id=frozen_plan.plan_id if frozen_plan is not None else None,
                 profile_id=preservation.profile_id,
                 sink=structlog_sink(logger),
             ),
@@ -108,7 +113,10 @@ class OperationExecution:
             execution.journal = DurableActionJournal.open_operation(
                 state_root,
                 operation_id=operation_id,
-                plan_id=operation_id,
+                # Same correction as the event recorder above: the durable
+                # journal records which *reviewed plan* authorised these
+                # actions, which is the question a later audit actually asks.
+                plan_id=frozen_plan.plan_id if frozen_plan is not None else operation_id,
                 profile_id=preservation.profile_id,
                 effective_config_sha256=effective_config_sha256,
             )

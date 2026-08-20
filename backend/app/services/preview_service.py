@@ -21,6 +21,7 @@ from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
+from app.core.plan_store import InvalidPlanStoreError, PlanStore, store_for_state_root
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import (
     PLANNED_QUARANTINE_STATUSES,
@@ -129,6 +130,7 @@ class PreviewService:
         rule_engine_service: RuleEngineService | None,
         duplicate_service: DuplicateService | None = None,
         category_classifier_service: CategoryClassifierService | None = None,
+        plan_store: PlanStore | None = None,
     ) -> None:
         self._fs = filesystem_service
         self._extraction = extraction_service
@@ -139,7 +141,11 @@ class PreviewService:
         self._latest_excluded_root_ids: tuple[str, ...] = ()
         self._outcome_directory = Path(tempfile.mkdtemp(prefix="mediasort-preview-outcomes-"))
         self._outcomes = PreviewOutcomeStore(self._outcome_directory / "outcomes.sqlite3")
+        # In-memory for the current process, *and* on disk. The dictionary was
+        # the only home, so a backend restart discarded every reviewed plan
+        # while the sort route still accepted a start without one.
         self._plans: dict[str, FrozenSortPlan] = {}
+        self._plan_store = plan_store or store_for_state_root(resolve_app_paths().data_dir)
 
     def latest_outcomes(self, paths: list[str]) -> tuple[str | None, list[dict[str, Any]]]:
         """Return provenance recorded by the last completed preview.
@@ -160,7 +166,20 @@ class PreviewService:
             self.close()
 
     def frozen_plan(self, plan_id: str) -> FrozenSortPlan | None:
-        return self._plans.get(plan_id)
+        """The reviewed plan for *plan_id*, from memory or from disk.
+
+        Raises rather than returning `None` when a plan exists but may not be
+        executed — an expired or corrupt plan is a different answer from "no
+        such plan", and collapsing them is how a user gets told to re-preview
+        when the real problem was a forward-incompatible envelope.
+        """
+        remembered = self._plans.get(plan_id)
+        if remembered is not None:
+            return remembered
+        try:
+            return self._plan_store.load(plan_id).plan
+        except InvalidPlanStoreError:
+            return None
 
     @property
     def latest_excluded_root_ids(self) -> tuple[str, ...]:
@@ -477,9 +496,12 @@ class PreviewService:
         self._latest_excluded_root_ids = scope.excluded_root_ids
         self._outcomes.replace(items)
         plan = build_frozen_sort_plan(items, config)
-        # Only the current reviewed plan remains executable. A stale identifier
-        # can therefore never silently select an older set of consequences.
+        # Only the current reviewed plan remains executable in memory. A stale
+        # identifier can therefore never silently select an older set of
+        # consequences. The store keeps it across a restart, where the same rule
+        # is enforced by the plan's own expiry rather than by this dictionary.
         self._plans = {plan.plan_id: plan}
+        self._plan_store.save(plan)
         return {
             "config_fingerprint": fingerprint,
             "excluded_roots": list(scope.excluded_paths),
@@ -647,6 +669,24 @@ class PreviewService:
             )
         dup_evaluation = match.evaluation
         dup_unknown_reason = match.unknown_reason
+
+        # DEC-01: preview and execution must agree about what a perceptual match
+        # means, or the reviewed plan would authorise a placement the run then
+        # declines to make (or worse, the other way round). The evidence fields
+        # are kept; the placement authority is not.
+        if match.is_duplicate and match.match_type != "exact":
+            dup_type = match.match_type
+            dup_similarity = match.similarity
+            dup_of = match.original_path
+            match = DuplicateMatch(
+                False,
+                match_type=match.match_type,
+                similarity=match.similarity,
+                original_path=match.original_path,
+                evaluation=match.evaluation,
+                unknown_reason=match.unknown_reason,
+                content_sha256=match.content_sha256,
+            )
 
         if match.is_duplicate:
             dup_type = match.match_type

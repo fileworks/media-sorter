@@ -274,14 +274,26 @@ def _validate_exact_groups(
         # Old hand-built snapshots may contain only the actionable member.
         # Production snapshots contain every member; only those can establish
         # the required two-sided equality proof.
-        candidates = tuple(
-            outcome
-            for outcome in group.outcomes
-            if outcome.kind not in {"blocked", "no_action_reference"}
+        #
+        # `no_action_reference` members are included as **read-only re-hash
+        # participants**. A reference-anchored group is exactly the case where
+        # the surviving copy is the one this run will not touch, so leaving it
+        # out meant the "two-sided" proof only ever measured one side — the side
+        # about to be quarantined. Nothing here mutates a reference; it is
+        # hashed, not moved.
+        candidates = tuple(outcome for outcome in group.outcomes if outcome.kind != "blocked")
+        if len(candidates) < 2:
+            continue
+        # A candidate without a recorded digest cannot be proved. Skipping the
+        # group meant proceeding to mutation with **no** proof at all, which is
+        # the opposite of the intent. Refuse it instead.
+        unproven = tuple(
+            outcome.member_id for outcome in candidates if outcome.expected_sha256 is None
         )
-        if len(candidates) < 2 or not all(
-            outcome.expected_sha256 is not None for outcome in candidates
-        ):
+        if unproven:
+            errors[group.group_id] = "cannot prove this group: no recorded digest for " + ", ".join(
+                sorted(unproven)
+            )
             continue
         measured: set[str] = set()
         try:

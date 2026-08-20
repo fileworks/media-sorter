@@ -18,8 +18,12 @@ import { useAuthorizedMedia } from "@/lib/thumbnailQueue";
 import { cn } from "@/lib/utils";
 
 interface MediaImageProps {
-  /** A full media-endpoint URL, e.g. `api.thumbnailUrl(path, 1600)`. */
-  src: string;
+  /**
+   * A full media-endpoint URL, e.g. `api.thumbnailUrl(path, 1600)`, or `null`
+   * while the local API session is unresolved. The builders return `null`
+   * rather than a guessed production URL (F-12), so this accepts it.
+   */
+  src: string | null;
   alt: string;
   className?: string;
   /** Shown instead of the image when it cannot be rendered. */
