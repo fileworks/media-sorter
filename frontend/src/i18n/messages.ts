@@ -58,6 +58,12 @@ export const en = {
   "review.browse.keyboardHelp": "Esc backs out one layer · Ctrl/⌘A selects the visible files",
   "review.bulk.applyRule": "Apply rule to selection",
   "review.bulk.notDuplicates": "Mark as not duplicates",
+  "review.partialIndex.title": "Some files could not be read while indexing",
+  "review.partialIndex.detail":
+    "A folder\u2019s last scan finished without reading everything in it, so a stack below may be missing copies that exist on disk. Re-scan before deleting anything you cannot replace.",
+  "review.truncated.title": "Showing the first {count} stacks",
+  "review.truncated.detail":
+    "This library has more duplicate stacks than one review session loads. The counts here describe what is shown, not the whole library.",
   "review.bulk.folder": "Preferred folder",
   "review.bulk.keepFromFolder": "Keep from folder",
   "review.bulk.impact": "This decides {decide} selected sets and leaves {skip} unchanged.",
@@ -139,6 +145,8 @@ export const en = {
     "Files that are not duplicates stay in their source folders. Duplicate copies move to _copies in the destination after verification.",
   "config.runMode.organizeNote":
     "Every file that is kept is placed into the destination under the folder structure set below.",
+  "config.keeper.smart.help":
+    "Recommended. Identical copies differ only in name and location, so this keeps the one that looks like the original: no \u201ccopy\u201d marker in the name, least deeply buried, then the oldest. Needs no setup.",
   "config.keeper.best_quality.help":
     "Prefers the highest resolution, then the largest file, then the newest modification time; final ties are resolved deterministically.",
   "config.keeper.newest.help": "Keeps the copy with the most recent capture date.",
@@ -153,6 +161,8 @@ export const en = {
   "config.keeper.shortest_filename.help":
     "Keeps the shortest filename — often the one without a \u201ccopy\u201d suffix.",
   "config.keeper.manual.help": "Chooses nothing. Every set waits for you in Review.",
+  "config.keeper.smart": "Keep the likely original (recommended)",
+  "config.keeper.smart.short": "Likely original",
   "config.keeper.best_quality": "Keep the best quality",
   "config.keeper.best_quality.short": "Keep best",
   "config.keeper.longest_filename": "Keep the longest filename",
@@ -659,6 +669,10 @@ export const en = {
   "config.conversion.videoFormat": "Video format",
   "config.other.fixDates": "Fix dates in metadata",
   "config.other.repair": "Repair corrupted files",
+  "config.indexWorkers.label": "Indexing threads",
+  "config.indexWorkers.help":
+    "How many files are read and decoded at once while indexing. Left empty, this matches your machine. Lower it to keep the computer responsive for other work; raise it only if indexing is the only thing running.",
+  "config.indexWorkers.auto": "Automatic",
   "config.thumbnailCache.label": "Cache thumbnails",
   "config.thumbnailCache.help":
     "Store disposable previews under the app data directory to avoid decoding media again.",
@@ -673,29 +687,10 @@ export const en = {
   "config.ai.localEngine": "Local AI engine",
   "config.ai.localEngineHelp":
     "Shared by local content tagging and Smart Categorization. Installing a model does not enable either feature.",
-  "config.ai.provider": "Provider",
-  "config.ai.local": "Local — offline, free, no key",
-  "config.ai.azure": "Azure AI Vision — 5,000/month free",
-  "config.ai.imagga": "Imagga — about 1,000/month free",
-  "config.ai.google": "Google Vision — 1,000/month free",
   "config.ai.labels": "Labels to detect",
   "config.ai.sync": "+ Sync from smart categorization",
   "config.ai.syncTitle": "Add all smart categorization folders to the label list",
   "config.ai.synced": "All smart categorization folders are already in the label list.",
-  "config.ai.endpoint": "Endpoint",
-  "config.ai.apiKey": "API key",
-  "config.ai.apiSecret": "API secret",
-  "config.ai.subscriptionKey": "Subscription key",
-  "config.ai.azureEndpointPlaceholder": "https://<resource>.cognitiveservices.azure.com",
-  "config.ai.azureHelp":
-    "Create a free Computer Vision resource (F0 pricing tier — 5,000 images/month) in the Azure portal, then copy its Endpoint and a Key.",
-  "config.ai.imaggaKeyPlaceholder": "Imagga API key",
-  "config.ai.imaggaSecretPlaceholder": "Imagga API secret",
-  "config.ai.imaggaHelp":
-    "Sign up free at imagga.com (about 1,000 tags/month), then copy the API key and secret from your dashboard.",
-  "config.ai.googleKeyPlaceholder": "Google Cloud API key",
-  "config.ai.googleHelp":
-    "In the Google Cloud console, enable the Vision API (1,000 images/month free), then create an API key under Credentials.",
   "config.ai.maxTags": "Maximum tags per file",
   "config.ai.confidence": "Confidence (0–1)",
   "config.ai.embed": "Save tags into files",
@@ -1357,7 +1352,6 @@ export const en = {
   "config.summary.keepFormats": "Keep formats",
   "config.summary.toFormat": "→ {format}",
   "config.summary.aiOffline": "On · offline",
-  "config.summary.aiCloud": "On · cloud",
   "config.summary.noRules": "On · no rules yet",
   "config.summary.ruleCount": "{count} rules",
   "config.summary.fixDates": "fix dates",
@@ -1804,6 +1798,12 @@ export const de: Record<MessageKey, string> = {
     "Esc geht eine Ebene zurück · Strg/⌘A wählt die sichtbaren Dateien aus",
   "review.bulk.applyRule": "Regel auf Auswahl anwenden",
   "review.bulk.notDuplicates": "Als keine Duplikate markieren",
+  "review.partialIndex.title": "Beim Indizieren konnten nicht alle Dateien gelesen werden",
+  "review.partialIndex.detail":
+    "Der letzte Scan eines Ordners hat nicht alles darin gelesen. Einem Stapel unten k\u00f6nnen daher Kopien fehlen, die auf der Festplatte vorhanden sind. F\u00fchren Sie einen neuen Scan durch, bevor Sie Unersetzliches l\u00f6schen.",
+  "review.truncated.title": "Die ersten {count} Stapel werden angezeigt",
+  "review.truncated.detail":
+    "Diese Bibliothek enthält mehr Duplikat-Stapel, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",
   "review.bulk.folder": "Bevorzugter Ordner",
   "review.bulk.keepFromFolder": "Aus Ordner behalten",
   "review.bulk.impact":
@@ -1892,6 +1892,8 @@ export const de: Record<MessageKey, string> = {
     "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach der Prüfung nach _copies im Ziel verschoben.",
   "config.runMode.organizeNote":
     "Jede behaltene Datei wird im Zielordner nach der unten eingestellten Ordnerstruktur abgelegt.",
+  "config.keeper.smart.help":
+    "Empfohlen. Identische Kopien unterscheiden sich nur in Name und Ablageort. Behalten wird daher die Datei, die nach dem Original aussieht: ohne \u201eKopie\u201c-Kennzeichnung im Namen, am wenigsten tief verschachtelt, dann die \u00e4lteste. Ohne Einrichtung.",
   "config.keeper.best_quality.help":
     "Bevorzugt die höchste Auflösung, dann die größte Datei und dann die jüngste Änderungszeit; verbleibende Gleichstände werden stabil aufgelöst.",
   "config.keeper.newest.help": "Behält die Kopie mit dem jüngsten Aufnahmedatum.",
@@ -1906,6 +1908,8 @@ export const de: Record<MessageKey, string> = {
   "config.keeper.shortest_filename.help":
     "Behält den kürzesten Dateinamen — oft den ohne „Kopie“-Zusatz.",
   "config.keeper.manual.help": "Wählt nichts aus. Jeder Satz wartet in der Prüfung auf dich.",
+  "config.keeper.smart": "Vermutliches Original behalten (empfohlen)",
+  "config.keeper.smart.short": "Vermutl. Original",
   "config.keeper.best_quality": "Beste Qualität behalten",
   "config.keeper.best_quality.short": "Beste behalten",
   "config.keeper.longest_filename": "Längsten Dateinamen behalten",
@@ -2429,6 +2433,10 @@ export const de: Record<MessageKey, string> = {
   "config.conversion.videoFormat": "Videoformat",
   "config.other.fixDates": "Datumsangaben in Metadaten korrigieren",
   "config.other.repair": "Beschädigte Dateien reparieren",
+  "config.indexWorkers.label": "Threads f\u00fcr die Indizierung",
+  "config.indexWorkers.help":
+    "Wie viele Dateien beim Indizieren gleichzeitig gelesen und dekodiert werden. Leer gelassen richtet sich der Wert nach Ihrem Rechner. Verringern Sie ihn, damit der Rechner f\u00fcr andere Arbeiten reaktionsf\u00e4hig bleibt; erh\u00f6hen Sie ihn nur, wenn sonst nichts l\u00e4uft.",
+  "config.indexWorkers.auto": "Automatisch",
   "config.thumbnailCache.label": "Vorschaubilder zwischenspeichern",
   "config.thumbnailCache.help":
     "Speichert löschbare Vorschaubilder im App-Datenordner, damit Medien nicht erneut dekodiert werden.",
@@ -2443,31 +2451,12 @@ export const de: Record<MessageKey, string> = {
   "config.ai.localEngine": "Lokale KI-Engine",
   "config.ai.localEngineHelp":
     "Wird von lokalem Inhaltstagging und intelligenter Kategorisierung gemeinsam verwendet. Die Installation eines Modells aktiviert keine der beiden Funktionen.",
-  "config.ai.provider": "Anbieter",
-  "config.ai.local": "Lokal — offline, kostenlos, ohne Schlüssel",
-  "config.ai.azure": "Azure AI Vision — 5.000/Monat kostenlos",
-  "config.ai.imagga": "Imagga — etwa 1.000/Monat kostenlos",
-  "config.ai.google": "Google Vision — 1.000/Monat kostenlos",
   "config.ai.labels": "Zu erkennende Bezeichnungen",
   "config.ai.sync": "+ Aus intelligenter Kategorisierung übernehmen",
   "config.ai.syncTitle":
     "Alle Ordner der intelligenten Kategorisierung zur Bezeichnungsliste hinzufügen",
   "config.ai.synced":
     "Alle Ordner der intelligenten Kategorisierung sind bereits in der Bezeichnungsliste.",
-  "config.ai.endpoint": "Endpunkt",
-  "config.ai.apiKey": "API-Schlüssel",
-  "config.ai.apiSecret": "API-Geheimnis",
-  "config.ai.subscriptionKey": "Abonnementschlüssel",
-  "config.ai.azureEndpointPlaceholder": "https://<ressource>.cognitiveservices.azure.com",
-  "config.ai.azureHelp":
-    "Im Azure-Portal eine kostenlose Computer-Vision-Ressource (Tarif F0 — 5.000 Bilder/Monat) erstellen und anschließend den Endpunkt sowie einen Schlüssel kopieren.",
-  "config.ai.imaggaKeyPlaceholder": "Imagga-API-Schlüssel",
-  "config.ai.imaggaSecretPlaceholder": "Imagga-API-Geheimnis",
-  "config.ai.imaggaHelp":
-    "Kostenlos bei imagga.com registrieren (etwa 1.000 Tags/Monat) und anschließend API-Schlüssel und Geheimnis aus dem Dashboard kopieren.",
-  "config.ai.googleKeyPlaceholder": "Google-Cloud-API-Schlüssel",
-  "config.ai.googleHelp":
-    "In der Google-Cloud-Konsole die Vision API aktivieren (1.000 Bilder/Monat kostenlos) und unter Zugangsdaten einen API-Schlüssel erstellen.",
   "config.ai.maxTags": "Maximale Tags pro Datei",
   "config.ai.confidence": "Konfidenz (0–1)",
   "config.ai.embed": "Tags in Dateien speichern",
@@ -3154,7 +3143,6 @@ export const de: Record<MessageKey, string> = {
   "config.summary.keepFormats": "Formate behalten",
   "config.summary.toFormat": "→ {format}",
   "config.summary.aiOffline": "An · offline",
-  "config.summary.aiCloud": "An · Cloud",
   "config.summary.noRules": "An · noch keine Regeln",
   "config.summary.ruleCount": "{count} Regeln",
   "config.summary.fixDates": "Daten korrigieren",

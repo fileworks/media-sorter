@@ -1,36 +1,31 @@
-"""AI tagging providers.
+"""AI tagging — local only.
 
-A small pluggable family of *synchronous* taggers. Each provider turns a single
-image into a ranked list of ``(label, score)`` pairs (score in ``0..1``):
+Turns a single image into a ranked list of ``(label, score)`` pairs (score in
+``0..1``) using :class:`LocalClipTagger`: offline CLIP/SigLIP zero-shot via
+``fastembed`` (ONNX Runtime, no torch, no API key). It scores the user-supplied
+label vocabulary against the image.
 
-* :class:`LocalClipTagger` — offline CLIP zero-shot via ``fastembed`` (ONNX
-  Runtime, no torch, no API key). The default, free, privacy-preserving option.
-  Scores the user-supplied label vocabulary against the image.
-* :class:`AzureVisionTagger` — Azure AI Vision Image Analysis (free F0 tier).
-* :class:`ImaggaTagger` — Imagga tagging API (free hobby tier).
-* :class:`GoogleCloudVisionTagger` — Google Cloud Vision ``LABEL_DETECTION``
-  (free 1,000/mo), authenticated with a plain API key.
+Tagging is deliberately local-only: no provider setting, no credentials, and no
+code path that can send a photograph anywhere. That is a product decision, not
+an omission — a self-hosted library should not need to trust a third party to
+describe its own pictures, and a gate that merely *asks* before uploading is a
+weaker guarantee than having nothing to upload with.
 
 Taggers are intentionally synchronous: the sort pipeline already runs per-file
-work in a worker thread (``asyncio.to_thread``), so blocking onnxruntime / HTTP
-calls fit naturally without any event-loop juggling.
+work in a worker thread (``asyncio.to_thread``), so blocking onnxruntime calls
+fit naturally without any event-loop juggling.
 
-:func:`build_tagger` resolves the configured provider, returning ``None`` (with a
-logged reason) when tagging is disabled or required credentials are missing — so
-a misconfiguration degrades to "no AI tags" rather than breaking a sort.
+:func:`build_tagger` returns ``None`` (with a logged reason) when tagging is
+disabled or no encoder is available — so an unusable setup degrades to "no AI
+tags" rather than breaking a sort.
 """
 
 from __future__ import annotations
 
-import base64
-import io
-import unicodedata
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
-from app.core.concepts import CATALOG, Locale
+from app.core.concepts import Locale
 from app.core.logging_config import get_logger
 from app.services.ai.clip_embedder import ClipEmbedder
 from app.services.ai.encoder_protocol import VisionEncoder
@@ -56,27 +51,6 @@ logger = get_logger(__name__)
 # Slope 100 was tuned on a sample set so a confident match reads ≈0.9 and a label
 # at the background level reads ≈0.5 (the natural threshold).
 TAGGER_SLOPE = 100.0
-
-# Tagger HTTP calls are short; keep a generous-but-bounded timeout.
-_HTTP_TIMEOUT = 30.0
-# Cap the uploaded/inferred image's longest edge to keep payloads (and cloud
-# cost) small without hurting tag quality.
-_MAX_IMAGE_DIM = 1024
-
-
-def _image_to_jpeg_bytes(image: Image, max_dim: int = _MAX_IMAGE_DIM, quality: int = 85) -> bytes:
-    """Downscale *image* to ``<= max_dim`` on its longest edge and encode as JPEG."""
-    from PIL import Image as PILImage
-
-    img = image.convert("RGB") if image.mode != "RGB" else image
-    longest = max(img.size)
-    if longest > max_dim:
-        scale = max_dim / float(longest)
-        new_size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
-        img = img.resize(new_size, PILImage.Resampling.LANCZOS)
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality)
-    return buf.getvalue()
 
 
 class AITagger(ABC):
@@ -222,250 +196,36 @@ class LocalClipTagger(AITagger):
 
 
 # --------------------------------------------------------------------------- #
-# Cloud providers                                                               #
-# --------------------------------------------------------------------------- #
-
-
-def _display_label(value: object) -> str:
-    return " ".join(unicodedata.normalize("NFKC", str(value)).split())
-
-
-class _WarningTagger(AITagger):
-    def __init__(self) -> None:
-        self._warnings: list[str] = []
-
-    @property
-    def warnings(self) -> tuple[str, ...]:
-        return tuple(self._warnings)
-
-    def _warn(self, message: str) -> None:
-        self._warnings.append(message)
-        logger.warning(message)
-
-
-class AzureVisionTagger(_WarningTagger):
-    """Azure AI Vision Image Analysis ('tags' feature). Free F0 tier ≈ 5,000/mo."""
-
-    _API_VERSION = "2024-02-01"
-
-    def __init__(
-        self,
-        endpoint: str,
-        api_key: str,
-        threshold: float = 0.2,
-        locale: Locale = "en",
-    ) -> None:
-        super().__init__()
-        self._endpoint = endpoint.rstrip("/")
-        self._api_key = api_key
-        self._threshold = threshold
-        self._locale = locale
-
-    def tag(self, image: Image) -> list[tuple[str, float]]:
-        try:
-            payload = _image_to_jpeg_bytes(image)
-            url = f"{self._endpoint}/computervision/imageanalysis:analyze"
-            resp = httpx.post(
-                url,
-                params={
-                    "api-version": self._API_VERSION,
-                    "features": "tags",
-                    "language": self._locale,
-                },
-                headers={
-                    "Ocp-Apim-Subscription-Key": self._api_key,
-                    "Content-Type": "application/octet-stream",
-                },
-                content=payload,
-                timeout=_HTTP_TIMEOUT,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            values = (data.get("tagsResult") or {}).get("values") or []
-            out: list[tuple[str, float]] = []
-            for v in values:
-                name = v.get("name")
-                conf = float(v.get("confidence", 0.0))
-                if name and conf >= self._threshold:
-                    out.append((_display_label(name), conf))
-            out.sort(key=lambda p: p[1], reverse=True)
-            return out
-        except Exception as exc:
-            logger.warning("Azure Vision tagging failed", error=str(exc))
-            return []
-
-
-class ImaggaTagger(_WarningTagger):
-    """Imagga tagging API. Free hobby tier ≈ 1,000/mo. Auth: key + secret."""
-
-    _URL = "https://api.imagga.com/v2/tags"
-
-    def __init__(
-        self,
-        api_key: str,
-        api_secret: str,
-        threshold: float = 0.2,
-        locale: Locale = "en",
-    ) -> None:
-        super().__init__()
-        self._auth = (api_key, api_secret)
-        self._threshold = threshold
-        self._locale = locale
-
-    def tag(self, image: Image) -> list[tuple[str, float]]:
-        try:
-            payload = _image_to_jpeg_bytes(image)
-            resp = httpx.post(
-                self._URL,
-                files={"image": ("image.jpg", payload, "image/jpeg")},
-                data={"language": self._locale},
-                auth=self._auth,
-                timeout=_HTTP_TIMEOUT,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            tags = (data.get("result") or {}).get("tags") or []
-            out: list[tuple[str, float]] = []
-            for t in tags:
-                name = (t.get("tag") or {}).get(self._locale)
-                conf = float(t.get("confidence", 0.0)) / 100.0  # Imagga reports 0..100
-                if name and conf >= self._threshold:
-                    out.append((_display_label(name), conf))
-            out.sort(key=lambda p: p[1], reverse=True)
-            return out
-        except Exception as exc:
-            logger.warning("Imagga tagging failed", error=str(exc))
-            return []
-
-
-class GoogleCloudVisionTagger(_WarningTagger):
-    """Google Cloud Vision LABEL_DETECTION via a plain API key. Free ≈ 1,000/mo."""
-
-    _URL = "https://vision.googleapis.com/v1/images:annotate"
-
-    def __init__(
-        self,
-        api_key: str,
-        threshold: float = 0.2,
-        max_results: int = 20,
-        locale: Locale = "en",
-    ) -> None:
-        super().__init__()
-        self._api_key = api_key
-        self._threshold = threshold
-        self._max_results = max_results
-        self._locale = locale
-
-    def tag(self, image: Image) -> list[tuple[str, float]]:
-        try:
-            payload = _image_to_jpeg_bytes(image)
-            content = base64.b64encode(payload).decode("ascii")
-            body = {
-                "requests": [
-                    {
-                        "image": {"content": content},
-                        "features": [{"type": "LABEL_DETECTION", "maxResults": self._max_results}],
-                    }
-                ]
-            }
-            resp = httpx.post(
-                self._URL,
-                params={"key": self._api_key},
-                json=body,
-                timeout=_HTTP_TIMEOUT,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            responses = data.get("responses") or [{}]
-            labels = responses[0].get("labelAnnotations") or []
-            out: list[tuple[str, float]] = []
-            for lbl in labels:
-                name = lbl.get("description")
-                conf = float(lbl.get("score", 0.0))
-                if not name or conf < self._threshold:
-                    continue
-                normalized = _display_label(name)
-                if self._locale == "de":
-                    mapped = CATALOG.localized_label(normalized, "de")
-                    if mapped is None:
-                        self._warn(f"provider.google.unmapped_label:{normalized}")
-                        continue
-                    normalized = mapped
-                out.append((normalized, conf))
-            out.sort(key=lambda p: p[1], reverse=True)
-            return out
-        except Exception as exc:
-            logger.warning("Google Cloud Vision tagging failed", error=str(exc))
-            return []
-
-
-# --------------------------------------------------------------------------- #
 # Factory                                                                       #
 # --------------------------------------------------------------------------- #
 
 
 def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITagger | None:
-    """Build the configured tagger, or ``None`` when unusable.
+    """Build the local tagger, or ``None`` when unusable.
 
-    Returns ``None`` (logging the reason) when AI tagging is disabled or the
-    selected provider is missing its required credentials, so callers can treat
-    "no tagger" as simply "no AI tags". When the ``local`` provider is selected,
-    the shared *embedder* (if given) is reused so the CLIP model loads only once
-    across AI tagging and Smart Categorization.
+    Returns ``None`` (logging the reason) when AI tagging is disabled or no
+    encoder is available, so callers can treat "no tagger" as simply "no AI
+    tags". The shared *embedder* (if given) is reused so the CLIP/SigLIP model
+    loads only once across AI tagging and Smart Categorization.
+
+    There is one provider by design. Tagging runs entirely on this machine, so
+    there is no credential to misconfigure and no image that can leave it.
     """
     if not config.ai_tagging_enabled:
         return None
 
-    provider = (config.ai_tagging_provider or "local").lower()
-    threshold = config.ai_tagging_confidence_threshold
-
-    if provider == "local":
-        if embedder is None:
-            # The shared encoder is built by the factory, which returns None when
-            # the hardware tier is "off" or the model is unavailable. Honour that
-            # here instead of silently fabricating a fresh ClipEmbedder and
-            # loading the very model the user opted out of.
-            logger.info("Local AI tagging selected but no encoder available; AI tagging disabled")
-            return None
-        return LocalClipTagger(
-            labels=config.resolved_ai_tagging_labels(),
-            threshold=threshold,
-            embedder=embedder,
-            locale=config.language,
-            bundled=config.ai_tagging_labels_provenance == "bundled",
-        )
-
-    if provider == "azure_vision":
-        if config.ai_tagging_endpoint and config.ai_tagging_api_key:
-            return AzureVisionTagger(
-                endpoint=config.ai_tagging_endpoint,
-                api_key=config.ai_tagging_api_key,
-                threshold=threshold,
-                locale=config.language,
-            )
-        logger.warning("Azure Vision selected but endpoint/api_key missing; AI tagging disabled")
+    if embedder is None:
+        # The shared encoder is built by the factory, which returns None when
+        # the hardware tier is "off" or the model is unavailable. Honour that
+        # here instead of silently fabricating a fresh ClipEmbedder and
+        # loading the very model the user opted out of.
+        logger.info("AI tagging is enabled but no encoder is available; AI tagging disabled")
         return None
 
-    if provider == "imagga":
-        if config.ai_tagging_api_key and config.ai_tagging_api_secret:
-            return ImaggaTagger(
-                api_key=config.ai_tagging_api_key,
-                api_secret=config.ai_tagging_api_secret,
-                threshold=threshold,
-                locale=config.language,
-            )
-        logger.warning("Imagga selected but api_key/api_secret missing; AI tagging disabled")
-        return None
-
-    if provider == "google_cloud_vision":
-        if config.ai_tagging_api_key:
-            return GoogleCloudVisionTagger(
-                api_key=config.ai_tagging_api_key,
-                threshold=threshold,
-                locale=config.language,
-            )
-        logger.warning("Google Vision selected but api_key missing; AI tagging disabled")
-        return None
-
-    logger.warning("Unknown ai_tagging_provider %r; AI tagging disabled", provider)
-    return None
+    return LocalClipTagger(
+        labels=config.resolved_ai_tagging_labels(),
+        threshold=config.ai_tagging_confidence_threshold,
+        embedder=embedder,
+        locale=config.language,
+        bundled=config.ai_tagging_labels_provenance == "bundled",
+    )

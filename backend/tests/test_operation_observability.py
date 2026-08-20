@@ -315,12 +315,17 @@ def test_credentials_in_the_effective_config_never_reach_the_event_stream(
     config = Config(
         source_directory=str(tmp_path / "source"),
         target_directory=str(tmp_path / "sorted"),
-        ai_tagging_api_key="sk-live-should-never-appear",
     )
     authorize_mutations(config, embedded_metadata=True)
 
     execution = _execution(tmp_path, config=config)
-    execution.emit("operation.preflight", settings=config.to_dict())
+    # No Config field holds a credential since AI tagging went local-only. The
+    # redactor never keyed on a particular field though — it matches
+    # credential-shaped key names in whatever mapping it is handed — so the
+    # guarantee is exercised with a synthetic key, which also keeps it covered
+    # if such a field ever comes back.
+    settings = {**config.to_dict(), "third_party_api_key": "sk-live-should-never-appear"}
+    execution.emit("operation.preflight", settings=settings)
     execution.finish("completed")
 
     rendered = "".join(event.model_dump_json() for event in _events(execution))

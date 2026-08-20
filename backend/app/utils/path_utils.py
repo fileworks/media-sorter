@@ -80,6 +80,35 @@ def sanitize_filename_stem(name: str) -> str:
     return safe.rstrip(" .")
 
 
+def is_reserved_device_name(name: str) -> bool:
+    """Whether *name* is a Windows device name, with or without an extension.
+
+    `CON.jpg` is not a file on Windows — it is the console. Creating one fails
+    with an OS error the sort surfaces as an unmapped per-file failure, and the
+    photograph is simply not sorted (`C-12`).
+    """
+    return name.split(".", 1)[0].strip().upper() in _RESERVED_SEGMENT_NAMES
+
+
+def safe_destination_name(name: str) -> str:
+    """The original filename, made writable where the platform forbids it.
+
+    Only device names are touched, and only by appending an underscore to the
+    stem: `CON.jpg` becomes `CON_.jpg`, and every other name is returned
+    unchanged. Deterministic and idempotent, because a rename that differed
+    between two runs would make the destination depend on run order.
+
+    Deliberately *not* the full `sanitize_filename_stem` treatment. That one is
+    for names this program composes; an original filename belongs to the person
+    who took the photograph, and rewriting more of it than the filesystem
+    actually refuses is not this function's business.
+    """
+    if not is_reserved_device_name(name):
+        return name
+    stem, dot, extension = name.partition(".")
+    return f"{stem.rstrip()}_{dot}{extension}"
+
+
 def is_excluded_by_pattern(path: Path, source_root: Path, patterns: list[str]) -> bool:
     """Return True if any component of *path* (relative to *source_root*) matches a glob.
 

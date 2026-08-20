@@ -332,12 +332,9 @@ export function summariesFor(config: Config, t: Translate): Record<string, strin
     "setting-conversion":
       conversions.length > 0 ? conversions.join(" · ") : t("config.summary.keepFormats"),
 
+    // Tagging is local-only, so there is no cloud summary left to choose.
     "setting-ai": config.ai_tagging_enabled
-      ? t(
-          config.ai_tagging_provider === "local"
-            ? "config.summary.aiOffline"
-            : "config.summary.aiCloud",
-        )
+      ? t("config.summary.aiOffline")
       : t("config.summary.off"),
 
     "setting-rules": config.rules_enabled

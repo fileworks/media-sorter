@@ -15,7 +15,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
     "dev:backend": "cd ../backend && ./.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --timeout-graceful-shutdown 3",
-    "dev:all": "node ../scripts/dev-session.mjs"
+    "dev:all": "node ../scripts/dev-session.mjs",
+    "test:a11y": "playwright test"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.3.0",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.62.1",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.18",

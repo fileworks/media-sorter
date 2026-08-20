@@ -35,7 +35,6 @@ const BASE = {
   rules_enabled: true,
   rule_set: { version: 1, tag_rules: [], route_rules: [] },
   ai_tagging_enabled: false,
-  ai_tagging_provider: "local",
   exclude_patterns: [],
   min_file_size_kb: null,
   max_file_size_mb: null,
@@ -80,15 +79,11 @@ describe("rail summaries", () => {
     ).toBe("→ JPEG");
   });
 
-  it("distinguishes offline tagging from a cloud provider", () => {
+  it("reports tagging as offline, the only way it runs", () => {
     expect(summariesFor({ ...BASE, ai_tagging_enabled: true }, t)["setting-ai"]).toBe(
       "On · offline",
     );
-    expect(
-      summariesFor({ ...BASE, ai_tagging_enabled: true, ai_tagging_provider: "imagga" }, t)[
-        "setting-ai"
-      ],
-    ).toBe("On · cloud");
+    expect(summariesFor({ ...BASE, ai_tagging_enabled: false }, t)["setting-ai"]).toBe("Off");
   });
 });
 

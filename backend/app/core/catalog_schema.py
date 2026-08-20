@@ -16,7 +16,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Final
 
-CATALOG_SCHEMA_VERSION: Final = 3
+CATALOG_SCHEMA_VERSION: Final = 4
 FINGERPRINT_VERSION: Final = 2
 FINGERPRINT_ROLE: Final = "cache_hint"
 
@@ -26,6 +26,10 @@ FINGERPRINT_ROLE: Final = "cache_hint"
 HASH_EXTRACTOR_VERSION: Final = 1
 MEDIA_FACT_EXTRACTOR_VERSION: Final = 1
 SIGNATURE_EXTRACTOR_VERSION: Final = 1
+#: The AI table records its own provenance per row (`D-05`), so it needs no
+#: single extractor version: a model, prompt or threshold change is already
+#: part of the key and therefore already a cache miss.
+AI_FACT_SCHEMA: Final = 1
 
 SCHEMA: Final = """
 CREATE TABLE IF NOT EXISTS roots (
@@ -111,6 +115,29 @@ CREATE TABLE IF NOT EXISTS signatures (
     computed_at       TEXT NOT NULL,
     PRIMARY KEY (file_id, kind)
 );
+
+-- D-05. An AI answer is only about the file *and* the thing that produced it:
+-- a different model, prompt revision, threshold or locale is a different
+-- answer, not a fresher one. Every one of those is part of the key, so a
+-- provenance change is a cache miss rather than a wrong answer (I-14).
+CREATE TABLE IF NOT EXISTS ai_facts (
+    file_id           INTEGER NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
+    kind              TEXT NOT NULL,
+    label             TEXT,
+    confidence        REAL,
+    model_id          TEXT NOT NULL,
+    manifest_sha256   TEXT NOT NULL,
+    revision          TEXT NOT NULL,
+    prompt_version    TEXT NOT NULL,
+    threshold_version TEXT NOT NULL,
+    locale            TEXT NOT NULL,
+    fingerprint       TEXT NOT NULL,
+    computed_at       TEXT NOT NULL,
+    PRIMARY KEY (file_id, kind, model_id, manifest_sha256, revision,
+                 prompt_version, threshold_version, locale)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_facts_file ON ai_facts(file_id, kind);
 
 CREATE TABLE IF NOT EXISTS thumbnails (
     file_id       INTEGER PRIMARY KEY REFERENCES files(file_id) ON DELETE CASCADE,

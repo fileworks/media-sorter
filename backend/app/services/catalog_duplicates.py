@@ -33,15 +33,54 @@ RootRole = Literal["input", "reference", "destination"]
 #: for distances up to three, which covers every threshold the UI offers.
 SIGNATURE_BANDS = 4
 
+#: Videos are stored under their own signature kind, never mixed with images.
+#: The two carry different widths (a video's is the concatenation of five frame
+#: hashes) and, more importantly, need different distance thresholds — so
+#: keeping them apart means a video's looser threshold can never loosen an
+#: image lookup.
+VIDEO_SIGNATURE_KIND = "vphash"
+IMAGE_SIGNATURE_KIND = "phash"
+
+#: Bit distance below which two videos are the same footage. Measured on
+#: ffmpeg-generated clips of 1,280-bit signatures (five 256-bit frame hashes):
+#:
+#:     0   remux / stream copy
+#:    10   same size, heavy re-compression (crf 35)
+#:    18   half resolution
+#:    44   half resolution and a different frame rate
+#:   635   unrelated (solid colour)
+#:   678   unrelated (test pattern)
+#:
+#: Unrelated pairs sit near 640, which is exactly what half of 1,280 random bits
+#: should be. 96 leaves better than twice the headroom over the worst duplicate
+#: measured and stays far below anything unrelated. It is deliberately not the
+#: image threshold: frame sampling introduces timing jitter that pixel noise in
+#: a re-saved photograph does not.
+VIDEO_MAX_DISTANCE = 96
+
 DEFAULT_PAGE_SIZE = 500
 
 #: Indexes the duplicate queries need. Created on first use rather than in the
 #: base schema so an existing catalog gains them without a migration step.
+#: These cover 4-character bands, i.e. a 16-character signature; wider ones get
+#: their indexes from `_ensure_band_width` when a query first asks for them,
+#: because an expression index is only used when it matches the query's
+#: expression exactly.
 _BAND_INDEXES = tuple(
     f"CREATE INDEX IF NOT EXISTS idx_signatures_band{band} "
     f"ON signatures(kind, substr(value, {band * 4 + 1}, 4))"
     for band in range(SIGNATURE_BANDS)
 )
+
+
+def _band_index_statements(width: int) -> tuple[str, ...]:
+    if width == 4:
+        return _BAND_INDEXES
+    return tuple(
+        f"CREATE INDEX IF NOT EXISTS idx_signatures_w{width}_band{band} "
+        f"ON signatures(kind, substr(value, {band * width + 1}, {width}))"
+        for band in range(SIGNATURE_BANDS)
+    )
 
 
 @dataclass(frozen=True)
@@ -61,13 +100,34 @@ class DuplicateCandidate:
 
 @dataclass
 class LookupTelemetry:
-    """What the query had to do, so a slow library can explain itself."""
+    """What the query had to do, so a slow library can explain itself.
+
+    ``degraded`` and ``signature_malformed`` are deliberately separate, because
+    the two conditions that disable the band fast path are not the same kind of
+    problem and must not have the same consequence:
+
+    * A **loose threshold** (``max_distance >= SIGNATURE_BANDS``) costs a full
+      scan. Every signature is examined and every distance is still computed
+      exactly, so recall is *complete* — this is the most trustworthy answer the
+      index can give, merely the slowest. It must not lower anyone's confidence.
+    * A **malformed signature** (the wrong number of bands) means the anchor is
+      not the shape the comparison assumes, so the distances themselves cannot
+      be trusted. That is a correctness problem, and it is the only one that
+      should reduce confidence.
+
+    Collapsing these into one flag reads "we scanned everything" as "we do not
+    know how good this is" — exactly backwards for the exhaustive case.
+    """
 
     buckets_queried: int = 0
     candidates_examined: int = 0
     candidates_returned: int = 0
+    #: The band fast path was unavailable and a full scan ran. A cost signal.
     degraded: bool = False
     degraded_reason: str | None = None
+    #: The anchor signature is not the expected width, so distances computed
+    #: against it are not trustworthy. A correctness signal.
+    signature_malformed: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -77,6 +137,9 @@ class CatalogDuplicateIndex:
     def __init__(self, catalog: MediaCatalog, *, page_size: int = DEFAULT_PAGE_SIZE) -> None:
         self.catalog = catalog
         self.page_size = page_size
+        #: Band widths this instance has created indexes for. 4 comes free with
+        #: the static set below.
+        self._indexed_widths: set[int] = set()
         self._ensure_indexes()
 
     def _ensure_indexes(self) -> None:
@@ -86,6 +149,16 @@ class CatalogDuplicateIndex:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_signatures_kind ON signatures(kind, file_id)"
             )
+        self._indexed_widths.add(4)
+
+    def _ensure_band_width(self, width: int) -> None:
+        """Index this band width, so the lookup below is a seek and not a scan."""
+        if width in self._indexed_widths:
+            return
+        with self.catalog.transaction() as connection:
+            for statement in _band_index_statements(width):
+                connection.execute(statement)
+        self._indexed_widths.add(width)
 
     # ------------------------------------------------------------------ #
     # Exact                                                               #
@@ -188,16 +261,26 @@ class CatalogDuplicateIndex:
         telemetry = telemetry or LookupTelemetry()
         limit = limit or self.page_size
         bands = _bands(signature)
-        if len(bands) != SIGNATURE_BANDS or max_distance >= SIGNATURE_BANDS:
+        malformed = len(bands) != SIGNATURE_BANDS
+        if malformed or max_distance >= SIGNATURE_BANDS:
             # Beyond this the pigeonhole guarantee no longer holds, so the only
             # honest options are a full scan or a wrong answer.
             telemetry.degraded = True
+            # Two different causes land here and the cure differs: one is a
+            # caller's threshold, the other is the width of every signature the
+            # producer writes. Naming the wrong one sends a profiler after the
+            # wrong knob — and only the second is a reason to distrust a result.
+            telemetry.signature_malformed = malformed
             telemetry.degraded_reason = (
-                "threshold too loose for band lookup; every signature was examined"
+                f"signature of {len(signature)} characters does not divide into "
+                f"{SIGNATURE_BANDS} bands; every signature was examined"
+                if malformed
+                else "threshold too loose for band lookup; every signature was examined"
             )
             rows = self._scan_signatures(kind, roles)
         else:
             telemetry.buckets_queried = SIGNATURE_BANDS
+            self._ensure_band_width(len(bands[0]))
             rows = self._band_rows(bands, kind, roles)
 
         results: list[DuplicateCandidate] = []
@@ -234,6 +317,7 @@ class CatalogDuplicateIndex:
         roles: Sequence[RootRole],
     ) -> sqlite3.Cursor:
         placeholders = ",".join("?" for _ in roles) or "''"
+        width = len(bands[0])
         branches: list[str] = []
         parameters: list[object] = []
         for index, band in enumerate(bands):
@@ -244,7 +328,7 @@ class CatalogDuplicateIndex:
                   JOIN files f ON f.file_id = s.file_id
                   JOIN roots r ON r.root_id = f.root_id
                  WHERE s.kind = ?
-                   AND substr(s.value, {index * 4 + 1}, 4) = ?
+                   AND substr(s.value, {index * width + 1}, {width}) = ?
                    AND s.fingerprint = f.fingerprint
                    AND f.fingerprint_version = ?
                    AND f.missing_since_generation IS NULL
@@ -304,10 +388,18 @@ def _candidate(row: sqlite3.Row) -> DuplicateCandidate:
 
 
 def _bands(signature: str) -> tuple[str, ...]:
-    """Split a 16-character signature into four 4-character bands."""
-    if len(signature) != SIGNATURE_BANDS * 4:
+    """Split a signature into four equal bands, whatever its width.
+
+    The pigeonhole guarantee is about the *number* of bands, not their size: if
+    two signatures differ by fewer bits than there are bands, at least one band
+    must be identical, so an equality lookup on that band cannot miss a match.
+    That holds for a 64-bit signature in 4-character bands and for the 256-bit
+    one the image extractor produces in 16-character bands alike.
+    """
+    width, remainder = divmod(len(signature), SIGNATURE_BANDS)
+    if width == 0 or remainder:
         return ()
-    return tuple(signature[index * 4 : index * 4 + 4] for index in range(SIGNATURE_BANDS))
+    return tuple(signature[index * width : (index + 1) * width] for index in range(SIGNATURE_BANDS))
 
 
 def hamming(left: str, right: str) -> int | None:

@@ -1,7 +1,7 @@
 /** Review the dry run and resolve duplicates before execution. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FiChevronRight } from "react-icons/fi";
+import { FiAlertTriangle, FiChevronRight } from "react-icons/fi";
 
 import { MediaViewer } from "@/components/screens/review/MediaViewer";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
@@ -593,6 +593,28 @@ export function ReviewScreen({
           aria-labelledby={`review-tab-${surface.mode}`}
           className="bg-background"
         >
+          {groups.partialIndex && (
+            <StateView
+              variant="partial"
+              compact
+              title={t("review.partialIndex.title")}
+              detail={t("review.partialIndex.detail")}
+            />
+          )}
+          {groups.truncated && (
+            <p
+              role="status"
+              className="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+            >
+              <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span>
+                <span className="font-medium">
+                  {t("review.truncated.title", { count: groups.groups.length })}
+                </span>{" "}
+                {t("review.truncated.detail")}
+              </span>
+            </p>
+          )}
           {surface.rows.length === 0 ? (
             <StateView
               variant="empty"

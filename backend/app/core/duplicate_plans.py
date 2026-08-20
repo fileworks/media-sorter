@@ -54,6 +54,7 @@ OutcomeKind = Literal[
 ]
 
 KeeperPolicyId = Literal[
+    "smart",
     "best_quality",
     "largest",
     "smallest",
@@ -75,6 +76,7 @@ KeeperPolicyId = Literal[
 #: `preferred_root` is absent because the root order it depended on is no longer
 #: something the interface lets anyone set.
 SELECTABLE_KEEPER_POLICIES: tuple[KeeperPolicyId, ...] = (
+    "smart",
     "best_quality",
     "largest",
     "smallest",
@@ -128,6 +130,24 @@ class FactValue(BaseModel):
         if not self.known and self.value is not None:
             raise ValueError("an unknown fact cannot also carry a value")
         return self
+
+
+class AiProvenance(BaseModel):
+    """Everything that decides whether a stored AI answer is still the answer.
+
+    `D-05`. Named as one object rather than seven arguments because every field
+    is part of the cache key, and a caller that forgets one gets a stale label
+    rather than a type error.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    model_id: str
+    manifest_sha256: str
+    revision: str
+    prompt_version: str
+    threshold_version: str
+    locale: str
 
 
 class MemberFacts(BaseModel):

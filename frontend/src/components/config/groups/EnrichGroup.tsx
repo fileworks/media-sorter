@@ -13,7 +13,6 @@ import { AiTagsInput } from "@/components/config/fields/AiTagsInput";
 import { CategorizeConfidenceSlider } from "@/components/config/fields/CategorizeConfidenceSlider";
 import { CategoryTagsInput } from "@/components/config/fields/CategoryTagsInput";
 import { RuleBuilderInline } from "@/components/RuleBuilder";
-import { BlurCommitInput } from "@/components/ui/blur-commit-input";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -53,7 +52,6 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
 
   const labels = config.ai_tagging_labels ?? DEFAULT_AI_LABELS;
   const lossyFormat = config.image_format === "jpeg" || config.image_format === "webp";
-  const isLocalProvider = config.ai_tagging_provider === "local";
 
   return (
     <SettingGroup
@@ -163,11 +161,11 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         description={t("config.ai.explanation")}
         htmlFor="ai-enabled"
         badge={
-          isLocalProvider ? (
-            <span className="rounded-full bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success">
-              {t("config.ai.offlineBadge")}
-            </span>
-          ) : undefined
+          // Tagging runs on this machine and nowhere else, so the badge is
+          // unconditional rather than a property of a chosen provider.
+          <span className="rounded-full bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success">
+            {t("config.ai.offlineBadge")}
+          </span>
         }
       >
         <Toggle
@@ -180,7 +178,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
 
       {config.ai_tagging_enabled && (
         <>
-          {hardware && !tooWeak && isLocalProvider && (
+          {hardware && !tooWeak && (
             <div className="grid gap-2.5 border-b border-border px-5 py-3.5 sm:grid-cols-3">
               {AI_TIERS.map((tier) => {
                 const active = (config.ai_model_tier ?? "auto") === tier;
@@ -240,117 +238,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
           <Disclosure summary={t("config.ai.advanced")}>
             {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
 
-            <SettingRow
-              field="ai_tagging_provider"
-              label={t("config.ai.provider")}
-              htmlFor="ai-provider"
-              stacked
-              last
-            >
-              <Select
-                id="ai-provider"
-                value={config.ai_tagging_provider}
-                onValueChange={(value) =>
-                  updateConfig({ ai_tagging_provider: value as Config["ai_tagging_provider"] })
-                }
-                className="max-w-sm"
-              >
-                <SelectItem value="local">{t("config.ai.local")}</SelectItem>
-                <SelectItem value="azure_vision">{t("config.ai.azure")}</SelectItem>
-                <SelectItem value="imagga">{t("config.ai.imagga")}</SelectItem>
-                <SelectItem value="google_cloud_vision">{t("config.ai.google")}</SelectItem>
-              </Select>
-            </SettingRow>
-
-            {config.ai_tagging_provider === "azure_vision" && (
-              <>
-                <SettingRow
-                  field="ai_tagging_endpoint"
-                  label={t("config.ai.endpoint")}
-                  htmlFor="ai-azure-endpoint"
-                  stacked
-                  last
-                >
-                  <BlurCommitInput
-                    id="ai-azure-endpoint"
-                    type="text"
-                    value={config.ai_tagging_endpoint}
-                    onCommit={(value) => updateConfig({ ai_tagging_endpoint: value })}
-                    placeholder={t("config.ai.azureEndpointPlaceholder")}
-                  />
-                </SettingRow>
-                <SettingRow
-                  field="ai_tagging_api_key"
-                  label={t("config.ai.apiKey")}
-                  htmlFor="ai-azure-key"
-                  stacked
-                  last
-                >
-                  <BlurCommitInput
-                    id="ai-azure-key"
-                    type="password"
-                    value={config.ai_tagging_api_key}
-                    onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
-                    placeholder={t("config.ai.subscriptionKey")}
-                  />
-                </SettingRow>
-              </>
-            )}
-
-            {config.ai_tagging_provider === "imagga" && (
-              <>
-                <SettingRow
-                  field="ai_tagging_api_key"
-                  label={t("config.ai.apiKey")}
-                  htmlFor="ai-imagga-key"
-                  stacked
-                  last
-                >
-                  <BlurCommitInput
-                    id="ai-imagga-key"
-                    type="password"
-                    value={config.ai_tagging_api_key}
-                    onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
-                    placeholder={t("config.ai.imaggaKeyPlaceholder")}
-                  />
-                </SettingRow>
-                <SettingRow
-                  field="ai_tagging_api_secret"
-                  label={t("config.ai.apiSecret")}
-                  htmlFor="ai-imagga-secret"
-                  stacked
-                  last
-                >
-                  <BlurCommitInput
-                    id="ai-imagga-secret"
-                    type="password"
-                    value={config.ai_tagging_api_secret}
-                    onCommit={(value) => updateConfig({ ai_tagging_api_secret: value })}
-                    placeholder={t("config.ai.imaggaSecretPlaceholder")}
-                  />
-                </SettingRow>
-              </>
-            )}
-
-            {config.ai_tagging_provider === "google_cloud_vision" && (
-              <SettingRow
-                field="ai_tagging_api_key"
-                label={t("config.ai.apiKey")}
-                htmlFor="ai-google-key"
-                stacked
-                last
-              >
-                <BlurCommitInput
-                  id="ai-google-key"
-                  type="password"
-                  value={config.ai_tagging_api_key}
-                  onCommit={(value) => updateConfig({ ai_tagging_api_key: value })}
-                  placeholder={t("config.ai.googleKeyPlaceholder")}
-                />
-              </SettingRow>
-            )}
-
-            {isLocalProvider && !localOff && (
+            {!localOff && (
               <SettingRow
                 field={["ai_tagging_labels", "ai_tagging_labels_provenance"]}
                 label={t("config.ai.labels")}
@@ -421,7 +309,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
               </SettingRow>
             </div>
 
-            {isLocalProvider && resolvedTier !== "off" && <AiModelManager />}
+            {resolvedTier !== "off" && <AiModelManager />}
           </Disclosure>
         </>
       )}
@@ -553,6 +441,40 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
           checked={config.repair_enabled ?? true}
           onChange={(value) => updateConfig({ repair_enabled: value })}
         />
+      </SettingRow>
+
+      <SettingRow
+        field="index_workers"
+        label={t("config.indexWorkers.label")}
+        description={t("config.indexWorkers.help")}
+        htmlFor="index-workers"
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            id="index-workers"
+            type="number"
+            min={0}
+            max={32}
+            // 0 and empty both mean "ask the machine", which is what the
+            // placeholder says. Storing null rather than a number is what keeps
+            // the setting automatic on a machine with a different core count.
+            value={config.index_workers ?? ""}
+            placeholder={t("config.indexWorkers.auto")}
+            onChange={(event) => {
+              const raw = Number(event.target.value);
+              updateConfig({
+                index_workers:
+                  event.target.value === "" || !Number.isFinite(raw) || raw <= 0
+                    ? null
+                    : Math.min(32, Math.trunc(raw)),
+              });
+            }}
+            className="w-28"
+          />
+          {config.index_workers === null && (
+            <span className="text-xs text-faint">{t("config.indexWorkers.auto")}</span>
+          )}
+        </div>
       </SettingRow>
 
       <SettingRow

@@ -511,8 +511,18 @@ def test_database_future_version_and_migration_failure_are_actionable(
     with closing(sqlite3.connect(future.db_path)) as conn, conn:
         conn.execute("CREATE TABLE operations (id TEXT PRIMARY KEY)")
         conn.execute(f"PRAGMA user_version = {CURRENT_DATABASE_SCHEMA + 1}")
-    with pytest.raises(DatabaseMigrationError, match="newer"):
+    with pytest.raises(DatabaseMigrationError, match="newer") as raised:
         future.init_schema()
+
+    # The test is named "actionable"; assert that rather than trusting the name.
+    # Matching only on "newer" passed while the message was two version numbers
+    # and a path — which is what a user saw when a downgrade stopped their
+    # application from starting.
+    message = str(raised.value)
+    assert str(future.db_path) in message, "must name the file the user has to act on"
+    assert "not been modified" in message, "must say their data is intact"
+    assert "reinstall the newer version" in message, "must say how to recover"
+    assert "move that file aside" in message, "must offer the other way out"
 
     failing = _database(tmp_path / "failing.db")
     with closing(sqlite3.connect(failing.db_path)) as conn, conn:

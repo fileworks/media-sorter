@@ -17,8 +17,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.media_units import MediaUnit, bind_media_units
 from app.services.duplicate_service import DuplicateService
 from app.services.extraction_service import DateExtractionService
-from app.services.filesystem_service import load_exif_dict, open_image
+from app.services.filesystem_service import open_image
 from app.services.quarantine import QuarantineRecord, QuarantineStore
+from app.services.signature_extraction import capture_time
 from app.services.verified_transfer import stream_sha256
 from app.utils.media_utils import is_image
 
@@ -389,23 +390,8 @@ def _fingerprint(path: Path) -> str:
 
 
 def _capture_time(path: Path) -> datetime | None:
-    try:
-        import piexif
-
-        data = load_exif_dict(path)
-        if data is None:
-            return None
-        for ifd, tag in (
-            ("Exif", piexif.ExifIFD.DateTimeOriginal),
-            ("Exif", piexif.ExifIFD.DateTimeDigitized),
-            ("0th", piexif.ImageIFD.DateTime),
-        ):
-            raw = data.get(ifd, {}).get(tag)
-            if raw:
-                return datetime.strptime(raw.decode(), "%Y:%m:%d %H:%M:%S")
-    except Exception:
-        return None
-    return None
+    """Delegates to the pure extractor so there is one definition of this."""
+    return capture_time(path)
 
 
 def _sharpness(path: Path) -> float | None:

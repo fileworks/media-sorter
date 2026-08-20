@@ -192,8 +192,15 @@ def similar_groups(
                         distance=candidate.distance,
                         threshold=max_distance,
                         confidence=_confidence(candidate.distance, max_distance, telemetry),
+                        # Only a malformed signature is an *extraction* issue.
+                        # A full scan forced by a loose threshold is a cost, not
+                        # a defect in the evidence, and reporting it here would
+                        # put a performance note in front of the user as though
+                        # something about their file had gone wrong.
                         extraction_issues=(
-                            (telemetry.degraded_reason,) if telemetry.degraded_reason else ()
+                            (telemetry.degraded_reason,)
+                            if telemetry.signature_malformed and telemetry.degraded_reason
+                            else ()
                         ),
                     ),
                 )
@@ -392,8 +399,15 @@ def _confidence(
     threshold: int,
     telemetry: LookupTelemetry,
 ) -> Literal["high", "medium", "low", "unknown"]:
-    """How much a perceptual match is worth, stated conservatively."""
-    if telemetry.degraded or distance is None:
+    """How much a perceptual match is worth, stated conservatively.
+
+    Keyed on ``signature_malformed`` rather than ``degraded``: a loose threshold
+    forces a full scan, but that scan computes every distance exactly and misses
+    nothing, so an exhaustive lookup is the *best* answer available and grading
+    it ``unknown`` would be backwards. Only a signature of the wrong shape makes
+    the distance itself untrustworthy.
+    """
+    if telemetry.signature_malformed or distance is None:
         return "unknown"
     if distance == 0:
         return "high"

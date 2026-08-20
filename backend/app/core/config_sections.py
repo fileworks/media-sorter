@@ -131,11 +131,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
         "Describe photos and videos with content keywords — independent of folder placement.",
         (
             "ai_tagging_enabled",
-            "ai_tagging_provider",
             "ai_tagging_confidence_threshold",
-            "ai_tagging_api_key",
-            "ai_tagging_api_secret",
-            "ai_tagging_endpoint",
             "ai_tagging_max_tags",
             "embed_tags_in_files",
             "ai_tagging_labels",
@@ -154,6 +150,7 @@ SECTIONS: tuple[ConfigSection, ...] = (
             "update_check_enabled",
             "thumbnail_cache_enabled",
             "thumbnail_cache_budget_bytes",
+            "index_workers",
         ),
     ),
 )

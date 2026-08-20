@@ -295,6 +295,37 @@ class TestSimilarConsent:
 
         assert propose_similar(candidates, rule).applies is False
 
+    def test_unreadable_dimensions_block_the_rule(self) -> None:
+        """This was every group in production until `P2-DEDUP-D3` wrote facts:
+        with no dimensions stored, the rule could never apply to anything."""
+        candidates = group(
+            member("a", distance=0, width=None, height=None),
+            member("b", distance=0, width=None, height=None),
+            kind="similar",
+        )
+        rule = HighConfidenceRule(enabled=True, max_distance=0, consented_at="now")
+
+        proposal = propose_similar(candidates, rule)
+
+        assert proposal.applies is False
+        assert "could not be read" in proposal.reason
+
+    def test_a_group_of_two_media_kinds_blocks_the_rule(self) -> None:
+        """The same-kind guard could not fail before facts existed — every
+        member reported `unknown`, so the set had one element and the check
+        passed without comparing anything."""
+        candidates = group(
+            member("a", distance=0, kind="image"),
+            member("b", distance=0, kind="video"),
+            kind="similar",
+        )
+        rule = HighConfidenceRule(enabled=True, max_distance=0, consented_at="now")
+
+        proposal = propose_similar(candidates, rule)
+
+        assert proposal.applies is False
+        assert "not the same kind" in proposal.reason
+
     def test_the_preview_shows_affected_groups_before_consent(self) -> None:
         groups = [
             group(member("a", distance=0), member("b", distance=0), kind="similar", group_id="g1"),
@@ -945,6 +976,29 @@ class TestNewKeeperPolicies:
         assert best.decided
         assert best.keeper_member_id == "readable"
 
+    def test_best_quality_says_how_much_of_it_pixels_decided(self) -> None:
+        """The ranking is deliberate (see the test above); the explanation must
+        not claim evidence the group did not have."""
+        mixed = apply_policy(
+            group(
+                member("unreadable", width=None, height=None, size=9_000),
+                member("readable", width=100, height=100, size=1_000),
+            ),
+            self._settings("best_quality"),
+        )
+        blind = apply_policy(
+            group(
+                member("a", width=None, height=None, size=1_000),
+                member("b", width=None, height=None, size=9_000),
+            ),
+            self._settings("best_quality"),
+        )
+
+        assert mixed.keeper_member_id == "readable"
+        assert "1 of 2 had unreadable dimensions" in mixed.reason
+        assert blind.keeper_member_id == "b"
+        assert blind.reason == "no member's dimensions could be read; decided by size"
+
     def test_best_quality_falls_back_to_size_between_equal_pixels(self) -> None:
         result = apply_policy(
             group(
@@ -1009,7 +1063,9 @@ class TestNewKeeperPolicies:
     def test_the_selectable_set_excludes_the_automatic_and_the_retired(self) -> None:
         assert "protected_reference" not in SELECTABLE_KEEPER_POLICIES
         assert "preferred_root" not in SELECTABLE_KEEPER_POLICIES
-        assert SELECTABLE_KEEPER_POLICIES[0] == "best_quality"
+        # `smart` leads because it is the shipped default and the only policy
+        # whose criteria can separate byte-identical members at all.
+        assert SELECTABLE_KEEPER_POLICIES[0] == "smart"
 
 
 class TestReviewedKeepersSurviveThePolicy:

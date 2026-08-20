@@ -58,12 +58,10 @@ export interface Config {
   repair_enabled: boolean;
   rules_enabled: boolean;
   rule_set: RuleSet;
+  /** Derive-pass threads. `null` means "ask the machine" (min(8, cpu_count)). */
+  index_workers: number | null;
   ai_tagging_enabled: boolean;
-  ai_tagging_provider: "local" | "azure_vision" | "imagga" | "google_cloud_vision";
   ai_tagging_confidence_threshold: number;
-  ai_tagging_api_key: string | null;
-  ai_tagging_api_secret: string | null;
-  ai_tagging_endpoint: string | null;
   ai_tagging_max_tags: number;
   embed_tags_in_files: boolean;
   ai_tagging_labels: string[];
@@ -177,6 +175,7 @@ export interface ReviewedSet {
 }
 
 export type KeeperPolicyId =
+  | "smart"
   | "best_quality"
   | "newest"
   | "oldest"
@@ -195,6 +194,7 @@ export type KeeperPolicyId =
  * exported from here alone so the two surfaces cannot offer different sets.
  */
 export const SELECTABLE_KEEPER_POLICIES = [
+  "smart",
   "best_quality",
   "newest",
   "oldest",
@@ -1635,19 +1635,36 @@ export class MediaSorterApiClient {
 
   async listReviewGroups(
     kind: GroupKind = "exact",
-    options: { limit?: number; maxDistance?: number; excludedRoots?: string[] } = {},
-  ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
+    options: {
+      limit?: number;
+      maxDistance?: number;
+      excludedRoots?: string[];
+      /** Opaque marker from a previous page's `next_cursor`. */
+      cursor?: string | null;
+    } = {},
+  ): Promise<{
+    groups: ReviewGroup[];
+    next_cursor: string | null;
+    kind: string;
+    /** More groups exist than this page holds. */
+    truncated: boolean;
+    /** A root's newest finished scan skipped files, so sets may be incomplete. */
+    partial_index: boolean;
+  }> {
     await this.ensureReady();
     const { data } = await this.http.get<{
       groups: ReviewGroup[];
       next_cursor: string | null;
       kind: string;
+      truncated: boolean;
+      partial_index: boolean;
     }>("/api/review/groups", {
       params: {
         kind,
         limit: options.limit ?? 50,
         max_distance: options.maxDistance ?? 2,
         excluded_roots: options.excludedRoots ?? [],
+        ...(options.cursor ? { cursor: options.cursor } : {}),
       },
     });
     return data;

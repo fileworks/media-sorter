@@ -94,6 +94,12 @@ class DiscoveryStats:
         return "complete" if not self.issues else "partial"
 
 
+#: Compute derived facts for a root while its generation is still open. Anything
+#: it could not read is appended to the stats' issues, which is what turns the
+#: generation `partial` instead of `complete`.
+DeriveFacts = Callable[[str, DiscoveryStats], None]
+
+
 def walk(
     root: Path,
     rules: TraversalRules,
@@ -190,6 +196,7 @@ def discover_into_catalog(
     batch_size: int = DEFAULT_BATCH_SIZE,
     cancel: Callable[[], bool] | None = None,
     on_batch: Callable[[int, DiscoveryStats], None] | None = None,
+    derive: DeriveFacts | None = None,
 ) -> DiscoveryStats:
     """Walk one root into the catalog in bounded, committed batches.
 
@@ -208,14 +215,26 @@ def discover_into_catalog(
             written += len(batch)
             if on_batch is not None:
                 on_batch(written, stats)
+        # Derived facts are part of what this generation saw, so they are
+        # computed while it is still open: whatever `derive` could not read is
+        # an issue like any other, and the outcome below is decided once, with
+        # all the evidence, rather than after the fact.
+        if derive is not None:
+            derive(root_id, stats)
         for path, error_class in stats.issues:
             catalog.record_issue(
                 root_id,
                 generation,
                 path=path,
                 error_class=error_class,
-                message="path could not be read during discovery",
+                message="path could not be read",
             )
+    except BaseException:
+        # A scan that died mid-flight never saw the library. Without this the
+        # `finally` closes it as `complete` on empty issues, which is the one
+        # outcome allowed to mark rows missing (I-09).
+        stats.issues.append((str(root), "scan_aborted"))
+        raise
     finally:
         catalog.finish_generation(generation, stats.outcome)  # type: ignore[arg-type]
     logger.info(
@@ -234,6 +253,7 @@ def discover_many(
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
     cancel: Callable[[], bool] | None = None,
+    derive: DeriveFacts | None = None,
 ) -> dict[str, DiscoveryStats]:
     """Walk several roots, one after another, stopping cleanly on cancellation."""
     results: dict[str, DiscoveryStats] = {}
@@ -247,5 +267,6 @@ def discover_many(
             rules,
             batch_size=batch_size,
             cancel=cancel,
+            derive=derive,
         )
     return results

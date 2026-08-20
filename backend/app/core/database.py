@@ -150,9 +150,23 @@ class DatabaseManager:
         try:
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])
             if version > CURRENT_DATABASE_SCHEMA:
+                # Refusing is correct — an older build must not write a schema it
+                # does not understand. What this used to do badly was say so: the
+                # message named two version numbers and a path, which tells
+                # somebody who has just downgraded nothing about why their
+                # application will not start or how to get it back.
                 raise DatabaseMigrationError(
-                    f"Database schema v{version} is newer than supported "
-                    f"v{CURRENT_DATABASE_SCHEMA}: {self.db_path}"
+                    f"This history database was written by a newer version of "
+                    f"MediaSorter (schema v{version}); this version supports "
+                    f"v{CURRENT_DATABASE_SCHEMA}. It has not been modified.\n"
+                    f"\n"
+                    f"  Database: {self.db_path}\n"
+                    f"\n"
+                    f"This happens after installing an older version over a newer "
+                    f"one. Either reinstall the newer version, or move that file "
+                    f"aside to start with an empty history — your photographs are "
+                    f"untouched either way, but the record of past runs is not "
+                    f"carried backwards."
                 )
 
             tables = {

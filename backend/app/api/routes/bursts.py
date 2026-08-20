@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from app.api.deps import ConfigDep, ContainerDep
 from app.core.paths import resolve_app_paths
 from app.services.burst_detection import (
     BurstGroup,
     BurstQuarantinePlan,
-    BurstSettings,
     build_burst_report,
     execute_burst_quarantine,
     export_burst_report,
@@ -31,11 +28,6 @@ router = APIRouter()
 _PLANS: dict[str, BurstQuarantinePlan] = {}
 
 
-class BurstDetectionRequest(BaseModel):
-    root: str = Field(min_length=1)
-    paths: list[str] = Field(default_factory=list, max_length=100_000)
-
-
 class BurstReviewRequest(BaseModel):
     group: BurstGroup
     keep_frame_ids: tuple[str, ...] = ()
@@ -48,27 +40,6 @@ class BurstExecuteRequest(BaseModel):
 
 class BurstExportRequest(BaseModel):
     format: Literal["json", "csv"] = "json"
-
-
-@router.post("/review/bursts/detect", response_model=list[BurstGroup])
-async def detect_bursts(
-    body: BurstDetectionRequest,
-    container: ContainerDep,
-    config: ConfigDep,
-) -> list[BurstGroup]:
-    settings = BurstSettings(
-        enabled=config.burst_detection_enabled,
-        time_window_seconds=config.burst_time_window_seconds,
-        max_perceptual_distance=config.burst_perceptual_distance,
-        require_camera_identity=config.burst_require_camera_identity,
-    )
-    groups = await asyncio.to_thread(
-        container.burst_detection_service.detect,
-        [Path(item) for item in body.paths],
-        Path(body.root),
-        settings,
-    )
-    return list(groups)
 
 
 @router.post("/review/bursts/decision")

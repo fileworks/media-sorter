@@ -58,7 +58,12 @@ from app.utils.media_utils import (
     is_media,
     is_size_included,
 )
-from app.utils.path_utils import is_excluded_by_pattern, path_relationship, validate_source_root
+from app.utils.path_utils import (
+    is_excluded_by_pattern,
+    path_relationship,
+    safe_destination_name,
+    validate_source_root,
+)
 
 logger = get_logger(__name__)
 
@@ -295,7 +300,17 @@ def find_available_filename(path: Path) -> Path:
 
     Module-level helper so ConversionService (and others) can import it
     without needing a FileSystemService instance.
+
+    Every destination leaf in the program passes through here, which is why the
+    Windows device-name guard lives here too (`C-12`). A source file named
+    `CON.jpg` is a real photograph on macOS and is not a file at all on Windows;
+    left alone it became an unmapped per-file IO error and the picture was
+    simply not sorted. The guard is unconditional rather than Windows-only, for
+    the same reason folder segments are already sanitised unconditionally: a
+    library sorted on one machine and read on another should not have names that
+    exist on only one of them.
     """
+    path = path.with_name(safe_destination_name(path.name))
     if not path.exists():
         return path
     stem, suffix, parent = path.stem, path.suffix, path.parent

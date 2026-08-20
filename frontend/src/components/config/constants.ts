@@ -163,12 +163,9 @@ export const SECTION_DEFAULTS = {
     rule_set: { version: 1 as const, tag_rules: [], route_rules: [] },
   },
   ai: {
+    index_workers: null,
     ai_tagging_enabled: false,
-    ai_tagging_provider: "local",
     ai_tagging_confidence_threshold: 0.5,
-    ai_tagging_api_key: null,
-    ai_tagging_api_secret: null,
-    ai_tagging_endpoint: null,
     ai_tagging_max_tags: 10,
     embed_tags_in_files: true,
     ai_tagging_labels: DEFAULT_AI_LABELS,

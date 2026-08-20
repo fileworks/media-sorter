@@ -488,7 +488,14 @@ def test_portable_builder_matches_launcher_resource_layout(
         json.dumps(
             {
                 "schema_version": 1,
-                "source_manifest_version": "fixture",
+                # The real manifest version, not a placeholder: the packaging
+                # check now refuses a provenance generated from a different
+                # manifest than the one this checkout tracks (F-10), and a
+                # fixture that could not pass that check would be testing a
+                # bundle the release pipeline would reject.
+                "source_manifest_version": json.loads(
+                    (REPO_ROOT / "scripts" / "ffmpeg-sources.json").read_text(encoding="utf-8")
+                )["manifest_version"],
                 "platform": "windows",
                 "architecture": "x86_64",
                 "sources": [

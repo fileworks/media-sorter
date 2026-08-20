@@ -4,7 +4,6 @@ import {
   DEFAULT_FILTERS,
   availableActions,
   bulkImpactView,
-  deserializeUiState,
   factLabel,
   factTitle,
   filterKey,
@@ -15,7 +14,6 @@ import {
   outcomeLabel,
   outcomeTone,
   resolutionLabel,
-  serializeUiState,
   type BulkImpact,
   type DuplicateGroup,
   type GroupMember,
@@ -339,39 +337,5 @@ describe("bulkImpactView", () => {
 
   it("says similar groups are excluded", () => {
     expect(bulkImpactView(impact, "gen-1").lines.join(" ")).toMatch(/not included/i);
-  });
-});
-
-describe("ui state", () => {
-  it("round-trips view, filters, and selection", () => {
-    const restored = deserializeUiState(
-      serializeUiState({
-        filters: { ...DEFAULT_FILTERS, kind: "exact" },
-        selectedGroupId: "g7",
-        scrollTop: 320.6,
-        view: "exact",
-      }),
-    );
-
-    expect(restored.filters.kind).toBe("exact");
-    expect(restored.selectedGroupId).toBe("g7");
-    expect(restored.scrollTop).toBe(321);
-    expect(restored.view).toBe("exact");
-  });
-
-  it("never persists a search that could contain a path", () => {
-    const raw = serializeUiState({
-      filters: { ...DEFAULT_FILTERS, search: "/Users/someone/Pictures" },
-      selectedGroupId: null,
-      scrollTop: 0,
-      view: "overview",
-    });
-
-    expect(raw).not.toContain("Users");
-  });
-
-  it("falls back to defaults for missing or damaged state", () => {
-    expect(deserializeUiState(null).view).toBe("overview");
-    expect(deserializeUiState("{not json").filters).toEqual(DEFAULT_FILTERS);
   });
 });

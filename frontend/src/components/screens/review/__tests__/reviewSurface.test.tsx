@@ -199,6 +199,8 @@ beforeEach(() => {
   vi.spyOn(api, "listReviewGroups").mockResolvedValue({
     groups: [],
     next_cursor: null,
+    truncated: false,
+    partial_index: false,
     kind: "exact",
   });
 });
@@ -331,6 +333,8 @@ describe("the stays branch", () => {
           ? [group("set-1", [{ path: "/in/dup-a.jpg" }, { path: "/in/dup-b.jpg" }])]
           : [],
       next_cursor: null,
+      truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -385,6 +389,8 @@ describe("resolve", () => {
             ]
           : [],
       next_cursor: null,
+      truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -639,6 +645,8 @@ describe("a baseline decides its own set", () => {
             ]
           : [],
       next_cursor: null,
+      truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -664,6 +672,8 @@ describe("comparing never fails silently", () => {
       groups:
         kind === "exact" ? [group("set-1", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }])] : [],
       next_cursor: null,
+      truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -992,6 +1002,8 @@ describe("the Review Escape stack", () => {
       groups:
         kind === "exact" ? [group("set-1", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }])] : [],
       next_cursor: null,
+      truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -1068,5 +1080,97 @@ describe("a folder's contents are grouped by where they land", () => {
     const pane = within(screen.getByRole("group", { name: en("review.items") }));
     expect(pane.getByText("07")).toBeTruthy();
     expect(pane.getByText("08")).toBeTruthy();
+  });
+});
+
+/**
+ * `P2-DEDUP-D7` acceptance (2). Draft 2 of the plan omitted this, and the plan
+ * itself calls it the actual UX defect: a list that stops at the page limit
+ * looks exactly like a list that ended, so the surface tells someone they have
+ * reviewed everything when they have reviewed the first page.
+ */
+describe("the truncation disclosure", () => {
+  const result = previewResult(
+    item({ source: "/in/dup-a.jpg", destination: "/out/2025/07/dup-a.jpg" }),
+    item({ source: "/in/dup-b.jpg", destination: "/out/_duplicates/dup-b.jpg" }),
+  );
+
+  function serve(truncated: boolean) {
+    vi.spyOn(api, "listReviewGroups").mockImplementation(async (kind, options) => ({
+      groups:
+        kind === "exact" && !options?.cursor
+          ? [group("set-1", [{ path: "/in/dup-a.jpg" }, { path: "/in/dup-b.jpg" }])]
+          : [],
+      // A server that keeps handing back a cursor is what drives the hook into
+      // its page bound, which is the state the disclosure exists for.
+      next_cursor: truncated ? "more" : null,
+      truncated,
+      partial_index: false,
+      kind: kind ?? "exact",
+    }));
+  }
+
+  it("is shown when the list is not the whole library", async () => {
+    serve(true);
+
+    renderReview(result);
+
+    expect(await screen.findByText(en("review.truncated.detail"), { exact: false })).toBeTruthy();
+  });
+
+  it("is absent when the list is complete", async () => {
+    serve(false);
+
+    renderReview(result);
+    // Wait for something that only exists once the groups query has resolved,
+    // or the absence below would hold simply because nothing had rendered yet.
+    await screen.findByRole("button", {
+      name: en("review.browse.showContents", { folder: en("review.browse.stays.undecided") }),
+    });
+
+    expect(screen.queryByText(en("review.truncated.detail"), { exact: false })).toBeNull();
+  });
+});
+
+describe("the partial-index disclosure", () => {
+  const result = previewResult(
+    item({ source: "/in/dup-a.jpg", destination: "/out/2025/07/dup-a.jpg" }),
+    item({ source: "/in/dup-b.jpg", destination: "/out/_duplicates/dup-b.jpg" }),
+  );
+
+  function serve(partial: boolean) {
+    vi.spyOn(api, "listReviewGroups").mockImplementation(async (kind, options) => ({
+      groups:
+        kind === "exact" && !options?.cursor
+          ? [group("set-1", [{ path: "/in/dup-a.jpg" }, { path: "/in/dup-b.jpg" }])]
+          : [],
+      next_cursor: null,
+      truncated: false,
+      partial_index: partial,
+      kind: kind ?? "exact",
+    }));
+  }
+
+  it("warns when a scan could not read everything", async () => {
+    // A stack drawn from a partly-read root may be missing copies that exist on
+    // disk, and the person about to quarantine one needs to know before they do.
+    serve(true);
+
+    renderReview(result);
+
+    expect(
+      await screen.findByText(en("review.partialIndex.detail"), { exact: false }),
+    ).toBeTruthy();
+  });
+
+  it("says nothing when the index is complete", async () => {
+    serve(false);
+
+    renderReview(result);
+    await screen.findByRole("button", {
+      name: en("review.browse.showContents", { folder: en("review.browse.stays.undecided") }),
+    });
+
+    expect(screen.queryByText(en("review.partialIndex.detail"), { exact: false })).toBeNull();
   });
 });

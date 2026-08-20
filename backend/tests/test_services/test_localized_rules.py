@@ -23,9 +23,6 @@ from app.core.rules import (
     validate_relative_route,
 )
 from app.services.ai.base_tagger import (
-    AzureVisionTagger,
-    GoogleCloudVisionTagger,
-    ImaggaTagger,
     LocalClipTagger,
 )
 from app.services.ai.encoder_protocol import VisionEncoder
@@ -261,53 +258,6 @@ def test_collision_reservation_covers_disk_and_same_batch(tmp_path: Path) -> Non
     assert first.name == "image_001.jpg"
     assert second.name == "image_002.jpg"
     assert destination.read_bytes() == b"existing"
-
-
-class _Response:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self.payload = payload
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict[str, Any]:
-        return self.payload
-
-
-def test_cloud_providers_request_or_map_german(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[dict[str, Any]] = []
-
-    def fake_post(_url: str, **kwargs: Any) -> _Response:
-        calls.append(kwargs)
-        if "files" in kwargs:
-            return _Response({"result": {"tags": [{"tag": {"de": " Straße "}, "confidence": 95}]}})
-        if "json" in kwargs:
-            return _Response(
-                {
-                    "responses": [
-                        {
-                            "labelAnnotations": [
-                                {"description": "Screenshot", "score": 0.9},
-                                {"description": "Unmapped Thing", "score": 0.8},
-                            ]
-                        }
-                    ]
-                }
-            )
-        return _Response({"tagsResult": {"values": [{"name": " Straße ", "confidence": 0.9}]}})
-
-    monkeypatch.setattr("app.services.ai.base_tagger.httpx.post", fake_post)
-    image = pytest.importorskip("PIL.Image").new("RGB", (2, 2))
-
-    assert AzureVisionTagger("https://azure", "key", locale="de").tag(image) == [("Straße", 0.9)]
-    assert calls[-1]["params"]["language"] == "de"
-    assert ImaggaTagger("key", "secret", locale="de").tag(image) == [("Straße", 0.95)]
-    assert calls[-1]["data"]["language"] == "de"
-    google = GoogleCloudVisionTagger("key", locale="de")
-    assert google.tag(image) == [("Bildschirmfoto", 0.9)]
-    assert google.warnings == ("provider.google.unmapped_label:Unmapped Thing",)
 
 
 class _PromptCapture:

@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
@@ -29,10 +31,29 @@ def test_official_actions_use_node_24_compatible_generations() -> None:
 
 
 def test_all_explicit_node_toolchains_use_node_24() -> None:
-    workflows = _workflow_text()
+    """Every `setup-node` step pins Node 24 — asserted per step, not by counting.
 
-    assert workflows.count("Set up Node 24") == 4
-    assert workflows.count('node-version: "24"') == 4
+    This used to assert a literal step count, which made adding any job that
+    needs Node fail a test about Node *versions*. The count was a proxy for the
+    real rule and a worse one: it says nothing about a step that pins the wrong
+    version, and it has to be edited every time the workflows grow.
+    """
+    pinned: list[tuple[str, str, str | None]] = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (document.get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses") or "")
+                if not uses.startswith("actions/setup-node"):
+                    continue
+                version = (step.get("with") or {}).get("node-version")
+                pinned.append((path.name, job_name, None if version is None else str(version)))
+
+    assert pinned, "no setup-node step found; this test would pass vacuously"
+    wrong = [entry for entry in pinned if entry[2] != "24"]
+    assert wrong == [], f"setup-node steps not pinned to Node 24: {wrong}"
+
+    workflows = _workflow_text()
     assert "Set up Node 20" not in workflows
     assert 'node-version: "20"' not in workflows
 
@@ -185,3 +206,108 @@ def test_every_bundled_resource_glob_matches_something() -> None:
         assert any(path.is_file() for path in tauri_root.glob(pattern)), (
             f"{pattern} matches no files"
         )
+
+
+def test_the_windows_only_contracts_run_on_a_windows_runner() -> None:
+    """P2-TEST-002. Three contracts are `skipif` non-Windows, so the only place
+    they can ever execute is the Windows job — and `test_root_identity.py` was
+    not in its file list, which meant they were skipped everywhere and run
+    nowhere. A skip is never a pass."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    windows = workflow["jobs"]["backend-windows"]
+    invocation = " ".join(str(step.get("run", "")) for step in windows["steps"] if "run" in step)
+
+    assert "windows" in str(windows["runs-on"])
+    for module in (
+        "tests/test_utils/test_path_utils.py",
+        "tests/test_root_identity.py",
+    ):
+        assert module in invocation, module
+
+
+def test_the_transfer_suites_also_run_on_apfs() -> None:
+    """The same argument in the other direction: APFS is case-insensitive and
+    stores names decomposed, so proving the transfer and identity rules only on
+    the Linux runner proves them for a filesystem no user has."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    macos = workflow["jobs"]["backend-macos"]
+    invocation = " ".join(str(step.get("run", "")) for step in macos["steps"] if "run" in step)
+
+    assert "macos" in str(macos["runs-on"])
+    for module in (
+        "tests/test_verified_transfer.py",
+        "tests/test_transfer_end_to_end.py",
+        "tests/test_path_identity.py",
+    ):
+        assert module in invocation, module
+
+
+def test_every_windows_only_test_lives_in_a_module_the_windows_job_runs() -> None:
+    """The rule rather than today's list: a new `skipif(win32)` contract added
+    to a module CI does not run would be invisible in exactly the same way."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    invocation = " ".join(
+        str(step.get("run", ""))
+        for step in workflow["jobs"]["backend-windows"]["steps"]
+        if "run" in step
+    )
+
+    unrun: list[str] = []
+    scanner = Path(__file__).name
+    for path in sorted((ROOT / "backend" / "tests").rglob("test_*.py")):
+        if path.name == scanner:
+            # This module names those markers in the line just below, and a
+            # scanner that reports itself reports nothing useful.
+            continue
+        # A *marker*, not a bare substring: this file names those expressions
+        # in its own detection logic and would otherwise report itself.
+        windows_only = any(
+            "skipif" in line and ('!= "win32"' in line or '!= "nt"' in line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+        )
+        if not windows_only:
+            continue
+        relative = path.relative_to(ROOT / "backend").as_posix()
+        if relative not in invocation:
+            unrun.append(relative)
+
+    assert unrun == [], f"windows-only contracts in modules the Windows job never runs: {unrun}"
+
+
+def test_the_release_attests_provenance_with_minimal_permissions() -> None:
+    """P2-SEC-002 / DEC-02. Attestations are an integrity anchor for an app that
+    stays unsigned. The grant that mints them is OIDC, so it belongs to exactly
+    one job and no other."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text("utf-8"))
+    publish = workflow["jobs"]["publish"]
+
+    assert publish["permissions"] == {
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    attests = [
+        step for step in publish["steps"] if "attest-build-provenance" in str(step.get("uses", ""))
+    ]
+    assert len(attests) == 1
+    subjects = str(attests[0]["with"]["subject-path"])
+    for extension in (".dmg", ".msi", ".exe", ".zip"):
+        assert extension in subjects, extension
+
+    # The mint must not be handed to any other job in the file.
+    for name, job in workflow["jobs"].items():
+        if name == "publish":
+            continue
+        assert "id-token" not in (job.get("permissions") or {}), name
+
+
+def test_the_docs_refuse_to_call_attestations_signing() -> None:
+    """DEC-02's third acceptance. An unnotarized DMG is *blocked* by default on
+    current macOS; a release note implying provenance fixes that would be
+    telling users something false about their own machine."""
+    signing = (ROOT / "docs" / "release-signing.md").read_text(encoding="utf-8").lower()
+
+    assert "attestation" in signing
+    assert "not code signing" in signing or "are not signing" in signing
+    assert "gh attestation verify" in signing
+    assert "notariz" in signing

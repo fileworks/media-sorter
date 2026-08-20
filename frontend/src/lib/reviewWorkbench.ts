@@ -23,19 +23,26 @@ export type GroupKind = "exact" | "similar" | "burst";
  * empty *by construction*, not by configuration — so offering a switch for it
  * promises a result the product cannot produce.
  *
- * This says nothing about the direct `POST /api/review/bursts/detect`
- * endpoint, which hashes and reads EXIF from the filesystem and does honor
- * `burst_detection_enabled` exactly as before. That contract is untouched.
+ * The direct `POST /api/review/bursts/detect` endpoint that used to sit beside
+ * this path has been removed: nothing in the app called it and no client in the
+ * frontend spoke to it. Detection is reached through the catalog view alone.
  *
- * `P2-DEDUP-D3` lands the signature/facts producer and `P2-DEDUP-D9` flips
- * this back. Nothing gated by it writes to the configuration, so a persisted
- * `burst_detection_enabled: true` survives untouched and neither direction
- * needs a data migration.
+ * `P2-DEDUP-D3` landed the signature/facts producer — indexing now writes a
+ * phash, a capture time and a camera model for every file — so `P2-DEDUP-D9`
+ * flipped this back on. `burst_detection_enabled` alone decides again, which is
+ * what a user setting should do. Proven rather than assumed: indexing two
+ * frames two seconds apart from one camera yields a burst group, and the same
+ * frames ninety minutes apart yield none
+ * (`backend/tests/test_indexing_completeness.py::TestBurstStacksCanBeProduced`).
  *
- * Typed `boolean` rather than left to literal inference so the disabled branch
- * stays type-checked instead of being narrowed away.
+ * Nothing gated by it ever wrote to the configuration, so a persisted
+ * `burst_detection_enabled` survived both flips untouched and neither
+ * direction needed a data migration.
+ *
+ * Typed `boolean` rather than left to literal inference so both branches stay
+ * type-checked instead of one being narrowed away.
  */
-export const CATALOG_BURST_GROUPS_AVAILABLE: boolean = false;
+export const CATALOG_BURST_GROUPS_AVAILABLE: boolean = true;
 export type RootRole = "input" | "reference" | "destination";
 export type DecisionAction = "keep" | "quarantine" | "skip" | "replace_keeper" | "keep_additional";
 export type OutcomeKind =
@@ -368,53 +375,6 @@ export function bulkImpactView(impact: BulkImpact, currentGeneration: string): B
   };
 }
 
-// ── Persistence ──────────────────────────────────────────────────────────────
-
-export interface ReviewUiState {
-  filters: ReviewFilters;
-  selectedGroupId: string | null;
-  scrollTop: number;
-  view: "overview" | "organization" | "exact" | "similar" | "validation" | "issues";
-}
-
-export const REVIEW_STATE_KEY = "mediasort_review_state";
-
-/**
- * Persisted UI state, deliberately without absolute paths.
- *
- * A restored session should reopen the same view and filter, not leak where
- * somebody's photos live into browser storage.
- */
-export function serializeUiState(state: ReviewUiState): string {
-  return JSON.stringify({
-    filters: { ...state.filters, search: "" },
-    selectedGroupId: state.selectedGroupId,
-    scrollTop: Math.round(state.scrollTop),
-    view: state.view,
-  });
-}
-
-export function deserializeUiState(raw: string | null): ReviewUiState {
-  const fallback: ReviewUiState = {
-    filters: DEFAULT_FILTERS,
-    selectedGroupId: null,
-    scrollTop: 0,
-    view: "overview",
-  };
-  if (!raw) return fallback;
-  try {
-    const parsed = JSON.parse(raw) as Partial<ReviewUiState>;
-    return {
-      filters: { ...DEFAULT_FILTERS, ...(parsed.filters ?? {}) },
-      selectedGroupId: parsed.selectedGroupId ?? null,
-      scrollTop: parsed.scrollTop ?? 0,
-      view: parsed.view ?? "overview",
-    };
-  } catch {
-    return fallback;
-  }
-}
-
 // ── Keep rules, decided here ─────────────────────────────────────────────────
 
 /**
@@ -452,6 +412,50 @@ export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): s
   };
   const filename = (member: GroupMember) =>
     member.relative_path.split(/[\\/]/).pop() ?? member.relative_path;
+  // ── `smart` ────────────────────────────────────────────────────────────────
+  // Mirrors `services/keeper_policies.py`. Every rung is pinned by
+  // `contracts/keeper-golden-vector.json`, which is generated from the Python
+  // side — so if these drift, the golden-vector test fails rather than a user
+  // getting a different keeper in Review than the backend would have placed.
+  const COPY_MARKERS = [
+    " - copy",
+    " - kopie",
+    " copy",
+    " kopie",
+    "-copy",
+    "_copy",
+    " (copy)",
+    " (kopie)",
+  ];
+  const COPY_PREFIXES = ["copy of ", "kopie von ", "duplicate of "];
+  // Brackets are required: a bare trailing number is how cameras name files, so
+  // counting "DSC_0002" as a copy of "DSC_0001" would treat half a memory card
+  // as duplicates.
+  const BRACKETED_COUNTER = /[ _-]*[([]\d{1,3}[)\]]$/;
+  // A counter attached to the copy word itself is unambiguous: "IMG_0421 copy 2".
+  const COPY_COUNTER = /(?:copy|kopie)[ _-]*\d{1,3}$/;
+
+  const stem = (member: GroupMember) => {
+    const name = filename(member);
+    const dot = name.lastIndexOf(".");
+    return (dot > 0 ? name.slice(0, dot) : name).toLowerCase();
+  };
+
+  /** How many signs there are that this name was machine-generated. */
+  const copyMarks = (member: GroupMember): number => {
+    // Read from the original stem rather than a partially stripped one, so the
+    // result cannot depend on which marker happened to be removed first.
+    const text = stem(member).trimEnd();
+    let marks = 0;
+    if (COPY_PREFIXES.some((prefix) => text.startsWith(prefix))) marks += 1;
+    if (COPY_MARKERS.some((marker) => text.includes(marker))) marks += 1;
+    if (BRACKETED_COUNTER.test(text)) marks += 1;
+    if (COPY_COUNTER.test(text)) marks += 1;
+    return marks;
+  };
+
+  /** How deeply buried the copy is: a library folder beats a backup folder. */
+  const depth = (member: GroupMember) => (member.relative_path.match(/[\\/]/g) ?? []).length;
   // The last tie-break, and the reason a result never depends on scan order.
   const identity = (member: GroupMember) =>
     `${member.root_id}:${member.relative_path}:${member.member_id}`;
@@ -474,6 +478,18 @@ export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): s
   };
 
   switch (policy) {
+    case "smart":
+      // Exact-group members are byte-identical, so nothing about the content can
+      // separate them. What differs is where they live and what they are called:
+      // fewest copy marks, then shallowest path, then oldest, then largest, then
+      // identity. An unknown mtime sorts last rather than reading as zero.
+      return best(members, (m) => [
+        copyMarks(m),
+        depth(m),
+        modified(m) ?? Number.POSITIVE_INFINITY,
+        -size(m),
+        identity(m),
+      ]);
     case "best_quality":
       // Most pixels, then most bytes. Unlike `highest_resolution` it does not
       // refuse a set whose dimensions could not all be read: a photo library is

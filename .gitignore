@@ -76,6 +76,9 @@ graphify-out/
 
 # ── Playwright MCP test artifacts ─────────────────────────────────────────────
 .playwright-mcp/
+# Playwright run artifacts (traces, screenshots) from the a11y suite.
+frontend/test-results/
+frontend/playwright-report/
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
