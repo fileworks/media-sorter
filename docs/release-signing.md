@@ -3,6 +3,30 @@
 Signing enrollment and credentials are manual operator gates. The repository contains no
 certificate, private key, account enrollment, legal agreement, or secret value.
 
+## Attestations are not signing
+
+Every published installer carries a **SLSA build-provenance attestation**
+(`DEC-02`). Verify one with:
+
+```console
+gh attestation verify <artifact> --repo fileworks/media-sorter
+```
+
+That proves which workflow, at which commit, on which runner produced the file —
+so an artifact claiming to be a MediaSorter release can be checked against this
+repository. It is **not** code signing, and it is deliberately not a substitute
+for it:
+
+- macOS still treats an unnotarized `.dmg` as blocked by default. A user must
+  clear it in System Settings → Privacy & Security. An attestation does not
+  change that, and no release note should imply it does.
+- Windows SmartScreen still warns on an unsigned `.exe`/`.msi` for the same
+  reason.
+
+Provenance answers "did this come from the project's build?". Signing answers
+"is the operating system willing to run it?". MediaSorter answers the first and,
+by decision, not yet the second.
+
 Release preflight has three outcomes:
 
 - **Unsigned:** no platform signing variables exist. Packaging continues and

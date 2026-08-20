@@ -253,3 +253,42 @@ def test_every_windows_only_test_lives_in_a_module_the_windows_job_runs() -> Non
             unrun.append(relative)
 
     assert unrun == [], f"windows-only contracts in modules the Windows job never runs: {unrun}"
+
+
+def test_the_release_attests_provenance_with_minimal_permissions() -> None:
+    """P2-SEC-002 / DEC-02. Attestations are an integrity anchor for an app that
+    stays unsigned. The grant that mints them is OIDC, so it belongs to exactly
+    one job and no other."""
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text("utf-8"))
+    publish = workflow["jobs"]["publish"]
+
+    assert publish["permissions"] == {
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    attests = [
+        step for step in publish["steps"] if "attest-build-provenance" in str(step.get("uses", ""))
+    ]
+    assert len(attests) == 1
+    subjects = str(attests[0]["with"]["subject-path"])
+    for extension in (".dmg", ".msi", ".exe", ".zip"):
+        assert extension in subjects, extension
+
+    # The mint must not be handed to any other job in the file.
+    for name, job in workflow["jobs"].items():
+        if name == "publish":
+            continue
+        assert "id-token" not in (job.get("permissions") or {}), name
+
+
+def test_the_docs_refuse_to_call_attestations_signing() -> None:
+    """DEC-02's third acceptance. An unnotarized DMG is *blocked* by default on
+    current macOS; a release note implying provenance fixes that would be
+    telling users something false about their own machine."""
+    signing = (ROOT / "docs" / "release-signing.md").read_text(encoding="utf-8").lower()
+
+    assert "attestation" in signing
+    assert "not code signing" in signing or "are not signing" in signing
+    assert "gh attestation verify" in signing
+    assert "notariz" in signing
