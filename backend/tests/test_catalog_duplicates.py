@@ -389,3 +389,39 @@ class TestWideSignatures:
         assert telemetry.degraded is True
         assert telemetry.degraded_reason is not None
         assert "does not divide" in telemetry.degraded_reason
+
+
+class TestExhaustiveIsNotUnreliable:
+    """A full scan means *complete* recall, not *doubtful* results.
+
+    `degraded` says the band fast path was unavailable; it fires for a loose
+    threshold and for a malformed signature alike. Only the second makes a
+    distance untrustworthy, and conflating them graded the index's most
+    thorough answer as its least believable one.
+    """
+
+    def test_loose_threshold_scans_everything_without_doubting_it(
+        self, catalog: MediaCatalog
+    ) -> None:
+        base = "ffffffffffffffff"
+        _add(catalog, "dest", "near.jpg", signature=base)
+        index = CatalogDuplicateIndex(catalog)
+        telemetry = LookupTelemetry()
+
+        index.perceptual_candidates(base, max_distance=8, telemetry=telemetry)
+
+        assert telemetry.degraded is True, "a loose threshold still costs a full scan"
+        assert telemetry.signature_malformed is False, "nothing about the signature was wrong"
+
+    def test_malformed_signature_is_flagged_as_untrustworthy(self, catalog: MediaCatalog) -> None:
+        _add(catalog, "dest", "a.jpg", signature="ffffffffffffffff")
+        index = CatalogDuplicateIndex(catalog)
+        telemetry = LookupTelemetry()
+
+        # 5 characters does not divide into 4 bands, so `_bands` gives up and
+        # the anchor is not the shape a distance comparison assumes.
+        index.perceptual_candidates("fffff", max_distance=1, telemetry=telemetry)
+
+        assert telemetry.degraded is True
+        assert telemetry.signature_malformed is True
+        assert "does not divide into" in (telemetry.degraded_reason or "")

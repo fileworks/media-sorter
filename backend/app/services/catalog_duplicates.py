@@ -75,13 +75,34 @@ class DuplicateCandidate:
 
 @dataclass
 class LookupTelemetry:
-    """What the query had to do, so a slow library can explain itself."""
+    """What the query had to do, so a slow library can explain itself.
+
+    ``degraded`` and ``signature_malformed`` are deliberately separate, because
+    the two conditions that disable the band fast path are not the same kind of
+    problem and must not have the same consequence:
+
+    * A **loose threshold** (``max_distance >= SIGNATURE_BANDS``) costs a full
+      scan. Every signature is examined and every distance is still computed
+      exactly, so recall is *complete* — this is the most trustworthy answer the
+      index can give, merely the slowest. It must not lower anyone's confidence.
+    * A **malformed signature** (the wrong number of bands) means the anchor is
+      not the shape the comparison assumes, so the distances themselves cannot
+      be trusted. That is a correctness problem, and it is the only one that
+      should reduce confidence.
+
+    Collapsing these into one flag reads "we scanned everything" as "we do not
+    know how good this is" — exactly backwards for the exhaustive case.
+    """
 
     buckets_queried: int = 0
     candidates_examined: int = 0
     candidates_returned: int = 0
+    #: The band fast path was unavailable and a full scan ran. A cost signal.
     degraded: bool = False
     degraded_reason: str | None = None
+    #: The anchor signature is not the expected width, so distances computed
+    #: against it are not trustworthy. A correctness signal.
+    signature_malformed: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -215,18 +236,20 @@ class CatalogDuplicateIndex:
         telemetry = telemetry or LookupTelemetry()
         limit = limit or self.page_size
         bands = _bands(signature)
-        if len(bands) != SIGNATURE_BANDS or max_distance >= SIGNATURE_BANDS:
+        malformed = len(bands) != SIGNATURE_BANDS
+        if malformed or max_distance >= SIGNATURE_BANDS:
             # Beyond this the pigeonhole guarantee no longer holds, so the only
             # honest options are a full scan or a wrong answer.
             telemetry.degraded = True
+            # Two different causes land here and the cure differs: one is a
+            # caller's threshold, the other is the width of every signature the
+            # producer writes. Naming the wrong one sends a profiler after the
+            # wrong knob — and only the second is a reason to distrust a result.
+            telemetry.signature_malformed = malformed
             telemetry.degraded_reason = (
-                # Two different causes land here and the cure differs: one is a
-                # caller's threshold, the other is the width of every signature
-                # the producer writes. Naming the wrong one sends a profiler
-                # after the wrong knob.
                 f"signature of {len(signature)} characters does not divide into "
                 f"{SIGNATURE_BANDS} bands; every signature was examined"
-                if len(bands) != SIGNATURE_BANDS
+                if malformed
                 else "threshold too loose for band lookup; every signature was examined"
             )
             rows = self._scan_signatures(kind, roles)
