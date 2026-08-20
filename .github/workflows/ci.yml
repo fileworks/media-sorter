@@ -311,6 +311,72 @@ jobs:
           path: frontend/test-results
           retention-days: 7
 
+  packaging-smoke:
+    name: packaging — the bundle launches and mounts its UI
+    # `P2-TEST-004`. `scripts/release_integrity.py smoke-webview` has existed all
+    # along, but only the release workflow ever called it — so a packaging break
+    # was discovered while publishing rather than on the pull request that caused
+    # it. This runs the same check against a bundle built from the branch.
+    #
+    # It is deliberately NOT wired into the release job's gate: this proves the
+    # check itself runs green in CI first. Promoting it to a release blocker is a
+    # separate decision, and a launch step that fails every release is worse than
+    # one that runs late.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+
+      - name: Cache the Rust build
+        # Swatinem/rust-cache v2
+        uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+        with:
+          workspaces: frontend/src-tauri
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "backend[dev]" pyinstaller
+          npm --prefix frontend ci
+
+      - name: Freeze the backend and stage it into the bundle
+        run: make bundle-backend
+
+      - name: Build the desktop bundle
+        working-directory: frontend
+        run: npm run tauri build
+
+      - name: Launch the packaged app and prove the React shell mounts
+        # MEDIASORT_WEBVIEW_SMOKE makes `frontend_ready` exit(0) as soon as the
+        # packaged WebView acknowledges the mounted app, so this asserts the UI
+        # actually came up rather than merely that the process survived.
+        run: |
+          python scripts/release_integrity.py smoke-webview \
+            --path "frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/MacOS/MediaSorter"
+
+      - name: Confirm the GPL notices travelled with the bundle
+        # `P2-SEC-001` acceptance (1), asserted rather than remembered.
+        run: |
+          licenses="frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/licenses"
+          test -s "$licenses/COPYING.GPLv3"
+          test -s "$licenses/FFMPEG-LICENSE-AND-SOURCE-OFFER.md"
+          echo "GPL licence and written offer are present in the bundle"
+
   native:
     name: native
     # MediaSorter ships macOS and Windows bundles. Building the Tauri 1 Linux
