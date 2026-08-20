@@ -1,17 +1,15 @@
 {
   "identifier": "default",
-  "description": "Default capability for MediaSorter desktop",
-  "windows": ["main"],
+  "description": "Default capability for MediaSorter desktop. No ambient filesystem write scope: tauri-plugin-dialog's save command grants a runtime scope for the single file the user picked (allow_file), so fs:allow-write-file needs no standing grant over home, Desktop, Downloads or Documents.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "shell:allow-open",
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-write-file",
-    "fs:allow-home-write-recursive",
-    "fs:allow-desktop-write-recursive",
-    "fs:allow-download-write-recursive",
-    "fs:allow-document-write-recursive",
     "clipboard-manager:allow-write-text",
     "notification:default"
   ]
