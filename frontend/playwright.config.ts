@@ -39,9 +39,18 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // `--host 127.0.0.1` rather than `npm run dev`: Vite defaults to binding
+    // `localhost`, which on a CI image can resolve to ::1 only, while the readiness
+    // poll below is IPv4. The server was up and the run still timed out.
+    command: "npx vite --host 127.0.0.1 --port 1420 --strictPort",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // A cold runner pre-bundles dependencies on first start, which 2 minutes
+    // does not reliably cover.
+    timeout: 180_000,
+    // Surface the server's own output, so the next failure of this kind says why
+    // rather than only that it waited.
+    stdout: "pipe",
+    stderr: "pipe",
   },
 });

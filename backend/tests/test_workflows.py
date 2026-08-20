@@ -31,10 +31,29 @@ def test_official_actions_use_node_24_compatible_generations() -> None:
 
 
 def test_all_explicit_node_toolchains_use_node_24() -> None:
-    workflows = _workflow_text()
+    """Every `setup-node` step pins Node 24 — asserted per step, not by counting.
 
-    assert workflows.count("Set up Node 24") == 4
-    assert workflows.count('node-version: "24"') == 4
+    This used to assert a literal step count, which made adding any job that
+    needs Node fail a test about Node *versions*. The count was a proxy for the
+    real rule and a worse one: it says nothing about a step that pins the wrong
+    version, and it has to be edited every time the workflows grow.
+    """
+    pinned: list[tuple[str, str, str | None]] = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (document.get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses") or "")
+                if not uses.startswith("actions/setup-node"):
+                    continue
+                version = (step.get("with") or {}).get("node-version")
+                pinned.append((path.name, job_name, None if version is None else str(version)))
+
+    assert pinned, "no setup-node step found; this test would pass vacuously"
+    wrong = [entry for entry in pinned if entry[2] != "24"]
+    assert wrong == [], f"setup-node steps not pinned to Node 24: {wrong}"
+
+    workflows = _workflow_text()
     assert "Set up Node 20" not in workflows
     assert 'node-version: "20"' not in workflows
 
