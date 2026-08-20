@@ -254,6 +254,31 @@ class MediaCatalog:
         ).fetchone()
         return 0 if row is None or row["generation"] is None else int(row["generation"])
 
+    def has_partial_generation(self) -> bool:
+        """Whether any root's newest finished scan stopped short of everything.
+
+        `current_generation` counts only complete scans, which is right for
+        deciding whether a plan is stale — but it means a partial scan is
+        invisible to every caller that asks that question. A duplicate set drawn
+        from a root whose index skipped files may be missing members, and the
+        person deciding what to delete is exactly who needs to know that.
+        """
+        row = self._connection.execute(
+            """
+            SELECT 1
+              FROM scan_generations AS g
+             WHERE g.outcome = 'partial'
+               AND g.generation_id = (
+                     SELECT MAX(inner_g.generation_id)
+                       FROM scan_generations AS inner_g
+                      WHERE inner_g.root_id = g.root_id
+                        AND inner_g.outcome != 'running'
+                   )
+             LIMIT 1
+            """
+        ).fetchone()
+        return row is not None
+
     def finish_generation(self, generation_id: int, outcome: GenerationOutcome) -> None:
         """Close a generation and, only if it completed, mark what it never saw.
 

@@ -200,6 +200,7 @@ beforeEach(() => {
     groups: [],
     next_cursor: null,
     truncated: false,
+      partial_index: false,
     kind: "exact",
   });
 });
@@ -333,6 +334,7 @@ describe("the stays branch", () => {
           : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -388,6 +390,7 @@ describe("resolve", () => {
           : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -643,6 +646,7 @@ describe("a baseline decides its own set", () => {
           : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -669,6 +673,7 @@ describe("comparing never fails silently", () => {
         kind === "exact" ? [group("set-1", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }])] : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -998,6 +1003,7 @@ describe("the Review Escape stack", () => {
         kind === "exact" ? [group("set-1", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }])] : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   });
@@ -1099,6 +1105,7 @@ describe("the truncation disclosure", () => {
       // its page bound, which is the state the disclosure exists for.
       next_cursor: truncated ? "more" : null,
       truncated,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
   }
@@ -1122,5 +1129,46 @@ describe("the truncation disclosure", () => {
     });
 
     expect(screen.queryByText(en("review.truncated.detail"), { exact: false })).toBeNull();
+  });
+});
+
+describe("the partial-index disclosure", () => {
+  const result = previewResult(
+    item({ source: "/in/dup-a.jpg", destination: "/out/2025/07/dup-a.jpg" }),
+    item({ source: "/in/dup-b.jpg", destination: "/out/_duplicates/dup-b.jpg" }),
+  );
+
+  function serve(partial: boolean) {
+    vi.spyOn(api, "listReviewGroups").mockImplementation(async (kind, options) => ({
+      groups:
+        kind === "exact" && !options?.cursor
+          ? [group("set-1", [{ path: "/in/dup-a.jpg" }, { path: "/in/dup-b.jpg" }])]
+          : [],
+      next_cursor: null,
+      truncated: false,
+      partial_index: partial,
+      kind: kind ?? "exact",
+    }));
+  }
+
+  it("warns when a scan could not read everything", async () => {
+    // A stack drawn from a partly-read root may be missing copies that exist on
+    // disk, and the person about to quarantine one needs to know before they do.
+    serve(true);
+
+    renderReview(result);
+
+    expect(await screen.findByText(en("review.partialIndex.detail"), { exact: false })).toBeTruthy();
+  });
+
+  it("says nothing when the index is complete", async () => {
+    serve(false);
+
+    renderReview(result);
+    await screen.findByRole("button", {
+      name: en("review.browse.showContents", { folder: en("review.browse.stays.undecided") }),
+    });
+
+    expect(screen.queryByText(en("review.partialIndex.detail"), { exact: false })).toBeNull();
   });
 });

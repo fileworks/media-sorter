@@ -23,6 +23,7 @@ describe("useReviewGroups", () => {
       groups: kind === "exact" ? [crossScopeGroup] : [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -53,6 +54,7 @@ describe("useReviewGroups", () => {
       groups: [],
       next_cursor: null,
       truncated: false,
+      partial_index: false,
       kind: kind ?? "exact",
     }));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -95,6 +97,7 @@ describe("useReviewGroups", () => {
         ),
         next_cursor: cursor,
         truncated: cursor !== null,
+        partial_index: false,
         kind: "exact",
       };
     }

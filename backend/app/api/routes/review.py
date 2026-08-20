@@ -136,6 +136,10 @@ class GroupPage(BaseModel):
     #: ran out, and a review surface that cannot tell them apart tells the user
     #: they are finished when they are not.
     truncated: bool = False
+    #: A root's newest finished scan stopped short of everything it was asked to
+    #: read. The sets below may be missing members, which is the one thing
+    #: somebody about to quarantine a file needs to know before they trust them.
+    partial_index: bool = False
 
 
 class OutcomeRequest(BaseModel):
@@ -258,6 +262,7 @@ def _list_groups(
         kind=kind,
         next_cursor=next_cursor,
         truncated=truncated,
+        partial_index=partial_index,
     )
 
 

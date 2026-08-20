@@ -1648,6 +1648,8 @@ export class MediaSorterApiClient {
     kind: string;
     /** More groups exist than this page holds. */
     truncated: boolean;
+    /** A root's newest finished scan skipped files, so sets may be incomplete. */
+    partial_index: boolean;
   }> {
     await this.ensureReady();
     const { data } = await this.http.get<{
@@ -1655,6 +1657,7 @@ export class MediaSorterApiClient {
       next_cursor: string | null;
       kind: string;
       truncated: boolean;
+      partial_index: boolean;
     }>("/api/review/groups", {
       params: {
         kind,

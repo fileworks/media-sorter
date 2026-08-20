@@ -58,6 +58,9 @@ export const en = {
   "review.browse.keyboardHelp": "Esc backs out one layer · Ctrl/⌘A selects the visible files",
   "review.bulk.applyRule": "Apply rule to selection",
   "review.bulk.notDuplicates": "Mark as not duplicates",
+  "review.partialIndex.title": "Some files could not be read while indexing",
+  "review.partialIndex.detail":
+    "A folder\u2019s last scan finished without reading everything in it, so a stack below may be missing copies that exist on disk. Re-scan before deleting anything you cannot replace.",
   "review.truncated.title": "Showing the first {count} stacks",
   "review.truncated.detail":
     "This library has more duplicate stacks than one review session loads. The counts here describe what is shown, not the whole library.",
@@ -1795,6 +1798,9 @@ export const de: Record<MessageKey, string> = {
     "Esc geht eine Ebene zurück · Strg/⌘A wählt die sichtbaren Dateien aus",
   "review.bulk.applyRule": "Regel auf Auswahl anwenden",
   "review.bulk.notDuplicates": "Als keine Duplikate markieren",
+  "review.partialIndex.title": "Beim Indizieren konnten nicht alle Dateien gelesen werden",
+  "review.partialIndex.detail":
+    "Der letzte Scan eines Ordners hat nicht alles darin gelesen. Einem Stapel unten k\u00f6nnen daher Kopien fehlen, die auf der Festplatte vorhanden sind. F\u00fchren Sie einen neuen Scan durch, bevor Sie Unersetzliches l\u00f6schen.",
   "review.truncated.title": "Die ersten {count} Stapel werden angezeigt",
   "review.truncated.detail":
     "Diese Bibliothek enthält mehr Duplikat-Stapel, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",

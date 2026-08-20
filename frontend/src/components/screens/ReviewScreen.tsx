@@ -593,6 +593,14 @@ export function ReviewScreen({
           aria-labelledby={`review-tab-${surface.mode}`}
           className="bg-background"
         >
+          {groups.partialIndex && (
+            <StateView
+              variant="partial"
+              compact
+              title={t("review.partialIndex.title")}
+              detail={t("review.partialIndex.detail")}
+            />
+          )}
           {groups.truncated && (
             <p
               role="status"

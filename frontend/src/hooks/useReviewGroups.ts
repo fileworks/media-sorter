@@ -45,16 +45,20 @@ const MAX_PAGES = 25;
  */
 async function fetchEveryPage(
   kind: GroupKind,
-): Promise<{ groups: ReviewGroup[]; truncated: boolean }> {
+): Promise<{ groups: ReviewGroup[]; truncated: boolean; partialIndex: boolean }> {
   const groups: ReviewGroup[] = [];
   let cursor: string | null = null;
+  let partialIndex = false;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await api.listReviewGroups(kind, { limit: LIMIT, cursor });
     groups.push(...result.groups);
+    // Sticky across pages: one page reporting a partial index is enough, and a
+    // later page saying otherwise must not clear it.
+    partialIndex = partialIndex || result.partial_index;
     cursor = result.next_cursor;
-    if (!cursor) return { groups, truncated: false };
+    if (!cursor) return { groups, truncated: false, partialIndex };
   }
-  return { groups, truncated: true };
+  return { groups, truncated: true, partialIndex };
 }
 
 export function useReviewGroups(
@@ -81,7 +85,7 @@ export function useReviewGroups(
 
   // `combine` rather than reading the result array directly: the array itself
   // is new on every render, so it can never be a stable `useMemo` dependency.
-  const { groups, truncated, isLoading, isError, error, refetch } = useQueries({
+  const { groups, truncated, partialIndex, isLoading, isError, error, refetch } = useQueries({
     queries: kinds.map((kind) => ({
       // Review needs the full library relationship for its honest
       // outside-this-run disclosure. Actionable rows are scoped separately to
@@ -92,6 +96,7 @@ export function useReviewGroups(
     combine: (results) => ({
       groups: results.flatMap((result) => result.data?.groups ?? []),
       truncated: results.some((result) => result.data?.truncated ?? false),
+      partialIndex: results.some((result) => result.data?.partialIndex ?? false),
       isLoading: results.some((result) => result.isLoading),
       isError: results.some((result) => result.isError),
       error: results.find((result) => result.isError)?.error ?? null,
@@ -129,6 +134,8 @@ export function useReviewGroups(
     groups,
     /** The list is not the whole library, so nothing derived from it is either. */
     truncated,
+    /** A scan skipped files, so a set here may be missing members. */
+    partialIndex,
     tally,
     isLoading,
     isError,

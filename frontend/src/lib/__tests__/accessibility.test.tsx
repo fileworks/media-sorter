@@ -58,6 +58,7 @@ beforeEach(() => {
     groups: [],
     next_cursor: null,
     truncated: false,
+    partial_index: false,
     kind: "exact",
   });
   vi.spyOn(api, "getConfig").mockResolvedValue(ACCESSIBILITY_CONFIG);

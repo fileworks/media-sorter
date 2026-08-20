@@ -30,7 +30,15 @@ export interface RootCard {
   state: RootState;
   /** Volume label, when the platform could resolve one. */
   volume: string | null;
-  freshness: "fresh" | "stale" | "unknown";
+  /**
+   * Mirrors the backend's `CatalogFreshnessState`. `partial` is the one that
+   * used to be unrepresentable here: the derive pass produces partial
+   * generations when it cannot read every file, and a type that could only say
+   * fresh/stale/unknown turned "some of your files were skipped" into
+   * "never fully scanned" — which reads like nothing has happened yet rather
+   * than like something went wrong.
+   */
+  freshness: "fresh" | "stale" | "partial" | "offline" | "unknown";
   /** Files the last completed scan saw, when there was one. */
   indexedFiles: number | null;
   issueCount: number;
@@ -451,6 +459,23 @@ export function cardStatus(card: RootCard, conflicts: Conflict[]): CardStatus {
   }
   const indexed =
     card.indexedFiles === null ? "not indexed" : `${card.indexedFiles.toLocaleString()} files`;
+  // A partial index is not a "Ready" folder. Some files were skipped, so any
+  // duplicate set drawn from this root may be missing members — the user has to
+  // be able to see that before they trust a review built on it.
+  if (card.freshness === "partial") {
+    return {
+      tone: "warning",
+      label: "Partly indexed",
+      detail: `${indexed} · some files could not be read`,
+    };
+  }
+  if (card.freshness === "offline") {
+    return {
+      tone: "warning",
+      label: "Offline",
+      detail: `${indexed} · this volume is not connected`,
+    };
+  }
   const freshness =
     card.freshness === "fresh"
       ? "up to date"
