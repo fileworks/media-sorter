@@ -142,6 +142,8 @@ export const en = {
     "Files that are not duplicates stay in their source folders. Duplicate copies move to _copies in the destination after verification.",
   "config.runMode.organizeNote":
     "Every file that is kept is placed into the destination under the folder structure set below.",
+  "config.keeper.smart.help":
+    "Recommended. Identical copies differ only in name and location, so this keeps the one that looks like the original: no \u201ccopy\u201d marker in the name, least deeply buried, then the oldest. Needs no setup.",
   "config.keeper.best_quality.help":
     "Prefers the highest resolution, then the largest file, then the newest modification time; final ties are resolved deterministically.",
   "config.keeper.newest.help": "Keeps the copy with the most recent capture date.",
@@ -156,6 +158,8 @@ export const en = {
   "config.keeper.shortest_filename.help":
     "Keeps the shortest filename — often the one without a \u201ccopy\u201d suffix.",
   "config.keeper.manual.help": "Chooses nothing. Every set waits for you in Review.",
+  "config.keeper.smart": "Keep the likely original (recommended)",
+  "config.keeper.smart.short": "Likely original",
   "config.keeper.best_quality": "Keep the best quality",
   "config.keeper.best_quality.short": "Keep best",
   "config.keeper.longest_filename": "Keep the longest filename",
@@ -1878,6 +1882,8 @@ export const de: Record<MessageKey, string> = {
     "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach der Prüfung nach _copies im Ziel verschoben.",
   "config.runMode.organizeNote":
     "Jede behaltene Datei wird im Zielordner nach der unten eingestellten Ordnerstruktur abgelegt.",
+  "config.keeper.smart.help":
+    "Empfohlen. Identische Kopien unterscheiden sich nur in Name und Ablageort. Behalten wird daher die Datei, die nach dem Original aussieht: ohne \u201eKopie\u201c-Kennzeichnung im Namen, am wenigsten tief verschachtelt, dann die \u00e4lteste. Ohne Einrichtung.",
   "config.keeper.best_quality.help":
     "Bevorzugt die höchste Auflösung, dann die größte Datei und dann die jüngste Änderungszeit; verbleibende Gleichstände werden stabil aufgelöst.",
   "config.keeper.newest.help": "Behält die Kopie mit dem jüngsten Aufnahmedatum.",
@@ -1892,6 +1898,8 @@ export const de: Record<MessageKey, string> = {
   "config.keeper.shortest_filename.help":
     "Behält den kürzesten Dateinamen — oft den ohne „Kopie“-Zusatz.",
   "config.keeper.manual.help": "Wählt nichts aus. Jeder Satz wartet in der Prüfung auf dich.",
+  "config.keeper.smart": "Vermutliches Original behalten (empfohlen)",
+  "config.keeper.smart.short": "Vermutl. Original",
   "config.keeper.best_quality": "Beste Qualität behalten",
   "config.keeper.best_quality.short": "Beste behalten",
   "config.keeper.longest_filename": "Längsten Dateinamen behalten",

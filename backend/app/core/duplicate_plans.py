@@ -54,6 +54,7 @@ OutcomeKind = Literal[
 ]
 
 KeeperPolicyId = Literal[
+    "smart",
     "best_quality",
     "largest",
     "smallest",
@@ -75,6 +76,7 @@ KeeperPolicyId = Literal[
 #: `preferred_root` is absent because the root order it depended on is no longer
 #: something the interface lets anyone set.
 SELECTABLE_KEEPER_POLICIES: tuple[KeeperPolicyId, ...] = (
+    "smart",
     "best_quality",
     "largest",
     "smallest",

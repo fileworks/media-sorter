@@ -32,6 +32,7 @@ from app.services.keeper_policies import PolicySettings, apply_policy
 #: Every id in `KeeperPolicyId`. A new policy that nobody adds a case for is a
 #: policy the two implementations may already disagree about.
 GOLDEN_POLICIES: tuple[KeeperPolicyId, ...] = (
+    "smart",
     "best_quality",
     "largest",
     "smallest",
@@ -129,8 +130,45 @@ def _cases() -> list[tuple[str, KeeperPolicyId, DuplicateGroup, tuple[str, ...]]
         _member("b", relative_path="b.jpg"),
         _member("a", relative_path="a.jpg"),
     )
+    # `smart` is the shipped default, and the only policy whose criteria can
+    # actually separate byte-identical members. One case per rung of its ladder,
+    # so a change to the order shows up as a changed artifact rather than as a
+    # silently different keeper.
+    copy_marked = _group(
+        _member("copy", relative_path="IMG_0421 copy.jpg"),
+        _member("original", relative_path="IMG_0421.jpg"),
+    )
+    counter_marked = _group(
+        _member("counter", relative_path="IMG_0421 (1).jpg"),
+        _member("original", relative_path="IMG_0421.jpg"),
+    )
+    buried = _group(
+        _member("deep", relative_path="Photos/2019/old/backup/IMG_0421.jpg"),
+        _member("shallow", relative_path="Photos/2019/IMG_0421.jpg"),
+    )
+    same_name_dated = _group(
+        _member("newer", relative_path="Photos/IMG_0421.jpg", modified=900),
+        _member("older", relative_path="Photos/IMG_0421.jpg", modified=100),
+    )
+    camera_names = _group(
+        _member("second", relative_path="DSC_0002.jpg"),
+        _member("first", relative_path="DSC_0001.jpg"),
+    )
+    # The case that caught a real mismatch: counting marks rather than returning
+    # a boolean is what lets a doubly-marked name lose to a singly-marked one.
+    both_marked = _group(
+        _member("twice", relative_path="IMG_0421 copy (2).jpg"),
+        _member("once", relative_path="IMG_0421 copy.jpg"),
+    )
 
     return [
+        ("smart keeps the name without a copy marker", "smart", copy_marked, ()),
+        ("smart reads a parenthesised counter as a copy marker", "smart", counter_marked, ()),
+        ("smart prefers the least deeply buried copy", "smart", buried, ()),
+        ("smart falls to the oldest when name and depth tie", "smart", same_name_dated, ()),
+        ("smart does not mistake a camera counter for a copy", "smart", camera_names, ()),
+        ("smart prefers the less marked name when every copy is marked", "smart", both_marked, ()),
+        ("smart is total: identical names and depths still decide", "smart", ties, ()),
         ("best_quality prefers pixels over bytes", "best_quality", measured, ()),
         ("best_quality falls back to size between equal pixels", "best_quality", equal_pixels, ()),
         ("best_quality ranks a measured member above an unmeasured one", "best_quality", mixed, ()),

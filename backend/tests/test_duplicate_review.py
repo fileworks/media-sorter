@@ -1063,7 +1063,9 @@ class TestNewKeeperPolicies:
     def test_the_selectable_set_excludes_the_automatic_and_the_retired(self) -> None:
         assert "protected_reference" not in SELECTABLE_KEEPER_POLICIES
         assert "preferred_root" not in SELECTABLE_KEEPER_POLICIES
-        assert SELECTABLE_KEEPER_POLICIES[0] == "best_quality"
+        # `smart` leads because it is the shipped default and the only policy
+        # whose criteria can separate byte-identical members at all.
+        assert SELECTABLE_KEEPER_POLICIES[0] == "smart"
 
 
 class TestReviewedKeepersSurviveThePolicy:

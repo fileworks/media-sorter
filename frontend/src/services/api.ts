@@ -175,6 +175,7 @@ export interface ReviewedSet {
 }
 
 export type KeeperPolicyId =
+  | "smart"
   | "best_quality"
   | "newest"
   | "oldest"
@@ -193,6 +194,7 @@ export type KeeperPolicyId =
  * exported from here alone so the two surfaces cannot offer different sets.
  */
 export const SELECTABLE_KEEPER_POLICIES = [
+  "smart",
   "best_quality",
   "newest",
   "oldest",

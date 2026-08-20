@@ -264,6 +264,7 @@ class Config:
     # not at all — an undecided group is quarantined for nothing, it just stays
     # undecided. A protected reference member always wins regardless.
     duplicate_keeper_policy: Literal[
+        "smart",
         "best_quality",
         "newest",
         "oldest",
@@ -273,7 +274,7 @@ class Config:
         "longest_filename",
         "shortest_filename",
         "manual",
-    ] = "best_quality"
+    ] = "smart"
     burst_detection_enabled: bool = False
     burst_time_window_seconds: float = 3.0
     burst_perceptual_distance: int = 4

@@ -65,6 +65,7 @@ class RecipeSettings(BaseModel):
     duplicate_perceptual_enabled: bool = True
     duplicate_perceptual_threshold: int = 95
     duplicate_keeper_policy: Literal[
+        "smart",
         "best_quality",
         "newest",
         "oldest",
