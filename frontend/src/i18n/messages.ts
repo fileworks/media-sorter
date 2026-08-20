@@ -58,6 +58,9 @@ export const en = {
   "review.browse.keyboardHelp": "Esc backs out one layer · Ctrl/⌘A selects the visible files",
   "review.bulk.applyRule": "Apply rule to selection",
   "review.bulk.notDuplicates": "Mark as not duplicates",
+  "review.truncated.title": "Showing the first {count} stacks",
+  "review.truncated.detail":
+    "This library has more duplicate stacks than one review session loads. The counts here describe what is shown, not the whole library.",
   "review.bulk.folder": "Preferred folder",
   "review.bulk.keepFromFolder": "Keep from folder",
   "review.bulk.impact": "This decides {decide} selected sets and leaves {skip} unchanged.",
@@ -1804,6 +1807,9 @@ export const de: Record<MessageKey, string> = {
     "Esc geht eine Ebene zurück · Strg/⌘A wählt die sichtbaren Dateien aus",
   "review.bulk.applyRule": "Regel auf Auswahl anwenden",
   "review.bulk.notDuplicates": "Als keine Duplikate markieren",
+  "review.truncated.title": "Die ersten {count} Stapel werden angezeigt",
+  "review.truncated.detail":
+    "Diese Bibliothek enthält mehr Duplikat-Stapel, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",
   "review.bulk.folder": "Bevorzugter Ordner",
   "review.bulk.keepFromFolder": "Aus Ordner behalten",
   "review.bulk.impact":

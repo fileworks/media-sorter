@@ -1635,19 +1635,33 @@ export class MediaSorterApiClient {
 
   async listReviewGroups(
     kind: GroupKind = "exact",
-    options: { limit?: number; maxDistance?: number; excludedRoots?: string[] } = {},
-  ): Promise<{ groups: ReviewGroup[]; next_cursor: string | null; kind: string }> {
+    options: {
+      limit?: number;
+      maxDistance?: number;
+      excludedRoots?: string[];
+      /** Opaque marker from a previous page's `next_cursor`. */
+      cursor?: string | null;
+    } = {},
+  ): Promise<{
+    groups: ReviewGroup[];
+    next_cursor: string | null;
+    kind: string;
+    /** More groups exist than this page holds. */
+    truncated: boolean;
+  }> {
     await this.ensureReady();
     const { data } = await this.http.get<{
       groups: ReviewGroup[];
       next_cursor: string | null;
       kind: string;
+      truncated: boolean;
     }>("/api/review/groups", {
       params: {
         kind,
         limit: options.limit ?? 50,
         max_distance: options.maxDistance ?? 2,
         excluded_roots: options.excludedRoots ?? [],
+        ...(options.cursor ? { cursor: options.cursor } : {}),
       },
     });
     return data;
