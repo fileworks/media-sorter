@@ -53,6 +53,9 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
+    # Property testing (`P-08`). Ported from unpacksort, where it already covers
+    # the archive-path safety rules this backend re-derived as `path_identity_key`.
+    "hypothesis>=6.140.3",
     # Ruff is the single linter + formatter (replaces black + isort + pylint).
     "ruff>=0.16.1",
     "mypy>=2.3.0",
