@@ -26,6 +26,7 @@ import base64
 import io
 import unicodedata
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -230,6 +231,27 @@ def _display_label(value: object) -> str:
     return " ".join(unicodedata.normalize("NFKC", str(value)).split())
 
 
+@dataclass(frozen=True)
+class CloudConsent:
+    """A recorded decision to send photographs to a named third party (`D-06`).
+
+    Modelled on `HighConfidenceRule.consented_at` rather than a boolean, for the
+    same reason: a flag says somebody could have agreed, a timestamped record
+    says somebody did, and names what they agreed to. Consent for one provider
+    is not consent for another.
+    """
+
+    provider: str = ""
+    consented_at: str = ""
+
+    @property
+    def granted(self) -> bool:
+        return bool(self.provider) and bool(self.consented_at)
+
+    def covers(self, provider: str) -> bool:
+        return self.granted and self.provider == provider
+
+
 class _WarningTagger(AITagger):
     def __init__(self) -> None:
         self._warnings: list[str] = []
@@ -243,8 +265,36 @@ class _WarningTagger(AITagger):
         logger.warning(message)
 
 
-class AzureVisionTagger(_WarningTagger):
+class _CloudTagger(_WarningTagger):
+    """A tagger that uploads the picture. Refuses without matching consent.
+
+    The gate is here rather than at a call site because there is no call site:
+    nothing in `app/` constructs these classes today, so a gate in a caller
+    would be a gate in a file that does not exist yet. Whoever wires one up
+    inherits the refusal instead of having to remember it.
+    """
+
+    #: Named on the subclass, and the name consent must match.
+    provider: str = ""
+
+    def __init__(self, consent: CloudConsent | None = None) -> None:
+        super().__init__()
+        self._consent = consent or CloudConsent()
+
+    def _may_upload(self) -> bool:
+        if self._consent.covers(self.provider):
+            return True
+        self._warn(
+            f"refusing to send images to {self.provider or 'an unnamed provider'}: "
+            "no recorded consent for this provider. Nothing was uploaded."
+        )
+        return False
+
+
+class AzureVisionTagger(_CloudTagger):
     """Azure AI Vision Image Analysis ('tags' feature). Free F0 tier ≈ 5,000/mo."""
+
+    provider = "azure-vision"
 
     _API_VERSION = "2024-02-01"
 
@@ -254,14 +304,17 @@ class AzureVisionTagger(_WarningTagger):
         api_key: str,
         threshold: float = 0.2,
         locale: Locale = "en",
+        consent: CloudConsent | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(consent)
         self._endpoint = endpoint.rstrip("/")
         self._api_key = api_key
         self._threshold = threshold
         self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
+        if not self._may_upload():
+            return []
         try:
             payload = _image_to_jpeg_bytes(image)
             url = f"{self._endpoint}/computervision/imageanalysis:analyze"
@@ -295,8 +348,10 @@ class AzureVisionTagger(_WarningTagger):
             return []
 
 
-class ImaggaTagger(_WarningTagger):
+class ImaggaTagger(_CloudTagger):
     """Imagga tagging API. Free hobby tier ≈ 1,000/mo. Auth: key + secret."""
+
+    provider = "imagga"
 
     _URL = "https://api.imagga.com/v2/tags"
 
@@ -306,13 +361,16 @@ class ImaggaTagger(_WarningTagger):
         api_secret: str,
         threshold: float = 0.2,
         locale: Locale = "en",
+        consent: CloudConsent | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(consent)
         self._auth = (api_key, api_secret)
         self._threshold = threshold
         self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
+        if not self._may_upload():
+            return []
         try:
             payload = _image_to_jpeg_bytes(image)
             resp = httpx.post(
@@ -338,8 +396,10 @@ class ImaggaTagger(_WarningTagger):
             return []
 
 
-class GoogleCloudVisionTagger(_WarningTagger):
+class GoogleCloudVisionTagger(_CloudTagger):
     """Google Cloud Vision LABEL_DETECTION via a plain API key. Free ≈ 1,000/mo."""
+
+    provider = "google-cloud-vision"
 
     _URL = "https://vision.googleapis.com/v1/images:annotate"
 
@@ -349,14 +409,17 @@ class GoogleCloudVisionTagger(_WarningTagger):
         threshold: float = 0.2,
         max_results: int = 20,
         locale: Locale = "en",
+        consent: CloudConsent | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(consent)
         self._api_key = api_key
         self._threshold = threshold
         self._max_results = max_results
         self._locale = locale
 
     def tag(self, image: Image) -> list[tuple[str, float]]:
+        if not self._may_upload():
+            return []
         try:
             payload = _image_to_jpeg_bytes(image)
             content = base64.b64encode(payload).decode("ascii")

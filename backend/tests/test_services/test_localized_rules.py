@@ -24,6 +24,7 @@ from app.core.rules import (
 )
 from app.services.ai.base_tagger import (
     AzureVisionTagger,
+    CloudConsent,
     GoogleCloudVisionTagger,
     ImaggaTagger,
     LocalClipTagger,
@@ -301,11 +302,20 @@ def test_cloud_providers_request_or_map_german(
     monkeypatch.setattr("app.services.ai.base_tagger.httpx.post", fake_post)
     image = pytest.importorskip("PIL.Image").new("RGB", (2, 2))
 
-    assert AzureVisionTagger("https://azure", "key", locale="de").tag(image) == [("Straße", 0.9)]
+    # These taggers upload the picture, and since `D-06` they refuse to do that
+    # without a consent record naming the provider. What this test is about is
+    # localisation, so it grants consent rather than asserting the old
+    # no-questions-asked behaviour.
+    def consent(provider: str) -> CloudConsent:
+        return CloudConsent(provider=provider, consented_at="2026-08-20T00:00:00Z")
+
+    azure = AzureVisionTagger("https://azure", "key", locale="de", consent=consent("azure-vision"))
+    assert azure.tag(image) == [("Straße", 0.9)]
     assert calls[-1]["params"]["language"] == "de"
-    assert ImaggaTagger("key", "secret", locale="de").tag(image) == [("Straße", 0.95)]
+    imagga = ImaggaTagger("key", "secret", locale="de", consent=consent("imagga"))
+    assert imagga.tag(image) == [("Straße", 0.95)]
     assert calls[-1]["data"]["language"] == "de"
-    google = GoogleCloudVisionTagger("key", locale="de")
+    google = GoogleCloudVisionTagger("key", locale="de", consent=consent("google-cloud-vision"))
     assert google.tag(image) == [("Bildschirmfoto", 0.9)]
     assert google.warnings == ("provider.google.unmapped_label:Unmapped Thing",)
 

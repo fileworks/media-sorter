@@ -20,6 +20,7 @@ from app.services.ai import base_tagger
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.base_tagger import (
     AzureVisionTagger,
+    CloudConsent,
     GoogleCloudVisionTagger,
     ImaggaTagger,
     LocalClipTagger,
@@ -105,6 +106,13 @@ def test_build_tagger_unknown_provider_returns_none() -> None:
 # ------------------------------------------------------------------ #
 
 
+# `D-06`: these taggers upload the picture and refuse without a consent record
+# naming the provider. These tests are about parsing each provider's response,
+# so they grant it; the refusal itself is covered in `test_cloud_consent.py`.
+def _consent(provider: str) -> CloudConsent:
+    return CloudConsent(provider=provider, consented_at="2026-08-20T00:00:00Z")
+
+
 def test_azure_parses_tags_and_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {
         "tagsResult": {
@@ -115,7 +123,9 @@ def test_azure_parses_tags_and_thresholds(monkeypatch: pytest.MonkeyPatch) -> No
         }
     }
     calls = _patch_post(monkeypatch, payload)
-    tagger = AzureVisionTagger(endpoint="https://x/", api_key="key", threshold=0.2)
+    tagger = AzureVisionTagger(
+        endpoint="https://x/", api_key="key", threshold=0.2, consent=_consent("azure-vision")
+    )
     result = tagger.tag(_img())
     assert result == [("beach", pytest.approx(0.91))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
     assert calls[0]["headers"]["Ocp-Apim-Subscription-Key"] == "key"
@@ -124,7 +134,7 @@ def test_azure_parses_tags_and_thresholds(monkeypatch: pytest.MonkeyPatch) -> No
 def test_imagga_scales_confidence_and_parses(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"result": {"tags": [{"tag": {"en": "dog"}, "confidence": 80.0}]}}
     _patch_post(monkeypatch, payload)
-    tagger = ImaggaTagger(api_key="k", api_secret="s", threshold=0.2)
+    tagger = ImaggaTagger(api_key="k", api_secret="s", threshold=0.2, consent=_consent("imagga"))
     result = tagger.tag(_img())
     # `pytest.approx` compares fine at runtime; mypy sees `ApproxBase`
     # against `float` and calls the comparison non-overlapping.
@@ -134,7 +144,9 @@ def test_imagga_scales_confidence_and_parses(monkeypatch: pytest.MonkeyPatch) ->
 def test_google_parses_label_annotations(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"responses": [{"labelAnnotations": [{"description": "Sky", "score": 0.97}]}]}
     _patch_post(monkeypatch, payload)
-    tagger = GoogleCloudVisionTagger(api_key="k", threshold=0.2)
+    tagger = GoogleCloudVisionTagger(
+        api_key="k", threshold=0.2, consent=_consent("google-cloud-vision")
+    )
     assert tagger.tag(_img()) == [("Sky", pytest.approx(0.97))]  # type: ignore[comparison-overlap]  # the object is mutated between the two assertions
 
 
