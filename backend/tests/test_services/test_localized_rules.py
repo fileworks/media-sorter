@@ -255,7 +255,7 @@ def test_collision_reservation_covers_disk_and_same_batch(tmp_path: Path) -> Non
     destination = tmp_path / "2026" / "07" / "image.jpg"
     destination.parent.mkdir(parents=True)
     destination.write_bytes(b"existing")
-    reserved: set[Path] = set()
+    reserved: set[str] = set()
     first = reserve_destination(destination, reserved)
     second = reserve_destination(destination, reserved)
     assert first.name == "image_001.jpg"

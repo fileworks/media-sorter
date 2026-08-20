@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.background_tasks.task_manager import CancellationToken
 from app.core.exceptions import (
+    CorruptedFileError,
     InsufficientStorageError,
     IntegrityTransferError,
     MediaSortException,
@@ -60,6 +61,13 @@ from app.utils.media_utils import (
 from app.utils.path_utils import is_excluded_by_pattern, path_relationship, validate_source_root
 
 logger = get_logger(__name__)
+
+#: A finite ceiling for `max_recursion_depth: None` (C-05). "No limit" is a
+#: reasonable thing for a user to ask for and an unreasonable thing for a
+#: recursive walk to promise: a directory cycle turns it into a `RecursionError`
+#: that aborts the whole scan. 64 is far deeper than any real media library and
+#: far shallower than Python's recursion limit.
+MAX_TRAVERSAL_DEPTH = 64
 
 _CHUNK = 1024 * 1024  # 1 MB
 
@@ -111,6 +119,48 @@ def register_heif() -> None:
         pass  # HEIC just won't be openable; callers handle None
 
 
+#: Ceiling on the sensor dimensions a RAW file may *declare* (F-06).
+#:
+#: `Image.MAX_IMAGE_PIXELS` is Pillow's decompression-bomb guard and LibRaw
+#: honours none of it: `raw.postprocess()` allocates height x width x 3 from
+#: numbers the file itself supplies. A crafted RAW claiming an enormous sensor
+#: therefore asks for an allocation bounded only by the header it wrote.
+#:
+#: 300 megapixels is roughly twice the largest medium-format sensor shipping
+#: today, so no real camera comes close, and the worst-case allocation stays
+#: bounded. `half_size=True` means the decode itself produces a quarter of this.
+MAX_RAW_DECLARED_PIXELS = 300_000_000
+
+
+def _refuse_absurd_raw_dimensions(path: Path, raw: Any) -> None:
+    """Check the declared sensor size before LibRaw allocates from it."""
+    sizes = getattr(raw, "sizes", None)
+
+    def _dimension(primary: str, fallback: str) -> object:
+        # `or` would be wrong here: a declared 0 is exactly the case worth
+        # refusing, and `0 or fallback` silently reads the other field instead.
+        value = getattr(sizes, primary, None)
+        return getattr(sizes, fallback, None) if value is None else value
+
+    height = _dimension("raw_height", "height")
+    width = _dimension("raw_width", "width")
+    if not isinstance(height, int) or not isinstance(width, int):
+        # Nothing to check against. Decoding is no more dangerous than before,
+        # and refusing every RAW whose bindings expose no sizes would be worse.
+        return
+    if height <= 0 or width <= 0:
+        raise CorruptedFileError(
+            f"RAW declares a non-positive sensor size ({width}x{height})",
+            str(path),
+        )
+    if height * width > MAX_RAW_DECLARED_PIXELS:
+        raise CorruptedFileError(
+            f"RAW declares {width}x{height} = {height * width} pixels, above the "
+            f"{MAX_RAW_DECLARED_PIXELS} ceiling; refusing to decode it",
+            str(path),
+        )
+
+
 def _open_raw(path: Path) -> Image | None:
     """Decode a RAW file to a PIL.Image.
 
@@ -134,6 +184,7 @@ def _open_raw(path: Path) -> Image | None:
                     return Image.open(io.BytesIO(thumb.data)).convert("RGB")
             except Exception:
                 pass
+            _refuse_absurd_raw_dimensions(path, raw)
             rgb = raw.postprocess(use_camera_wb=True, half_size=True, no_auto_bright=False)
             return Image.fromarray(rgb)
     except Exception as exc:
@@ -553,10 +604,34 @@ class FileSystemService:
         exclusions: tuple[Path, ...],
         *,
         is_root: bool,
+        visited: set[tuple[int, int]] | None = None,
     ) -> None:
         if cancel_token is not None and cancel_token.is_set():
             result.cancelled = True
             return
+        # C-05: a directory cycle — `a/loop -> ..`, a bind mount, a hardlinked
+        # directory — used to recurse until `RecursionError`, because
+        # `entry.is_dir()` follows symlinks and `max_depth` defaults to None.
+        # Identity is `(st_dev, st_ino)` rather than the path, so a cycle formed
+        # by any of those routes is recognised as the same directory.
+        if visited is None:
+            visited = set()
+        try:
+            marker = current.stat()
+            identity = (marker.st_dev, marker.st_ino)
+        except OSError as exc:
+            result.issues.append(TraversalIssue(str(current), type(exc).__name__, str(exc)))
+            return
+        if identity in visited:
+            result.issues.append(
+                TraversalIssue(
+                    str(current),
+                    "DirectoryCycle",
+                    "already visited in this traversal; not descending again",
+                )
+            )
+            return
+        visited.add(identity)
         try:
             entries: list[Path] = []
             for entry in current.iterdir():
@@ -647,21 +722,31 @@ class FileSystemService:
                     logger.debug("Excluded directory", path=str(entry))
                     result.excluded_directories += 1
                     continue
-                if max_depth is None or depth < max_depth:
-                    self._walk_result(
-                        root,
-                        entry,
-                        recursive,
-                        max_depth,
-                        depth + 1,
-                        result,
-                        exclude_patterns,
-                        min_file_size_kb,
-                        max_file_size_mb,
-                        cancel_token,
-                        exclusions,
-                        is_root=False,
+                effective_depth = MAX_TRAVERSAL_DEPTH if max_depth is None else max_depth
+                if depth >= effective_depth:
+                    result.issues.append(
+                        TraversalIssue(
+                            str(entry),
+                            "MaxDepthReached",
+                            f"stopped at depth {effective_depth}",
+                        )
                     )
+                    continue
+                self._walk_result(
+                    root,
+                    entry,
+                    recursive,
+                    max_depth,
+                    depth + 1,
+                    result,
+                    exclude_patterns,
+                    min_file_size_kb,
+                    max_file_size_mb,
+                    cancel_token,
+                    exclusions,
+                    is_root=False,
+                    visited=visited,
+                )
 
     def _walk(
         self,

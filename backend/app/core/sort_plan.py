@@ -8,6 +8,7 @@ small, exact authorization record to check before it writes anything.
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -17,17 +18,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
-from app.core.exceptions import ConflictError, PlanAuthorizationError
-from app.core.integrity import MutationActionKind, SourceEffect
-from app.core.provenance import OutcomeProvenance
-from app.services.destination import (
+from app.core.destination_paths import (
     CONTEXTUAL_COPY_FOLDER,
     QUARANTINE_FOLDERS,
     companion_destination,
+    contextualize_copy,
     copy_destination,
     reserve_destination,
 )
-from app.services.outcome_provenance import contextualize_copy
+from app.core.exceptions import ConflictError, PlanAuthorizationError
+from app.core.integrity import MutationActionKind, SourceEffect
+from app.core.paths import path_identity_key
+from app.core.provenance import OutcomeProvenance
 
 PlannedDisposition = Literal[
     "sort",
@@ -77,12 +79,30 @@ PLANNED_QUARANTINE_STATUSES = frozenset(
 
 def source_fingerprint(path: Path) -> str:
     """Versioned non-destructive hint used only to detect preview drift."""
-    observed = path.stat()
+    return _fingerprint_of(path.stat())
+
+
+def _fingerprint_of(observed: os.stat_result) -> str:
     return (
         "v2:cache_hint:"
         f"{observed.st_size}:{observed.st_mtime_ns}:"
         f"{getattr(observed, 'st_ctime_ns', 0)}:{observed.st_ino}"
     )
+
+
+def measured_identity(path: Path) -> tuple[str, int]:
+    """The drift fingerprint and the size, from **one** stat.
+
+    They have to agree, and they used to come from different places: the
+    fingerprint from a stat here, the size from whatever the preview recorded
+    minutes earlier. When the preview could not stat a file it recorded `0`, and
+    that `0` was frozen into the plan even though this stat had just succeeded —
+    so execution measured the real size, the drift guard compared it against
+    `0`, and refused the file as `source_resized`. Nothing had resized; the plan
+    had simply written down a size nobody measured.
+    """
+    observed = path.stat()
+    return _fingerprint_of(observed), observed.st_size
 
 
 class FrozenSortAction(BaseModel):
@@ -193,6 +213,19 @@ class FrozenSortPlan(BaseModel):
     copy_mode: bool = True
     converts_media: bool = False
     embeds_tags: bool = False
+    #: The catalog generation this plan was computed against (C-04).
+    #:
+    #: The configuration fingerprint answers "did the user change the settings?"
+    #: and nothing else. A file appearing in the *destination* after the preview
+    #: changes neither the settings nor the source, so a plan built before it
+    #: arrived was accepted and then failed that one file at execution time,
+    #: mid-run, with a per-file `destination_exists` report. The destination is
+    #: half of what a sort plan is about, and staleness has to mean both halves.
+    #:
+    #: `0` means "no catalog generation was recorded", which is how plans from
+    #: before this field are read: they are not refused, because refusing every
+    #: older plan is a worse answer than the one defect this prevents.
+    catalog_generation: int = 0
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
@@ -409,7 +442,7 @@ def _rewrite_reviewed_set(
     rewritten = list(actions)
     affected = _unit_indices(actions, primary_indices)
     reserved = {
-        Path(action.reviewed_destination_path).resolve(strict=False)
+        path_identity_key(str(Path(action.reviewed_destination_path).resolve(strict=False)))
         for index, action in enumerate(actions)
         if index not in affected
     }
@@ -519,7 +552,7 @@ def _rewrite_distinct_set(
     rewritten = list(actions)
     affected = _unit_indices(actions, primary_indices)
     reserved = {
-        Path(action.reviewed_destination_path).resolve(strict=False)
+        path_identity_key(str(Path(action.reviewed_destination_path).resolve(strict=False)))
         for index, action in enumerate(actions)
         if index not in affected
     }
@@ -633,6 +666,8 @@ def build_impact(
 def build_frozen_sort_plan(
     items: list[dict[str, Any]],
     config: Config,
+    *,
+    catalog_generation: int = 0,
 ) -> FrozenSortPlan:
     """Freeze preview outcomes and derive their impact from those same actions."""
     actions: list[FrozenSortAction] = []
@@ -665,17 +700,22 @@ def build_frozen_sort_plan(
                 else ("copy" if config.copy_instead_of_move else "move")
             )
             provenance = item.get("provenance")
+            planned_fingerprint, measured_size = measured_identity(source_path)
             actions.append(
                 FrozenSortAction(
                     source_path=str(source_path),
-                    source_fingerprint=source_fingerprint(source_path),
+                    source_fingerprint=planned_fingerprint,
                     destination_path=str(transfer_destination),
                     reviewed_destination_path=str(reviewed_destination),
                     kind=action_kind,
                     source_effect=(
                         "retained" if config.copy_instead_of_move else "remove_after_verification"
                     ),
-                    expected_size_bytes=int(item.get("file_size") or 0),
+                    # Measured here, not carried over from the preview record:
+                    # the stat above already succeeded, so there is no reason to
+                    # trust a number taken minutes ago that may have been a
+                    # fallback `0` for a file the preview could not read.
+                    expected_size_bytes=measured_size,
                     disposition="quarantine" if status in quarantine_statuses else "sort",
                     unit_id=item.get("unit_id"),
                     provenance=(
@@ -723,8 +763,7 @@ def build_frozen_sort_plan(
                 continue
             source_path = Path(str(companion_source))
             try:
-                companion_size = source_path.stat().st_size
-                companion_fingerprint = source_fingerprint(source_path)
+                companion_fingerprint, companion_size = measured_identity(source_path)
             except OSError:
                 # A scan and a preview are not the same instant. A sidecar that
                 # went in between is one companion the run cannot place, not a
@@ -766,6 +805,7 @@ def build_frozen_sort_plan(
     return FrozenSortPlan(
         plan_id=f"sortplan_{uuid.uuid4().hex[:20]}",
         config_fingerprint=config_fingerprint(config),
+        catalog_generation=catalog_generation,
         actions=tuple(actions),
         impact=build_impact(
             actions,

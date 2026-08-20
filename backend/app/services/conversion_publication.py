@@ -26,6 +26,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.core.logging_config import get_logger
 from app.services.conversion_guard import (
@@ -215,3 +216,18 @@ def _clear_stage(stage: Path) -> None:
         # concurrent operation's directory must survive.
         with contextlib.suppress(OSError):
             stage.parent.rmdir()
+
+
+def record_conversion(record: dict[str, Any], publication: ConversionPublication) -> None:
+    """Carry the conversion's evidence onto the file's report row."""
+    if not publication.converted:
+        if publication.kept_original_because is not None:
+            record["conversion_kept_original_because"] = publication.kept_original_because
+        return
+    record["conversion_proof"] = None if publication.proof is None else publication.proof.detail
+    record["conversion_output_bytes"] = (
+        None if publication.proof is None else publication.proof.size_bytes
+    )
+    if publication.quarantine_record is not None:
+        record["conversion_original_quarantine_id"] = publication.quarantine_record.record_id
+        record["conversion_original_bytes"] = publication.quarantine_record.size_bytes

@@ -317,7 +317,9 @@ export function DestinationTree({
                     key={line.node.path}
                     ref={treeWindow.measureElement}
                     data-virtual-index={virtual.index}
-                    className="absolute inset-x-0"
+                    // Clears the sticky tree heading when a row is scrolled
+                    // into view by the outer scroller.
+                    className="absolute inset-x-0 scroll-mt-8"
                     style={{ transform: `translateY(${virtual.start}px)` }}
                   >
                     <Row

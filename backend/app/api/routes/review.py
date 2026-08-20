@@ -18,12 +18,14 @@ from pydantic import BaseModel, Field
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config_fingerprint import config_fingerprint
 from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction, DuplicateGroup
-from app.core.library_profiles import CatalogPlacement
 from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
 from app.services.catalog import MediaCatalog
 from app.services.catalog_duplicates import CatalogDuplicateIndex
-from app.services.catalog_location import open_catalog
+from app.services.catalog_location import (
+    live_catalog_generation,
+    open_configured_catalog,
+)
 from app.services.catalog_views import CursorError, ViewQuery, aggregate, query_page
 from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.keeper_policies import (
@@ -102,11 +104,8 @@ async def _active_plan(
 
 
 def _catalog(container: Any) -> MediaCatalog:
-    profile = getattr(container.config, "library_profile", None)
-    placement = getattr(profile, "catalog", None) or CatalogPlacement()
-    if placement.mode != "application_data":
-        placement = CatalogPlacement()
-    return open_catalog(placement, data_dir=resolve_app_paths().data_dir)
+    # One definition, shared with the sort route's freshness check (C-04).
+    return open_configured_catalog(container)
 
 
 # --------------------------------------------------------------------------- #
@@ -546,8 +545,7 @@ def _policy_id(body: PolicyRequest, container: Any) -> str:
 
 
 def _live_generation(container: Any) -> int:
-    with _catalog(container) as catalog:
-        return catalog.current_generation()
+    return live_catalog_generation(container)
 
 
 def _current_groups(container: Any) -> list[Any]:

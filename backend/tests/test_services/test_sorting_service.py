@@ -1261,11 +1261,16 @@ async def test_process_file_apply_rename(tmp_path: Path) -> None:
     assert "IMG_2024-03-15" in record["dest_path"]
 
 
-def test_safe_stat_returns_zero_for_missing_file(tmp_path: Path) -> None:
-    """_safe_stat must return 0 rather than raising for a non-existent path (lines 367-368)."""
+def test_safe_stat_reports_a_missing_file_as_unknown_rather_than_raising(tmp_path: Path) -> None:
+    """_safe_stat must not raise for a non-existent path — and must not claim 0 bytes.
+
+    This asserted `== 0` until C-10: the real contract is "never raises", and
+    returning zero made an unreadable file indistinguishable from an empty one
+    (I-10). The size-separation cases live in `tests/test_unknown_size.py`.
+    """
     missing = tmp_path / "does_not_exist.jpg"
     result = SortingService._safe_stat(missing)
-    assert result == 0
+    assert result is None
 
 
 # ------------------------------------------------------------------ #

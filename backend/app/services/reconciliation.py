@@ -30,7 +30,7 @@ from app.core.integrity import (
     MutationManifestAction,
 )
 from app.core.logging_config import get_logger
-from app.services.verified_transfer import stream_sha256
+from app.services.verified_transfer import stage_glob, stream_sha256
 
 logger = get_logger(__name__)
 
@@ -180,11 +180,31 @@ def apply_safe_recovery(root: Path, report: ReconciliationReport) -> RecoveryOut
                 source_safety=_safety_of(item),
                 diagnostic_code=item.classification,
             )
-            if item.destination_verified:
+            # C-08: the report was the only evidence, and it can be arbitrarily
+            # old — `bootstrap` applies it unattended at startup. Anything that
+            # touched the destination in between (a sync client, a restore, a
+            # user) left the recommendation standing while the copy it rests on
+            # no longer existed. Both destructive branches below are gated on a
+            # fresh measurement instead, which is what this function's contract
+            # already claimed: "the destination independently hashes to the
+            # authorized content".
+            still_verified = item.destination_verified and _destination_still_verified(
+                root, report, item
+            )
+            if still_verified:
                 outcome.discarded_stages.extend(_discard(item.verified_stages))
                 outcome.discarded_stages.extend(_discard(item.unverified_stages))
+            elif item.destination_verified:
+                logger.warning(
+                    "Destination no longer matches its authorization; keeping every artifact",
+                    action_id=item.action_id,
+                    destination=str(item.destination_path),
+                )
             if item.recommended == "remove_verified_source":
-                _remove(item.source_path, outcome)
+                if still_verified:
+                    _remove(item.source_path, outcome)
+                else:
+                    outcome.unresolved_actions.append(item.action_id)
             elif item.recommended != "none":
                 outcome.unresolved_actions.append(item.action_id)
             events.emit(
@@ -266,6 +286,39 @@ def _reconcile_action(
     )
 
 
+def _destination_still_verified(
+    root: Path,
+    report: ReconciliationReport,
+    item: ActionReconciliation,
+) -> bool:
+    """Re-measure the destination against its stored authorization.
+
+    Deliberately re-read from the manifest rather than trusting the report:
+    the report is the thing that may be stale, so checking it against itself
+    would prove nothing. If the authorization can no longer be read at all,
+    the answer is "not verified" — the source stays.
+    """
+    authorized = {action.action_id: action for action in _authorized_by_id(root, report)}
+    action = authorized.get(item.action_id)
+    if action is None:
+        return False
+    present, matches = _content_state(Path(item.destination_path), action)
+    return present and matches
+
+
+def _authorized_by_id(
+    root: Path, report: ReconciliationReport
+) -> tuple[MutationManifestAction, ...]:
+    manifest = read_manifest(root, report.manifest_id)
+    if manifest is not None:
+        return manifest.actions
+    return read_manifest_actions(root, report.operation_id)
+
+
+#: Stage names written before the name carried its owning action (C-08).
+_LEGACY_STAGE_GLOB = ".*.ms-stage-*.tmp"
+
+
 def _content_state(path: Path, action: MutationManifestAction) -> tuple[bool, bool]:
     """Return ``(present, matches the authorized content)`` for one path."""
     try:
@@ -286,12 +339,31 @@ def _classify_stages(
     verified: list[Path] = []
     unverified: list[Path] = []
     try:
-        candidates = sorted(destination.parent.glob(".*.ms-stage-*.tmp"))
+        # C-08: this globbed `.*.ms-stage-*.tmp`, every action's stage in the
+        # directory. A verified action then discarded them all, including
+        # another action's leftover — which may be that action's only surviving
+        # copy if its source was already removed. Scoped to the owning action.
+        candidates = sorted(destination.parent.glob(stage_glob(action.action_id)))
     except OSError:
         return (), ()
     for candidate in candidates:
         _present, matches = _content_state(candidate, action)
         (verified if matches else unverified).append(candidate)
+
+    # Stages written before the name carried an owner cannot be attributed by
+    # name. Content is the only evidence left, so one is adopted *only* when it
+    # hashes to this action's authorized content — never merely because it sits
+    # in the same directory, which is the mistake being fixed above.
+    try:
+        legacy = sorted(destination.parent.glob(_LEGACY_STAGE_GLOB))
+    except OSError:
+        return tuple(verified), tuple(unverified)
+    for candidate in legacy:
+        if candidate in verified or candidate in unverified:
+            continue
+        _present, matches = _content_state(candidate, action)
+        if matches:
+            verified.append(candidate)
     return tuple(verified), tuple(unverified)
 
 

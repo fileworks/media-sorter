@@ -162,43 +162,6 @@ def append_collision(
     return provenance.model_copy(update={"path": (*provenance.path[:15], segment)})
 
 
-def contextualize_copy(
-    provenance: OutcomeProvenance,
-    *,
-    destination: Path,
-    destination_root: Path,
-    keeper: Path,
-) -> OutcomeProvenance:
-    """Attribute the actual keeper-relative path without borrowing the copy's date.
-
-    A copy whose own metadata says 2021 can legitimately follow a keeper into
-    2019. Reusing the ordinary date segments would therefore be a persuasive
-    lie. Each inherited folder is explicitly attributed to the keeper instead.
-    """
-    try:
-        relative = destination.relative_to(destination_root)
-    except ValueError:
-        relative = destination
-    parts = relative.parts
-    contextual = [
-        PathSegmentProvenance(
-            segment=segment,
-            decision="quarantine",
-            detail=f"follows kept copy {keeper.name}",
-        )
-        for segment in parts[:-1]
-    ]
-    if parts:
-        contextual.append(
-            PathSegmentProvenance(
-                segment=parts[-1],
-                decision="original_name",
-                detail=f"named for kept copy {keeper.stem} and its source root",
-            )
-        )
-    return provenance.model_copy(update={"path": tuple(contextual[:16])})
-
-
 def _path_segments(
     *,
     file_path: Path,

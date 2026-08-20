@@ -228,7 +228,10 @@ export function RecipeScreen({
               {/* The wider scope, offered where its consequences are listed. A
                 recipe stays narrow unless the user asks otherwise, and ticking
                 this grows the table above rather than changing what it means. */}
-              <label className="mt-3 flex items-start gap-2">
+              {/* `min-h-6` makes the 24px target structural rather than a
+                  side effect of the description happening to wrap to two
+                  lines (WCAG 2.2 SC 2.5.8). */}
+              <label className="mt-3 flex min-h-6 items-start gap-2">
                 <input
                   type="checkbox"
                   checked={resetOthers}

@@ -21,6 +21,10 @@ from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+#: `sysctl -n hw.memsize` prints one integer. Ten seconds is far beyond any
+#: healthy response and short enough that a wedged call cannot stall startup.
+_SYSCTL_TIMEOUT_SECONDS = 10
+
 ModelTier = Literal["off", "lite", "standard", "max"]
 
 _ACCELERATOR_EPS = {
@@ -47,7 +51,13 @@ def _ram_gb() -> float:
         if platform.system() == "Darwin":
             import subprocess
 
-            out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)
+            # I-12: every subprocess call is bounded. `sysctl` returning a
+            # single integer should take milliseconds; without a timeout a
+            # wedged call would hang hardware detection, and hardware detection
+            # runs during startup.
+            out = subprocess.check_output(
+                ["sysctl", "-n", "hw.memsize"], text=True, timeout=_SYSCTL_TIMEOUT_SECONDS
+            )
             return int(out.strip()) / (1024**3)
         if platform.system() == "Windows":
             import ctypes

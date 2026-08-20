@@ -119,11 +119,14 @@ export function ExecuteScreen({
                 "text-4xl font-bold tracking-tight",
                 failed ? "text-error" : "text-primary",
               )}
-              aria-live="polite"
             >
               {settled ? (done ? "100%" : `${percentage}%`) : `${percentage}%`}
             </span>
-            <span className="text-sm font-semibold text-foreground">
+            {/* The percentage changes on nearly every tick, so announcing it
+                turned a long run into a stream of numbers that talked over
+                everything else. The phase label changes when something
+                genuinely happened, which is what a listener needs to hear. */}
+            <span className="text-sm font-semibold text-foreground" aria-live="polite">
               {t(
                 failed
                   ? "execute.phase.failed"

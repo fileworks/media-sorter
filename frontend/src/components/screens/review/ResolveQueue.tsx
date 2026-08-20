@@ -569,7 +569,10 @@ export function ResolveQueue({
                   </p>
                 </div>
                 {/* This labelled selection feeds the bulk actions. */}
-                <label className="mt-0.5 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-3xs text-muted-foreground">
+                {/* `min-h-6` rather than `target-24`: this label carries visible
+                    text, so its own box is the target and only needed height
+                    (WCAG 2.2 SC 2.5.8). */}
+                <label className="mt-0.5 flex min-h-6 cursor-pointer items-center gap-1.5 whitespace-nowrap text-3xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={selectedSetIds.has(current.id)}

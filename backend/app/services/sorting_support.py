@@ -5,11 +5,13 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
+from app.core.exceptions import MutationPolicyError
 from app.core.integrity import MutationActionKind, PreservationProfile
 from app.core.integrity_policy import MutationAuthorization
 from app.core.logging_config import get_logger
@@ -33,6 +35,7 @@ from app.utils.path_utils import sanitize_path_segment
 
 if TYPE_CHECKING:
     from app.core.database import DatabaseManager
+    from app.services.config_service import ConfigService
     from app.services.filesystem_service import FileSystemService
     from app.services.metadata_service import MetadataService
 
@@ -60,10 +63,53 @@ class SortingSupportMixin:
     """Placement, quarantine, destination-planning, and persistence support."""
 
     _fs: FileSystemService
+    #: Needed by `_refuse_protected_without_execution`: without an
+    #: `OperationExecution` the protected-root set has to come from the same
+    #: configuration `run()` reads it from.
+    _config_service: ConfigService
     _metadata: MetadataService
     _extraction: DateExtractionService
     _db: DatabaseManager | None
     _collisions_planned: int
+
+    def _refuse_protected_without_execution(self, source: Path, destination: Path) -> None:
+        """C-14: never touch a reference root on the unguarded path.
+
+        `_place` and `_quarantine_transfer` fall back to `safe_move`/`safe_copy`
+        when there is no `OperationExecution`. That skips all three guarantees
+        `execution.place` provides — `_assert_not_protected`, the frozen-plan
+        guard, and the action journal — so a comparison-only reference root
+        could be written to by a path that recorded nothing.
+
+        Reference roots exist so a user can deduplicate *against* a library they
+        do not want reorganized, and that promise cannot depend on which code
+        path happened to run. The protected set normally lives on the execution;
+        without one it is derived from the same configuration `run()` derives
+        it from.
+
+        In production this branch is unreachable — `run()` builds an execution
+        for every non-dry run, and these transfers only happen when `dry_run` is
+        False — so this guards the seam rather than a live path.
+        """
+        references = getattr(self._config_service.get().library_profile, "references", ())
+        protected = tuple(
+            Path(str(reference.path)).expanduser().resolve(strict=False)
+            for reference in references or ()
+        )
+        if not protected:
+            return
+        for role, candidate in (("source", source), ("destination", destination)):
+            resolved = candidate.expanduser().resolve(strict=False)
+            for root in protected:
+                if resolved == root or root in resolved.parents:
+                    raise MutationPolicyError(
+                        "Reference folders are compared against, never changed.",
+                        reason="reference_root_is_immutable",
+                        role=role,
+                        path=str(candidate),
+                        reference_root=str(root),
+                        source_safety="source_retained",
+                    )
 
     def _place(
         self,
@@ -83,6 +129,7 @@ class SortingSupportMixin:
         """Place media through the authorized, journalled, verified executor."""
         move = not config.copy_instead_of_move
         if execution is None:
+            self._refuse_protected_without_execution(source, destination)
             return (
                 self._fs.safe_move(source, destination)
                 if move
@@ -200,7 +247,7 @@ class SortingSupportMixin:
         category: str | None = None,
         camera: str = "",
         route_suffix: str | None = None,
-        reserved_destinations: set[Path] | None = None,
+        reserved_destinations: set[str] | None = None,
     ) -> tuple[Path, Path]:
         """Compute a collision-free destination path without mutating storage."""
         dest_dir = build_dest_dir(
@@ -331,6 +378,7 @@ class SortingSupportMixin:
     ) -> None:
         """Quarantine through the same verified executor as normal placement."""
         if execution is None:
+            self._refuse_protected_without_execution(source, destination)
             if move:
                 self._fs.safe_move(source, destination)
             else:
@@ -349,11 +397,28 @@ class SortingSupportMixin:
         execution.outcomes[-1] = execution.outcomes[-1].model_copy(update={"code": "quarantined"})
 
     @staticmethod
-    def _safe_stat(path: Path) -> int:
+    def _safe_stat(path: Path) -> int | None:
+        """The file's size, or `None` when it could not be read (I-10).
+
+        Returning `0` here made an unreadable file indistinguishable from a
+        genuinely empty one. Every caller builds a record for an unmatched,
+        failed or corrupted file — precisely where a file that cannot be
+        stat'd is most likely — so the conflation understated the bytes at
+        stake without ever saying it had guessed.
+        """
         try:
             return path.stat().st_size
         except OSError:
-            return 0
+            return None
+
+    @staticmethod
+    def _unknown_size_count(records: Iterable[Mapping[str, Any]]) -> int:
+        """How many reported files have a size nobody could read.
+
+        Derived from the records themselves rather than tallied at each call
+        site, so the count cannot drift from the rows it describes.
+        """
+        return sum(1 for record in records if record.get("file_size") is None)
 
     def _persist_operation(
         self,

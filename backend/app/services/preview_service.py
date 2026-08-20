@@ -12,6 +12,7 @@ import time
 from collections.abc import Iterable, Sequence
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
@@ -120,6 +121,21 @@ def _outcome_payload(item: dict[str, Any]) -> dict[str, Any]:
         "candidates": date_record.get("candidates", []),
         "provenance": provenance,
     }
+
+
+def _catalog_generation_for(config: Config) -> int:
+    """The catalog generation behind this preview, or 0 when there is no catalog.
+
+    Zero is the honest answer for a library with no catalog, and it is also the
+    value `/sorting/start` treats as "not recorded" — so a preview that could
+    not name a generation never causes a start to be refused.
+    """
+    from app.services.catalog_location import live_catalog_generation
+
+    try:
+        return live_catalog_generation(SimpleNamespace(config=config))
+    except Exception:  # pragma: no cover - a missing catalog is not a preview failure
+        return 0
 
 
 class PreviewService:
@@ -326,7 +342,8 @@ class PreviewService:
         )
         slots: list[dict[str, Any] | None] = [None] * len(units)
         planned_items: dict[str, dict[str, Any]] = {}
-        reserved_destinations: set[Path] = set()
+        # Identity keys, not paths (C-06).
+        reserved_destinations: set[str] = set()
         operation_rules = (
             self._rules.for_operation(config)
             if isinstance(self._rules, RuleEngineService)
@@ -495,7 +512,11 @@ class PreviewService:
         self._latest_config_fingerprint = fingerprint
         self._latest_excluded_root_ids = scope.excluded_root_ids
         self._outcomes.replace(items)
-        plan = build_frozen_sort_plan(items, config)
+        # C-04: stamp the plan with the catalog generation it was computed
+        # against, so `/sorting/start` can tell that the destination moved on.
+        plan = build_frozen_sort_plan(
+            items, config, catalog_generation=_catalog_generation_for(config)
+        )
         # Only the current reviewed plan remains executable in memory. A stale
         # identifier can therefore never silently select an older set of
         # consequences. The store keeps it across a restart, where the same rule
@@ -567,9 +588,13 @@ class PreviewService:
         surfaced as a ``failed`` item so ``stats["will_fail"]`` stays meaningful.
         """
         try:
-            file_size = file_path.stat().st_size
+            file_size: int | None = file_path.stat().st_size
         except OSError:
-            file_size = 0
+            # `None`, not `0` (C-10 / I-10): a file whose size could not be read
+            # is not an empty file. The frozen plan measures its own sizes, so
+            # this figure is descriptive rather than authoritative — which is
+            # exactly why it must not invent one.
+            file_size = None
 
         # Classify cheaply up front, but defer the outcome until after duplicate
         # identity. A junk/thumbnail file may be the kept member of a set; its
@@ -876,8 +901,8 @@ class PreviewService:
                 camera=camera,
             )
         if status == "duplicate" and dest is not None and dup_of is not None:
+            from app.core.destination_paths import contextualize_copy
             from app.core.provenance import OutcomeProvenance
-            from app.services.outcome_provenance import contextualize_copy
 
             item["provenance"] = contextualize_copy(
                 OutcomeProvenance.model_validate(item["provenance"]),

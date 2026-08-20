@@ -1,7 +1,18 @@
 import { useEffect, useRef, type RefObject } from "react";
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+/**
+ * Only `button` excluded `[disabled]`, so a disabled input, select or textarea
+ * counted as a tab stop. The trap then cycled focus onto a control the browser
+ * will not focus, and the keyboard user's Tab appeared to do nothing.
+ */
+const FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
 
 /**
  * Trap Tab focus inside `ref` while `active` (WCAG 2.1 modal behaviour):

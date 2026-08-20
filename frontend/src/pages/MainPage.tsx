@@ -524,7 +524,7 @@ export default function MainPage() {
     unresolvedGroups: impact?.unresolved_count ?? 0,
     unplannedCount: impact?.unresolved_count ?? 0,
     freeBytes: analysis.result?.disk_space.destination_free_bytes ?? null,
-    requiredBytes: impact?.required_bytes ?? 0,
+    requiredBytes: impact?.required_bytes ?? null,
     quarantineWritable: true,
     conversionWithoutOriginals: impact?.conversion_without_originals ?? 0,
     companionsLeftInPlace: impact?.companions_left_in_place ?? 0,

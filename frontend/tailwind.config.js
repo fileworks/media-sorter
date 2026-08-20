@@ -100,6 +100,13 @@ export default {
       minHeight: {
         actionbar: "3.75rem", // 60px
       },
+      spacing: {
+        // The band at the bottom of the viewport that floating controls own:
+        // the action bar (3.75rem) plus the selection bar that sits above it,
+        // plus breathing room. Anything scrolled into view must clear it and
+        // anything floating must sit above it, so the number lives here once.
+        actionzone: "8rem",
+      },
       maxWidth: {
         workspace: "92.5rem", // 1480px
       },

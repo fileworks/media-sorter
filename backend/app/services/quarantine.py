@@ -624,6 +624,24 @@ def store_for_state_root(state_root: Path) -> QuarantineStore:
 
 
 @dataclass(frozen=True)
+class VolumeRequirement:
+    """One filesystem volume and what this run needs from it.
+
+    Volumes are identified by `st_dev`, not by path, because two roots that
+    look unrelated are one budget when they sit on the same device — and one
+    root's free space says nothing about another's when they do not.
+    """
+
+    path: Path
+    required_bytes: int
+    available_bytes: int
+
+    @property
+    def satisfied(self) -> bool:
+        return self.available_bytes >= self.required_bytes
+
+
+@dataclass(frozen=True)
 class PreflightResult:
     """What must be true before any planned action touches the filesystem."""
 
@@ -633,6 +651,8 @@ class PreflightResult:
     required_bytes: int = 0
     available_bytes: int = 0
     quarantine_available: bool = True
+    #: One entry per distinct volume this run would write to.
+    volumes: tuple[VolumeRequirement, ...] = ()
 
     @property
     def headline(self) -> str:
@@ -669,19 +689,30 @@ def preflight(
         blocked.append(conflict)
 
     required = int((quarantine_bytes + destination_bytes) * FREE_SPACE_MARGIN)
-    available = 0
-    target = destination or quarantine_root
-    if target is not None:
-        try:
-            target.mkdir(parents=True, exist_ok=True)
-            available = shutil.disk_usage(target).free
-        except OSError as exc:
-            blocked.append(f"the destination could not be prepared: {exc}")
-        else:
-            if available < required:
-                blocked.append(
-                    f"not enough free space: {required:,} bytes needed, {available:,} available"
-                )
+
+    # Each demand is charged to the root that actually receives those bytes.
+    # `quarantine_root` is the app-data store that holds conversion originals,
+    # which is routinely on a different device from a NAS or external-drive
+    # destination — summing both against one root would pass a run that cannot
+    # finish, and checking each in isolation would double-count when they share
+    # a device.
+    demands: list[tuple[Path, int]] = []
+    destination_target = destination or quarantine_root
+    if destination_target is not None:
+        demands.append((destination_target, destination_bytes))
+    quarantine_target = quarantine_root or destination
+    if quarantine_target is not None:
+        demands.append((quarantine_target, quarantine_bytes))
+
+    volumes, volume_errors = _volume_requirements(demands)
+    blocked.extend(volume_errors)
+    for volume in volumes:
+        if not volume.satisfied:
+            blocked.append(
+                f"not enough free space on {volume.path}: "
+                f"{volume.required_bytes:,} bytes needed, {volume.available_bytes:,} available"
+            )
+    available = min((volume.available_bytes for volume in volumes), default=0)
 
     quarantine_ready = True
     if quarantine_root is not None:
@@ -706,7 +737,55 @@ def preflight(
         required_bytes=required,
         available_bytes=available,
         quarantine_available=quarantine_ready,
+        volumes=volumes,
     )
+
+
+def _device_of(path: Path) -> int:
+    """The device a path lives on.
+
+    A named seam rather than an inline `path.stat().st_dev`: a test cannot mount
+    a second filesystem, and patching `pathlib.Path.stat` to fake one corrupts
+    pathlib's internal caches on some interpreters. This is the one fact the
+    grouping needs, so it is the one thing worth overriding.
+    """
+    return path.stat().st_dev
+
+
+def _volume_requirements(
+    demands: Sequence[tuple[Path, int]],
+) -> tuple[tuple[VolumeRequirement, ...], list[str]]:
+    """Group byte demands by the device that would receive them.
+
+    Two roots on one device share its free space, so their demands add up. Two
+    roots on different devices are independent budgets, and a run needs both.
+    """
+    errors: list[str] = []
+    #: device id -> (first path seen on it, summed requirement)
+    grouped: dict[int, tuple[Path, int]] = {}
+    for path, wanted in demands:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            device = _device_of(path)
+        except OSError as exc:
+            errors.append(f"{path} could not be prepared: {exc}")
+            continue
+        existing = grouped.get(device)
+        if existing is None:
+            grouped[device] = (path, wanted)
+        else:
+            grouped[device] = (existing[0], existing[1] + wanted)
+
+    volumes: list[VolumeRequirement] = []
+    for path, wanted in grouped.values():
+        required = int(wanted * FREE_SPACE_MARGIN)
+        try:
+            free = shutil.disk_usage(path).free
+        except OSError as exc:
+            errors.append(f"{path} could not be measured: {exc}")
+            continue
+        volumes.append(VolumeRequirement(path=path, required_bytes=required, available_bytes=free))
+    return tuple(volumes), errors
 
 
 # --------------------------------------------------------------------------- #

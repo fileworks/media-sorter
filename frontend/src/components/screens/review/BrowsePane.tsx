@@ -18,6 +18,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useViewportBudget } from "@/hooks/useViewportBudget";
 import { useI18n } from "@/i18n/I18nContext";
+import { MIN_TARGET_24 } from "@/lib/a11y";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { isDecidedState, isProposedState, isUndecidedState } from "@/lib/duplicateDecisions";
@@ -156,7 +157,8 @@ export function BrowsePane({
         {groups.map((group) => (
           <section
             key={group.path}
-            className="border-b border-border last:border-b-0"
+            // Clears the sticky group heading above it.
+            className="scroll-mt-8 border-b border-border last:border-b-0"
             style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
           >
             {group.direct ? (
@@ -247,6 +249,9 @@ export function BrowsePane({
               key={line.key}
               data-virtual-index={virtual.index}
               ref={windowing.measureElement}
+              // Clears the sticky column header when a row is scrolled into
+              // view, so a focused row is not hidden underneath it.
+              className="scroll-mt-8"
               style={{
                 position: "absolute",
                 top: 0,
@@ -589,7 +594,7 @@ function SetCopies({
                   onOpen={() => onEnlarge(row.source)}
                   openLabel={t("review.viewer.open", { name: row.name })}
                 />
-                <span className="absolute left-1 top-1">
+                <label className={cn(MIN_TARGET_24, "absolute left-1 top-1")}>
                   <input
                     type="checkbox"
                     checked={selected.has(row.source)}
@@ -604,7 +609,7 @@ function SetCopies({
                     }
                     className="h-3.5 w-3.5 rounded border-border bg-card/90 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
                   />
-                </span>
+                </label>
                 {(kept || locked || suggested) && (
                   <span
                     className={cn(
@@ -791,19 +796,20 @@ function FileLine({
       )}
       data-selected={selected}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        disabled={locked}
-        aria-label={row.name}
-        aria-description={locked ? t("review.stack.baselineHelp") : undefined}
-        onClick={(event) => event.stopPropagation()}
-        // Preserve shift-range selection from the checkbox event.
-        onChange={(event) =>
-          onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
-        }
-        className="h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-      />
+      <label className={MIN_TARGET_24} onClick={(event) => event.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={locked}
+          aria-label={row.name}
+          aria-description={locked ? t("review.stack.baselineHelp") : undefined}
+          // Preserve shift-range selection from the checkbox event.
+          onChange={(event) =>
+            onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
+          }
+          className="h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+        />
+      </label>
 
       <span onClick={(event) => event.stopPropagation()}>
         <Thumbnail
@@ -916,8 +922,9 @@ function GridTile({
       </Tooltip>
 
       {/* Keep the selection control visible after selection. */}
-      <span
+      <label
         className={cn(
+          MIN_TARGET_24,
           "absolute left-1 top-1 rounded bg-card/90 p-1 transition-opacity",
           selected
             ? "opacity-100"
@@ -935,7 +942,7 @@ function GridTile({
           }
           className="block h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
         />
-      </span>
+      </label>
 
       {locked && (
         <span className="absolute right-1 top-1 rounded bg-card/90 p-1">

@@ -874,6 +874,8 @@ export const en = {
     "{count} outcome(s) could not be frozen safely. Review the plan again before executing.",
   "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
   "preflight.blocking.space": "Not enough free space: {required} needed, {available} available.",
+  "preflight.blocking.spaceUnknown":
+    "How much space this run needs is not known yet, so it cannot be checked against the disk.",
   "preflight.reversible.copy":
     "{count} file(s) copied; the source remains available for re-running.",
   "preflight.reversible.skip": "{count} file(s) left exactly where they are.",
@@ -2652,6 +2654,8 @@ export const de: Record<MessageKey, string> = {
     "Die Quarantäne ist nicht beschreibbar; daher kann nichts sicher verschoben werden.",
   "preflight.blocking.space":
     "Nicht genug freier Speicher: {required} benötigt, {available} verfügbar.",
+  "preflight.blocking.spaceUnknown":
+    "Wie viel Speicher dieser Lauf benötigt, ist noch nicht bekannt und kann daher nicht gegen den Datenträger geprüft werden.",
   "preflight.reversible.copy":
     "{count} Datei(en) werden kopiert; die Quelle bleibt für eine erneute Ausführung erhalten.",
   "preflight.reversible.skip": "{count} Datei(en) bleiben unverändert an ihrem Ort.",
