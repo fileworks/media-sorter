@@ -56,6 +56,11 @@ dev = [
     # Property testing (`P-08`). Ported from unpacksort, where it already covers
     # the archive-path safety rules this backend re-derived as `path_identity_key`.
     "hypothesis>=6.140.3",
+    # Workflow tests parse `.github/workflows/*.yml` structurally rather than by
+    # substring, so the shape they assert is the shape Actions will read. It was
+    # only ever present transitively before, which is a CI break waiting to
+    # happen.
+    "pyyaml>=6.0.2",
     # Ruff is the single linter + formatter (replaces black + isort + pylint).
     "ruff>=0.16.1",
     "mypy>=2.3.0",
