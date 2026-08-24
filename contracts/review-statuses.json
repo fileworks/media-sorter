@@ -1,11 +1,26 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "generated_by": "scripts/generate_review_status_contract.py",
   "non_quarantining_preview_statuses": [
     "duplicate_unknown",
     "keep_in_place",
     "review_only",
     "sort"
+  ],
+  "operation_record_statuses": [
+    "already_in_destination",
+    "blocked",
+    "cancelled",
+    "companion_left_in_place",
+    "corrupted",
+    "duplicate",
+    "failed",
+    "future_date",
+    "incomplete_unit",
+    "junk",
+    "kept_in_place",
+    "success",
+    "unknown_date"
   ],
   "planned_quarantine_statuses": [
     "already_in_destination",

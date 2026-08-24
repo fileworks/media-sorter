@@ -12,6 +12,7 @@ import { formatDuration } from "@/lib/formatters";
 import { formatDate } from "@/lib/dateFormatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { useCountUp } from "@/hooks/useCountUp";
+import { REPORT_FILTER_TABS, reportTabForStatus, type ReportFilterTab } from "@/lib/reportStatuses";
 import { presentOutcome, type StatusTone } from "@/lib/statusPresentation";
 import type { OperationOutcome, OperationReport, FileOperationRecord } from "@/types/api";
 import { useI18n } from "@/i18n/I18nContext";
@@ -235,31 +236,13 @@ function StatsDashboard({
 
 // ── Section C — File Table ────────────────────────────────────────────────────
 
-type FilterTab = "all" | "sorted" | "quarantined" | "duplicates" | "failed";
+type FilterTab = ReportFilterTab;
 type SortCol = keyof Pick<
   FileOperationRecord,
   "source_path" | "dest_path" | "extracted_date" | "metadata_source" | "status"
 >;
 
-const FILTER_TABS: {
-  id: FilterTab;
-  statuses: string[] | null;
-}[] = [
-  { id: "all", statuses: null },
-  { id: "sorted", statuses: ["success"] },
-  {
-    id: "quarantined",
-    statuses: ["unknown_date", "future_date", "corrupted", "junk"],
-  },
-  {
-    id: "duplicates",
-    statuses: ["duplicate", "already_in_destination"],
-  },
-  {
-    id: "failed",
-    statuses: ["failed", "incomplete_unit", "unmatched_companion", "cancelled", "blocked"],
-  },
-];
+const FILTER_TABS = REPORT_FILTER_TABS;
 
 const STATUS_STYLES: Record<string, { key: string; className: string }> = {
   success: {
@@ -369,7 +352,8 @@ function FileTableSection({
     setPage(0);
   };
 
-  // Pre-compute tab counts once
+  // One table decides both which rows a tab shows and the number on it. They
+  // were two lists of the same strings, free to disagree.
   const tabCounts = useMemo(() => {
     const counts: Record<FilterTab, number> = {
       all: files.length,
@@ -379,16 +363,8 @@ function FileTableSection({
       failed: 0,
     };
     for (const f of files) {
-      if (f.status === "success") counts.sorted++;
-      else if (["unknown_date", "future_date", "corrupted", "junk"].includes(f.status))
-        counts.quarantined++;
-      else if (["duplicate", "already_in_destination"].includes(f.status)) counts.duplicates++;
-      else if (
-        ["failed", "incomplete_unit", "unmatched_companion", "cancelled", "blocked"].includes(
-          f.status,
-        )
-      )
-        counts.failed++;
+      const tab = reportTabForStatus(f.status);
+      if (tab !== null) counts[tab]++;
     }
     return counts;
   }, [files]);
