@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import sqlite3
+import sys
+import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
@@ -129,6 +132,175 @@ class CatalogUnit:
     members: tuple[FileRecord, ...]
 
 
+def _preflight_schema_read_only(path: Path) -> None:
+    """Read a catalog's version without opening a writable SQLite handle.
+
+    SQLite may create or recover ``-wal``, ``-shm`` or hot-journal siblings as
+    a side effect of an ordinary connection. A downgraded binary must refuse
+    before that point, so the future-schema check uses an explicit read-only
+    URI and performs no PRAGMA that can change journal mode.
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        return
+    # The effective schema may live only in a valid WAL. Opening the original,
+    # even read-only, may recover/checkpoint it and alter or remove siblings.
+    # Inspect a coherent disposable clone instead. Clone/no-atime copy keeps
+    # the original files' bytes and stat metadata untouched.
+    siblings = tuple(
+        candidate
+        for candidate in (
+            path,
+            path.with_name(path.name + "-wal"),
+            path.with_name(path.name + "-shm"),
+            path.with_name(path.name + "-journal"),
+        )
+        if candidate.exists()
+    )
+    before = {candidate: _stat_identity(candidate) for candidate in siblings}
+    try:
+        with tempfile.TemporaryDirectory(prefix="mediasort-catalog-preflight-") as temporary:
+            snapshot_root = Path(temporary)
+            snapshot = snapshot_root / path.name
+            _copy_without_source_atime(path, snapshot)
+            for suffix in ("-wal", "-journal"):
+                sibling = path.with_name(path.name + suffix)
+                if sibling.exists():
+                    _copy_without_source_atime(sibling, snapshot.with_name(snapshot.name + suffix))
+            # Do not copy SHM: it is a transient index containing process-local
+            # locks. SQLite safely rebuilds one beside the disposable WAL.
+            with closing(sqlite3.connect(snapshot)) as connection:
+                version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    except (OSError, sqlite3.DatabaseError, ValueError) as exc:
+        raise CatalogCorruptionError(
+            f"Catalog schema could not be inspected without mutation: {path}: {exc}"
+        ) from exc
+    after = {candidate: _stat_identity(candidate) for candidate in siblings}
+    if after != before:
+        raise CatalogCorruptionError(
+            f"Catalog changed while its schema was inspected: {path}; refusing writable open"
+        )
+    if version > CATALOG_SCHEMA_VERSION:
+        raise CatalogCorruptionError(
+            f"Catalog schema v{version} was written by a newer build "
+            f"(this build understands v{CATALOG_SCHEMA_VERSION}); the catalog and its "
+            "existing SQLite siblings were not modified"
+        )
+
+
+def _stat_identity(path: Path) -> tuple[int, int, int, int, int, int]:
+    observed = path.stat()
+    return (
+        observed.st_ino,
+        observed.st_size,
+        observed.st_mode,
+        observed.st_atime_ns,
+        observed.st_mtime_ns,
+        observed.st_ctime_ns,
+    )
+
+
+def _copy_without_source_atime(source: Path, destination: Path) -> None:
+    """Clone a SQLite file without reading the source through a normal handle."""
+    # Windows has no O_NOATIME equivalent. Always establish the explicit
+    # SetFileTime suppression handle before reading; an ordinary os.open()
+    # commonly succeeds and would silently bypass that guarantee.
+    if os.name == "nt":
+        _copy_windows_without_source_atime(source, destination)
+        return
+    if sys.platform == "darwin":
+        import ctypes
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        clonefile = libc.clonefile
+        clonefile.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int)
+        clonefile.restype = ctypes.c_int
+        if clonefile(os.fsencode(source), os.fsencode(destination), 0) == 0:
+            return
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(source))
+
+    flags = os.O_RDONLY | getattr(os, "O_NOATIME", 0)
+    source_fd = os.open(source, flags)
+    try:
+        with os.fdopen(source_fd, "rb", closefd=False) as reader, destination.open("xb") as writer:
+            shutil.copyfileobj(reader, writer)
+    finally:
+        os.close(source_fd)
+
+
+def _copy_windows_without_source_atime(source: Path, destination: Path) -> None:
+    """Read through a Windows handle whose access-time updates are disabled.
+
+    Relying on the system-wide last-access policy was not a proof: administrators
+    can enable it, and a future-schema refusal must not change even metadata.
+    ``SetFileTime`` documents the all-ones access-time sentinel specifically for
+    suppressing updates made through this handle. If that guarantee cannot be
+    established, preflight fails closed instead of falling back to a normal
+    copy.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    file_write_attributes = 0x0100
+    generic_read = 0x80000000
+    share_all = 0x00000001 | 0x00000002 | 0x00000004
+    open_existing = 3
+    sequential_scan = 0x08000000
+    invalid_handle = ctypes.c_void_p(-1).value
+
+    ctypes_namespace: Any = ctypes
+    windows_dll: Any = ctypes_namespace.WinDLL
+    windows_error: Any = ctypes_namespace.WinError
+    last_error: Any = ctypes_namespace.get_last_error
+    windows_runtime: Any = msvcrt
+    kernel32 = windows_dll("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    set_file_time = kernel32.SetFileTime
+    set_file_time.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    )
+    set_file_time.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+
+    handle = create_file(
+        str(source),
+        generic_read | file_write_attributes,
+        share_all,
+        None,
+        open_existing,
+        sequential_scan,
+        None,
+    )
+    if handle == invalid_handle:
+        raise windows_error(last_error())
+    suppress_update = wintypes.FILETIME(0xFFFFFFFF, 0xFFFFFFFF)
+    if not set_file_time(handle, None, ctypes.byref(suppress_update), None):
+        error = last_error()
+        close_handle(handle)
+        raise windows_error(error)
+    try:
+        source_fd = windows_runtime.open_osfhandle(int(handle), os.O_RDONLY)
+    except BaseException:
+        close_handle(handle)
+        raise
+    with os.fdopen(source_fd, "rb") as reader, destination.open("xb") as writer:
+        shutil.copyfileobj(reader, writer)
+
+
 class MediaCatalog:
     """The catalog's only writer and reader.
 
@@ -139,6 +311,7 @@ class MediaCatalog:
 
     def __init__(self, path: Path, *, busy_timeout_ms: int = 10_000) -> None:
         self.path = path
+        _preflight_schema_read_only(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = self._open(busy_timeout_ms)
         try:

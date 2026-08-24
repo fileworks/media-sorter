@@ -8,12 +8,14 @@ backend is localhost-only, so reading an arbitrary local path is by design.
 import asyncio
 import contextlib
 import io
+import mimetypes
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, Query, Response
 from PIL import Image, ImageChops, ImageOps
 from pydantic import BaseModel
+from starlette.responses import FileResponse
 
 from app.api.deps import ContainerDep
 from app.core.exceptions import UnsupportedMediaError
@@ -35,6 +37,8 @@ class MediaInfoResponse(BaseModel):
     extracted_date: str | None
     metadata_source: str
     media_type: str
+    duration_seconds: float | None
+    codec: str | None
 
 
 # Default longest-edge size of generated thumbnails, in pixels. Small enough to
@@ -185,6 +189,8 @@ def _media_info(path_str: str, extraction_service: Any) -> dict[str, Any]:
         "extracted_date": None,
         "metadata_source": "none",
         "media_type": "other",
+        "duration_seconds": None,
+        "codec": None,
     }
     if not path.is_file():
         return info
@@ -200,6 +206,12 @@ def _media_info(path_str: str, extraction_service: Any) -> dict[str, Any]:
     elif suffix in VIDEO_EXTENSIONS:
         info["media_type"] = "video"
         dims = _video_dimensions(path)
+        info["duration_seconds"] = probe_duration(path)
+        with contextlib.suppress(Exception):
+            probed = run_ffprobe_json(path, "stream=codec_name", select_streams="v:0")
+            streams = (probed or {}).get("streams", [])
+            if streams and streams[0].get("codec_name"):
+                info["codec"] = str(streams[0]["codec_name"])
     if dims is not None:
         info["width"], info["height"] = dims
 
@@ -214,6 +226,24 @@ def _media_info(path_str: str, extraction_service: Any) -> dict[str, Any]:
         pass
 
     return info
+
+
+@router.get("/media/content")
+async def media_content(container: ContainerDep, path: str = Query(...)) -> FileResponse:
+    """Stream a local video through the authenticated API session.
+
+    Browsers cannot attach the capability header to a plain ``<video src>``.
+    The frontend therefore fetches this response with the same authenticated
+    client used for thumbnails and hands the browser a short-lived object URL.
+    Unsupported, missing, and unreadable formats receive the same honest
+    fallback as the thumbnail endpoint.
+    """
+    del container  # Dependency execution authenticates the request.
+    source = Path(path)
+    if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise UnsupportedMediaError("No playable video is available for this file", file_path=path)
+    media_type = mimetypes.guess_type(source.name)[0] or "video/mp4"
+    return FileResponse(source, media_type=media_type, headers={"Cache-Control": "private"})
 
 
 @router.get("/media/info", response_model=MediaInfoResponse)

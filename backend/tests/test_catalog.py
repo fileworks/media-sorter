@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
+import sys
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -16,6 +18,7 @@ from typing import Any
 
 import pytest
 
+import app.services.catalog as catalog_module
 from app.core.catalog_schema import (
     CATALOG_SCHEMA_VERSION,
     FINGERPRINT_ROLE,
@@ -63,6 +66,129 @@ class TestSchema:
             first.register_root("r1", tmp_path)
         with MediaCatalog(path) as second:
             assert second.diagnostics().roots == 1
+
+    @staticmethod
+    def _snapshot(paths: tuple[Path, ...]) -> dict[Path, tuple[bytes, os.stat_result]]:
+        content = {path: path.read_bytes() for path in paths}
+        old_atime_ns = 946_684_800_000_000_000
+        for path in paths:
+            observed = path.stat()
+            os.utime(path, ns=(old_atime_ns, observed.st_mtime_ns))
+        return {path: (content[path], path.stat()) for path in paths}
+
+    @staticmethod
+    def _assert_unchanged(before: dict[Path, tuple[bytes, os.stat_result]]) -> None:
+        after_stats = {path: path.stat() for path in before}
+        for path, (content, observed) in before.items():
+            current = after_stats[path]
+            assert path.read_bytes() == content
+            assert (
+                current.st_ino,
+                current.st_size,
+                current.st_mode,
+                current.st_atime_ns,
+                current.st_mtime_ns,
+                current.st_ctime_ns,
+            ) == (
+                observed.st_ino,
+                observed.st_size,
+                observed.st_mode,
+                observed.st_atime_ns,
+                observed.st_mtime_ns,
+                observed.st_ctime_ns,
+            )
+
+    def test_future_main_schema_preflight_changes_no_file_metadata(self, tmp_path: Path) -> None:
+        path = tmp_path / "future.db"
+        with sqlite3.connect(path) as connection:
+            connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
+        before = self._snapshot((path,))
+
+        with pytest.raises(CatalogCorruptionError, match="newer build"):
+            MediaCatalog(path)
+
+        self._assert_unchanged(before)
+        assert not path.with_name(path.name + "-wal").exists()
+        assert not path.with_name(path.name + "-shm").exists()
+        assert not path.with_name(path.name + "-journal").exists()
+
+    def test_windows_preflight_always_uses_the_no_atime_handle(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        source = tmp_path / "source.db"
+        destination = tmp_path / "copy.db"
+        source.write_bytes(b"SQLite fixture")
+        calls: list[tuple[Path, Path]] = []
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr(
+            catalog_module,
+            "_copy_windows_without_source_atime",
+            lambda observed_source, observed_destination: calls.append(
+                (observed_source, observed_destination)
+            ),
+        )
+
+        catalog_module._copy_without_source_atime(source, destination)
+
+        assert calls == [(source, destination)]
+        assert not destination.exists()
+
+    def test_wal_carried_future_schema_is_refused_without_checkpointing(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "future-wal.db"
+        with sqlite3.connect(path) as initial:
+            initial.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION}")
+            initial.execute("CREATE TABLE evidence(value TEXT)")
+        writer = sqlite3.connect(path)
+        try:
+            assert writer.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+            writer.execute("PRAGMA wal_autocheckpoint=0")
+            writer.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
+            writer.execute("INSERT INTO evidence VALUES ('future')")
+            writer.commit()
+            wal = path.with_name(path.name + "-wal")
+            shm = path.with_name(path.name + "-shm")
+            assert wal.is_file() and shm.is_file()
+            assert int.from_bytes(path.read_bytes()[60:64], "big") == CATALOG_SCHEMA_VERSION
+            before = self._snapshot((path, wal, shm))
+
+            with pytest.raises(CatalogCorruptionError, match="newer build"):
+                MediaCatalog(path)
+
+            self._assert_unchanged(before)
+        finally:
+            writer.close()
+
+    def test_future_schema_with_a_hot_journal_is_refused_without_recovery(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "future-journal.db"
+        with sqlite3.connect(path) as connection:
+            connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
+            connection.execute("CREATE TABLE evidence(value TEXT)")
+            connection.execute("INSERT INTO evidence VALUES ('before')")
+        child = """
+import os, sqlite3, sys
+connection = sqlite3.connect(sys.argv[1])
+connection.execute('PRAGMA journal_mode=DELETE')
+connection.execute('BEGIN IMMEDIATE')
+connection.execute("UPDATE evidence SET value='uncommitted'")
+os._exit(17)
+"""
+        completed = subprocess.run([sys.executable, "-c", child, str(path)], check=False)
+        assert completed.returncode == 17
+        journal = path.with_name(path.name + "-journal")
+        assert journal.is_file()
+        before = self._snapshot((path, journal))
+
+        with pytest.raises(CatalogCorruptionError, match="newer build"):
+            MediaCatalog(path)
+
+        self._assert_unchanged(before)
 
     def test_a_corrupt_file_is_refused_rather_than_used(self, tmp_path: Path) -> None:
         path = tmp_path / "broken.db"
