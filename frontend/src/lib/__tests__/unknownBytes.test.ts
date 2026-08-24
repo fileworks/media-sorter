@@ -20,6 +20,7 @@ import { preflight, type PreflightInput } from "@/lib/operationCenter";
 
 function input(overrides: Partial<PreflightInput> = {}): PreflightInput {
   return {
+    impactState: "ready",
     actionableGroups: 3,
     sourceMutations: 0,
     acknowledgedSourceMutations: false,
@@ -53,6 +54,11 @@ describe("an unknown size renders as unknown", () => {
   it("still formats a known size", () => {
     // The guard against a placeholder that swallowed every number.
     expect(formatBytes(2048)).toMatch(/2/);
+  });
+
+  it("keeps a known zero distinct from an unknown byte count", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(0)).not.toBe(formatBytes(null));
   });
 });
 

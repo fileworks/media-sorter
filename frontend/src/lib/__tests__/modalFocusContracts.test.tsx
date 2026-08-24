@@ -10,8 +10,8 @@
  * suite, which is the thing worth catching.
  */
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { useRef } from "react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import confirmDialogSource from "@/components/ConfirmDialog.tsx?raw";
@@ -47,6 +47,30 @@ function renderModal(onClose: () => void) {
         </ModalFooter>
       </Modal>
     </I18nProvider>,
+  );
+}
+
+function NestedModalHarness() {
+  const [innerOpen, setInnerOpen] = useState(false);
+  return (
+    <I18nProvider>
+      <Modal open onClose={() => undefined} title="Outer dialog">
+        <ModalHeader />
+        <ModalBody>
+          <button type="button" onClick={() => setInnerOpen(true)}>
+            Open viewer
+          </button>
+          <button type="button">Outer action</button>
+        </ModalBody>
+      </Modal>
+      <Modal open={innerOpen} onClose={() => setInnerOpen(false)} title="Viewer">
+        <ModalHeader />
+        <ModalBody>
+          <button type="button">Viewer first</button>
+          <button type="button">Viewer last</button>
+        </ModalBody>
+      </Modal>
+    </I18nProvider>
   );
 }
 
@@ -161,6 +185,32 @@ describe("Modal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onInner).toHaveBeenCalledTimes(1);
     expect(onOuter).not.toHaveBeenCalled();
+  });
+
+  it("makes only the top layer modal and restores its exact trigger", async () => {
+    render(<NestedModalHarness />);
+    const trigger = screen.getByRole("button", { name: "Open viewer" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const panels = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
+    expect(panels).toHaveLength(2);
+    const [outer, inner] = panels;
+    expect(outer.getAttribute("aria-modal")).toBeNull();
+    expect(outer.closest("[data-modal-layer]")?.getAttribute("aria-hidden")).toBe("true");
+    expect(inner.getAttribute("aria-modal")).toBe("true");
+
+    const innerButtons = within(inner).getAllByRole("button");
+    innerButtons[innerButtons.length - 1]?.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(inner.contains(document.activeElement)).toBe(true);
+    expect(outer.contains(document.activeElement)).toBe(false);
+
+    fireEvent.click(within(inner).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.getByRole("dialog", { name: "Outer dialog" }).getAttribute("aria-modal")).toBe(
+      "true",
+    );
   });
 });
 

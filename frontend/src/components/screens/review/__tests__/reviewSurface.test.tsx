@@ -9,6 +9,7 @@
  * afterwards, and that a comparison never fails silently.
  */
 
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,7 +17,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReviewScreen } from "@/components/screens/ReviewScreen";
 import { I18nProvider, translate } from "@/i18n/I18nContext";
 import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
-import { api } from "@/services/api";
+import { api, type PlanReviewState } from "@/services/api";
 import type { Config, OutcomeProvenance, PreviewItem, PreviewResult } from "@/types/api";
 
 function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
@@ -70,6 +71,25 @@ function previewResult(...items: PreviewItem[]): PreviewResult {
   } as unknown as PreviewResult;
 }
 
+function durableReviewState(overrides: Partial<PlanReviewState> = {}): PlanReviewState {
+  return {
+    schema_version: 1,
+    config_fingerprint: "test",
+    decisions: [],
+    selected_set_ids: [],
+    mode: "browse",
+    queue_set_id: null,
+    detail_path: null,
+    viewer_path: null,
+    search: "",
+    tree_path: null,
+    view: "list",
+    sort: "name",
+    keep_policy: "smart",
+    ...overrides,
+  };
+}
+
 interface MemberSpec {
   path: string;
   role?: "input" | "reference";
@@ -120,21 +140,50 @@ let decisions: {
   outstandingSets: number;
   proposedSets: number;
   undecidedSets: number;
-} = { reviewedSets: [], outstandingSets: 0, proposedSets: 0, undecidedSets: 0 };
+  persistenceState: "saving" | "saved" | "error";
+  persistenceError: string | null;
+} = {
+  reviewedSets: [],
+  outstandingSets: 0,
+  proposedSets: 0,
+  undecidedSets: 0,
+  persistenceState: "saving",
+  persistenceError: null,
+};
 
 function renderReview(
   result: PreviewResult,
   config: Config = { ...TEST_CONFIG, duplicate_keeper_policy: "manual" },
-  callbacks: { onOpenSetting?: (anchor: string) => void; onRerunPreview?: () => void } = {},
+  callbacks: {
+    onOpenSetting?: (anchor: string) => void;
+    onRerunPreview?: () => void;
+    recoveredState?: PlanReviewState | null;
+    strict?: boolean;
+  } = {},
 ) {
-  decisions = { reviewedSets: [], outstandingSets: 0, proposedSets: 0, undecidedSets: 0 };
+  decisions = {
+    reviewedSets: [],
+    outstandingSets: 0,
+    proposedSets: 0,
+    undecidedSets: 0,
+    persistenceState: "saving",
+    persistenceError: null,
+  };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(
+  const review = (
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="en">
         <ReviewScreen
           result={result}
           config={config}
+          recoveredState={
+            callbacks.recoveredState === undefined
+              ? durableReviewState({
+                  mode: "browse",
+                  keep_policy: config.duplicate_keeper_policy,
+                })
+              : callbacks.recoveredState
+          }
           onOpenSetting={callbacks.onOpenSetting ?? (() => {})}
           onRerunPreview={callbacks.onRerunPreview ?? (() => {})}
           onDecisionsChange={(next) => {
@@ -142,8 +191,9 @@ function renderReview(
           }}
         />
       </I18nProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  return render(callbacks.strict ? <StrictMode>{review}</StrictMode> : review);
 }
 
 const en = (key: string, params?: Record<string, string | number>) => translate("en", key, params);
@@ -176,11 +226,9 @@ function showContents(folder: string) {
 }
 
 beforeEach(() => {
-  // Review intentionally remembers its mode in the browser. Give every test a
-  // fresh browser profile so one test ending in Resolve cannot make the next
-  // test start there. Node versions differ on whether jsdom's localStorage is
-  // available, so relying on the runner's implementation made this file pass
-  // locally and fail in CI.
+  // Give every test a fresh browser profile. Node versions differ on whether
+  // jsdom's localStorage is available, so relying on the runner's
+  // implementation made this file pass locally and fail in CI.
   const stored = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => stored.get(key) ?? null,
@@ -207,12 +255,60 @@ beforeEach(() => {
     partial_index: false,
     kind: "exact",
   });
+  vi.spyOn(api, "savePlanReviewState").mockImplementation(async (_planId, state) => state);
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("review entry", () => {
+  it("opens Browse when a new plan has no duplicate decisions", async () => {
+    localStorage.setItem("mediasort_review_mode", "browse");
+    renderReview(
+      previewResult(item()),
+      { ...TEST_CONFIG, duplicate_keeper_policy: "manual" },
+      { recoveredState: null },
+    );
+    await waitForReview();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: en("review.mode.browse") }).getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+    expect(localStorage.getItem("mediasort_review_mode")).toBeNull();
+  });
+
+  it("opens duplicate decisions first when a new plan has an actionable set", async () => {
+    renderReview(
+      previewResult(
+        item({ source: "/in/a.jpg" }),
+        item({
+          source: "/in/a-copy.jpg",
+          status: "duplicate",
+          duplicate_of: "/in/a.jpg",
+        }),
+      ),
+      undefined,
+      { recoveredState: null },
+    );
+    await waitForReview();
+
+    expect(
+      screen.getByRole("tab", { name: en("review.mode.resolve") }).getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("settles durable persistence when React StrictMode remounts effects", async () => {
+    renderReview(previewResult(item()), undefined, { recoveredState: null, strict: true });
+    await waitForReview();
+
+    await waitFor(() => expect(decisions.persistenceState).toBe("saved"));
+    expect(api.savePlanReviewState).toHaveBeenCalled();
+  });
 });
 
 describe("browse", () => {
@@ -375,9 +471,10 @@ describe("the stays branch", () => {
   });
 
   it("says how many sets are waiting, and the queue holds exactly that many", async () => {
-    renderReview(result);
+    renderReview(result, undefined, {
+      recoveredState: durableReviewState({ mode: "resolve", keep_policy: "manual" }),
+    });
     await waitForReview();
-    switchTo("resolve");
 
     expect(
       screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 1, total: 1 })}`)),
@@ -435,6 +532,35 @@ describe("resolve", () => {
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]);
     expect(positionIs(2)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "c.jpg" })).toBeTruthy();
+  });
+
+  it("serializes rapid durable saves so the newest decisions win", async () => {
+    const firstSave = deferred<PlanReviewState>();
+    const save = vi
+      .mocked(api.savePlanReviewState)
+      .mockImplementationOnce(() => firstSave.promise)
+      .mockImplementation(async (_planId, state) => state);
+    renderReview(result, undefined, {
+      recoveredState: durableReviewState({ mode: "resolve", keep_policy: "manual" }),
+    });
+    await waitForReview();
+
+    for (const name of ["b.jpg", "d.jpg"]) {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: en("review.resolve.keepThis", { name, number: 2 }),
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
+    }
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][1].decisions).toHaveLength(1);
+    await act(async () => firstSave.resolve(save.mock.calls[0][1]));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1][1].decisions).toHaveLength(2);
+    await waitFor(() => expect(decisions.persistenceState).toBe("saved"));
   });
 
   it("stays put when the set just decided was the last one open", async () => {
@@ -694,17 +820,25 @@ describe("resolve", () => {
     switchTo("browse");
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "a.jpg" } });
 
+    let persisted: PlanReviewState | undefined;
     await waitFor(() => {
-      const persisted = localStorage.getItem(`mediasort_review_state:${result.plan_id}`) ?? "";
-      expect(persisted).toContain("set-1");
-      expect(persisted).toContain("a.jpg");
+      persisted = vi
+        .mocked(api.savePlanReviewState)
+        .mock.calls.map((call) => call[1])
+        .find(
+          (state) =>
+            state.search === "a.jpg" &&
+            state.decisions.some((decision) => decision.group_id === "set-1"),
+        );
+      expect(persisted).toBeTruthy();
     });
     first.unmount();
 
-    const recovered = renderReview(result, {
-      ...TEST_CONFIG,
-      duplicate_keeper_policy: "largest",
-    });
+    const recovered = renderReview(
+      result,
+      { ...TEST_CONFIG, duplicate_keeper_policy: "largest" },
+      { recoveredState: persisted },
+    );
     await waitForReview();
     await waitFor(() =>
       expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]),
@@ -724,42 +858,30 @@ describe("resolve", () => {
     expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
   });
 
-  it("keeps one plan's snapshot in the browser, not one per plan ever reviewed", async () => {
+  it("removes legacy browser snapshots and writes the backend-owned state", async () => {
     localStorage.setItem("mediasort_review_state:plan-older", "{}");
     localStorage.setItem("mediasort_review_state:plan-oldest", "{}");
 
-    renderReview(result);
+    renderReview(result, undefined, { recoveredState: null });
     await waitForReview();
 
-    await waitFor(() =>
-      expect(localStorage.getItem(`mediasort_review_state:${result.plan_id}`)).not.toBeNull(),
-    );
+    await waitFor(() => expect(api.savePlanReviewState).toHaveBeenCalled());
+    expect(localStorage.getItem(`mediasort_review_state:${result.plan_id}`)).toBeNull();
     expect(localStorage.getItem("mediasort_review_state:plan-older")).toBeNull();
     expect(localStorage.getItem("mediasort_review_state:plan-oldest")).toBeNull();
   });
 
   it("rejects review state whose configuration fingerprint is stale", async () => {
-    localStorage.setItem(
-      `mediasort_review_state:${result.plan_id}`,
-      JSON.stringify({
-        schemaVersion: 2,
-        planId: result.plan_id,
-        configFingerprint: "different-config",
-        decisions: [["set-1", { kind: "keeper", memberId: "set-1:1" }]],
-        selectedSetIds: [],
-        mode: "browse",
-        queueSetId: null,
-        detailPath: null,
-        viewerPath: null,
-        search: "",
-        treePath: null,
-        view: "list",
-        sort: "name",
-        keepPolicy: "largest",
-      }),
+    renderReview(
+      result,
+      { ...TEST_CONFIG, duplicate_keeper_policy: "largest" },
+      {
+        recoveredState: durableReviewState({
+          config_fingerprint: "different-config",
+          decisions: [{ group_id: "set-1", kind: "keeper", member_id: "set-1:1" }],
+        }),
+      },
     );
-
-    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();
     await screen.findAllByRole("button", {
       name: new RegExp(en("review.stack.copies", { count: 2 })),
@@ -776,13 +898,17 @@ describe("resolve", () => {
       screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 2, total: 2 })}`)),
     ).toBeTruthy();
 
+    let persisted: PlanReviewState | undefined;
     await waitFor(() => {
-      const persisted = localStorage.getItem(`mediasort_review_state:${result.plan_id}`) ?? "";
-      expect(persisted).toContain('"queueSetId":"set-2"');
+      persisted = vi
+        .mocked(api.savePlanReviewState)
+        .mock.calls.map((call) => call[1])
+        .find((state) => state.queue_set_id === "set-2");
+      expect(persisted).toBeTruthy();
     });
     first.unmount();
 
-    renderReview(result);
+    renderReview(result, undefined, { recoveredState: persisted });
     await waitForReview();
     expect(
       screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 2, total: 2 })}`)),
@@ -800,12 +926,13 @@ describe("resolve", () => {
         name: en("review.setSelection.toggle", { name: "a.jpg" }),
       }),
     );
+    expect(screen.getByText(en("review.setSelection.count.one"))).toBeTruthy();
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: en("review.setSelection.toggle", { name: "c.jpg" }),
       }),
     );
-    switchTo("resolve");
+    fireEvent.click(screen.getByRole("button", { name: en("review.setSelection.review") }));
     expect(screen.getByText(en("review.setSelection.count", { count: 2 }))).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: en("review.bulk.notDuplicates") }));
@@ -825,6 +952,27 @@ describe("resolve", () => {
       { keep: "/in/a.jpg", demote: ["/in/b.jpg"] },
       { keep: "/in/c.jpg", demote: ["/in/d.jpg"], keep_all: true },
     ]);
+  });
+
+  it("selects the visible collapsed sets with Ctrl/Cmd+A", async () => {
+    renderReview(result);
+    await screen.findByRole("checkbox", {
+      name: en("review.setSelection.toggle", { name: "a.jpg" }),
+    });
+
+    fireEvent.keyDown(window, { key: "a", ctrlKey: true });
+
+    expect(
+      screen.getByRole("checkbox", {
+        name: en("review.setSelection.toggle", { name: "a.jpg" }),
+      }),
+    ).toHaveProperty("checked", true);
+    expect(
+      screen.getByRole("checkbox", {
+        name: en("review.setSelection.toggle", { name: "c.jpg" }),
+      }),
+    ).toHaveProperty("checked", true);
+    expect(screen.getByText(en("review.setSelection.count", { count: 2 }))).toBeTruthy();
   });
 
   it("ends with a way back rather than an empty frame", async () => {
@@ -895,7 +1043,9 @@ describe("a baseline decides its own set", () => {
     fireEvent.click(screen.getByRole("button", { name: en("review.compare.title") }));
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).queryByRole("button", { name: en("review.compare.keepBoth") }),
+      within(dialog).queryByRole("button", {
+        name: en("review.compare.keepBoth", { count: 2 }),
+      }),
     ).toBeNull();
     expect(
       within(dialog).queryByRole("button", { name: en("review.compare.confirmSelection") }),
@@ -1266,9 +1416,11 @@ describe("the Review Escape stack", () => {
         name: "Look at a.jpg full screen",
       }),
     );
-    expect(screen.getAllByRole("dialog")).toHaveLength(2);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
 
     fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("dialog", { name: en("review.compare.title") })).toBeTruthy();
 

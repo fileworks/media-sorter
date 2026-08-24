@@ -270,8 +270,9 @@ export function ExecutePreflight({
           <input
             type="checkbox"
             checked={input.acknowledgedSourceMutations}
+            disabled={input.impactState !== "ready"}
             onChange={(event) => onAcknowledge(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           />
           {result.acknowledgement
             ? input.sourceMutations > 0

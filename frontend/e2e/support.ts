@@ -2,7 +2,7 @@ import { type Page, type Locator } from "@playwright/test";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import type { OperationReport, PreviewResult } from "../src/types/api";
-import type { PlanRecoveryResponse } from "../src/services/api";
+import type { PlanRecoveryResponse, PlanReviewState } from "../src/services/api";
 
 const require = createRequire(import.meta.url);
 const DEFAULT_CONFIG = (
@@ -191,6 +191,8 @@ export const E2E_RECOVERY: PlanRecoveryResponse = {
   destination_fingerprint: "e2e-destination",
   source_fingerprints: { "input-1": "e2e-source" },
   reviewed_sets: [],
+  preview_result: E2E_PREVIEW_RESULT,
+  review_state: null,
 };
 
 /**
@@ -436,6 +438,32 @@ export async function focusObscuredBy(page: Page): Promise<ObscuredTarget | null
     const box = active.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) return null;
 
+    // Hit-test the part that can actually be seen. A tall control inside the
+    // modal's scrolling body keeps its full layout rectangle even where that
+    // rectangle is clipped by the body; sampling the clipped tail reports the
+    // pinned footer as an obstruction although no focus indicator is painted
+    // there. Real overlays inside the visible intersection are still caught.
+    let left = Math.max(0, box.left);
+    let right = Math.min(window.innerWidth, box.right);
+    let top = Math.max(0, box.top);
+    let bottom = Math.min(window.innerHeight, box.bottom);
+    const clips = new Set(["auto", "scroll", "hidden", "clip"]);
+    let ancestor = active.parentElement;
+    while (ancestor !== null && ancestor !== document.body) {
+      const style = getComputedStyle(ancestor);
+      const ancestorBox = ancestor.getBoundingClientRect();
+      if (clips.has(style.overflowX)) {
+        left = Math.max(left, ancestorBox.left);
+        right = Math.min(right, ancestorBox.right);
+      }
+      if (clips.has(style.overflowY)) {
+        top = Math.max(top, ancestorBox.top);
+        bottom = Math.min(bottom, ancestorBox.bottom);
+      }
+      ancestor = ancestor.parentElement;
+    }
+    if (right <= left || bottom <= top) return null;
+
     const describe = (element: Element): string => {
       const tag = element.tagName.toLowerCase();
       const id = element.id ? `#${element.id}` : "";
@@ -449,11 +477,11 @@ export async function focusObscuredBy(page: Page): Promise<ObscuredTarget | null
 
     // Inset by a pixel so a shared border does not read as an overlap.
     const points: [number, number][] = [
-      [box.left + 1, box.top + 1],
-      [box.right - 1, box.top + 1],
-      [box.left + 1, box.bottom - 1],
-      [box.right - 1, box.bottom - 1],
-      [box.left + box.width / 2, box.top + box.height / 2],
+      [left + 1, top + 1],
+      [right - 1, top + 1],
+      [left + 1, bottom - 1],
+      [right - 1, bottom - 1],
+      [left + (right - left) / 2, top + (bottom - top) / 2],
     ];
     for (const [x, y] of points) {
       if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
@@ -540,7 +568,15 @@ export async function* tabStops(page: Page, limit = 60): AsyncGenerator<Locator>
     const id = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
       if (!active || active === document.body) return null;
-      return `${active.tagName}:${active.id}:${(active.textContent ?? "").trim().slice(0, 24)}`;
+      const path: string[] = [];
+      let node: HTMLElement | null = active;
+      while (node !== null && node !== document.body) {
+        const parent: HTMLElement | null = node.parentElement;
+        const siblingIndex = parent === null ? 0 : Array.from(parent.children).indexOf(node);
+        path.push(`${node.tagName.toLowerCase()}:nth-child(${siblingIndex + 1})`);
+        node = parent;
+      }
+      return path.reverse().join(">");
     });
     if (id === null) return;
     if (seen.has(id)) return; // cycled back to the start
@@ -555,8 +591,13 @@ export async function* tabStops(page: Page, limit = 60): AsyncGenerator<Locator>
  * In dev, `api.ts` falls back to 127.0.0.1:8000 when Tauri IPC is absent, so
  * this is where the app's requests actually go.
  */
-export async function stubBackend(page: Page): Promise<void> {
+export async function stubBackend(
+  page: Page,
+  options: { previewResult?: PreviewResult; reviewState?: PlanReviewState | null } = {},
+): Promise<void> {
   const fixtureDefaults = configPayload();
+  const previewResult = options.previewResult ?? E2E_PREVIEW_RESULT;
+  let reviewState = options.reviewState ?? null;
   let currentConfig: Record<string, unknown> | undefined;
   const getDefaults = async (): Promise<Record<string, unknown>> => {
     return fixtureDefaults;
@@ -629,7 +670,14 @@ export async function stubBackend(page: Page): Promise<void> {
         return route.fulfill({ status: 415, body: "thumbnail unavailable" });
       return route.fulfill({ status: 200, contentType: "image/png", body: SYNTHETIC_PNG });
     }
-    if (url.includes("/api/sorting/plans/e2e-plan/recovery")) return body(E2E_RECOVERY);
+    if (url.includes("/api/sorting/plans/e2e-plan/review-state")) {
+      if (route.request().method() === "PUT") {
+        reviewState = route.request().postDataJSON() as PlanReviewState;
+      }
+      return body(reviewState);
+    }
+    if (url.includes("/api/sorting/plans/e2e-plan/recovery"))
+      return body({ ...E2E_RECOVERY, preview_result: previewResult, review_state: reviewState });
     if (url.includes("/api/sorting/impact")) return body(E2E_PREVIEW_RESULT.impact);
     if (url.includes("/api/sorting/start")) return body({ task_id: "e2e-sort" });
     if (url.includes("/api/sorting/e2e-sort"))

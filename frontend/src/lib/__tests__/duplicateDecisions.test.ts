@@ -73,6 +73,7 @@ describe("keeper proposal rationale", () => {
     );
 
     expect(rationale.winningRung.key).toBe("review.resolve.rationale.rung.largestSize");
+    expect(rationale.primaryRung.key).toBe("review.resolve.rationale.rung.largestSize");
     expect(rationale.tieBreak).toBeNull();
   });
 
@@ -86,8 +87,13 @@ describe("keeper proposal rationale", () => {
       "winner",
     );
 
+    expect(rationale.primaryRung.key).toBe("review.resolve.rationale.rung.largestSize");
     expect(rationale.winningRung.key).toBe("review.resolve.rationale.rung.newestDate");
-    expect(rationale.tieBreak).toBeNull();
+    expect(rationale.tieBreak?.key).toBe("review.resolve.rationale.rung.newestDate");
+    expect(rationale.comparisons).toEqual([
+      expect.objectContaining({ member: "winner.jpg", selected: true }),
+      expect.objectContaining({ member: "other.jpg", selected: false }),
+    ]);
   });
 
   it("discloses stable identity only when it was the decisive tie-break", () => {
@@ -97,6 +103,7 @@ describe("keeper proposal rationale", () => {
     const rationale = keeperRationale(group(first, second), "largest", "a");
 
     expect(rationale.winningRung.key).toBe("review.resolve.rationale.rung.stableIdentity");
+    expect(rationale.primaryRung.key).toBe("review.resolve.rationale.rung.largestSize");
     expect(rationale.tieBreak?.key).toBe("review.resolve.rationale.tie.stableIdentity");
   });
 

@@ -56,6 +56,15 @@ export function CopyRow({
     >
       <div className="relative">
         <Thumbnail path={row.source} maxPx={160} className="h-[3.625rem] w-[3.625rem] rounded-md" />
+        <button
+          type="button"
+          disabled={baseline}
+          aria-describedby={baseline ? "review-baseline-rule" : undefined}
+          aria-pressed={selected}
+          onClick={onSelect}
+          aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
+          className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        />
         {/* Overlay state remains visible regardless of filename length. */}
         <span
           className={cn(
@@ -84,16 +93,7 @@ export function CopyRow({
       </div>
 
       <div className="min-w-0">
-        {/* Sibling controls keep selection and detail actions independent. */}
-        <button
-          type="button"
-          disabled={baseline}
-          aria-describedby={baseline ? "review-baseline-rule" : undefined}
-          aria-pressed={selected}
-          onClick={onSelect}
-          aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
-          className="absolute inset-0 rounded-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-        />
+        {/* Selection and details are disjoint targets, so neither can obscure the other's focus. */}
         <button
           type="button"
           onClick={onOpenDetail}

@@ -39,9 +39,11 @@ describe("companion evidence shared by Plan, preflight, and Execute", () => {
     );
 
     expect(screen.getByText("Primary in unit unit-1")).toBeTruthy();
-    expect(screen.getByText(/Result: sort.*IMG_0001\.jpg/)).toBeTruthy();
+    expect(screen.getByText(/Result: Will be organized.*IMG_0001\.jpg/)).toBeTruthy();
     expect(
-      screen.getByText(/IMG_0001\.xmp.*edit sidecar.*attached.*unknown namespace/),
+      screen.getByText(
+        /IMG_0001\.xmp.*Edit sidecar.*Planned with the primary file.*unknown namespace/,
+      ),
     ).toBeTruthy();
     expect(screen.getByText(/Review this media unit after execution/)).toBeTruthy();
   });
@@ -54,7 +56,9 @@ describe("companion evidence shared by Plan, preflight, and Execute", () => {
     );
 
     expect(screen.getByText("Primärdatei in Einheit unit-1")).toBeTruthy();
-    expect(screen.getByText(/Ergebnis: sort.*Ziel:.*IMG_0001\.jpg/)).toBeTruthy();
-    expect(screen.getByText(/Rolle: edit sidecar.*Warnung:.*unknown namespace/)).toBeTruthy();
+    expect(screen.getByText(/Ergebnis: Wird einsortiert.*Ziel:.*IMG_0001\.jpg/)).toBeTruthy();
+    expect(
+      screen.getByText(/Rolle: Bearbeitungs-Sidecar.*Warnung:.*unknown namespace/),
+    ).toBeTruthy();
   });
 });

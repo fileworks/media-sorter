@@ -11,6 +11,7 @@ import { Thumbnail } from "@/components/ui/thumbnail";
 import { useMediaInfo, useReviewOutcome } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
+import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
@@ -98,7 +99,7 @@ export function DetailView({
     info.data?.width != null && info.data?.height != null
       ? `${info.data.width} × ${info.data.height}`
       : unknown;
-  const size = row.sizeBytes > 0 ? formatBytes(row.sizeBytes, { locale }) : unknown;
+  const size = formatBytes(row.sizeBytes, { locale, nullPlaceholder: unknown });
   const type = fileType(row.name);
 
   const outcomeRecord = outcome.data?.state === "available" ? outcome.data.outcome : null;
@@ -201,7 +202,7 @@ export function DetailView({
                   value: row.destination ?? t("review.destination.none"),
                   unknown: row.destination === null,
                 },
-                { id: "result", value: row.status.replace(/_/g, " ") },
+                { id: "result", value: plannedStatusLabel(row.status, t) },
                 { id: "reason", value: t(row.reason.key, row.reason.params) },
                 { id: "category", value: row.category ?? unknown, unknown: row.category === null },
                 {
@@ -218,12 +219,16 @@ export function DetailView({
                 row.unitId
                   ? {
                       id: "mediaUnit",
-                      value: t(
-                        row.unitPrimary
-                          ? "review.detail.mediaUnit.primary"
-                          : "review.detail.mediaUnit.member",
-                        { id: row.unitId },
-                      ),
+                      value:
+                        row.unitPrimary === null
+                          ? t("review.detail.mediaUnit.unknown", { id: row.unitId })
+                          : t(
+                              row.unitPrimary
+                                ? "review.detail.mediaUnit.primary"
+                                : "review.detail.mediaUnit.member",
+                              { id: row.unitId },
+                            ),
+                      unknown: row.unitPrimary === null,
                     }
                   : null,
                 row.companionCount > 0
@@ -234,8 +239,8 @@ export function DetailView({
                           ?.map((companion) =>
                             t("review.detail.companionEvidence", {
                               file: getBasename(companion.source),
-                              role: companion.role.replace(/_/g, " "),
-                              status: companion.status.replace(/_/g, " "),
+                              role: companionRoleLabel(companion.role, t),
+                              status: companionStatusLabel(companion.status, t),
                               destination: companion.destination ?? t("review.destination.none"),
                               warning: companion.warning ?? t("review.detail.companionNoWarning"),
                             }),

@@ -17,7 +17,7 @@ export type ByteUnit = "B" | "KB" | "MB" | "GB" | "TB";
 export interface FormatBytesOptions {
   /** Largest unit to scale up to. Default `"GB"`. */
   maxUnit?: ByteUnit;
-  /** Returned for `null`/`undefined`/`<= 0`/non-finite input. Default `"—"`. */
+  /** Returned for nullish, negative, or non-finite input. Default `"—"`. */
   nullPlaceholder?: string;
   /**
    * Decimal places for fractional units. `"auto"` (default) shows 1 decimal
@@ -35,7 +35,7 @@ const BYTE_UNITS: ByteUnit[] = ["B", "KB", "MB", "GB", "TB"];
 /**
  * Format a byte count as a human-readable size, e.g. `1536` → `"1.5 KB"`.
  *
- * @param bytes - the size in bytes (nullish/0/negative → `nullPlaceholder`)
+ * @param bytes - the size in bytes (nullish/negative/non-finite → `nullPlaceholder`; zero → `0 B`)
  * @param options - unit cap, placeholder, and decimal-place behaviour
  * @returns a formatted string such as `"4.2 MB"` or the placeholder
  *
@@ -50,8 +50,12 @@ export function formatBytes(
 ): string {
   const { maxUnit = "GB", nullPlaceholder = NULL_PLACEHOLDER, decimals = "auto", locale } = options;
 
-  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) {
     return nullPlaceholder;
+  }
+  if (bytes === 0) {
+    const zero = locale ? new Intl.NumberFormat(locale).format(0) : "0";
+    return `${zero} ${BYTE_UNITS[0]}`;
   }
 
   const maxIdx = BYTE_UNITS.indexOf(maxUnit);

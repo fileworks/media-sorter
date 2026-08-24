@@ -225,11 +225,13 @@ function generatedPlan(seed: number): GeneratedPlan {
         memberId,
         policy: "newest",
         rationale: {
+          primaryRung: { key: "review.resolve.rationale.rung.newestDate" },
           winningRung: { key: "review.resolve.rationale.rung.newestDate" },
           knownFacts: [{ key: "review.resolve.rationale.fact.members", params: { count: 2 } }],
           unknownFacts: [],
           tieBreak: null,
           limitation: null,
+          comparisons: [],
         },
       });
     if (state === 2) decisions.set(id, { kind: "keeper", memberId });

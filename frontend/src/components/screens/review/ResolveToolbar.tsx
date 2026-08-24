@@ -11,6 +11,7 @@ import { SortControl } from "@/components/screens/review/SortControl";
 import { useI18n } from "@/i18n/I18nContext";
 import type { ReviewSort } from "@/lib/reviewSort";
 import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
+import { FiCheckCircle } from "react-icons/fi";
 
 export function ResolveToolbar({
   rule,
@@ -51,6 +52,10 @@ export function ResolveToolbar({
   return (
     <div className="flex min-h-14 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border bg-card px-2.5 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("review.keepRule")}>
+        <Button size="sm" disabled={proposalCount === 0} onClick={onAcceptAllProposals}>
+          <FiCheckCircle className="h-3.5 w-3.5" aria-hidden />
+          {tCount("review.proposal.acceptAll", proposalCount)}
+        </Button>
         <label
           htmlFor="review-keep-rule"
           className="whitespace-nowrap text-3xs text-muted-foreground"
@@ -72,14 +77,6 @@ export function ResolveToolbar({
         </Select>
         <Button size="sm" variant="outline" disabled={openCount === 0} onClick={onCheckImpact}>
           {t("review.ruleImpact.check")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={proposalCount === 0}
-          onClick={onAcceptAllProposals}
-        >
-          {tCount("review.proposal.acceptAll", proposalCount)}
         </Button>
         <Button size="sm" variant="ghost" disabled={decidedCount === 0} onClick={onResetAll}>
           {t("review.resolve.resetAll")}

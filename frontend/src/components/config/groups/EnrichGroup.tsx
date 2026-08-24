@@ -1,11 +1,6 @@
 /** Enrich — optional conversion, tagging, and repair work. */
 
-import {
-  DEFAULT_AI_LABELS,
-  clampConfidence,
-  clampMargin,
-  clampMaxTags,
-} from "@/components/config/constants";
+import { clampConfidence, clampMargin, clampMaxTags } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
 import { AiCapabilityChip } from "@/components/config/fields/AiEngine";
 import { AiModelManager } from "@/components/config/fields/AiModelManager";
@@ -50,7 +45,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         ? t("config.folder.installLocal")
         : undefined;
 
-  const labels = config.ai_tagging_labels ?? DEFAULT_AI_LABELS;
+  const labels = config.ai_tagging_labels;
   const lossyFormat = config.image_format === "jpeg" || config.image_format === "webp";
 
   return (
@@ -93,12 +88,12 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         <Toggle
           id="convert-images"
           label={t("config.conversion.images")}
-          checked={config.convert_images ?? false}
+          checked={config.convert_images}
           onChange={(value) => updateConfig({ convert_images: value })}
         />
         <Select
           aria-label={t("config.conversion.imageFormat")}
-          value={config.image_format ?? "jpeg"}
+          value={config.image_format}
           disabled={!config.convert_images}
           onValueChange={(value) => updateConfig({ image_format: value as Config["image_format"] })}
           className="w-28"
@@ -136,12 +131,12 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         <Toggle
           id="convert-videos"
           label={t("config.conversion.videos")}
-          checked={config.convert_videos ?? false}
+          checked={config.convert_videos}
           onChange={(value) => updateConfig({ convert_videos: value })}
         />
         <Select
           aria-label={t("config.conversion.videoFormat")}
-          value={config.video_format ?? "mp4"}
+          value={config.video_format}
           disabled={!config.convert_videos}
           onValueChange={(value) => updateConfig({ video_format: value as Config["video_format"] })}
           className="w-28"
@@ -181,7 +176,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
           {hardware && !tooWeak && (
             <div className="grid gap-2.5 border-b border-border px-5 py-3.5 sm:grid-cols-3">
               {AI_TIERS.map((tier) => {
-                const active = (config.ai_model_tier ?? "auto") === tier;
+                const active = config.ai_model_tier === tier;
                 const recommended = hardware.recommended_tier === tier;
                 return (
                   <label
@@ -280,9 +275,14 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                   type="number"
                   min={1}
                   max={50}
-                  value={config.ai_tagging_max_tags ?? 10}
+                  value={config.ai_tagging_max_tags}
                   onChange={(event) =>
-                    updateConfig({ ai_tagging_max_tags: clampMaxTags(event.target.value) })
+                    updateConfig({
+                      ai_tagging_max_tags: clampMaxTags(
+                        event.target.value,
+                        config.ai_tagging_max_tags,
+                      ),
+                    })
                   }
                 />
               </SettingRow>
@@ -299,10 +299,13 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                   min={0}
                   max={1}
                   step={0.05}
-                  value={config.ai_tagging_confidence_threshold ?? 0.5}
+                  value={config.ai_tagging_confidence_threshold}
                   onChange={(event) =>
                     updateConfig({
-                      ai_tagging_confidence_threshold: clampConfidence(event.target.value),
+                      ai_tagging_confidence_threshold: clampConfidence(
+                        event.target.value,
+                        config.ai_tagging_confidence_threshold,
+                      ),
                     })
                   }
                 />
@@ -325,7 +328,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         <Toggle
           id="categorize-enabled"
           label={t("config.folder.categorize")}
-          checked={config.categorize_enabled ?? false}
+          checked={config.categorize_enabled}
           disabled={categorizeBlocked}
           onChange={(value) => updateConfig({ categorize_enabled: value })}
         />
@@ -341,7 +344,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
             last
           >
             <CategoryTagsInput
-              categories={config.categorize_categories ?? []}
+              categories={config.categorize_categories}
               onChange={(next) =>
                 updateConfig({
                   categorize_categories: next,
@@ -366,7 +369,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
             last
           >
             <CategorizeConfidenceSlider
-              value={config.categorize_confidence_threshold ?? 0.55}
+              value={config.categorize_confidence_threshold}
               onChange={(value) => updateConfig({ categorize_confidence_threshold: value })}
             />
           </SettingRow>
@@ -383,9 +386,14 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
               min={0}
               max={0.5}
               step={0.05}
-              value={config.categorize_min_margin ?? 0.15}
+              value={config.categorize_min_margin}
               onChange={(event) =>
-                updateConfig({ categorize_min_margin: clampMargin(event.target.value) })
+                updateConfig({
+                  categorize_min_margin: clampMargin(
+                    event.target.value,
+                    config.categorize_min_margin,
+                  ),
+                })
               }
               className="max-w-[8rem]"
             />
@@ -438,7 +446,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         <Toggle
           id="repair-enabled"
           label={t("config.other.repair")}
-          checked={config.repair_enabled ?? true}
+          checked={config.repair_enabled}
           onChange={(value) => updateConfig({ repair_enabled: value })}
         />
       </SettingRow>

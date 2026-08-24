@@ -491,4 +491,13 @@ input[type="range"]::-moz-range-track {
   .ui-button[data-size="icon"] {
     min-width: 44px;
   }
+  .review-grid-select {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .review-grid-select {
+    opacity: 1;
+  }
 }

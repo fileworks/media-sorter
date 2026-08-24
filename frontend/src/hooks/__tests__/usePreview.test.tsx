@@ -2,12 +2,17 @@
 
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePreview } from "@/hooks/usePreview";
-import { I18nProvider } from "@/i18n/I18nContext";
-import { api, type PlanRecoveryResponse, type PreviewResult } from "@/services/api";
+import { I18nProvider, useI18n } from "@/i18n/I18nContext";
+import {
+  api,
+  type PlanRecoveryResponse,
+  type PreviewResult,
+  type PreviewStatus,
+} from "@/services/api";
 import type { AnalysisResult } from "@/types/api";
 
 const STORAGE_KEY = "mediasort_completed_plan";
@@ -50,6 +55,7 @@ function preview(planId = "plan-current", configFingerprint = "config-current"):
 function recovery(
   planId = "plan-current",
   configFingerprint = "config-current",
+  result = preview(planId, configFingerprint),
 ): PlanRecoveryResponse {
   return {
     plan_id: planId,
@@ -57,6 +63,8 @@ function recovery(
     destination_fingerprint: "destination-current",
     source_fingerprints: { "/input/photo.jpg": "source-current" },
     reviewed_sets: [],
+    preview_result: result,
+    review_state: null,
   };
 }
 
@@ -91,35 +99,35 @@ function scanResult(total = 6): AnalysisResult {
 
 function store(
   result: PreviewResult,
-  evidence: PlanRecoveryResponse,
   planId = result.plan_id,
   analysis: AnalysisResult | null = null,
 ) {
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       planId,
-      result,
-      recovery: evidence,
+      configFingerprint: result.config_fingerprint,
       analysis,
     }),
   );
 }
 
+let browserStorage: Map<string, string>;
+
 describe("completed preview recovery", () => {
   beforeEach(() => {
-    const stored = new Map<string, string>();
+    browserStorage = new Map<string, string>();
     // Faithful down to `length`/`key`, because dropping a plan enumerates the
     // store to find that plan's Review snapshots.
     vi.stubGlobal("localStorage", {
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => stored.set(key, value),
-      removeItem: (key: string) => stored.delete(key),
-      clear: () => stored.clear(),
-      key: (index: number) => [...stored.keys()][index] ?? null,
+      getItem: (key: string) => browserStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => browserStorage.set(key, value),
+      removeItem: (key: string) => browserStorage.delete(key),
+      clear: () => browserStorage.clear(),
+      key: (index: number) => [...browserStorage.keys()][index] ?? null,
       get length() {
-        return stored.size;
+        return browserStorage.size;
       },
     });
   });
@@ -128,9 +136,9 @@ describe("completed preview recovery", () => {
     vi.restoreAllMocks();
   });
 
-  it("rejects a local snapshot whose pointer and rendered plan identity disagree", async () => {
-    store(preview("plan-rendered"), recovery("plan-pointer"), "plan-pointer");
-    const recover = vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery("plan-pointer"));
+  it("rejects a local pointer whose required identity is incomplete", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ schemaVersion: 3, planId: "plan-current" }));
+    const recover = vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery());
 
     const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
 
@@ -143,7 +151,7 @@ describe("completed preview recovery", () => {
 
   it("brings the plan's scan back with it, so nothing reads as unscanned", async () => {
     const evidence = recovery();
-    store(preview(), evidence, "plan-current", scanResult(6));
+    store(preview(), "plan-current", scanResult(6));
     vi.spyOn(api, "recoverSortPlan").mockResolvedValue(evidence);
 
     const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
@@ -172,27 +180,40 @@ describe("completed preview recovery", () => {
   });
 
   it("drops the Review snapshots of a plan it has just refused", async () => {
-    store(preview(), recovery());
+    store(preview());
     localStorage.setItem("mediasort_review_state:plan-current", "{}");
     localStorage.setItem("mediasort_review_stop:plan-current", "review");
-    vi.spyOn(api, "recoverSortPlan").mockResolvedValue({
-      ...recovery(),
-      destination_fingerprint: "destination-rewritten",
-    });
+    vi.spyOn(api, "recoverSortPlan").mockRejectedValue(new Error("destination changed"));
 
     const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.rehydrated).toBe(true));
+    expect(result.current.persistenceState).toBe("error");
+    expect(result.current.persistenceError).toMatch(/no longer recoverable/i);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(localStorage.getItem("mediasort_review_state:plan-current")).toBeNull();
     expect(localStorage.getItem("mediasort_review_stop:plan-current")).toBeNull();
   });
 
-  it("rejects backend evidence that differs from the durable reviewed fingerprints", async () => {
-    store(preview(), recovery());
+  it("does not re-run recovery when only the interface language changes", async () => {
+    store(preview());
+    const recover = vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery());
+
+    const { result } = renderHook(() => ({ preview: usePreview(), language: useI18n() }), {
+      wrapper: wrapper(),
+    });
+    await waitFor(() => expect(result.current.preview.persistenceState).toBe("saved"));
+
+    act(() => result.current.language.setLocale("de"));
+    await waitFor(() => expect(document.documentElement.lang).toBe("de"));
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(result.current.preview.result?.plan_id).toBe("plan-current");
+  });
+
+  it("rejects backend evidence that differs from the compact pointer", async () => {
+    store(preview());
     vi.spyOn(api, "recoverSortPlan").mockResolvedValue({
-      ...recovery(),
-      destination_fingerprint: "destination-rewritten",
+      ...recovery("plan-current", "different-config"),
     });
 
     const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
@@ -206,7 +227,7 @@ describe("completed preview recovery", () => {
   it("rehydrates an exact reviewed snapshot and retains all durable fingerprints", async () => {
     const resultFixture = preview();
     const evidence = recovery();
-    store(resultFixture, evidence);
+    store(resultFixture);
     vi.spyOn(api, "recoverSortPlan").mockResolvedValue(evidence);
 
     const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
@@ -214,9 +235,100 @@ describe("completed preview recovery", () => {
     await waitFor(() => expect(result.current.result?.plan_id).toBe("plan-current"));
     await waitFor(() => expect(result.current.rehydrated).toBe(true));
     expect(result.current.recovered).toBe(true);
-    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as {
-      recovery?: PlanRecoveryResponse;
-    };
-    expect(persisted.recovery).toEqual(evidence);
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Record<
+      string,
+      unknown
+    >;
+    expect(persisted).toMatchObject({
+      schemaVersion: 3,
+      planId: "plan-current",
+      configFingerprint: "config-current",
+    });
+    expect(persisted).not.toHaveProperty("result");
+    expect(persisted).not.toHaveProperty("recovery");
+    expect(result.current.recoveryEvidence).toEqual(evidence);
+    expect(result.current.persistenceState).toBe("saved");
+  });
+
+  it("stores a small pointer even when the durable snapshot contains 20,000 items", async () => {
+    const huge = {
+      ...preview(),
+      items: Array.from({ length: 20_000 }, (_, index) => ({
+        source: `/input/${index}.jpg`,
+        destination: `/output/${index}.jpg`,
+        status: "sort",
+      })),
+    } as PreviewResult;
+    store(huge);
+    vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery(undefined, undefined, huge));
+
+    const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.result?.items).toHaveLength(20_000));
+    await waitFor(() => expect(result.current.persistenceState).toBe("saved"));
+    const raw = localStorage.getItem(STORAGE_KEY) ?? "";
+    expect(raw.length).toBeLessThan(1_000);
+    expect(raw).not.toContain("/input/19999.jpg");
+  });
+
+  it("surfaces pointer-storage failure instead of claiming restart recovery", async () => {
+    const resultFixture = preview();
+    browserStorage.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 3,
+        planId: resultFixture.plan_id,
+        configFingerprint: resultFixture.config_fingerprint,
+        analysis: null,
+      }),
+    );
+    vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery());
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+
+    const { result } = renderHook(() => usePreview(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.result?.plan_id).toBe("plan-current"));
+    await waitFor(() => expect(result.current.persistenceState).toBe("error"));
+    expect(result.current.persistenceError).toBeTruthy();
+  });
+
+  it("persists a newly completed preview without re-running destination freshness", async () => {
+    const resultFixture = preview();
+    const recover = vi.spyOn(api, "recoverSortPlan").mockResolvedValue(recovery());
+    vi.spyOn(api, "beginOperation").mockReturnValue(() => undefined);
+    vi.spyOn(api, "startPreview").mockResolvedValue("preview-task");
+    vi.spyOn(api, "getPreviewStatus").mockResolvedValue({
+      task_id: "preview-task",
+      operation_kind: "preview",
+      status: "completed",
+      progress: { current: 1, total: 1, percentage: 100 },
+      partial: false,
+      issues: [],
+      events: [],
+      last_event_sequence: 1,
+      error: null,
+      failure: null,
+      result: { ...resultFixture },
+    } satisfies PreviewStatus);
+
+    const { result } = renderHook(() => usePreview(scanResult(1)), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.rehydrated).toBe(true));
+
+    let completion: Promise<PreviewResult | null>;
+    act(() => {
+      completion = result.current.generatePreview();
+    });
+    await waitFor(() => expect(result.current.result).toEqual(resultFixture));
+    await waitFor(() => expect(result.current.persistenceState).toBe("saved"));
+    await expect(completion!).resolves.toEqual(resultFixture);
+
+    expect(recover).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null")).toMatchObject({
+      schemaVersion: 3,
+      planId: resultFixture.plan_id,
+      configFingerprint: resultFixture.config_fingerprint,
+    });
   });
 });

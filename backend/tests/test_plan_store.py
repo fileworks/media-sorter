@@ -94,6 +94,62 @@ class TestRoundTrip:
         assert [p.name for p in store.root.glob("*.tmp")] == []
         assert store.path_for(plan.plan_id).is_file()
 
+    def test_preview_and_review_state_survive_without_rewriting_plan_identity(
+        self, store: PlanStore, tmp_path: Path
+    ) -> None:
+        plan = _plan(tmp_path)
+        preview = {
+            "plan_id": plan.plan_id,
+            "config_fingerprint": plan.config_fingerprint,
+            "items": [{"source": plan.actions[0].source_path}],
+        }
+        stored = store.save(plan, preview_result=preview)
+        envelope_before_review = store.path_for(plan.plan_id).read_bytes()
+        state = {
+            "schema_version": 1,
+            "config_fingerprint": plan.config_fingerprint,
+            "decisions": [{"group_id": "set-1", "kind": "keeper", "member_id": "member-1"}],
+            "selected_set_ids": ["set-1"],
+            "mode": "resolve",
+            "queue_set_id": "set-1",
+            "detail_path": None,
+            "viewer_path": None,
+            "search": "",
+            "tree_path": None,
+            "view": "grid",
+            "sort": "date",
+            "keep_policy": "smart",
+        }
+
+        store.save_review_state(
+            plan.plan_id,
+            state,
+            expected_config_fingerprint=plan.config_fingerprint,
+        )
+        reopened = PlanStore(store.root).load(plan.plan_id)
+
+        assert reopened.plan == plan
+        assert reopened.created_at == stored.created_at
+        assert reopened.expires_at == stored.expires_at
+        assert reopened.preview_result == preview
+        assert reopened.review_state == state
+        assert store.path_for(plan.plan_id).read_bytes() == envelope_before_review
+        assert store.review_path_for(plan.plan_id).is_file()
+        assert list(store.root.glob("*.tmp")) == []
+
+    def test_review_state_refuses_a_different_configuration(
+        self, store: PlanStore, tmp_path: Path
+    ) -> None:
+        plan = _plan(tmp_path)
+        store.save(plan, preview_result={"plan_id": plan.plan_id})
+
+        with pytest.raises(InvalidPlanStoreError, match="configuration"):
+            store.save_review_state(
+                plan.plan_id,
+                {"schema_version": 1},
+                expected_config_fingerprint="different",
+            )
+
 
 class TestExpiry:
     def test_a_plan_is_executable_inside_its_window(self, store: PlanStore, tmp_path: Path) -> None:

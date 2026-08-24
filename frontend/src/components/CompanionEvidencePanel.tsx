@@ -1,4 +1,5 @@
 import { useI18n } from "@/i18n/I18nContext";
+import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
 import { getBasename } from "@/lib/pathUtils";
 import type { PreviewItem } from "@/types/api";
 
@@ -47,7 +48,7 @@ export function CompanionEvidencePanel({
               </p>
               <p className="break-all text-3xs text-muted-foreground">
                 {t("companionEvidence.primaryOutcome", {
-                  status: item.status.replace(/_/g, " "),
+                  status: plannedStatusLabel(item.status, t),
                   destination: item.destination ?? t("review.destination.none"),
                 })}
               </p>
@@ -58,8 +59,8 @@ export function CompanionEvidencePanel({
                 >
                   {t("companionEvidence.companion", {
                     file: getBasename(companion.source),
-                    role: companion.role.replace(/_/g, " "),
-                    status: companion.status.replace(/_/g, " "),
+                    role: companionRoleLabel(companion.role, t),
+                    status: companionStatusLabel(companion.status, t),
                     destination: companion.destination ?? t("review.destination.none"),
                     warning: companion.warning ?? t("companionEvidence.noWarning"),
                   })}

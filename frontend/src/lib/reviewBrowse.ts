@@ -394,7 +394,7 @@ export interface ReviewStats {
   /** Duplicate sets this run holds, and the copies inside them it would park. */
   sets: number;
   copies: number;
-  copyBytes: number;
+  copyBytes: number | null;
   /** Sets with no decision. The run skips these whole. */
   undecided: number;
   /** Rule-ranked sets that still bind nothing. */
@@ -440,6 +440,7 @@ export function reviewStats(
   let sets = 0;
   let copies = 0;
   let copyBytes = 0;
+  let copyBytesKnown = true;
   let undecided = 0;
   let proposed = 0;
 
@@ -462,7 +463,8 @@ export function reviewStats(
     for (const row of entry.rows) {
       if (row === entry.keeper) continue;
       copies += 1;
-      copyBytes += row.sizeBytes;
+      if (row.sizeBytes === null) copyBytesKnown = false;
+      else copyBytes += row.sizeBytes;
     }
   }
 
@@ -475,7 +477,7 @@ export function reviewStats(
     staysPut,
     sets,
     copies,
-    copyBytes,
+    copyBytes: copyBytesKnown ? copyBytes : null,
     undecided,
     proposed,
     outstanding: undecided + proposed,

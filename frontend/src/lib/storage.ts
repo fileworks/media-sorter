@@ -8,28 +8,47 @@
  * a convenience: reads fall back, writes are best-effort, and nothing throws.
  */
 
-export function readStored(key: string): string | null {
+function browserStorage(): Storage | null {
   try {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage.getItem(key);
+    // Node 26 exposes an experimental global `localStorage` getter that emits
+    // a warning when read without `--localstorage-file`. Persistence is only
+    // meaningful when a browser Window exists, so never probe that Node global.
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    if (descriptor && "value" in descriptor) return descriptor.value as Storage;
+    const nodeProcess = (
+      globalThis as typeof globalThis & { process?: { versions?: { node?: string } } }
+    ).process;
+    // Vitest's jsdom Window inherits Node's accessor. Skip it; tests that need
+    // storage install the explicit data descriptor handled above.
+    if (nodeProcess?.versions?.node) return null;
+    return typeof window === "undefined" ? null : window.localStorage;
   } catch {
     return null;
   }
 }
 
-export function writeStored(key: string, value: string): void {
+export function readStored(key: string): string | null {
   try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, value);
+    return browserStorage()?.getItem(key) ?? null;
   } catch {
-    // Denied or full: durable state is optional, the run is not.
+    return null;
+  }
+}
+
+export function writeStored(key: string, value: string): boolean {
+  try {
+    const storage = browserStorage();
+    if (storage === null) return false;
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
   }
 }
 
 export function removeStored(key: string): void {
   try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.removeItem(key);
+    browserStorage()?.removeItem(key);
   } catch {
     // See `writeStored`.
   }
@@ -47,15 +66,16 @@ export function removeStored(key: string): void {
  */
 export function dropScopedExcept(prefix: string, keep: string | null): void {
   try {
-    if (typeof localStorage === "undefined") return;
+    const storage = browserStorage();
+    if (storage === null) return;
     const stale: string[] = [];
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
       if (key === null || !key.startsWith(prefix)) continue;
       if (keep !== null && key === `${prefix}${keep}`) continue;
       stale.push(key);
     }
-    for (const key of stale) localStorage.removeItem(key);
+    for (const key of stale) storage.removeItem(key);
   } catch {
     // See `writeStored`.
   }

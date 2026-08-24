@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import ts from "typescript";
 import operationCenterSource from "@/components/OperationCenter.tsx?raw";
 import sourcesScreenSource from "@/components/screens/SourcesScreen.tsx?raw";
@@ -108,10 +108,6 @@ function templateKeyPrefixes(): Set<string> {
 }
 
 describe("English/German resources", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("have exact non-empty key parity", () => {
     expect(Object.keys(de).sort()).toEqual(Object.keys(en).sort());
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
@@ -240,13 +236,21 @@ describe("English/German resources", () => {
   });
 
   it("loads the persisted locale and changes rendered resources immediately", () => {
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => (key === "mediasort_language" ? "de" : null),
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => (key === "mediasort_language" ? "de" : null),
+      },
     });
-
-    expect(storedLocale()).toBe("de");
-    expect(translate("en", "progress.analyzingFiles")).toBe("Analyzing files…");
-    expect(translate("de", "progress.analyzingFiles")).toBe("Dateien werden analysiert…");
+    try {
+      expect(storedLocale()).toBe("de");
+      expect(translate("en", "progress.analyzingFiles")).toBe("Analyzing files…");
+      expect(translate("de", "progress.analyzingFiles")).toBe("Dateien werden analysiert…");
+    } finally {
+      if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+      else Reflect.deleteProperty(globalThis, "localStorage");
+    }
   });
 
   it("localizes progress, errors, and accessible names", () => {

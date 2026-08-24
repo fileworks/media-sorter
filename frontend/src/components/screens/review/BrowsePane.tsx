@@ -20,6 +20,7 @@ import { useViewportBudget } from "@/hooks/useViewportBudget";
 import { useI18n } from "@/i18n/I18nContext";
 import { MIN_TARGET_24 } from "@/lib/a11y";
 import { formatBytes } from "@/lib/formatters";
+import { companionRoleLabel, companionStatusLabel } from "@/lib/evidenceLabels";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { isDecidedState, isProposedState, isUndecidedState } from "@/lib/duplicateDecisions";
 import { cn } from "@/lib/utils";
@@ -423,7 +424,9 @@ function SetHeader({
   const undecided = isUndecidedState(entry.decisionState) && !entry.hasBaseline;
   const proposed = isProposedState(entry.decisionState) && entry.proposedKeeper !== null;
   const settled = entry.hasBaseline || isDecidedState(entry.decisionState);
-  const bytes = entry.rows.reduce((sum, row) => sum + row.sizeBytes, 0);
+  const bytes = entry.rows.every((row) => row.sizeBytes !== null)
+    ? entry.rows.reduce((sum, row) => sum + (row.sizeBytes ?? 0), 0)
+    : null;
   const name = entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id;
 
   return (
@@ -907,13 +910,17 @@ function mediaUnitSummary(
 ): string | null {
   if (!row.unitId) return null;
   const membership = t(
-    row.unitPrimary ? "review.browse.unit.primary" : "review.browse.unit.member",
+    row.unitPrimary === null
+      ? "review.browse.unit.unknown"
+      : row.unitPrimary
+        ? "review.browse.unit.primary"
+        : "review.browse.unit.member",
     { id: row.unitId },
   );
   const companions = (row.companions ?? []).map((companion) =>
     t("review.browse.unit.companion", {
-      role: companion.role.replace(/_/g, " "),
-      status: companion.status.replace(/_/g, " "),
+      role: companionRoleLabel(companion.role, t),
+      status: companionStatusLabel(companion.status, t),
       destination: companion.destination ?? t("review.destination.none"),
       warning: companion.warning ?? t("review.browse.unit.noWarning"),
     }),
@@ -976,7 +983,7 @@ function GridTile({
           "absolute left-1 top-1 h-6 w-6 items-center justify-center rounded bg-card/90 transition-opacity",
           selected
             ? "opacity-100"
-            : "opacity-0 focus-within:opacity-100 group-hover/tile:opacity-100",
+            : "review-grid-select opacity-0 focus-within:opacity-100 group-hover/tile:opacity-100",
         )}
       >
         <input

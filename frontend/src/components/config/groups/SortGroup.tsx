@@ -181,13 +181,12 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
           <Select
             id="folder-structure"
             aria-label={t("config.organizeDate")}
-            value={structureKey(config.sort_criteria ?? ["year"])}
+            value={structureKey(config.sort_criteria)}
             disabled={!config.sort}
-            onValueChange={(value) =>
-              updateConfig({
-                sort_criteria: STRUCTURES.find((s) => s.value === value)?.criteria ?? ["year"],
-              })
-            }
+            onValueChange={(value) => {
+              const structure = STRUCTURES.find((candidate) => candidate.value === value);
+              if (structure) updateConfig({ sort_criteria: structure.criteria });
+            }}
             className="w-44"
           >
             {STRUCTURES.map((structure) => (
@@ -207,7 +206,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
           <Toggle
             id="camera-subfolder"
             label={t("config.folder.camera")}
-            checked={config.camera_subfolder_enabled ?? false}
+            checked={config.camera_subfolder_enabled}
             onChange={(value) => updateConfig({ camera_subfolder_enabled: value })}
           />
         </SettingRow>

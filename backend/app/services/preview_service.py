@@ -22,7 +22,7 @@ from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
-from app.core.plan_store import InvalidPlanStoreError, PlanStore, store_for_state_root
+from app.core.plan_store import InvalidPlanStoreError, PlanStore, StoredPlan, store_for_state_root
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import (
     PLANNED_QUARANTINE_STATUSES,
@@ -196,6 +196,24 @@ class PreviewService:
             return self._plan_store.load(plan_id).plan
         except InvalidPlanStoreError:
             return None
+
+    def stored_plan(self, plan_id: str) -> StoredPlan:
+        """Return the durable plan and preserve its typed refusal on failure."""
+        return self._plan_store.load(plan_id)
+
+    def save_review_state(
+        self,
+        plan_id: str,
+        state: dict[str, Any],
+        *,
+        expected_config_fingerprint: str,
+    ) -> None:
+        """Persist Review state in a sidecar bound to its durable authority."""
+        self._plan_store.save_review_state(
+            plan_id,
+            state,
+            expected_config_fingerprint=expected_config_fingerprint,
+        )
 
     @property
     def latest_excluded_root_ids(self) -> tuple[str, ...]:
@@ -530,8 +548,7 @@ class PreviewService:
         # consequences. The store keeps it across a restart, where the same rule
         # is enforced by the plan's own expiry rather than by this dictionary.
         self._plans = {plan.plan_id: plan}
-        self._plan_store.save(plan)
-        return {
+        result = {
             "config_fingerprint": fingerprint,
             "excluded_roots": list(scope.excluded_paths),
             "excluded_root_ids": list(scope.excluded_root_ids),
@@ -550,6 +567,12 @@ class PreviewService:
                 for item in traversal.unmatched_companions
             ],
         }
+        # The frozen actions authorise execution; this companion snapshot is
+        # the exact evidence Review rendered. Keeping both in one atomic
+        # envelope avoids storing a potentially large library in localStorage
+        # and lets a backend restart restore the same reviewed screen.
+        self._plan_store.save(plan, preview_result=result)
+        return result
 
     # ------------------------------------------------------------------ #
     # Per-file prediction                                                   #

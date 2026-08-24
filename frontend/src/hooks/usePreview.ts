@@ -8,7 +8,7 @@ import type { PlanRecoveryResponse } from "@/services/api";
 import type { AnalysisResult, PreviewResult, TaskProgress } from "@/types/api";
 
 const COMPLETED_PLAN_KEY = "mediasort_completed_plan";
-/** Review's own per-plan snapshots, dropped with the plan they belong to. */
+/** Legacy browser snapshots plus the current per-plan view stop. */
 const PLAN_SCOPED_PREFIXES = ["mediasort_review_state:", "mediasort_review_stop:"];
 
 /** Forget the completed plan and everything the Review screen kept about it. */
@@ -18,10 +18,9 @@ function forgetCompletedPlan(): void {
 }
 
 interface StoredCompletedPlan {
-  schemaVersion: 2;
+  schemaVersion: 3;
   planId: string;
-  result: PreviewResult;
-  recovery: PlanRecoveryResponse;
+  configFingerprint: string;
   /**
    * The scan the plan was built from.
    *
@@ -34,61 +33,23 @@ interface StoredCompletedPlan {
   analysis: AnalysisResult | null;
 }
 
-function sameStringMap(left: Record<string, string>, right: Record<string, string>): boolean {
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
-  );
-}
-
-function sameReviewedSets(
-  left: PlanRecoveryResponse["reviewed_sets"],
-  right: PlanRecoveryResponse["reviewed_sets"],
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function sameRecovery(left: PlanRecoveryResponse, right: PlanRecoveryResponse): boolean {
-  return (
-    left.plan_id === right.plan_id &&
-    left.config_fingerprint === right.config_fingerprint &&
-    left.destination_fingerprint === right.destination_fingerprint &&
-    sameStringMap(left.source_fingerprints, right.source_fingerprints) &&
-    sameReviewedSets(left.reviewed_sets, right.reviewed_sets)
-  );
-}
-
 function validStoredPlan(value: unknown): value is StoredCompletedPlan {
   if (typeof value !== "object" || value === null) return false;
   const stored = value as Partial<StoredCompletedPlan>;
   if (
-    stored.schemaVersion !== 2 ||
+    stored.schemaVersion !== 3 ||
     typeof stored.planId !== "string" ||
     stored.planId.length === 0 ||
-    typeof stored.result !== "object" ||
-    stored.result === null ||
-    typeof stored.recovery !== "object" ||
-    stored.recovery === null ||
+    typeof stored.configFingerprint !== "string" ||
+    stored.configFingerprint.length === 0 ||
     (stored.analysis !== null && typeof stored.analysis !== "object")
   ) {
     return false;
   }
-  const result = stored.result as Partial<PreviewResult>;
-  const recovery = stored.recovery as Partial<PlanRecoveryResponse>;
-  return (
-    result.plan_id === stored.planId &&
-    recovery.plan_id === stored.planId &&
-    typeof result.config_fingerprint === "string" &&
-    result.config_fingerprint === recovery.config_fingerprint &&
-    typeof recovery.destination_fingerprint === "string" &&
-    recovery.destination_fingerprint.length > 0 &&
-    typeof recovery.source_fingerprints === "object" &&
-    recovery.source_fingerprints !== null &&
-    Array.isArray(recovery.reviewed_sets)
-  );
+  return true;
 }
+
+export type PlanPersistenceState = "idle" | "saving" | "saved" | "error";
 
 /**
  * Runs the preview as a background task and polls for real progress, so the UI
@@ -96,6 +57,7 @@ function validStoredPlan(value: unknown): value is StoredCompletedPlan {
  */
 export function usePreview(scan: AnalysisResult | null = null) {
   const { t } = useI18n();
+  const recoveryTranslateRef = useRef(t);
   const queryClient = useQueryClient();
 
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -111,6 +73,9 @@ export function usePreview(scan: AnalysisResult | null = null) {
   /** The scan that came back with a recovered plan, until a live one replaces it. */
   const [recoveredScan, setRecoveredScan] = useState<AnalysisResult | null>(null);
   const [recoveryEvidence, setRecoveryEvidence] = useState<PlanRecoveryResponse | null>(null);
+  const [persistenceState, setPersistenceState] = useState<PlanPersistenceState>("idle");
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const [persistenceAttempt, setPersistenceAttempt] = useState(0);
   // Guard so we handle the terminal status exactly once.
   const handledRef = useRef(false);
   const releaseLoaderRef = useRef<(() => void) | null>(null);
@@ -120,10 +85,12 @@ export function usePreview(scan: AnalysisResult | null = null) {
   // to await the second one.
   const settleRef = useRef<((result: PreviewResult | null) => void) | null>(null);
 
-  // The backend owns the frozen plan; this local snapshot owns the review
-  // rendering data. Rehydrate only after the backend proves the plan,
-  // configuration, destination and source fingerprints are still current.
+  // localStorage owns only a compact pointer. The backend owns the frozen plan,
+  // the exact rendered snapshot, all fingerprints, and Review's durable state.
+  // A large library therefore cannot silently overflow browser storage and
+  // leave the UI pretending that restart recovery is available.
   useEffect(() => {
+    const translate = recoveryTranslateRef.current;
     let mounted = true;
     const raw = readStored(COMPLETED_PLAN_KEY);
     if (raw === null) {
@@ -150,22 +117,38 @@ export function usePreview(scan: AnalysisResult | null = null) {
       };
     }
     const storedPlan = parsed;
+    setPersistenceState("saving");
+    setPersistenceError(null);
     void api
       .recoverSortPlan(storedPlan.planId)
       .then((liveRecovery) => {
         if (!mounted) return;
-        if (!sameRecovery(storedPlan.recovery, liveRecovery)) {
+        const liveResult = liveRecovery.preview_result;
+        if (
+          liveRecovery.plan_id !== storedPlan.planId ||
+          liveRecovery.config_fingerprint !== storedPlan.configFingerprint ||
+          liveResult.plan_id !== storedPlan.planId ||
+          liveResult.config_fingerprint !== storedPlan.configFingerprint
+        ) {
           forgetCompletedPlan();
+          setPersistenceState("error");
+          setPersistenceError(translate("review.persistence.stale"));
           return;
         }
         setRecoveryEvidence(liveRecovery);
         setRecovered(true);
         setRecoveredScan(storedPlan.analysis);
-        setResult(storedPlan.result);
+        setResult(liveResult);
+        setPersistenceState("saved");
         setGeneration((current) => current + 1);
       })
-      .catch(() => {
-        if (mounted) forgetCompletedPlan();
+      .catch((cause: unknown) => {
+        if (!mounted) return;
+        forgetCompletedPlan();
+        setPersistenceState("error");
+        setPersistenceError(
+          extractErrorMessage(cause, translate("review.persistence.recoveryFailed")).message,
+        );
       })
       .finally(() => {
         if (mounted) setRehydrated(true);
@@ -179,47 +162,54 @@ export function usePreview(scan: AnalysisResult | null = null) {
     if (!rehydrated) return;
     if (result === null) {
       forgetCompletedPlan();
+      // Rehydration also reaches this branch after a failed/stale recovery.
+      // Keep that actionable error visible; explicit clear/new-run paths reset
+      // persistence themselves.
+      setPersistenceState((current) => (current === "error" ? current : "idle"));
       return;
     }
-    let cancelled = false;
-    const persist = (evidence: PlanRecoveryResponse) => {
-      if (cancelled) return;
+    const persist = () => {
       const stored: StoredCompletedPlan = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         planId: result.plan_id,
-        result,
-        recovery: evidence,
+        configFingerprint: result.config_fingerprint,
         analysis: scan ?? recoveredScan,
       };
-      writeStored(COMPLETED_PLAN_KEY, JSON.stringify(stored));
+      if (!writeStored(COMPLETED_PLAN_KEY, JSON.stringify(stored))) {
+        setPersistenceState("error");
+        setPersistenceError(t("review.persistence.pointerFailed"));
+        return;
+      }
+      setPersistenceState("saved");
+      setPersistenceError(null);
     };
-    if (
-      recoveryEvidence?.plan_id === result.plan_id &&
-      recoveryEvidence.config_fingerprint === result.config_fingerprint
-    ) {
-      persist(recoveryEvidence);
-    } else {
-      void api
-        .recoverSortPlan(result.plan_id)
-        .then((evidence) => {
-          if (
-            evidence.plan_id !== result.plan_id ||
-            evidence.config_fingerprint !== result.config_fingerprint
-          ) {
-            forgetCompletedPlan();
-            return;
-          }
-          setRecoveryEvidence(evidence);
-          persist(evidence);
-        })
-        .catch(() => {
-          if (!cancelled) forgetCompletedPlan();
-        });
+    setPersistenceState("saving");
+    setPersistenceError(null);
+    // A completed preview is returned only after PreviewService has durably
+    // written the frozen plan and this exact snapshot. Calling recovery here
+    // used to hash the complete destination a second time before Review could
+    // proceed. Full freshness validation belongs at restart recovery and live
+    // execution; the new-plan path only needs to store its compact pointer.
+    if (recoveryEvidence === null) {
+      persist();
+      return;
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [recoveredScan, recoveryEvidence, rehydrated, result, scan]);
+    if (
+      recoveryEvidence.plan_id !== result.plan_id ||
+      recoveryEvidence.config_fingerprint !== result.config_fingerprint ||
+      recoveryEvidence.preview_result.plan_id !== result.plan_id ||
+      recoveryEvidence.preview_result.config_fingerprint !== result.config_fingerprint
+    ) {
+      setPersistenceState("error");
+      setPersistenceError(t("review.persistence.stale"));
+      return;
+    }
+    persist();
+  }, [persistenceAttempt, recoveredScan, recoveryEvidence, rehydrated, result, scan, t]);
+
+  const retryPersistence = useCallback(() => {
+    setPersistenceAttempt((current) => current + 1);
+  }, []);
 
   const settle = useCallback((value: PreviewResult | null) => {
     settleRef.current?.(value);
@@ -321,6 +311,8 @@ export function usePreview(scan: AnalysisResult | null = null) {
       setRecovered(false);
       setRecoveredScan(null);
       setRecoveryEvidence(null);
+      setPersistenceState("idle");
+      setPersistenceError(null);
       setElapsed(0);
       handledRef.current = false;
       lastEventSequenceRef.current = 0;
@@ -351,6 +343,8 @@ export function usePreview(scan: AnalysisResult | null = null) {
     setRecovered(false);
     setRecoveredScan(null);
     setRecoveryEvidence(null);
+    setPersistenceState("idle");
+    setPersistenceError(null);
     setError(null);
     setCancelled(false);
     setElapsed(0);
@@ -414,6 +408,10 @@ export function usePreview(scan: AnalysisResult | null = null) {
     rehydrated,
     recovered,
     recoveredScan,
+    recoveryEvidence,
+    persistenceState,
+    persistenceError,
+    retryPersistence,
     generatePreview,
     resumePreview,
     cancelPreview,

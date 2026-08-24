@@ -79,7 +79,7 @@ export function ModelTierSelect({
 }) {
   const { t } = useI18n();
   const recommended = hardware.recommended_tier;
-  const tier = config.ai_model_tier ?? "auto";
+  const tier = config.ai_model_tier;
 
   const slowFlag = (tierValue: ResolvedTier): string =>
     recommended !== "off" && TIER_RANK[tierValue] > TIER_RANK[recommended]
@@ -133,7 +133,7 @@ export function ModelTierSelect({
         >
           <Toggle
             id="ai-allow-gpu"
-            checked={config.ai_allow_gpu ?? true}
+            checked={config.ai_allow_gpu}
             onChange={(v) => updateConfig({ ai_allow_gpu: v })}
           />
         </SettingRow>

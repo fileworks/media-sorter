@@ -21,6 +21,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -68,8 +69,24 @@ function useModalContext(): ModalContextValue {
  * cannot separate them, and without a stack one keypress closed the whole pile.
  */
 const modalStack: symbol[] = [];
+const modalStackListeners = new Set<() => void>();
+let modalStackVersion = 0;
 
-function useModalStack(active: boolean): { isTopmost: () => boolean } {
+function publishModalStack(): void {
+  modalStackVersion += 1;
+  for (const listener of modalStackListeners) listener();
+}
+
+function subscribeModalStack(listener: () => void): () => void {
+  modalStackListeners.add(listener);
+  return () => modalStackListeners.delete(listener);
+}
+
+function modalStackSnapshot(): number {
+  return modalStackVersion;
+}
+
+function useModalStack(active: boolean): { isTopmost: () => boolean; topmost: boolean } {
   const idRef = useRef<symbol | null>(null);
   if (!idRef.current) idRef.current = Symbol("modal");
   const id = idRef.current;
@@ -78,16 +95,19 @@ function useModalStack(active: boolean): { isTopmost: () => boolean } {
     if (!active) return;
     const previousOverflow = document.body.style.overflow;
     modalStack.push(id);
+    publishModalStack();
     document.body.style.overflow = "hidden";
     return () => {
       const index = modalStack.lastIndexOf(id);
       if (index !== -1) modalStack.splice(index, 1);
+      publishModalStack();
       if (modalStack.length === 0) document.body.style.overflow = previousOverflow;
     };
   }, [active, id]);
 
+  useSyncExternalStore(subscribeModalStack, modalStackSnapshot, modalStackSnapshot);
   const isTopmost = useCallback(() => modalStack[modalStack.length - 1] === id, [id]);
-  return { isTopmost };
+  return { isTopmost, topmost: isTopmost() };
 }
 
 interface ModalProps {
@@ -112,11 +132,18 @@ export function Modal({
   className,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const restoreTargetRef = useRef<HTMLElement | null>(null);
+  const previouslyOpenRef = useRef(false);
   const titleId = useId();
 
-  const { isTopmost } = useModalStack(open);
+  if (open && !previouslyOpenRef.current) {
+    restoreTargetRef.current = document.activeElement as HTMLElement | null;
+  }
+  previouslyOpenRef.current = open;
 
-  useFocusTrap(panelRef, open);
+  const { isTopmost, topmost } = useModalStack(open);
+
+  useFocusTrap(panelRef, open, isTopmost, restoreTargetRef.current);
 
   useEffect(() => {
     if (!open) return;
@@ -131,6 +158,9 @@ export function Modal({
 
   return createPortal(
     <div
+      data-modal-layer
+      aria-hidden={topmost ? undefined : true}
+      inert={!topmost}
       className={cn(
         "modal-backdrop-enter fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-4",
         // No blur: at 2px it reads as a rendering fault rather than depth. The
@@ -141,14 +171,14 @@ export function Modal({
       // that begins inside the panel — selecting a path, dragging the compare
       // slider — and releases outside it is not a request to close.
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (topmost && event.target === event.currentTarget) onClose();
       }}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
-        aria-modal="true"
+        aria-modal={topmost ? true : undefined}
         aria-labelledby={titleId}
         className={cn(
           // Opacity fades temporarily blend every line with the backdrop and

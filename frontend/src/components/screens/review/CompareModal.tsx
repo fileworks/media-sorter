@@ -11,6 +11,7 @@ import { Segmented } from "@/components/ui/setting-row";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes, formatDuration } from "@/lib/formatters";
+import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
 import { orderFacts, REVIEW_FACT_LABELS, type ReviewFactId } from "@/lib/reviewFacts";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
@@ -27,6 +28,8 @@ interface CompareModalProps {
   keeperId: string | null;
   /** The set both files belong to, or null when they are merely two files. */
   setId: string | null;
+  /** Full set size; the visible pair may be only two members of a larger set. */
+  setMemberCount?: number;
   /** A rule suggestion is evidence, never an implicit selection. */
   recommendedId?: string | null;
   recommendedLabel?: string | null;
@@ -165,6 +168,7 @@ export function CompareModal({
   b,
   keeperId,
   setId,
+  setMemberCount = 2,
   recommendedId = null,
   recommendedLabel = null,
   recommendationReason = null,
@@ -198,7 +202,14 @@ export function CompareModal({
   const decisionEnabled = sameSet && !decisionLocked;
   const aspect = pairAspect(a, b);
   const frameAspect = mode === "side" ? aspect * 2 : aspect;
-  const bothVideos = a.facts?.media_kind === "video" && b.facts?.media_kind === "video";
+  const kindA = a.facts?.media_kind ?? "unknown";
+  const kindB = b.facts?.media_kind ?? "unknown";
+  const bothVideos = kindA === "video" && kindB === "video";
+  const eitherVideo = kindA === "video" || kindB === "video";
+  const mediaKind = (file: ComparableFile) => {
+    const kind = file.facts?.media_kind;
+    return kind && kind !== "unknown" ? t(`review.mediaKind.${kind}`) : unknown;
+  };
   const resolution = (file: ComparableFile) =>
     dimensions(file) === null ? unknown : resolutionLabel(file.facts!);
   const megapixels = (file: ComparableFile) => {
@@ -219,14 +230,25 @@ export function CompareModal({
     });
   };
   const codec = (file: ComparableFile) => {
+    if (file.facts?.media_kind === "unknown" || file.facts === null) return unknown;
+    if (file.facts.media_kind !== "video") return t("review.compare.notApplicable");
     const fact = file.facts?.codec;
     return fact?.known && fact.value !== null && fact.value !== undefined
       ? String(fact.value)
       : unknown;
   };
+  const duration = (file: ComparableFile) => {
+    if (file.facts?.media_kind === "unknown" || file.facts === null) return unknown;
+    if (file.facts.media_kind !== "video") return t("review.compare.notApplicable");
+    return formatDuration(factNumber(file, "duration_seconds"), {
+      locale,
+      nullPlaceholder: unknown,
+    });
+  };
   const unit = (file: ComparableFile) => {
     if (file.unitId === undefined) return unknown;
     if (file.unitId === null) return t("review.compare.unit.standalone");
+    if (file.unitPrimary === null || file.unitPrimary === undefined) return unknown;
     return t(file.unitPrimary ? "review.compare.unit.primary" : "review.compare.unit.member", {
       id: file.unitId,
     });
@@ -237,8 +259,8 @@ export function CompareModal({
     return file.companions
       .map((companion) =>
         t("review.compare.companions.entry", {
-          role: companion.role.replace(/_/g, " "),
-          status: companion.status.replace(/_/g, " "),
+          role: companionRoleLabel(companion.role, t),
+          status: companionStatusLabel(companion.status, t),
           destination: companion.destination ?? unknown,
           warning: companion.warning ?? t("review.compare.companions.noWarning"),
         }),
@@ -550,6 +572,7 @@ export function CompareModal({
           ))}
         </div>
         {orderFacts<CompareFact>([
+          { id: "fileType", left: mediaKind(a), right: mediaKind(b) },
           {
             id: "resolution",
             left: resolution(a),
@@ -564,25 +587,18 @@ export function CompareModal({
             winner: larger(pixels(a), pixels(b)),
             winnerNote: t("review.compare.wins.moreDetail"),
           },
-          bothVideos
+          eitherVideo
             ? {
                 id: "duration",
-                left: formatDuration(factNumber(a, "duration_seconds"), {
-                  locale,
-                  nullPlaceholder: unknown,
-                }),
-                right: formatDuration(factNumber(b, "duration_seconds"), {
-                  locale,
-                  nullPlaceholder: unknown,
-                }),
-                winner: larger(
-                  factNumber(a, "duration_seconds"),
-                  factNumber(b, "duration_seconds"),
-                ),
+                left: duration(a),
+                right: duration(b),
+                winner: bothVideos
+                  ? larger(factNumber(a, "duration_seconds"), factNumber(b, "duration_seconds"))
+                  : null,
                 winnerNote: t("review.compare.wins.longer"),
               }
             : null,
-          bothVideos ? { id: "codec", left: codec(a), right: codec(b) } : null,
+          eitherVideo ? { id: "codec", left: codec(a), right: codec(b) } : null,
           {
             id: "size",
             left: a.facts ? formatBytes(a.facts.size_bytes, { locale }) : unknown,
@@ -605,8 +621,8 @@ export function CompareModal({
           },
           {
             id: "result",
-            left: a.plannedStatus ?? unknown,
-            right: b.plannedStatus ?? unknown,
+            left: a.plannedStatus ? plannedStatusLabel(a.plannedStatus, t) : unknown,
+            right: b.plannedStatus ? plannedStatusLabel(b.plannedStatus, t) : unknown,
           },
           {
             id: "confidence",
@@ -713,7 +729,7 @@ export function CompareModal({
         {decisionEnabled && (
           <>
             <Button size="sm" variant="outline" onClick={onKeepBoth}>
-              {t("review.compare.keepBoth")}
+              {t("review.compare.keepBoth", { count: setMemberCount })}
             </Button>
             <Button
               size="sm"

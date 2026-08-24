@@ -37,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
-import { usePlanImpact } from "@/hooks/usePlanImpact";
+import { planImpactFingerprint, usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
@@ -88,7 +88,7 @@ const FinishedRun = lazy(() =>
 const REVIEW_STOP_PREFIX = "mediasort_review_stop:";
 
 function recoveredReviewStop(planId: string): "plan" | "review" {
-  return readStored(`${REVIEW_STOP_PREFIX}${planId}`) === "review" ? "review" : "plan";
+  return readStored(`${REVIEW_STOP_PREFIX}${planId}`) === "plan" ? "plan" : "review";
 }
 
 function storeReviewStop(planId: string, view: "plan" | "review"): void {
@@ -107,11 +107,11 @@ export default function MainPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [operationCenterOpen, setOperationCenterOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [impactAcknowledged, setImpactAcknowledged] = useState(false);
+  const [acknowledgedImpact, setAcknowledgedImpact] = useState<string | null>(null);
   const [excludedForRun, setExcludedForRun] = useState<string[]>([]);
   const [stage, setStage] = useState<StageState["stage"]>("sources");
   const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
-  const [reviewView, setReviewView] = useState<"plan" | "review">("plan");
+  const [reviewView, setReviewView] = useState<"plan" | "review">("review");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
@@ -158,16 +158,16 @@ export default function MainPage() {
   }, [config?.language, setLocale]);
 
   useEffect(() => {
-    setImpactAcknowledged(false);
+    setAcknowledgedImpact(null);
     if (preview.result === null) {
-      setReviewView("plan");
+      setReviewView("review");
       return;
     }
     if (preview.recovered) {
       setReviewView(recoveredReviewStop(preview.result.plan_id));
       setRequestedStage("review");
     } else {
-      setReviewView("plan");
+      setReviewView("review");
     }
   }, [preview.recovered, preview.result]);
 
@@ -262,7 +262,7 @@ export default function MainPage() {
   const discardPlan = useCallback(() => {
     preview.clear();
     setRunDecisions(EMPTY_RUN_DECISIONS);
-    setImpactAcknowledged(false);
+    setAcknowledgedImpact(null);
   }, [preview]);
 
   /** Source scope and traversal changes also invalidate the scan itself. */
@@ -424,19 +424,9 @@ export default function MainPage() {
     preview.clear();
     setExcludedForRun([]);
     setRunDecisions(EMPTY_RUN_DECISIONS);
-    setImpactAcknowledged(false);
+    setAcknowledgedImpact(null);
     setRequestedStage("sources");
   }, [analysis, preview, sorting]);
-
-  const startRun = useCallback(() => {
-    if (runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets !== 0) {
-      return;
-    }
-    void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id, {
-      excludedRoots: excludedForRun,
-      reviewedSets: runDecisions.reviewedSets,
-    });
-  }, [excludedForRun, preview.result, runDecisions, sorting]);
 
   // ── Stage wiring ───────────────────────────────────────────────────────────
 
@@ -455,11 +445,19 @@ export default function MainPage() {
       planned,
       plannedReason: t("stage.gate.plan"),
       duplicateReviewReady:
-        runDecisions.planId === preview.result?.plan_id && runDecisions.outstandingSets === 0,
+        runDecisions.planId === preview.result?.plan_id &&
+        runDecisions.outstandingSets === 0 &&
+        runDecisions.persistenceState === "saved" &&
+        preview.persistenceState === "saved",
       duplicateReviewReason:
-        runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets === null
-          ? t("stage.gate.duplicateLoading")
-          : tCount("stage.gate.duplicates", runDecisions.outstandingSets),
+        preview.persistenceState === "error" || runDecisions.persistenceState === "error"
+          ? t("stage.gate.reviewPersistence")
+          : runDecisions.planId !== preview.result?.plan_id ||
+              runDecisions.outstandingSets === null ||
+              runDecisions.persistenceState !== "saved" ||
+              preview.persistenceState !== "saved"
+            ? t("stage.gate.duplicateLoading")
+            : tCount("stage.gate.duplicates", runDecisions.outstandingSets),
       executionActive: isSorting || activeTask?.operation_kind === "sort",
       blocked: recoveryBlock.blocked,
       blockedReason: recoveryBlock.reason,
@@ -475,11 +473,13 @@ export default function MainPage() {
       rootIssue,
       rootsReady,
       runDecisions.outstandingSets,
+      runDecisions.persistenceState,
       runDecisions.planId,
       scanned,
       t,
       tCount,
       preview.result?.plan_id,
+      preview.persistenceState,
     ],
   );
 
@@ -509,7 +509,34 @@ export default function MainPage() {
     excludedForRun,
     runDecisions.reviewedSets,
   );
-  const impact = runImpact.data ?? preview.result?.impact;
+  const impactFingerprint = planImpactFingerprint(excludedForRun, runDecisions.reviewedSets);
+  const impactAcknowledged = acknowledgedImpact === impactFingerprint;
+  const impact = runImpact.isSuccess ? runImpact.data : undefined;
+
+  const startRun = useCallback(() => {
+    if (
+      !runImpact.isSuccess ||
+      !impactAcknowledged ||
+      runDecisions.planId !== preview.result?.plan_id ||
+      runDecisions.outstandingSets !== 0 ||
+      runDecisions.persistenceState !== "saved" ||
+      preview.persistenceState !== "saved"
+    ) {
+      return;
+    }
+    void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id, {
+      excludedRoots: excludedForRun,
+      reviewedSets: runDecisions.reviewedSets,
+    });
+  }, [
+    excludedForRun,
+    impactAcknowledged,
+    preview.result,
+    runDecisions,
+    runImpact.isSuccess,
+    sorting,
+    preview.persistenceState,
+  ]);
 
   /**
    * A refused impact is a refused decision, and it has to say so here.
@@ -540,6 +567,8 @@ export default function MainPage() {
         current.outstandingSets === decisions.outstandingSets &&
         current.proposedSets === decisions.proposedSets &&
         current.undecidedSets === decisions.undecidedSets &&
+        current.persistenceState === decisions.persistenceState &&
+        current.persistenceError === decisions.persistenceError &&
         sameReviewedSets(current.reviewedSets, decisions.reviewedSets)
           ? current
           : { ...decisions, planId },
@@ -547,7 +576,8 @@ export default function MainPage() {
     },
     [preview.result?.plan_id],
   );
-  const preflightInput = {
+  const preflightInput: import("@/lib/operationCenter").PreflightInput = {
+    impactState: runImpact.isError ? "error" : runImpact.isSuccess ? "ready" : "loading",
     actionableGroups: impact?.actionable_groups ?? 0,
     quarantineCount: impact?.quarantine_count ?? 0,
     quarantineBytes: impact?.quarantine_bytes ?? 0,
@@ -838,8 +868,13 @@ export default function MainPage() {
                       }
                     >
                       <ReviewScreen
+                        key={preview.result.plan_id}
                         result={preview.result}
                         config={config}
+                        recoveredState={preview.recoveryEvidence?.review_state ?? null}
+                        planPersistenceState={preview.persistenceState}
+                        planPersistenceError={preview.persistenceError}
+                        onRetryPlanPersistence={preview.retryPersistence}
                         onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
                         onOpenSources={() => nav.go("sources")}
                         onRerunPreview={() => {
@@ -885,7 +920,9 @@ export default function MainPage() {
                 <ExecutePreflight
                   input={preflightInput}
                   companionItems={preview.result?.items ?? []}
-                  onAcknowledge={setImpactAcknowledged}
+                  onAcknowledge={(acknowledged) =>
+                    setAcknowledgedImpact(acknowledged ? impactFingerprint : null)
+                  }
                   onExecute={startRun}
                   busy={isSorting}
                 />

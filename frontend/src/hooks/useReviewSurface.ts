@@ -1,109 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 import { keeperProposals, type DuplicateDecision } from "@/lib/duplicateDecisions";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import { REVIEW_SORTS, type ReviewSort } from "@/lib/reviewSort";
-import { dropScopedExcept, readStored, writeStored } from "@/lib/storage";
+import { dropScopedExcept, readStored, removeStored, writeStored } from "@/lib/storage";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
-import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/services/api";
+import {
+  api,
+  type KeeperPolicyId,
+  type PlanReviewState,
+  type ReviewDecisionState,
+} from "@/services/api";
 import type { PreviewResult } from "@/types/api";
 
 const VIEW_KEY = "mediasort_review_view";
-const MODE_KEY = "mediasort_review_mode";
+const LEGACY_MODE_KEY = "mediasort_review_mode";
 const SORT_KEY = "mediasort_review_sort";
 const REVIEW_STATE_PREFIX = "mediasort_review_state:";
 
-interface PersistedReviewState {
-  schemaVersion: 2;
-  planId: string;
-  configFingerprint: string;
-  decisions: Array<[string, DuplicateDecision]>;
-  selectedSetIds: string[];
-  mode: ReviewMode;
-  queueSetId: string | null;
-  detailPath: string | null;
-  viewerPath: string | null;
-  search: string;
-  treePath: string | null;
-  view: ViewMode;
-  sort: ReviewSort;
-  keepPolicy: KeeperPolicyId;
+export type ReviewPersistenceState = "saving" | "saved" | "error";
+
+function decisionEntries(state: PlanReviewState | null): Array<[string, DuplicateDecision]> {
+  if (state === null) return [];
+  return state.decisions.map((decision) => [
+    decision.group_id,
+    decision.kind === "keep_all"
+      ? { kind: "keep_all" }
+      : { kind: "keeper", memberId: decision.member_id! },
+  ]);
 }
 
-function reviewStateKey(planId: string): string {
-  return `${REVIEW_STATE_PREFIX}${planId}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
-}
-
-function isDecision(value: unknown): value is DuplicateDecision {
-  if (!isRecord(value)) return false;
-  if (value.kind === "keep_all") return Object.keys(value).length === 1;
-  return (
-    value.kind === "keeper" &&
-    typeof value.memberId === "string" &&
-    value.memberId.length > 0 &&
-    Object.keys(value).every((key) => key === "kind" || key === "memberId")
-  );
-}
-
-function isDecisionEntries(value: unknown): value is Array<[string, DuplicateDecision]> {
-  if (!Array.isArray(value)) return false;
-  const ids = new Set<string>();
-  return value.every((entry) => {
-    if (
-      !Array.isArray(entry) ||
-      entry.length !== 2 ||
-      typeof entry[0] !== "string" ||
-      entry[0].length === 0 ||
-      ids.has(entry[0]) ||
-      !isDecision(entry[1])
-    ) {
-      return false;
-    }
-    ids.add(entry[0]);
-    return true;
-  });
-}
-
-function readReviewState(planId: string, configFingerprint: string): PersistedReviewState | null {
-  const raw = readStored(reviewStateKey(planId));
-  if (raw === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    const valid =
-      parsed.schemaVersion === 2 &&
-      parsed.planId === planId &&
-      parsed.configFingerprint === configFingerprint &&
-      isDecisionEntries(parsed.decisions) &&
-      isStringArray(parsed.selectedSetIds) &&
-      (parsed.mode === "browse" || parsed.mode === "resolve") &&
-      isNullableString(parsed.queueSetId) &&
-      isNullableString(parsed.detailPath) &&
-      isNullableString(parsed.viewerPath) &&
-      typeof parsed.search === "string" &&
-      isNullableString(parsed.treePath) &&
-      (parsed.view === "list" || parsed.view === "grid") &&
-      typeof parsed.sort === "string" &&
-      (REVIEW_SORTS as readonly string[]).includes(parsed.sort) &&
-      typeof parsed.keepPolicy === "string" &&
-      (SELECTABLE_KEEPER_POLICIES as readonly string[]).includes(parsed.keepPolicy);
-    return valid ? (parsed as unknown as PersistedReviewState) : null;
-  } catch {
-    return null;
-  }
+function decisionState([groupId, decision]: [string, DuplicateDecision]): ReviewDecisionState {
+  return {
+    group_id: groupId,
+    kind: decision.kind,
+    member_id: decision.kind === "keeper" ? decision.memberId : null,
+  };
 }
 
 /**
@@ -133,34 +66,34 @@ export function useReviewSurface(
   stacks: DuplicateGroup[],
   defaultKeepPolicy: KeeperPolicyId,
   catalogReady = true,
+  recoveredState: PlanReviewState | null = null,
 ) {
-  const [initialState] = useState<PersistedReviewState | null>(() =>
-    readReviewState(result.plan_id, result.config_fingerprint),
+  const [initialState] = useState<PlanReviewState | null>(() =>
+    recoveredState?.config_fingerprint === result.config_fingerprint ? recoveredState : null,
   );
-  const [mode, setModeState] = useState<ReviewMode>(
-    () => initialState?.mode ?? stored<ReviewMode>(MODE_KEY, "browse", ["browse", "resolve"]),
-  );
+  const newPlanEntryRef = useRef(initialState === null);
+  const [mode, setModeState] = useState<ReviewMode>(() => initialState?.mode ?? "resolve");
   /** Which set the queue is on. Null means "the first one still undecided". */
-  const [queueSetId, setQueueSetId] = useState<string | null>(initialState?.queueSetId ?? null);
+  const [queueSetId, setQueueSetId] = useState<string | null>(initialState?.queue_set_id ?? null);
   /** The file the detail view is open on, by source path. */
-  const [detailPath, setDetailPath] = useState<string | null>(initialState?.detailPath ?? null);
+  const [detailPath, setDetailPath] = useState<string | null>(initialState?.detail_path ?? null);
   /** The file being examined full screen, which may be opened over the detail view. */
-  const [viewerPath, setViewerPath] = useState<string | null>(initialState?.viewerPath ?? null);
+  const [viewerPath, setViewerPath] = useState<string | null>(initialState?.viewer_path ?? null);
   // Keeper choices, held here and sent with the run — never round-tripped.
   // They used to POST to `/api/review/decide`, which wrote a server-side plan
   // nothing read back: the refetch that followed returned identical data, so
   // the screen showed the same thing before and after every decision.
   const [decisions, setDecisions] = useState<Map<string, DuplicateDecision>>(
-    () => new Map(initialState?.decisions ?? []),
+    () => new Map(decisionEntries(initialState)),
   );
   /** Set-level selection shared by Browse and Resolve. */
   const [selectedSetIds, setSelectedSetIds] = useState<Set<string>>(
-    () => new Set(initialState?.selectedSetIds ?? []),
+    () => new Set(initialState?.selected_set_ids ?? []),
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastToggled, setLastToggled] = useState<string | null>(null);
   const [search, setSearch] = useState(initialState?.search ?? "");
-  const [treePath, setTreePath] = useState<string | null>(initialState?.treePath ?? null);
+  const [treePath, setTreePath] = useState<string | null>(initialState?.tree_path ?? null);
   const [view, setViewState] = useState<ViewMode>(
     () => initialState?.view ?? stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]),
   );
@@ -169,67 +102,109 @@ export function useReviewSurface(
     () => initialState?.sort ?? stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS),
   );
   const [keepPolicy, setKeepPolicy] = useState<KeeperPolicyId>(
-    initialState?.keepPolicy ?? defaultKeepPolicy,
+    initialState?.keep_policy ?? defaultKeepPolicy,
   );
-  const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(result.plan_id);
+  const [persistenceState, setPersistenceState] = useState<ReviewPersistenceState>("saving");
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const desiredStateRef = useRef<{ fingerprint: string; state: PlanReviewState } | null>(null);
+  const savedFingerprintRef = useRef<string | null>(
+    initialState === null ? null : JSON.stringify(initialState),
+  );
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    const saved = readReviewState(result.plan_id, result.config_fingerprint);
-    setDecisions(new Map(saved?.decisions ?? []));
-    setSelectedSetIds(new Set(saved?.selectedSetIds ?? []));
-    // Without a snapshot for this plan the durable *preferences* still apply:
-    // resetting them to the hardcoded defaults would silently discard the
-    // user's chosen mode, layout, and order on every new plan.
-    setModeState(saved?.mode ?? stored<ReviewMode>(MODE_KEY, "browse", ["browse", "resolve"]));
-    setQueueSetId(saved?.queueSetId ?? null);
-    setDetailPath(saved?.detailPath ?? null);
-    setViewerPath(saved?.viewerPath ?? null);
-    setSearch(saved?.search ?? "");
-    setTreePath(saved?.treePath ?? null);
-    setViewState(saved?.view ?? stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]));
-    setSortState(saved?.sort ?? stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS));
-    setKeepPolicy(saved?.keepPolicy ?? defaultKeepPolicy);
-    setHydratedPlanId(result.plan_id);
-  }, [defaultKeepPolicy, result.config_fingerprint, result.plan_id]);
+    // React StrictMode intentionally runs mount cleanup/setup twice in
+    // development. Re-arm the guard on every setup; otherwise the first
+    // cleanup leaves persistence permanently stuck in "saving".
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
+  // Delete the superseded browser-authoritative snapshot for this plan. The
+  // backend envelope now owns decisions and view state; browser storage keeps
+  // global preferences and one compact completed-plan pointer only.
   useEffect(() => {
-    if (hydratedPlanId !== result.plan_id) return;
-    const state: PersistedReviewState = {
-      schemaVersion: 2,
-      planId: result.plan_id,
-      configFingerprint: result.config_fingerprint,
-      decisions: [...decisions.entries()],
-      selectedSetIds: [...selectedSetIds],
+    dropScopedExcept(REVIEW_STATE_PREFIX, null);
+    removeStored(LEGACY_MODE_KEY);
+  }, []);
+
+  const durableState = useMemo<PlanReviewState>(
+    () => ({
+      schema_version: 1,
+      config_fingerprint: result.config_fingerprint,
+      decisions: [...decisions.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(decisionState),
+      selected_set_ids: [...selectedSetIds].sort(),
       mode,
-      queueSetId,
-      detailPath,
-      viewerPath,
+      queue_set_id: queueSetId,
+      detail_path: detailPath,
+      viewer_path: viewerPath,
       search,
-      treePath,
+      tree_path: treePath,
       view,
       sort,
+      keep_policy: keepPolicy,
+    }),
+    [
+      decisions,
+      detailPath,
       keepPolicy,
+      mode,
+      queueSetId,
+      result.config_fingerprint,
+      search,
+      selectedSetIds,
+      sort,
+      treePath,
+      view,
+      viewerPath,
+    ],
+  );
+
+  /** Serialise and coalesce saves so a slower older response cannot win. */
+  const flushPersistence = useCallback(() => {
+    if (savingRef.current || desiredStateRef.current === null) return;
+    savingRef.current = true;
+    void (async () => {
+      while (mountedRef.current) {
+        const desired = desiredStateRef.current;
+        if (desired === null || desired.fingerprint === savedFingerprintRef.current) break;
+        setPersistenceState("saving");
+        setPersistenceError(null);
+        try {
+          await api.savePlanReviewState(result.plan_id, desired.state);
+        } catch (cause) {
+          if (mountedRef.current) {
+            setPersistenceState("error");
+            setPersistenceError(cause instanceof Error ? cause.message : String(cause));
+          }
+          savingRef.current = false;
+          return;
+        }
+        savedFingerprintRef.current = desired.fingerprint;
+      }
+      savingRef.current = false;
+      if (mountedRef.current) setPersistenceState("saved");
+    })();
+  }, [result.plan_id]);
+
+  useEffect(() => {
+    desiredStateRef.current = {
+      fingerprint: JSON.stringify(durableState),
+      state: durableState,
     };
-    writeStored(reviewStateKey(result.plan_id), JSON.stringify(state));
-    // One plan is reviewable at a time; every earlier plan's snapshot is dead
-    // weight that would otherwise grow until the quota refused this write.
-    dropScopedExcept(REVIEW_STATE_PREFIX, result.plan_id);
-  }, [
-    decisions,
-    detailPath,
-    hydratedPlanId,
-    keepPolicy,
-    mode,
-    queueSetId,
-    result.config_fingerprint,
-    result.plan_id,
-    search,
-    selectedSetIds,
-    sort,
-    treePath,
-    view,
-    viewerPath,
-  ]);
+    flushPersistence();
+  }, [durableState, flushPersistence]);
+
+  const retryPersistence = useCallback(() => {
+    setPersistenceState("saving");
+    setPersistenceError(null);
+    flushPersistence();
+  }, [flushPersistence]);
 
   const proposals = useMemo(
     () => keeperProposals(stacks, keepPolicy, decisions),
@@ -257,7 +232,6 @@ export function useReviewSurface(
 
   const setMode = useCallback((next: ReviewMode) => {
     setModeState(next);
-    writeStored(MODE_KEY, next);
   }, []);
 
   const setSort = useCallback((next: ReviewSort) => {
@@ -355,6 +329,16 @@ export function useReviewSurface(
     return members;
   }, [result.items, stacks]);
 
+  // Review is decision-first when there is work to decide. When the completed
+  // catalog proves there are no duplicate sets, an empty "auto-keep 0" queue
+  // is not a useful landing page, so a new plan opens its result browser. A
+  // recovered plan keeps the exact view the user deliberately left behind.
+  useEffect(() => {
+    if (!newPlanEntryRef.current || !catalogReady) return;
+    newPlanEntryRef.current = false;
+    if (liveMembersBySet.size === 0) setModeState("browse");
+  }, [catalogReady, liveMembersBySet]);
+
   const protectedSetIds = useMemo(
     () =>
       new Set(
@@ -406,10 +390,37 @@ export function useReviewSurface(
     [protectedSetIds],
   );
 
+  const chooseKeepers = useCallback(
+    (choices: readonly { groupId: string; memberId: string }[]) => {
+      setDecisions((current) => {
+        const next = new Map(current);
+        for (const choice of choices) {
+          if (protectedSetIds.has(choice.groupId)) continue;
+          next.set(choice.groupId, { kind: "keeper", memberId: choice.memberId });
+        }
+        return next;
+      });
+    },
+    [protectedSetIds],
+  );
+
   const markNotDuplicates = useCallback(
     (groupId: string) => {
       if (protectedSetIds.has(groupId)) return;
       setDecisions((current) => new Map(current).set(groupId, { kind: "keep_all" }));
+    },
+    [protectedSetIds],
+  );
+
+  const markManyNotDuplicates = useCallback(
+    (groupIds: readonly string[]) => {
+      setDecisions((current) => {
+        const next = new Map(current);
+        for (const groupId of groupIds) {
+          if (!protectedSetIds.has(groupId)) next.set(groupId, { kind: "keep_all" });
+        }
+        return next;
+      });
     },
     [protectedSetIds],
   );
@@ -420,6 +431,15 @@ export function useReviewSurface(
       const next = new Map(current);
       next.delete(groupId);
       return next;
+    });
+  }, []);
+
+  const clearDecisions = useCallback((groupIds: readonly string[]) => {
+    setDecisions((current) => {
+      const next = new Map(current);
+      let changed = false;
+      for (const groupId of groupIds) changed = next.delete(groupId) || changed;
+      return changed ? next : current;
     });
   }, []);
 
@@ -477,8 +497,11 @@ export function useReviewSurface(
     proposals,
     keeperOverrides,
     chooseKeeper,
+    chooseKeepers,
     markNotDuplicates,
+    markManyNotDuplicates,
     clearDecision,
+    clearDecisions,
     acceptProposal,
     acceptAllProposals,
     reviewedSets,
@@ -501,5 +524,8 @@ export function useReviewSurface(
     setSort,
     keepPolicy,
     setKeepPolicy,
+    persistenceState,
+    persistenceError,
+    retryPersistence,
   };
 }

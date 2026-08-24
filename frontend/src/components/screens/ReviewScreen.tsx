@@ -32,7 +32,7 @@ import {
   STAYS_PATH,
   type SetEntry,
 } from "@/lib/reviewBrowse";
-import { sortSets } from "@/lib/reviewSort";
+import { sortEntries, sortRows, sortSets } from "@/lib/reviewSort";
 import {
   catalogGroupsForRun,
   comparePair,
@@ -54,6 +54,8 @@ import {
   type ComparableFile,
   type DuplicateGroup,
 } from "@/lib/reviewWorkbench";
+import type { PlanPersistenceState } from "@/hooks/usePreview";
+import type { PlanReviewState } from "@/services/api";
 import type { Config, PreviewResult } from "@/types/api";
 
 interface ReviewScreenProps {
@@ -63,12 +65,18 @@ interface ReviewScreenProps {
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
   onOpenSources?: () => void;
+  recoveredState?: PlanReviewState | null;
+  planPersistenceState?: PlanPersistenceState;
+  planPersistenceError?: string | null;
+  onRetryPlanPersistence?: () => void;
   /** Run-scoped decisions, lifted so Execute can send them with the run. */
   onDecisionsChange?: (decisions: {
     reviewedSets: { keep: string; demote: string[]; keep_all?: boolean }[];
     outstandingSets: number;
     proposedSets: number;
     undecidedSets: number;
+    persistenceState: "saving" | "saved" | "error";
+    persistenceError: string | null;
   }) => void;
 }
 
@@ -91,6 +99,10 @@ export function ReviewScreen({
   onOpenSetting,
   onRerunPreview,
   onOpenSources,
+  recoveredState = null,
+  planPersistenceState = "saved",
+  planPersistenceError = null,
+  onRetryPlanPersistence,
   onDecisionsChange,
 }: ReviewScreenProps) {
   const { t, tCount, locale } = useI18n();
@@ -117,6 +129,7 @@ export function ReviewScreen({
     scopedGroups,
     config.duplicate_keeper_policy,
     !groups.isLoading && !groups.isError,
+    recoveredState,
   );
 
   useEffect(() => setDecidedSetIds(surface.decidedSetIds), [surface.decidedSetIds]);
@@ -154,6 +167,8 @@ export function ReviewScreen({
       outstandingSets: stats.outstanding,
       proposedSets: stats.proposed,
       undecidedSets: stats.undecided,
+      persistenceState: surface.persistenceState,
+      persistenceError: surface.persistenceError,
     });
   }, [
     groups.isError,
@@ -162,6 +177,8 @@ export function ReviewScreen({
     stats.outstanding,
     stats.proposed,
     stats.undecided,
+    surface.persistenceError,
+    surface.persistenceState,
     surface.reviewedSets,
   ]);
   // Every set the panel lists, in the order it lists them: "Set 3 of 15" names
@@ -182,28 +199,51 @@ export function ReviewScreen({
   }, [entries, needle, surface.treePath]);
 
   /** Visible order for range selection and folder-scoped detail navigation. */
-  const paneOrder = useMemo(
+  const paneOrder = useMemo(() => {
+    const groups = folderGroups(paneEntries, surface.treePath);
+    return groups.flatMap((group) => {
+      // Grid shows subfolders as tiles. List shows their aggregated rows.
+      if (surface.view === "grid" && !group.direct) return [];
+      return sortEntries(group.entries, surface.sort, locale).flatMap((entry) => {
+        if (entry.kind === "file") return [entry.row.source];
+        // A collapsed set exposes only its set-level checkbox, never an
+        // individual file checkbox. Ctrl/Cmd+A must follow that exact UI.
+        return expandedSets.has(entry.id)
+          ? sortRows(entry.rows, surface.sort, locale).map((row) => row.source)
+          : [];
+      });
+    });
+  }, [expandedSets, locale, paneEntries, surface.sort, surface.treePath, surface.view]);
+
+  /** Top-level duplicate sets whose selection controls are actually visible. */
+  const paneSetOrder = useMemo(
     () =>
-      folderGroups(paneEntries, surface.treePath).flatMap((group) =>
-        group.entries.flatMap((entry) =>
-          entry.kind === "file"
-            ? [entry.row.source]
-            : expandedSets.has(entry.id)
-              ? entry.rows.map((row) => row.source)
-              : entry.keeper
-                ? [entry.keeper.source]
-                : [],
+      folderGroups(paneEntries, surface.treePath).flatMap((group) => {
+        // Grid replaces non-direct children with one folder tile.
+        if (surface.view === "grid" && !group.direct) return [];
+        return sortEntries(group.entries, surface.sort, locale).flatMap((entry) =>
+          entry.kind === "set" && !entry.hasBaseline ? [entry.id] : [],
+        );
+      }),
+    [locale, paneEntries, surface.sort, surface.treePath, surface.view],
+  );
+
+  const memberIdBySetSource = useMemo(
+    () =>
+      new Map(
+        surface.rows.flatMap((row) =>
+          row.stack ? [[`${row.stack.id}\0${row.source}`, row.stack.memberId] as const] : [],
         ),
       ),
-    [expandedSets, paneEntries, surface.treePath],
+    [surface.rows],
   );
 
   const chooseKeeperBySource = useCallback(
     (setId: string, source: string) => {
-      const row = surface.rows.find((candidate) => candidate.source === source);
-      if (row?.stack) surface.chooseKeeper(setId, row.stack.memberId);
+      const memberId = memberIdBySetSource.get(`${setId}\0${source}`);
+      if (memberId) surface.chooseKeeper(setId, memberId);
     },
-    [surface],
+    [memberIdBySetSource, surface],
   );
 
   const groupFor = useCallback(
@@ -438,6 +478,7 @@ export function ReviewScreen({
     clearSelection,
     clearSetSelection,
     selectAllVisible,
+    selectSets,
     selected,
     selectedSetIds,
     setSearch,
@@ -479,6 +520,7 @@ export function ReviewScreen({
       if (event.key === "a" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         selectAllVisible(paneOrder);
+        selectSets(paneSetOrder);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -488,7 +530,9 @@ export function ReviewScreen({
     clearSetSelection,
     expandedSets,
     paneOrder,
+    paneSetOrder,
     selectAllVisible,
+    selectSets,
     selected,
     selectedSetIds,
     setSearch,
@@ -542,6 +586,26 @@ export function ReviewScreen({
         title={t("review.title")}
         subtitle={t("review.subtitle")}
       />
+
+      {(planPersistenceState === "error" || surface.persistenceState === "error") && (
+        <StateView
+          variant="error"
+          compact
+          title={t("review.persistence.title")}
+          detail={
+            planPersistenceError ?? surface.persistenceError ?? t("review.persistence.saveFailed")
+          }
+          onRetry={
+            planPersistenceState === "error" ? onRetryPlanPersistence : surface.retryPersistence
+          }
+        />
+      )}
+
+      {(planPersistenceState === "saving" || surface.persistenceState === "saving") && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t("review.persistence.saving")}
+        </p>
+      )}
 
       {compareRefusal !== null && (
         <StateView
@@ -664,13 +728,26 @@ export function ReviewScreen({
               onGo={goToQueue}
               onOpenSet={(setId) => surface.setQueueSetId(setId)}
               onKeep={chooseKeeperBySource}
+              onKeepMany={(choices) =>
+                surface.chooseKeepers(
+                  choices
+                    .map((choice) => {
+                      const memberId = memberIdBySetSource.get(`${choice.setId}\0${choice.source}`);
+                      return memberId ? { groupId: choice.setId, memberId } : null;
+                    })
+                    .filter(
+                      (choice): choice is { groupId: string; memberId: string } => choice !== null,
+                    ),
+                )
+              }
               onKeepAll={keepAll}
+              onKeepAllMany={surface.markManyNotDuplicates}
               onReset={surface.clearDecision}
-              onResetAll={() => {
-                for (const entry of allSets) {
-                  if (!entry.hasBaseline) surface.clearDecision(entry.id);
-                }
-              }}
+              onResetAll={() =>
+                surface.clearDecisions(
+                  allSets.filter((entry) => !entry.hasBaseline).map((entry) => entry.id),
+                )
+              }
               onAcceptProposal={surface.acceptProposal}
               onCompare={compareSet}
               onOpenDetail={surface.setDetailPath}
@@ -769,6 +846,27 @@ export function ReviewScreen({
                     onCompare={() => openCompare(comparePair(surface.selectedRows))}
                     onClear={surface.clearSelection}
                   />
+
+                  {surface.selectedSetIds.size > 0 && (
+                    <div
+                      role="region"
+                      aria-label={tCount("review.setSelection.count", surface.selectedSetIds.size)}
+                      className="flex flex-wrap items-center gap-2 rounded-panel border border-primary/35 bg-tint-primary px-3 py-2"
+                    >
+                      <span className="mr-auto text-xs font-semibold text-foreground">
+                        {tCount("review.setSelection.count", surface.selectedSetIds.size)}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
+                      >
+                        {t("review.setSelection.review")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={surface.clearSetSelection}>
+                        {t("review.setSelection.clear")}
+                      </Button>
+                    </div>
+                  )}
 
                   {paneEntries.length === 0 ? (
                     <StateView
@@ -873,6 +971,7 @@ export function ReviewScreen({
           b={comparing.b}
           keeperId={comparing.keeperId}
           setId={comparing.setId}
+          setMemberCount={comparing.alternatives.length + 1}
           recommendedId={comparing.recommendedId}
           recommendedLabel={comparing.recommendedLabel}
           recommendationReason={comparing.recommendationReason}

@@ -22,9 +22,11 @@ import { StackVisual } from "@/components/screens/review/StackVisual";
  * no keeper is settled yet, the largest copy is assumed to be the one kept —
  * the same assumption the default rule makes.
  */
-function reclaimableBytes(entry: SetEntry): number {
-  const total = entry.rows.reduce((sum, row) => sum + row.sizeBytes, 0);
-  const kept = entry.keeper?.sizeBytes ?? Math.max(...entry.rows.map((row) => row.sizeBytes), 0);
+function reclaimableBytes(entry: SetEntry): number | null {
+  if (entry.rows.some((row) => row.sizeBytes === null)) return null;
+  const sizes = entry.rows.map((row) => row.sizeBytes ?? 0);
+  const total = sizes.reduce((sum, size) => sum + size, 0);
+  const kept = entry.keeper?.sizeBytes ?? Math.max(...sizes, 0);
   return Math.max(0, total - kept);
 }
 

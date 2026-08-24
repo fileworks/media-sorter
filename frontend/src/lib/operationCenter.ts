@@ -172,6 +172,8 @@ export function centerBadge(state: CenterState): CenterBadge {
 // ── Execute preflight ────────────────────────────────────────────────────────
 
 export interface PreflightInput {
+  /** A successful request for the exact current decision fingerprint. */
+  impactState: "loading" | "ready" | "error";
   /** Groups whose decisions would run. */
   actionableGroups: number;
   quarantineCount: number;
@@ -235,6 +237,20 @@ export interface Preflight {
  */
 export function preflight(input: PreflightInput): Preflight {
   const blocking: PreflightLine[] = [];
+
+  if (input.impactState === "loading") {
+    blocking.push({
+      text: "The exact impact is still being calculated.",
+      tone: "warning",
+      messageKey: "preflight.blocking.impactLoading",
+    });
+  } else if (input.impactState === "error") {
+    blocking.push({
+      text: "The exact impact could not be verified. Return to Review and try again.",
+      tone: "error",
+      messageKey: "preflight.blocking.impactError",
+    });
+  }
 
   if (input.actionableGroups === 0) {
     // A run with no actions is not started: it would write an empty report and
