@@ -11,11 +11,12 @@ import {
   toConfigRecipe,
   unclaimedDefaults,
 } from "@/lib/configRecipes";
+import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
 import { requestedCapabilities, unauthorizedCapabilities } from "@/lib/configGates";
-import { SECTION_DEFAULTS } from "@/components/config/constants";
 import type { Config } from "@/types/api";
 
 const base = {
+  ...TEST_CONFIG,
   sort: true,
   sort_criteria: ["year", "month", "day"],
   copy_instead_of_move: false,
@@ -27,43 +28,13 @@ const base = {
   convert_videos: false,
   video_format: "mkv",
   repair_enabled: false,
-  preservation_profile: {
-    schema_version: 1,
-    profile_id: "default",
-    name: "Organize only",
-    mode: "organize_only",
-    allow_embedded_metadata_edits: false,
-    allow_repair: false,
-    allow_conversion: false,
-    allow_compression: false,
-    preserve_filesystem_timestamps: true,
-    derived_metadata: "report_only",
-    authorization_origin: "default",
-    acknowledged_at: null,
-    requires_review: false,
-  },
-  optimization_profile: {
-    schema_version: 1,
-    profile_id: "optimization-disabled",
-    name: "Optimization disabled",
-    mode: "disabled",
-    acknowledged_at: null,
-    tool: null,
-    tool_version: null,
-    parameters: {},
-    validation_contract: null,
-    memory_limit_mib: 512,
-    temporary_space_limit_bytes: null,
-    retain_original: true,
-  },
 } as Config;
 
 const [SAFE_SORT, CLEAN_SWEEP, ARCHIVE_CONVERT, FIND_DUPLICATES_ONLY, SCRATCH] = CONFIG_RECIPES;
 
 describe("built-in configuration recipes", () => {
-  it("pins every default a recipe relies on", () => {
-    const defaults = Object.assign({}, ...Object.values(SECTION_DEFAULTS));
-    expect(defaults).toMatchObject({
+  it("reads defaults from the backend-generated contract", () => {
+    expect(TEST_CONFIG).toMatchObject({
       sort: true,
       sort_criteria: ["year"],
       copy_instead_of_move: false,
@@ -74,7 +45,7 @@ describe("built-in configuration recipes", () => {
       image_format: "jpeg",
       convert_videos: false,
       video_format: "mp4",
-      repair_enabled: true,
+      repair_enabled: false,
     });
   });
 

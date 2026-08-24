@@ -60,71 +60,124 @@ export function SettingChangeTable({
 
   return (
     <div
-      className="max-w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       tabIndex={0}
       role="region"
       aria-label={t("config.reset.comparison")}
     >
-      <table className="min-w-[32rem] w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-border text-muted-foreground">
-            <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
-              {t("config.reset.setting")}
-            </th>
-            <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
-              {t("config.reset.current")}
-            </th>
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                scope="col"
-                aria-current={column.emphasized ? "true" : undefined}
-                className={cn(
-                  "whitespace-nowrap px-2 py-1.5 font-medium",
-                  column.emphasized && "bg-tint-primary text-primary",
-                )}
-              >
-                {column.label}
-                {column.emphasized && (
-                  <span className="ml-1.5 rounded-full border border-current px-1.5 py-0.5 text-3xs">
-                    {t("config.reset.selected")}
-                  </span>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {orderedRows.map((row) => (
-            <tr key={row.key} className="border-b border-border last:border-0">
-              <th scope="row" className="whitespace-nowrap py-1.5 pr-3 font-medium text-foreground">
-                {row.setting}
-              </th>
-              <td className="py-1.5 pr-3 text-muted-foreground">{row.current}</td>
+      {/* At phone/zoom widths the comparison is a stack, not a squeezed table.
+          Every current/result value remains labelled and the region itself has
+          no horizontal scrolling surface. */}
+      <div className="grid gap-2 sm:hidden">
+        {orderedRows.map((row) => (
+          <article key={row.key} className="min-w-0 rounded-lg border border-border p-2.5 text-xs">
+            <h3 className="break-words font-semibold text-foreground">{row.setting}</h3>
+            <dl className="mt-2 grid gap-1.5">
+              <div className="grid min-w-0 grid-cols-[minmax(5rem,0.45fr)_minmax(0,1fr)] gap-2">
+                <dt className="text-muted-foreground">{t("config.reset.current")}</dt>
+                <dd className="min-w-0 break-words text-foreground">{row.current}</dd>
+              </div>
               {columns.map((column) => {
                 const result = byColumn.get(column.id)?.get(row.key);
                 const unchanged = result === undefined || result.unchanged === true;
                 return (
-                  <td
+                  <div
                     key={column.id}
+                    aria-current={column.emphasized ? "true" : undefined}
                     className={cn(
-                      "px-2 py-1.5 font-medium text-foreground",
+                      "grid min-w-0 grid-cols-[minmax(5rem,0.45fr)_minmax(0,1fr)] gap-2 rounded px-1 py-0.5",
                       column.emphasized && "bg-tint-primary",
                     )}
                   >
-                    <span className="block">{result?.result ?? row.current}</span>
-                    {unchanged && (
-                      <span className="block text-3xs font-normal text-muted-foreground">
-                        {t("config.reset.unchanged")}
-                      </span>
-                    )}
-                  </td>
+                    <dt className={cn("break-words", column.emphasized && "text-primary")}>
+                      {column.label}
+                      {column.emphasized && (
+                        <span className="mt-0.5 block text-3xs font-semibold">
+                          {t("config.reset.selected")}
+                        </span>
+                      )}
+                    </dt>
+                    <dd className="min-w-0 break-words font-medium text-foreground">
+                      {result?.result ?? row.current}
+                      {unchanged && (
+                        <span className="block text-3xs font-normal text-muted-foreground">
+                          {t("config.reset.unchanged")}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
                 );
               })}
+            </dl>
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden max-w-full overflow-x-auto sm:block">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
+                {t("config.reset.setting")}
+              </th>
+              <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
+                {t("config.reset.current")}
+              </th>
+              {columns.map((column) => (
+                <th
+                  key={column.id}
+                  scope="col"
+                  aria-current={column.emphasized ? "true" : undefined}
+                  className={cn(
+                    "whitespace-nowrap px-2 py-1.5 font-medium",
+                    column.emphasized && "bg-tint-primary text-primary",
+                  )}
+                >
+                  {column.label}
+                  {column.emphasized && (
+                    <span className="ml-1.5 rounded-full border border-current px-1.5 py-0.5 text-3xs">
+                      {t("config.reset.selected")}
+                    </span>
+                  )}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {orderedRows.map((row) => (
+              <tr key={row.key} className="border-b border-border last:border-0">
+                <th
+                  scope="row"
+                  className="whitespace-nowrap py-1.5 pr-3 font-medium text-foreground"
+                >
+                  {row.setting}
+                </th>
+                <td className="py-1.5 pr-3 text-muted-foreground">{row.current}</td>
+                {columns.map((column) => {
+                  const result = byColumn.get(column.id)?.get(row.key);
+                  const unchanged = result === undefined || result.unchanged === true;
+                  return (
+                    <td
+                      key={column.id}
+                      className={cn(
+                        "px-2 py-1.5 font-medium text-foreground",
+                        column.emphasized && "bg-tint-primary",
+                      )}
+                    >
+                      <span className="block">{result?.result ?? row.current}</span>
+                      {unchanged && (
+                        <span className="block text-3xs font-normal text-muted-foreground">
+                          {t("config.reset.unchanged")}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -164,7 +217,7 @@ interface ResetDialogProps {
  * button doing nothing when pressed.
  */
 export function ResetDialog({ open, title, destinations, onClose, onConfirm }: ResetDialogProps) {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
 
   return (
     <Modal
@@ -198,7 +251,7 @@ export function ResetDialog({ open, title, destinations, onClose, onConfirm }: R
                     onClick={() => onConfirm(destination)}
                   >
                     {destinations.length === 1
-                      ? t("config.reset.confirm", { count: destination.rows.length })
+                      ? tCount("config.reset.confirm", destination.rows.length)
                       : t("config.reset.confirmDestination", {
                           count: destination.rows.length,
                           target: destination.label,

@@ -220,11 +220,8 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
         </>
       )}
 
-      {/* The catalog cannot produce burst stacks until `P2-DEDUP-D3` lands the
-          signature/media-fact producer, so this control would promise a result the
-          product cannot deliver. Hidden, not reset: a persisted or recipe-supplied
-          `burst_detection_enabled` is left exactly as the user set it, and
-          `P2-DEDUP-D9` restores the control with no migration. */}
+      {/* Catalog indexing writes the signature and media facts that burst
+          detection consumes; this setting controls whether the view is shown. */}
       {CATALOG_BURST_GROUPS_AVAILABLE && (
         <SettingRow
           field="burst_detection_enabled"

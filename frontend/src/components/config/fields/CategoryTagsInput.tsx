@@ -10,7 +10,7 @@ export function CategoryTagsInput({
   onChange: (next: string[]) => void;
   disabled?: boolean;
 }) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const add = (raw: string) => {
     const safe = sanitizeCategory(raw);
     if (!safe) return;
@@ -32,7 +32,7 @@ export function CategoryTagsInput({
               type="button"
               disabled={disabled}
               onClick={() => remove(cat)}
-              className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               aria-label={t("common.removeValue", { value: cat })}
             >
               ×
@@ -55,7 +55,7 @@ export function CategoryTagsInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {t("config.input.categoryCount", {
+        {tCount("config.input.categoryCount", categories.length, {
           count: categories.length.toLocaleString(locale),
         })}
       </p>

@@ -22,6 +22,13 @@ export type Translate = (
   fallback?: string,
 ) => string;
 
+/** `Translate` for a counted thing; see `tCount` in the i18n context. */
+export type TranslateCount = (
+  key: string,
+  count: number,
+  params?: Record<string, string | number>,
+) => string;
+
 const CRITERION_KEY: Record<string, string> = {
   year: "config.criteria.year",
   month: "config.criteria.month",
@@ -288,7 +295,11 @@ export function folderPreviewTree(
   return [...nested, ...review];
 }
 
-export function summariesFor(config: Config, t: Translate): Record<string, string> {
+export function summariesFor(
+  config: Config,
+  t: Translate,
+  tCount: TranslateCount,
+): Record<string, string> {
   const conversions: string[] = [];
   if (config.convert_images) {
     conversions.push(t("config.summary.toFormat", { format: config.image_format.toUpperCase() }));
@@ -340,7 +351,7 @@ export function summariesFor(config: Config, t: Translate): Record<string, strin
     "setting-rules": config.rules_enabled
       ? ruleCount === 0
         ? t("config.summary.noRules")
-        : t("config.summary.ruleCount", { count: ruleCount })
+        : tCount("config.summary.ruleCount", ruleCount)
       : t("config.summary.off"),
 
     "setting-maintenance":

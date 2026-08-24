@@ -9,7 +9,7 @@ export function AiTagsInput({
   onCommit: (next: string[]) => void;
   disabled?: boolean;
 }) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const add = (raw: string) => {
     const tag = raw.trim().toLowerCase();
     if (!tag) return;
@@ -31,7 +31,7 @@ export function AiTagsInput({
               type="button"
               disabled={disabled}
               onClick={() => remove(tag)}
-              className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               aria-label={t("common.removeValue", { value: tag })}
             >
               ×
@@ -54,7 +54,9 @@ export function AiTagsInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {t("config.input.labelCount", { count: labels.length.toLocaleString(locale) })}
+        {tCount("config.input.labelCount", labels.length, {
+          count: labels.length.toLocaleString(locale),
+        })}
       </p>
     </div>
   );

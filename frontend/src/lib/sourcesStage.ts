@@ -423,64 +423,27 @@ export function changeRole(cards: RootCard[], rootId: string, role: RootRole): R
   return { cards: next, conflicts: validateRoots(next) };
 }
 
-export interface CardStatus {
-  tone: "ready" | "warning" | "error";
-  label: string;
-  detail: string;
-}
+/**
+ * How a source card reads at a glance: ready, worth a look, or wrong.
+ *
+ * Tone only. This used to return an English `label` and `detail` beside it,
+ * which nothing rendered — the card states its facts through `factLines`, from
+ * the catalogue. Two descriptions of one card, one of them untranslated and
+ * invisible, is a mistranslation waiting for whoever displays it.
+ */
+export type CardTone = "ready" | "warning" | "error";
 
-export function cardStatus(card: RootCard, conflicts: Conflict[]): CardStatus {
+export function cardTone(card: RootCard, conflicts: Conflict[]): CardTone {
   const own = conflicts.filter((conflict) => conflict.rootIds.includes(card.rootId));
-  const blocking = own.find((conflict) => conflict.blocking);
-  if (blocking) {
-    return { tone: "error", label: "Conflict", detail: blocking.message };
+  if (own.some((conflict) => conflict.blocking)) return "error";
+  if (own.length > 0) return "warning";
+  if (card.state === "missing" || card.state === "not_writable" || card.state === "unreadable") {
+    return "error";
   }
-  if (own.length > 0) {
-    return { tone: "warning", label: "Check this", detail: own[0].message };
-  }
-  if (card.state === "checking") {
-    return { tone: "warning", label: "Checking…", detail: "Looking at this folder." };
-  }
-  if (card.state === "missing") {
-    return { tone: "error", label: "Missing", detail: "This folder no longer exists." };
-  }
-  if (card.state === "not_writable") {
-    return { tone: "error", label: "Read-only", detail: "This folder cannot be written to." };
-  }
-  if (card.state === "unreadable") {
-    return { tone: "error", label: "Unreadable", detail: "This folder cannot be read." };
-  }
-  if (card.state === "unknown") {
-    return {
-      tone: "warning",
-      label: "Not checked",
-      detail: "This folder has not been scanned yet.",
-    };
-  }
-  const indexed =
-    card.indexedFiles === null ? "not indexed" : `${card.indexedFiles.toLocaleString()} files`;
-  // A partial index is not a "Ready" folder. Some files were skipped, so any
-  // duplicate set drawn from this root may be missing members — the user has to
-  // be able to see that before they trust a review built on it.
-  if (card.freshness === "partial") {
-    return {
-      tone: "warning",
-      label: "Partly indexed",
-      detail: `${indexed} · some files could not be read`,
-    };
-  }
-  if (card.freshness === "offline") {
-    return {
-      tone: "warning",
-      label: "Offline",
-      detail: `${indexed} · this volume is not connected`,
-    };
-  }
-  const freshness =
-    card.freshness === "fresh"
-      ? "up to date"
-      : card.freshness === "stale"
-        ? "not scanned recently"
-        : "never fully scanned";
-  return { tone: "ready", label: "Ready", detail: `${indexed} · ${freshness}` };
+  if (card.state === "checking" || card.state === "unknown") return "warning";
+  // A partial index is not a "ready" folder: some files were skipped, so a
+  // duplicate set drawn from this root may be missing members, and the reader
+  // has to see that before trusting a review built on it.
+  if (card.freshness === "partial" || card.freshness === "offline") return "warning";
+  return "ready";
 }

@@ -4,6 +4,7 @@
  * via a `storage` event so all useTheme instances stay in sync.
  */
 import { useEffect, useState } from "react";
+import { readStored, writeStored } from "@/lib/storage";
 
 type Theme = "light" | "dark";
 const STORAGE_KEY = "mediasort_theme";
@@ -13,12 +14,8 @@ function getSystemTheme(): Theme {
 }
 
 function getInitialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "dark" || stored === "light") return stored;
-  } catch {
-    // localStorage unavailable
-  }
+  const stored = readStored(STORAGE_KEY);
+  if (stored === "dark" || stored === "light") return stored;
   return getSystemTheme();
 }
 
@@ -42,11 +39,7 @@ export function useTheme(): { theme: Theme; toggle: () => void } {
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (e: MediaQueryListEvent) => {
-      try {
-        if (!localStorage.getItem(STORAGE_KEY)) {
-          setThemeState(e.matches ? "dark" : "light");
-        }
-      } catch {
+      if (readStored(STORAGE_KEY) === null) {
         setThemeState(e.matches ? "dark" : "light");
       }
     };
@@ -70,11 +63,7 @@ export function useTheme(): { theme: Theme; toggle: () => void } {
   const toggle = () =>
     setThemeState((t) => {
       const next = t === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {
-        // ignore
-      }
+      writeStored(STORAGE_KEY, next);
       return next;
     });
 

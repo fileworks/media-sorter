@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { FiActivity, FiChevronDown } from "react-icons/fi";
 
+import { CompanionEvidencePanel } from "@/components/CompanionEvidencePanel";
 import { StatusMessage } from "@/components/StatusMessage";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
@@ -24,7 +25,7 @@ import {
   type PreflightInput,
 } from "@/lib/operationCenter";
 import { useOperationLiveness } from "@/hooks/useOperationLiveness";
-import type { TaskProgress } from "@/types/api";
+import type { PreviewItem, TaskProgress } from "@/types/api";
 
 const TONE_CLASS = {
   neutral: "text-muted-foreground",
@@ -166,6 +167,7 @@ export function OperationCenter({
 
 interface ExecutePreflightProps {
   input: PreflightInput;
+  companionItems?: readonly PreviewItem[];
   onAcknowledge: (acknowledged: boolean) => void;
   onExecute: () => void;
   busy?: boolean;
@@ -173,14 +175,23 @@ interface ExecutePreflightProps {
 
 export function ExecutePreflight({
   input,
+  companionItems = [],
   onAcknowledge,
   onExecute,
   busy = false,
 }: ExecutePreflightProps) {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
   const result = preflight(input);
-  const lineText = (line: (typeof result.reversible)[number]) =>
-    line.messageKey ? t(line.messageKey, line.params, line.text) : line.text;
+  // A line that carries a count resolves through the counted lookup, so every
+  // producer of these lines gets the singular for free rather than each one
+  // remembering to ask for it.
+  const lineText = (line: (typeof result.reversible)[number]) => {
+    if (line.messageKey === undefined) return line.text;
+    const count = line.params?.count;
+    return typeof count === "number"
+      ? tCount(line.messageKey, count, line.params)
+      : t(line.messageKey, line.params, line.text);
+  };
 
   // Three different causes disable Execute. The blocking list above already
   // spells out the first; the other two are stated here or they are stated
@@ -286,6 +297,9 @@ export function ExecutePreflight({
           )}
         </div>
       </aside>
+      <div className="lg:col-span-2">
+        <CompanionEvidencePanel items={companionItems} compact />
+      </div>
     </section>
   );
 }

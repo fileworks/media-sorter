@@ -34,7 +34,7 @@ import {
   ROLE_LABEL,
   activeCards,
   blockingConflicts,
-  cardStatus,
+  cardTone,
   changeRole,
   excludeForRun,
   validateRoots,
@@ -51,6 +51,7 @@ const ROLE_BADGE: Record<RootRole, string> = {
 };
 
 type Translate = ReturnType<typeof useI18n>["t"];
+type TranslateCount = ReturnType<typeof useI18n>["tCount"];
 
 interface SourcesScreenProps {
   cards: RootCard[];
@@ -72,6 +73,7 @@ function factLines(
   primaryInput: boolean,
   copyMode: boolean,
   t: Translate,
+  tCount: TranslateCount,
   locale: string,
 ): string[] {
   if (card.role === "destination") {
@@ -101,7 +103,7 @@ function factLines(
     return [
       card.indexedFiles === null
         ? t("sources.facts.referenceUnscanned")
-        : t("sources.facts.referenceIndexed", {
+        : tCount("sources.facts.referenceIndexed", card.indexedFiles, {
             count: card.indexedFiles.toLocaleString(locale),
           }),
       t("sources.facts.referencePurpose"),
@@ -121,7 +123,9 @@ function factLines(
     return card.indexedFiles === null
       ? unscanned
       : [
-          t("sources.facts.indexed", { count: card.indexedFiles.toLocaleString(locale) }),
+          tCount("sources.facts.indexed", card.indexedFiles, {
+            count: card.indexedFiles.toLocaleString(locale),
+          }),
           t("sources.facts.inputPurpose"),
         ];
   }
@@ -133,7 +137,7 @@ function factLines(
     .map(([kind, count]) => `${kind} ${count.toLocaleString(locale)}`)
     .join(" · ");
   return [
-    t("sources.facts.inputTotals", {
+    tCount("sources.facts.inputTotals", analysis.total_files, {
       count: analysis.total_files.toLocaleString(locale),
       size: formatBytes(analysis.total_size_bytes, { locale }),
     }),
@@ -171,7 +175,7 @@ function FolderCard({
   t: Translate;
 }) {
   const [copied, setCopied] = useState(false);
-  const status = cardStatus(card, conflicts);
+  const tone = cardTone(card, conflicts);
   const ownConflict = conflicts.find((conflict) => conflict.rootIds.includes(card.rootId));
   const offline = card.state === "offline" || card.state === "unreadable";
 
@@ -192,7 +196,7 @@ function FolderCard({
         className={cn(
           "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border bg-card p-3",
           "sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]",
-          status.tone === "error" ? "border-error/50" : "border-border",
+          tone === "error" ? "border-error/50" : "border-border",
           card.role === "reference" && "border-info/25 bg-tint-info/40",
           card.role === "destination" && "border-success/25 bg-tint-success/30",
           // The chip carries the state in words. Dimming the whole card made
@@ -360,7 +364,7 @@ export function SourcesScreen({
   onRemove,
   onRemap,
 }: SourcesScreenProps) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const [pendingRole, setPendingRole] = useState<{ rootId: string; role: RootRole } | null>(null);
 
   const active = useMemo(() => activeCards(cards, excludedForRun), [cards, excludedForRun]);
@@ -464,6 +468,7 @@ export function SourcesScreen({
         card.role === "input" && card.rootId === inputs[0]?.rootId,
         config.copy_instead_of_move,
         t,
+        tCount,
         locale,
       )}
       conflicts={conflicts}

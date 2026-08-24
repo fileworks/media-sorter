@@ -89,4 +89,70 @@ describe("run scope in reports", () => {
     expect(screen.getByText(translate("en", "report.summary.skipped"))).toBeTruthy();
     expect(screen.getByText(translate("en", "report.summary.remaining"))).toBeTruthy();
   });
+
+  it("keeps companion membership, role, placement, warning, and result visible", () => {
+    const withCompanion: OperationReport = {
+      ...REPORT,
+      outcome: "partial",
+      summary: {
+        ...REPORT.summary,
+        total: 2,
+        sorted: 1,
+        failed: 1,
+        companions: 1,
+        incomplete_units: 1,
+      },
+      files: [
+        {
+          id: "primary",
+          operation_id: REPORT.operation_id,
+          source_path: "/library/phone/IMG_0001.jpg",
+          dest_path: "/library/sorted/2026/IMG_0001.jpg",
+          extracted_date: "2026-08-08",
+          metadata_source: "exif",
+          action: "copy",
+          status: "success",
+          error_message: null,
+          file_size: 100,
+          file_type: ".jpg",
+          tags: [],
+          unit_id: "unit-1",
+          companion_role: null,
+          unit_primary_path: "/library/phone/IMG_0001.jpg",
+        },
+        {
+          id: "sidecar",
+          operation_id: REPORT.operation_id,
+          source_path: "/library/phone/IMG_0001.xmp",
+          dest_path: "/library/sorted/2026/IMG_0001.xmp",
+          extracted_date: null,
+          metadata_source: null,
+          action: "copy",
+          status: "incomplete_unit",
+          error_message: "The primary changed; this sidecar was retained.",
+          file_size: 20,
+          file_type: ".xmp",
+          tags: [],
+          unit_id: "unit-1",
+          companion_role: "xmp_sidecar",
+          unit_primary_path: "/library/phone/IMG_0001.jpg",
+        },
+      ],
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <ReportPanel report={withCompanion} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(translate("en", "report.unit.primary"))).toBeTruthy();
+    expect(
+      screen.getByText(translate("en", "report.unit.companion", { role: "xmp sidecar" })),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/Primary: IMG_0001\.jpg/)).toHaveLength(2);
+    expect(screen.getByText("The primary changed; this sidecar was retained.")).toBeTruthy();
+    expect(screen.getByText("/library/sorted/2026/IMG_0001.xmp")).toBeTruthy();
+    expect(screen.getByText(translate("en", "report.status.incompleteUnit"))).toBeTruthy();
+  });
 });

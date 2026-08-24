@@ -106,87 +106,83 @@ export function clampMargin(raw: string): number {
   return Math.min(Math.max(0, n), 0.5);
 }
 
-export const SECTION_DEFAULTS = {
-  essentials: {
-    language: "en" as const,
-    sort: true,
-    sort_criteria: ["year"],
-    copy_instead_of_move: false,
-    companion_handling: "keep_with_primary" as const,
-  },
-  folders: {
-    camera_subfolder_enabled: false,
-    preserve_subfolders: false,
-    categorize_enabled: false,
-    categorize_categories: DEFAULT_CATEGORIES,
-    categorize_categories_provenance: "bundled" as const,
-    categorize_confidence_threshold: 0.55,
-    categorize_min_margin: 0.15,
-  },
-  duplicates: {
-    remove_duplicates: true,
-    duplicate_exact_enabled: true,
-    duplicate_perceptual_enabled: true,
-    duplicate_perceptual_threshold: 95,
-    burst_detection_enabled: false,
-    burst_time_window_seconds: 3,
-    burst_perceptual_distance: 4,
-    burst_require_camera_identity: true,
-  },
-  rename: {
-    rename: false,
-    rename_pattern: "TYPE_YYYY-MM-DD",
-  },
-  conversion: {
-    convert_images: false,
-    image_format: "jpeg" as const,
-    convert_videos: false,
-    video_format: "mp4" as const,
-  },
-  filters: {
-    recursive_scan: true,
-    min_file_size_kb: null,
-    max_file_size_mb: null,
-    exclude_patterns: [
-      "@eaDir",
-      ".@__thumb",
-      "@Recycle",
-      "Thumbs.db",
-      "desktop.ini",
-      ".DS_Store",
-      ".Spotlight-V100",
-      "eaRecycle",
-    ],
-  },
-  rules: {
-    rules_enabled: true,
-    rule_set: { version: 1 as const, tag_rules: [], route_rules: [] },
-  },
-  ai: {
-    index_workers: null,
-    ai_tagging_enabled: false,
-    ai_tagging_confidence_threshold: 0.5,
-    ai_tagging_max_tags: 10,
-    embed_tags_in_files: true,
-    ai_tagging_labels: DEFAULT_AI_LABELS,
-    ai_tagging_labels_provenance: "bundled" as const,
-  },
-  other: {
-    override_metadata: false,
-    repair_enabled: true,
-    thumbnail_cache_enabled: true,
-    thumbnail_cache_budget_bytes: 512 * 1024 * 1024,
-  },
-} satisfies Record<string, Partial<Config>>;
+/*
+ * Field ownership is presentation metadata only. Concrete values are fetched
+ * from the backend's /api/config/defaults endpoint.
+ */
+export const SECTION_FIELDS = {
+  essentials: [
+    "language",
+    "source_directory",
+    "target_directory",
+    "run_mode",
+    "sort",
+    "sort_criteria",
+    "copy_instead_of_move",
+    "companion_handling",
+  ],
+  folders: [
+    "camera_subfolder_enabled",
+    "preserve_subfolders",
+    "categorize_enabled",
+    "categorize_categories",
+    "categorize_categories_provenance",
+    "categorize_confidence_threshold",
+    "categorize_min_margin",
+  ],
+  duplicates: [
+    "remove_duplicates",
+    "duplicate_exact_enabled",
+    "duplicate_perceptual_enabled",
+    "duplicate_perceptual_threshold",
+    "duplicate_keeper_policy",
+    "burst_detection_enabled",
+    "burst_time_window_seconds",
+    "burst_perceptual_distance",
+    "burst_require_camera_identity",
+  ],
+  rename: ["rename", "rename_pattern"],
+  conversion: [
+    "convert_images",
+    "image_format",
+    "image_quality",
+    "convert_videos",
+    "video_format",
+    "video_quality",
+  ],
+  filters: [
+    "recursive_scan",
+    "max_recursion_depth",
+    "min_file_size_kb",
+    "max_file_size_mb",
+    "exclude_patterns",
+    "junk_filter_enabled",
+    "junk_min_file_size_kb",
+    "junk_min_image_dimension",
+    "junk_filename_patterns",
+  ],
+  rules: ["rules_enabled", "rule_set"],
+  ai: [
+    "ai_tagging_enabled",
+    "ai_tagging_confidence_threshold",
+    "ai_tagging_max_tags",
+    "embed_tags_in_files",
+    "ai_tagging_labels",
+    "ai_tagging_labels_provenance",
+    "ai_model_tier",
+    "ai_allow_gpu",
+  ],
+  other: [
+    "override_metadata",
+    "repair_enabled",
+    "update_check_enabled",
+    "thumbnail_cache_enabled",
+    "thumbnail_cache_budget_bytes",
+    "index_workers",
+  ],
+} as const satisfies Record<string, readonly (keyof Config)[]>;
 
-export type SectionId = keyof typeof SECTION_DEFAULTS;
-
-export function isSectionDirty(config: Config, section: SectionId): boolean {
-  const defaults = SECTION_DEFAULTS[section] as Partial<Config>;
-  return (Object.keys(defaults) as (keyof Config)[]).some(
-    (key) => JSON.stringify(config[key]) !== JSON.stringify(defaults[key]),
-  );
-}
+export type SectionId = keyof typeof SECTION_FIELDS;
 
 export interface SectionProps {
   config: Config;

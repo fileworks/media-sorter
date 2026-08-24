@@ -22,7 +22,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { CONFIG_RECIPES, applyRecipe } from "@/lib/configRecipes";
-import { I18nProvider, translate } from "@/i18n/I18nContext";
+import { I18nProvider, plural, translate } from "@/i18n/I18nContext";
 import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
 import { api } from "@/services/api";
 import type { Config } from "@/types/api";
@@ -149,10 +149,14 @@ describe("per-row changed markers", () => {
     fireEvent.click(within(row as HTMLElement).getByRole("button", { name: markerName("On") }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(translate("en", "config.transfer.timestamps"))).toBeTruthy();
+    // The phone card and desktop table are both present; CSS exposes exactly
+    // one at a time. Require both renderings to carry the same setting name.
+    expect(within(dialog).getAllByText(translate("en", "config.transfer.timestamps"))).toHaveLength(
+      2,
+    );
     fireEvent.click(
       within(dialog).getByRole("button", {
-        name: translate("en", "config.reset.confirm", { count: 1 }),
+        name: plural("en", "config.reset.confirm", 1),
       }),
     );
     expect(onSaveConfig).toHaveBeenCalledWith({
@@ -200,12 +204,12 @@ describe("per-row changed markers", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(translate("en", "config.reset.rowTitle"))).toBeTruthy();
     expect(within(dialog).getAllByRole("row")).toHaveLength(2); // header + one setting
-    expect(within(dialog).getByText("Similarity threshold")).toBeTruthy();
+    expect(within(dialog).getAllByText("Similarity threshold")).toHaveLength(2);
     expect(onSaveConfig).not.toHaveBeenCalled();
 
     fireEvent.click(
       within(dialog).getByRole("button", {
-        name: translate("en", "config.reset.confirm", { count: 1 }),
+        name: plural("en", "config.reset.confirm", 1),
       }),
     );
     expect(onSaveConfig).toHaveBeenCalledWith({ duplicate_perceptual_threshold: 95 });
