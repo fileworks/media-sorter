@@ -6,6 +6,7 @@ import { FiCheck, FiLock } from "react-icons/fi";
 
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
+import { formatDate } from "@/lib/dateFormatters";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { folderLeaf, relativeDestination, type ReviewRow } from "@/lib/reviewRows";
@@ -43,7 +44,12 @@ export function CopyRow({
   return (
     <article
       className={cn(
-        "candidate-grid relative min-h-[4.875rem] min-w-0 rounded-panel border bg-card px-2 py-1.5",
+        // `isolate` scopes the z-indices below (the full-card select overlay,
+        // the badges, the filename button above them) to this card. Without a
+        // stacking context they competed page-wide, and the filename's `z-20`
+        // painted over the Resolve queue's sticky decision bar at `z-10` —
+        // leaving "No file selected" unreadable under a copy's name.
+        "candidate-grid relative isolate min-h-[4.875rem] min-w-0 rounded-panel border bg-card px-2 py-1.5",
         "transition-[border-color,box-shadow,background-color,transform] duration-150",
         baseline ? "cursor-default" : "cursor-pointer",
         selected && "selection-set",
@@ -128,7 +134,7 @@ export function CopyRow({
       </span>
 
       <span className="candidate-date text-right text-3xs text-muted-foreground">
-        {row.date === null ? t("review.resolve.noDate") : row.date}
+        {row.date === null ? t("review.resolve.noDate") : formatDate(row.date, { locale })}
       </span>
 
       <span className="candidate-date-source text-right text-3xs text-faint">

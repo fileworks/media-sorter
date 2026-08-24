@@ -12,6 +12,7 @@ import { useMediaInfo, useReviewOutcome } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
+import { formatDate } from "@/lib/dateFormatters";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
@@ -187,7 +188,7 @@ export function DetailView({
                     row.date === null
                       ? unknown
                       : t("review.detail.dateFrom", {
-                          date: row.date,
+                          date: formatDate(row.date, { locale }),
                           source: formatMetadataSource(row.dateSource, t),
                         }),
                   unknown: row.date === null,

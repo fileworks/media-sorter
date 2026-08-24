@@ -332,6 +332,25 @@ describe("browse", () => {
     expect(screen.queryByRole("checkbox", { name: "holiday.jpg" })).toBeNull();
   });
 
+  it("presents dates the way a person reads them, not as raw ISO", async () => {
+    // The date column truncates, so an ISO timestamp rendered verbatim showed
+    // as "2025-07-04T09:3…" — unreadable, and ignoring the active locale while
+    // History and the report already formatted theirs.
+    renderReview(
+      previewResult(
+        item({
+          source: "/in/holiday.jpg",
+          destination: "/out/2025/07/holiday.jpg",
+          extracted_date: "2025-07-04T09:30:00",
+        }),
+      ),
+    );
+    await screen.findByRole("checkbox", { name: "holiday.jpg" });
+
+    expect(document.body.textContent).not.toContain("2025-07-04T09:30:00");
+    expect(document.body.textContent).toContain("Jul 4, 2025");
+  });
+
   it("shows the whole plan when the destination root is selected", async () => {
     renderReview(result);
     await screen.findByRole("checkbox", { name: "holiday.jpg" });

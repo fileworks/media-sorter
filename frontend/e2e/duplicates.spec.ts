@@ -111,3 +111,34 @@ test("comparing two copies keeps one, and the decision survives a restart", asyn
   await page.reload();
   await expect(page.getByText("1 of 4 decided")).toBeVisible();
 });
+
+test("the pinned decision bar is never painted over by the copies behind it", async ({ page }) => {
+  await openResolve(page);
+
+  // The bar reports the current selection state. A copy row's filename button
+  // carries `z-20` so it sits above that row's full-card select overlay; when
+  // the card established no stacking context, that `z-20` competed page-wide
+  // and painted over the sticky bar's `z-10`, leaving the status unreadable
+  // under a filename. jsdom cannot see this: nothing there is ever composited.
+  const painted = await page.evaluate(() => {
+    const status = [...document.querySelectorAll("strong")].find((element) =>
+      /no file selected/i.test(element.textContent ?? ""),
+    );
+    if (!status) return { found: false, covering: null };
+    const box = status.getBoundingClientRect();
+    const topmost = document.elementsFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    )[0] as HTMLElement | undefined;
+    return {
+      found: true,
+      covering:
+        topmost && !topmost.contains(status) && topmost !== status
+          ? (topmost.textContent ?? "").trim().slice(0, 60)
+          : null,
+    };
+  });
+
+  expect(painted.found).toBe(true);
+  expect(painted.covering, "something is painted over the decision bar's status").toBeNull();
+});
