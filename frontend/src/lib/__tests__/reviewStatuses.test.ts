@@ -19,7 +19,7 @@ import contract from "../../../../contracts/review-statuses.json";
 
 describe("preview status parity with the backend", () => {
   it("reads a contract in the shape this test was written against", () => {
-    expect(contract.format_version).toBe(1);
+    expect(contract.format_version).toBe(2);
   });
 
   it("carries every status the backend sends to a review folder", () => {

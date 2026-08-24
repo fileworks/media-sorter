@@ -8,6 +8,7 @@ pin the backend side of the generated artifact both halves now read.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ import pytest
 from app.core.review_status_contract import (
     CONTRACT_FORMAT_VERSION,
     NON_QUARANTINING_PREVIEW_STATUSES,
+    OPERATION_RECORD_STATUSES,
     PREVIEW_STATUSES,
     contract_payload,
 )
@@ -103,3 +105,61 @@ def test_a_missing_artifact_is_reported_rather_than_ignored(tmp_path: Path) -> N
     )
     assert result.returncode == 1
     assert "does not exist" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# The executor's record vocabulary                                             #
+# --------------------------------------------------------------------------- #
+#
+# A preview status says where a file *would* go; a record status says what
+# actually happened to it. The report screen filters on the second, and it had
+# no contract — so a status the executor wrote and the filter did not know
+# about vanished from every tab while still counting toward "All".
+
+
+def test_the_artifact_carries_every_record_status(artifact: dict[str, object]) -> None:
+    assert artifact["operation_record_statuses"] == sorted(OPERATION_RECORD_STATUSES)
+
+
+def test_every_status_the_executor_writes_is_declared() -> None:
+    """The literals in the executor must all be in the exported vocabulary.
+
+    Hand-maintaining the set is only safe if forgetting to extend it fails
+    here. `status="..."` and `record["status"] = "..."` are the two shapes the
+    service uses to stamp a record.
+    """
+    source = (
+        Path(__file__).resolve().parents[1] / "app" / "services" / "sorting_service.py"
+    ).read_text(encoding="utf-8")
+    written = set(re.findall(r'status="([a-z_]+)"', source))
+    written |= set(re.findall(r'\["status"\]\s*=\s*"([a-z_]+)"', source))
+    # `status="ok"`-style literals belong to unrelated payloads (probes and
+    # capability reports), so only compare the ones that are record statuses.
+    undeclared = {
+        status
+        for status in written
+        if status not in OPERATION_RECORD_STATUSES and status in _RECORD_STATUS_CANDIDATES
+    }
+    assert undeclared == set(), (
+        f"the executor writes {sorted(undeclared)} but the contract does not declare them; "
+        "the report filter will drop those rows from every tab"
+    )
+
+
+#: Statuses observed on record dicts. Anything the executor stamps that is not
+#: listed here is an unrelated payload field, not a file outcome.
+_RECORD_STATUS_CANDIDATES = {
+    "already_in_destination",
+    "blocked",
+    "cancelled",
+    "companion_left_in_place",
+    "corrupted",
+    "duplicate",
+    "failed",
+    "future_date",
+    "incomplete_unit",
+    "junk",
+    "kept_in_place",
+    "success",
+    "unknown_date",
+}

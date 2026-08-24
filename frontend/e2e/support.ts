@@ -330,7 +330,7 @@ export const E2E_OPERATION_REPORT: OperationReport = {
     }),
     operationFile("file-duplicate", "/tmp/e2e-input/IMG_0001-copy.jpg", {
       destination: null,
-      status: "skipped_duplicate",
+      status: "duplicate",
     }),
     operationFile("file-corrupt", "/tmp/e2e-input/corrupt.jpg", {
       destination: null,
@@ -360,7 +360,10 @@ function operationFile(
     extracted_date: source.endsWith(".mp4") || source.includes("corrupt") ? null : "2026-08-21",
     metadata_source: source.endsWith(".mp4") || source.includes("corrupt") ? "unknown" : "exif",
     action: options.destination === null ? "leave" : "copy",
-    status: options.status ?? (options.error ? "incomplete_unit" : "sorted"),
+    // "success" is what the executor actually writes; "sorted" was a status no
+    // backend ever emits, so every one of these rows fell outside every report
+    // filter and the Sorted tab read (0) next to a tile saying 6.
+    status: options.status ?? (options.error ? "incomplete_unit" : "success"),
     error_message: options.error ?? null,
     file_size: 1,
     file_type: source.split(".").pop() ?? "unknown",
