@@ -9,6 +9,9 @@ your config directory. Any field can also be overridden by an environment variab
 > clearly named quarantine folders you can review.
 
 Defaults below are the real backend defaults from `backend/app/core/config.py`.
+AI tagging and categorization are local-only: no media, labels, or credentials are sent
+to a cloud media provider. Model downloads happen only through an explicit,
+checksum-verified user action.
 
 ## Recipes and visibility
 
@@ -48,8 +51,8 @@ junk) → **03 Enrich** (convert and tag). The rail beside them carries the *cur
 value* of each entry, so reading it top to bottom answers "what is this run going to
 do?" without expanding anything.
 
-Consequential detail — cloud credentials, label vocabularies, thresholds, rule editing —
-sits behind a per-row disclosure. A new setting belongs in a disclosure unless its value
+Consequential detail — label vocabularies, thresholds, rule editing — sits behind a
+per-row disclosure. A new setting belongs in a disclosure unless its value
 is normally decided for each run or library.
 
 ## Essentials
@@ -292,7 +295,7 @@ Use either, both, or neither.
 The Configure screen probes your machine (`GET /api/hardware`) and shows a **capability
 chip**: your CPU/RAM/GPU summary and the recommended tier. If the machine is below the
 minimum for local AI (needs ≥4 CPU cores and ≥4 GB RAM), local features auto-disable and
-the UI steers you to a cloud tagging provider. Choosing a tier heavier than recommended
+the UI explains that tagging/categorization are unavailable offline. Choosing a tier heavier than recommended
 is allowed but flagged **"may be slow"**, so the choice is always informed.
 
 ### AI content tagging
@@ -300,19 +303,14 @@ is allowed but flagged **"may be slow"**, so the choice is always informed.
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | Tag media by content | `ai_tagging_enabled` | `false` | Master switch for content tagging. Runs during a real sort, not in preview. |
-| Provider | `ai_tagging_provider` | `"local"` | `local` (offline, free, no key) · `azure_vision` (free 5,000/mo) · `imagga` (~1,000/mo) · `google_cloud_vision` (1,000/mo). |
-| API key / secret / endpoint | `ai_tagging_api_key`, `ai_tagging_api_secret`, `ai_tagging_endpoint` | `null` | Cloud credentials. Azure needs endpoint + key; Imagga needs key + secret; Google needs key. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
 | Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
-Azure and Imagga receive the selected operation locale and request native German output.
-Google Vision does not guarantee German labels, so known English results are mapped
-through bundled concept aliases and unknown results are omitted with a warning. Local
-SigLIP uses localized descriptions and templates. Local CLIP may use stable English
-semantic prompts for model quality, but still emits the selected localized label.
-Provider failures remain best-effort and never fail the sort.
+Local SigLIP uses localized descriptions and templates. Local CLIP may use stable English
+semantic prompts for model quality, but still emits the selected localized label. Model
+download failures remain best-effort and never fail the sort.
 
 ### Smart Categorization
 

@@ -74,6 +74,7 @@ filename.
 - Never skip `response_model` on a stable-shape endpoint; never add an undocumented dict return
 - Never mix naming styles — this API is `snake_case`, end to end
 - Never return an unbounded list — bound pagination params at the query layer
-- Never expose secrets (cloud API keys are accepted in config but never echoed into logs)
+- Never add credentials or media-provider secrets to the API; tagging and categorization
+  are local-only and outbound access is limited to explicit update/model-download paths.
 - Never use `Any` in Pydantic schema fields
 - Never trust client-side validation alone — `POST /config` re-validates every key server-side

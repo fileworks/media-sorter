@@ -27,7 +27,8 @@
 - **Mock at the collaborator boundary** with `unittest.mock.patch.object(svc._extraction, "extract_detailed", ...)` — not whole services when testing a route
 - **Background tasks**: use the real typed `Task` when phase/event/partial behavior matters; focused legacy service tests may use a progress/cancel stand-in. Worker-thread cancellation and retention/idempotency behavior belong in `test_task_manager.py`.
 - `pytest.mark.parametrize` for edge-case tables (see `test_config.py` rename-pattern tests)
-- Never touch the network — the update checker and cloud taggers are tested with mocked `httpx`
+- Never touch the network — update/model-download paths are tested with mocked `httpx`, and
+  there is no cloud media tagger to exercise.
 
 ## Coverage Goals
 - Services (business logic): the focus of the ≥80% gate

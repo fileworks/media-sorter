@@ -42,5 +42,5 @@ Two things are worth knowing when assessing a report:
 ## What is deliberately out of scope
 
 The application never uploads, never phones home except for the optional update
-check against `api.github.com`, and stores no credentials beyond the optional
-AI-tagging API keys the user enters, which are kept in the local config file.
+check against `api.github.com`, and stores no cloud media credentials. AI tagging and
+categorization are local-only; model downloads are explicit and checksum-verified.

@@ -20,8 +20,8 @@
 MediaSorter turns mixed camera, phone, messenger, and backup folders into a
 reviewed date-organized library. It extracts capture dates, keeps companion
 files together, detects duplicate and similar media, and can categorize or tag
-content with optional local AI. Processing stays on your machine unless you
-explicitly select a cloud tagging provider.
+content with optional local AI. Processing and tagging stay on your machine;
+the application has no cloud media provider or credential path.
 
 ## Install
 
@@ -198,8 +198,7 @@ instructions belong in ignored `CLAUDE.local.md`.
 
 Report vulnerabilities privately through [SECURITY.md](SECURITY.md). The
 backend binds to loopback by default. Outbound access is limited to explicit
-features such as update checks, model installation, or a configured cloud AI
-provider.
+features such as update checks and model installation.
 
 ## License
 
