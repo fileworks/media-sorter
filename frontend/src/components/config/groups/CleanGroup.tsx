@@ -21,8 +21,8 @@ import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
 export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
   const { t } = useI18n();
 
-  const excludePatterns = config.exclude_patterns ?? [];
-  const junkPatterns = config.junk_filename_patterns ?? [];
+  const excludePatterns = config.exclude_patterns;
+  const junkPatterns = config.junk_filename_patterns;
 
   // Exact-only versus exact-plus-near is one decision to a user even though it
   // is two flags underneath; presenting it as two toggles invites the
@@ -66,7 +66,7 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
                   description={t("config.duplicates.thresholdHelp")}
                 >
                   <PerceptualSlider
-                    value={config.duplicate_perceptual_threshold ?? 95}
+                    value={config.duplicate_perceptual_threshold}
                     onChange={(value) => updateConfig({ duplicate_perceptual_threshold: value })}
                   />
                 </SubSetting>
@@ -147,10 +147,11 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
                   type="number"
                   min={0}
                   max={MAX_FILE_SIZE_INPUT}
-                  value={config.junk_min_file_size_kb ?? 8}
-                  onChange={(event) =>
-                    updateConfig({ junk_min_file_size_kb: clampFileSize(event.target.value) ?? 0 })
-                  }
+                  value={config.junk_min_file_size_kb}
+                  onChange={(event) => {
+                    const value = clampFileSize(event.target.value);
+                    if (value !== null) updateConfig({ junk_min_file_size_kb: value });
+                  }}
                   className="w-28"
                 />
                 <span className="text-xs text-faint">{t("config.unit.kb")}</span>
@@ -167,12 +168,11 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
                   type="number"
                   min={0}
                   max={MAX_FILE_SIZE_INPUT}
-                  value={config.junk_min_image_dimension ?? 200}
-                  onChange={(event) =>
-                    updateConfig({
-                      junk_min_image_dimension: clampFileSize(event.target.value) ?? 0,
-                    })
-                  }
+                  value={config.junk_min_image_dimension}
+                  onChange={(event) => {
+                    const value = clampFileSize(event.target.value);
+                    if (value !== null) updateConfig({ junk_min_image_dimension: value });
+                  }}
                   className="w-28"
                 />
                 <span className="text-xs text-faint">{t("config.unit.px")}</span>
@@ -184,7 +184,7 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
         <Toggle
           id="junk-filter"
           label={t("config.filters.junk")}
-          checked={config.junk_filter_enabled ?? false}
+          checked={config.junk_filter_enabled}
           onChange={(value) => updateConfig({ junk_filter_enabled: value })}
         />
       </SettingRow>

@@ -5,6 +5,7 @@ import { FiArrowLeft, FiArrowRight, FiMaximize, FiMinus, FiPlus } from "react-ic
 
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal";
 import { MediaVideo } from "@/components/ui/media-video";
+import { useMediaInfo } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
 import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 import { api } from "@/services/api";
@@ -40,7 +41,10 @@ export function MediaViewer({
   const frameRef = useRef<HTMLDivElement>(null);
   const [zoomStep, setZoomStep] = useState(0);
   const zoom = ZOOM_STEPS[zoomStep];
-  const isVideo = /\.(avi|m4v|mkv|mov|mp4|webm)$/i.test(path);
+  const info = useMediaInfo(path);
+  const isVideo = info.data?.media_type === "video";
+  const canZoom = info.data?.media_type === "image";
+  const effectiveZoom = canZoom ? zoom : 1;
 
   // Each newly opened file starts fitted to the viewport.
   useEffect(() => setZoomStep(0), [path]);
@@ -54,57 +58,65 @@ export function MediaViewer({
   // The modal owns Escape; typing controls retain their navigation keys.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "input, textarea, select, button, a, video, audio, [contenteditable='true'], [role='slider']",
+        )
+      )
+        return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "ArrowLeft") onPrevious?.();
       else if (event.key === "ArrowRight") onNext?.();
-      else if (event.key === "+" || event.key === "=") zoomIn();
-      else if (event.key === "-") zoomOut();
-      else if (event.key === "0") setZoomStep(0);
+      else if (canZoom && (event.key === "+" || event.key === "=")) zoomIn();
+      else if (canZoom && event.key === "-") zoomOut();
+      else if (canZoom && event.key === "0") setZoomStep(0);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onNext, onPrevious, zoomIn, zoomOut]);
+  }, [canZoom, onNext, onPrevious, zoomIn, zoomOut]);
 
   // Center the scrollable image after each zoom change.
   useEffect(() => {
     const frame = frameRef.current;
-    if (!frame || zoom === 1) return;
+    if (!frame || effectiveZoom === 1) return;
     frame.scrollLeft = (frame.scrollWidth - frame.clientWidth) / 2;
     frame.scrollTop = (frame.scrollHeight - frame.clientHeight) / 2;
-  }, [zoom]);
+  }, [effectiveZoom]);
 
   return (
     <Modal open onClose={onClose} title={name} size="full">
       <ModalHeader
         actions={
-          <>
-            <ViewerButton
-              label={t("review.viewer.zoomOut")}
-              onClick={zoomOut}
-              disabled={zoomStep === 0}
-              disabledReason={t("review.viewer.alreadyFit")}
-              icon={FiMinus}
-            />
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-              {zoom === 1 ? t("review.viewer.fit") : `${zoom}×`}
-            </span>
-            <ViewerButton
-              label={t("review.viewer.zoomIn")}
-              onClick={zoomIn}
-              disabled={zoomStep === ZOOM_STEPS.length - 1}
-              disabledReason={t("review.viewer.maximumZoom")}
-              icon={FiPlus}
-            />
-            <ViewerButton
-              label={t("review.viewer.fitToWindow")}
-              onClick={() => setZoomStep(0)}
-              disabled={zoomStep === 0}
-              disabledReason={t("review.viewer.alreadyFit")}
-              icon={FiMaximize}
-            />
-          </>
+          canZoom ? (
+            <>
+              <ViewerButton
+                label={t("review.viewer.zoomOut")}
+                onClick={zoomOut}
+                disabled={zoomStep === 0}
+                disabledReason={t("review.viewer.alreadyFit")}
+                icon={FiMinus}
+              />
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {zoom === 1 ? t("review.viewer.fit") : `${zoom}×`}
+              </span>
+              <ViewerButton
+                label={t("review.viewer.zoomIn")}
+                onClick={zoomIn}
+                disabled={zoomStep === ZOOM_STEPS.length - 1}
+                disabledReason={t("review.viewer.maximumZoom")}
+                icon={FiPlus}
+              />
+              <ViewerButton
+                label={t("review.viewer.fitToWindow")}
+                onClick={() => setZoomStep(0)}
+                disabled={zoomStep === 0}
+                disabledReason={t("review.viewer.alreadyFit")}
+                icon={FiMaximize}
+              />
+            </>
+          ) : undefined
         }
       >
         <span className="min-w-0 truncate text-xs text-faint" title={destination ?? undefined}>
@@ -119,15 +131,32 @@ export function MediaViewer({
         ref={frameRef}
         className={cn(
           "min-h-0 flex-1 bg-foreground",
-          zoom === 1 ? "flex items-center justify-center overflow-hidden" : "overflow-auto",
+          effectiveZoom === 1
+            ? "flex items-center justify-center overflow-hidden"
+            : "overflow-auto",
         )}
       >
-        {isVideo ? (
+        {info.isLoading ? (
+          <p role="status" className="px-6 text-center text-sm text-background/80">
+            {t("review.detail.infoLoading")}
+          </p>
+        ) : info.isError ? (
+          <div className="px-6 text-center text-sm text-background/80">
+            <p role="alert">{t("review.detail.infoFailed")}</p>
+            <button
+              type="button"
+              className="mt-3 rounded-lg border border-current px-3 py-1.5 font-medium"
+              onClick={() => void info.refetch()}
+            >
+              {t("state.retry")}
+            </button>
+          </div>
+        ) : isVideo ? (
           <div className="flex h-full w-full items-center justify-center p-4">
             <MediaVideo path={path} name={name} className="max-h-full max-w-full" />
           </div>
         ) : (
-          <ViewerImage path={path} name={name} zoom={zoom} />
+          <ViewerImage path={path} name={name} zoom={effectiveZoom} />
         )}
       </div>
 

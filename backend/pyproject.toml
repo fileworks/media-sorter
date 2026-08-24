@@ -67,6 +67,9 @@ dev = [
     "ruff>=0.16.1",
     "mypy>=2.3.0",
     "httpx>=0.25.0",
+    # Starlette's TestClient is built on HTTPX2; plain HTTPX is a deprecated
+    # compatibility fallback and emits a warning during every test process.
+    "httpx2>=2.0.0",
     # Bundling — used by `make bundle-backend` to freeze the backend for distribution
     "pyinstaller>=6.21.0",
 ]

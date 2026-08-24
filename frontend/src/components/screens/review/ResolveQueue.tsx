@@ -25,7 +25,10 @@ function candidateNote(
   t: (key: string, params?: Record<string, string | number>) => string,
   locale: string,
 ): string | null {
-  const largest = rows.reduce((most, candidate) => Math.max(most, candidate.sizeBytes), 0);
+  const knownSizes = rows.flatMap((candidate) =>
+    candidate.sizeBytes === null ? [] : [candidate.sizeBytes],
+  );
+  const largest = knownSizes.length > 0 ? Math.max(...knownSizes) : null;
   const dated = rows.filter((candidate) => candidate.date !== null);
   const newest = dated.reduce<string | null>(
     (latest, candidate) => (latest === null || candidate.date! > latest ? candidate.date : latest),
@@ -34,14 +37,14 @@ function candidateNote(
   const isNewest =
     newest !== null && row.date === newest && dated.some((other) => other.date !== newest);
 
-  if (row.sizeBytes === largest && largest > 0) {
-    const smaller = rows.some((candidate) => candidate.sizeBytes < largest);
+  if (row.sizeBytes !== null && row.sizeBytes === largest && largest > 0) {
+    const smaller = knownSizes.some((size) => size < largest);
     if (smaller) {
       return isNewest
         ? t("review.resolve.note.largestAndNewest")
         : t("review.resolve.note.largest");
     }
-  } else if (largest > row.sizeBytes) {
+  } else if (largest !== null && row.sizeBytes !== null && largest > row.sizeBytes) {
     return t("review.resolve.note.smallerBy", {
       amount: formatBytes(largest - row.sizeBytes, { locale }),
     });
@@ -57,7 +60,9 @@ interface ResolveQueueProps {
   onGo: (index: number) => void;
   onOpenSet: (setId: string) => void;
   onKeep: (setId: string, source: string) => void;
+  onKeepMany?: (choices: readonly { setId: string; source: string }[]) => void;
   onKeepAll: (setId: string) => void;
+  onKeepAllMany?: (setIds: readonly string[]) => void;
   onReset?: (setId: string) => void;
   onResetAll?: () => void;
   onAcceptProposal: (setId: string) => void;
@@ -89,7 +94,9 @@ export function ResolveQueue({
   onGo,
   onOpenSet,
   onKeep,
+  onKeepMany,
   onKeepAll,
+  onKeepAllMany,
   onReset,
   onResetAll,
   onAcceptProposal,
@@ -200,9 +207,11 @@ export function ResolveQueue({
   );
 
   const applyChoices = (choices: typeof ruleChoices) => {
-    for (const choice of choices) {
-      if (choice.source !== null) onKeep(choice.setId, choice.source);
-    }
+    const resolved = choices.filter(
+      (choice): choice is { setId: string; source: string } => choice.source !== null,
+    );
+    if (onKeepMany) onKeepMany(resolved);
+    else for (const choice of resolved) onKeep(choice.setId, choice.source);
   };
 
   const chooseByNumber = useCallback(
@@ -390,7 +399,9 @@ export function ResolveQueue({
             disabled: false,
             disabledReasonId: "review-set-selection-empty",
             onApply: () => {
-              for (const entry of selectedSets) onKeepAll(entry.id);
+              const setIds = selectedSets.map((entry) => entry.id);
+              if (onKeepAllMany) onKeepAllMany(setIds);
+              else for (const setId of setIds) onKeepAll(setId);
             },
           },
           {
@@ -540,6 +551,17 @@ export function ResolveQueue({
                       <dl className="mt-2 grid gap-1 text-3xs text-muted-foreground sm:grid-cols-2">
                         <div>
                           <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.primaryRung")}
+                          </dt>
+                          <dd>
+                            {t(
+                              current.proposalRationale.primaryRung.key,
+                              current.proposalRationale.primaryRung.params,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-foreground">
                             {t("review.resolve.rationale.winningRung")}
                           </dt>
                           <dd>
@@ -597,6 +619,42 @@ export function ResolveQueue({
                             </dd>
                           </div>
                         )}
+                        <div className="sm:col-span-2">
+                          <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.comparedFacts")}
+                          </dt>
+                          <dd>
+                            <ul className="mt-0.5 space-y-0.5">
+                              {current.proposalRationale.comparisons.map((comparison) => (
+                                <li key={comparison.member}>
+                                  <span
+                                    className={
+                                      comparison.selected ? "font-semibold text-success" : undefined
+                                    }
+                                  >
+                                    {comparison.member}
+                                    {comparison.selected
+                                      ? ` (${t("review.resolve.rationale.selected")})`
+                                      : ""}
+                                  </span>
+                                  {": "}
+                                  {comparison.values
+                                    .map((fact) => {
+                                      const value =
+                                        fact.value === null
+                                          ? t("review.detail.unknown")
+                                          : fact.format === "bytes" &&
+                                              typeof fact.value === "number"
+                                            ? formatBytes(fact.value, { locale })
+                                            : String(fact.value);
+                                      return `${t(fact.rung.key, fact.rung.params)}: ${value}`;
+                                    })
+                                    .join("; ")}
+                                </li>
+                              ))}
+                            </ul>
+                          </dd>
+                        </div>
                       </dl>
                     )}
                   </div>

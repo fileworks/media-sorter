@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { formatBytes, formatBytesShort, formatDuration, formatCount } from "@/lib/formatters";
 
 describe("formatBytes", () => {
-  it("returns the placeholder for nullish / non-positive / non-finite input", () => {
+  it("keeps a known zero distinct from nullish, negative, and non-finite input", () => {
     expect(formatBytes(null)).toBe("—");
     expect(formatBytes(undefined)).toBe("—");
-    expect(formatBytes(0)).toBe("—");
+    expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(-5)).toBe("—");
     expect(formatBytes(NaN)).toBe("—");
     expect(formatBytes(Infinity)).toBe("—");

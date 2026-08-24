@@ -223,7 +223,7 @@ describe("duplicate comparison", () => {
     expect(screen.queryByText(/the larger file/i)).toBeNull();
   });
 
-  it("shows duration and codec only for a pair of videos", () => {
+  it("shows duration and codec whenever video evidence is relevant", () => {
     const { unmount } = render(
       <I18nProvider initialLocale="en">
         <CompareModal
@@ -256,6 +256,46 @@ describe("duplicate comparison", () => {
     );
     expect(screen.queryByText("Duration")).toBeNull();
     expect(screen.queryByText("Codec")).toBeNull();
+  });
+
+  it("keeps mixed image/video facts honest instead of hiding one side", () => {
+    renderComparison(
+      file("still", facts({ width: 1000, height: 1500, kind: "image" })),
+      file(
+        "clip",
+        facts({ width: 1920, height: 1080, kind: "video", duration: 65, codec: "h264" }),
+      ),
+    );
+
+    expect(screen.getByText("File type")).toBeTruthy();
+    expect(screen.getByText("Duration")).toBeTruthy();
+    expect(screen.getByText("Video codec")).toBeTruthy();
+    expect(screen.getAllByText("Not applicable")).toHaveLength(2);
+    expect(screen.getByText("1m 5s")).toBeTruthy();
+    expect(screen.getByText("h264")).toBeTruthy();
+  });
+
+  it("states the full set scope when keeping every member", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("b", facts({ width: 1000, height: 1500 }))}
+          keeperId={null}
+          setId="set-1"
+          setMemberCount={3}
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Keep all 3 as separate files — these are not duplicates",
+      }),
+    ).toBeTruthy();
   });
 
   it("shows companion membership, role, destination, warning, and planned result", () => {
@@ -291,12 +331,14 @@ describe("duplicate comparison", () => {
     expect(screen.getByText("Primary in unit unit-1")).toBeTruthy();
     expect(screen.getByText("Standalone file")).toBeTruthy();
     expect(
-      screen.getByText(/edit sidecar.*attached.*primary\.xmp.*metadata was unreadable/),
+      screen.getByText(
+        /Edit sidecar.*Planned with the primary file.*primary\.xmp.*metadata was unreadable/,
+      ),
     ).toBeTruthy();
     expect(screen.getByText("/sorted/2026/primary.jpg")).toBeTruthy();
     expect(screen.getByText("One companion needs review.")).toBeTruthy();
-    expect(screen.getByText("organize")).toBeTruthy();
-    expect(screen.getByText("keep_in_place")).toBeTruthy();
+    expect(screen.getByText("Will be organized")).toBeTruthy();
+    expect(screen.getByText("Will remain in place")).toBeTruthy();
   });
 
   it("opens either side full screen without dismissing the comparison", () => {

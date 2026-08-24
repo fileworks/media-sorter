@@ -369,6 +369,7 @@ describe("operation center", () => {
 
 describe("execute preflight", () => {
   const base: PreflightInput = {
+    impactState: "ready",
     actionableGroups: 3,
     quarantineCount: 4,
     quarantineBytes: 5_000,
@@ -397,6 +398,20 @@ describe("execute preflight", () => {
       /reference file\(s\) will not be touched/i,
     );
   });
+
+  it.each(["loading", "error"] as const)(
+    "blocks while the exact decision impact is %s",
+    (impactState) => {
+      const result = preflight({ ...base, impactState, acknowledgedSourceMutations: true });
+
+      expect(result.canExecute).toBe(false);
+      expect(result.blocking[0].messageKey).toBe(
+        impactState === "loading"
+          ? "preflight.blocking.impactLoading"
+          : "preflight.blocking.impactError",
+      );
+    },
+  );
 
   it("blocks a plan with no actionable work", () => {
     const result = preflight({ ...base, actionableGroups: 0 });

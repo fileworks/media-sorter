@@ -30,11 +30,21 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /touch\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         // Pinned so a target-size or focus-obscured result is a property of the
         // layout rather than of whatever window the runner happened to open.
         viewport: { width: 1280, height: 800 },
+      },
+    },
+    {
+      name: "chromium-touch",
+      testMatch: /touch\.spec\.ts/,
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 360, height: 800 },
+        hasTouch: true,
       },
     },
   ],

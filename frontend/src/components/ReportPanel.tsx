@@ -4,6 +4,7 @@ import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { companionRoleLabel } from "@/lib/evidenceLabels";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import { triggerDownload } from "@/lib/download";
 import { cn } from "@/lib/utils";
@@ -579,7 +580,7 @@ function FileTableSection({
                             ? t("report.unit.primary")
                             : f.companion_role
                               ? t("report.unit.companion", {
-                                  role: f.companion_role.replace(/_/g, " "),
+                                  role: companionRoleLabel(f.companion_role, t),
                                 })
                               : t("report.unit.unknownRole")}
                         </p>

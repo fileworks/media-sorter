@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { E2E_ANALYSIS, E2E_RECOVERY, duplicatePlan, stubBackend } from "./support";
+import { E2E_ANALYSIS, duplicatePlan, stubBackend } from "./support";
 
 /**
  * The duplicate workflow, driven the way a person drives it.
@@ -22,7 +22,7 @@ async function openResolve(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await stubBackend(page);
+  await stubBackend(page, { previewResult: result });
   await page.route("**/api/review/groups**", async (route) => {
     const kind = new URL(route.request().url()).searchParams.get("kind") ?? "exact";
     await route.fulfill({
@@ -38,13 +38,18 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.addInitScript(
-    ({ result, recovery, analysis }) => {
+    ({ result, analysis }) => {
       localStorage.setItem(
         "mediasort_completed_plan",
-        JSON.stringify({ schemaVersion: 2, planId: result.plan_id, result, recovery, analysis }),
+        JSON.stringify({
+          schemaVersion: 3,
+          planId: result.plan_id,
+          configFingerprint: result.config_fingerprint,
+          analysis,
+        }),
       );
     },
-    { result, recovery: E2E_RECOVERY, analysis: E2E_ANALYSIS },
+    { result, analysis: E2E_ANALYSIS },
   );
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -91,9 +96,17 @@ test("comparing two copies keeps one, and the decision survives a restart", asyn
   // Named, not indexed: the comparison-mode selector is a radiogroup too, and
   // an index would silently pick "Overlay".
   await dialog.getByRole("radio", { name: /^B ·/ }).check();
+  await expect(page.getByText(/saving this reviewed plan/i)).toHaveCount(0);
+  const decisionSaved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/sorting/plans/e2e-plan/review-state") &&
+      response.request().method() === "PUT",
+  );
   await dialog.getByRole("button", { name: "Confirm selection" }).click();
 
   await expect(page.getByText("1 of 4 decided")).toBeVisible();
+  await decisionSaved;
+  await expect(page.getByText(/saving this reviewed plan/i)).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByText("1 of 4 decided")).toBeVisible();

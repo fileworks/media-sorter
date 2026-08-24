@@ -134,7 +134,7 @@ export function factTitle(fact: FactValue): string | undefined {
   return fact.known ? undefined : (fact.issue ?? "this could not be read");
 }
 
-export function resolutionLabel(facts: MemberFacts): string {
+export function resolutionLabel(facts: Pick<MemberFacts, "width" | "height">): string {
   if (!facts.width.known || !facts.height.known) return "unknown";
   return `${facts.width.value} × ${facts.height.value}`;
 }
@@ -403,8 +403,18 @@ export type KeeperRankingRung =
 
 export interface KeeperRanking {
   memberId: string;
+  /** The rule the selected policy tries first, whether or not it breaks the tie. */
+  primaryRung: KeeperRankingRung;
   /** The first ordered criterion that left only the selected member. */
   decisiveRung: KeeperRankingRung;
+  /** Every criterion actually consulted, with each compared member's raw fact. */
+  trace: KeeperCriterionTrace[];
+}
+
+export interface KeeperCriterionTrace {
+  rung: KeeperRankingRung;
+  values: Record<string, number | string | null>;
+  contendersAfter: number;
 }
 
 /**
@@ -484,6 +494,7 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
   interface Criterion {
     rung: KeeperRankingRung;
     value: (member: GroupMember) => number | string;
+    display: (member: GroupMember) => number | string | null;
   }
 
   const best = (
@@ -503,15 +514,28 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
     const winner = sorted[0];
     let contenders = [...pool];
     let decisiveRung = criteria[criteria.length - 1].rung;
+    const trace: KeeperCriterionTrace[] = [];
     for (const criterion of criteria) {
       const winningValue = criterion.value(winner);
       contenders = contenders.filter((member) => criterion.value(member) === winningValue);
+      trace.push({
+        rung: criterion.rung,
+        values: Object.fromEntries(
+          pool.map((member) => [member.member_id, criterion.display(member)]),
+        ),
+        contendersAfter: contenders.length,
+      });
       if (contenders.length === 1) {
         decisiveRung = criterion.rung;
         break;
       }
     }
-    return { memberId: winner.member_id, decisiveRung };
+    return {
+      memberId: winner.member_id,
+      primaryRung: criteria[0].rung,
+      decisiveRung,
+      trace,
+    };
   };
 
   switch (policy) {
@@ -521,11 +545,15 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
       // fewest copy marks, then shallowest path, then oldest, then largest, then
       // identity. An unknown mtime sorts last rather than reading as zero.
       return best(members, [
-        { rung: "copy_markers", value: copyMarks },
-        { rung: "path_depth", value: depth },
-        { rung: "oldest_modified", value: (m) => modified(m) ?? Number.POSITIVE_INFINITY },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "stable_identity", value: identity },
+        { rung: "copy_markers", value: copyMarks, display: copyMarks },
+        { rung: "path_depth", value: depth, display: depth },
+        {
+          rung: "oldest_modified",
+          value: (m) => modified(m) ?? Number.POSITIVE_INFINITY,
+          display: modified,
+        },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "best_quality":
       // Most pixels, then most bytes. Unlike `highest_resolution` it does not
@@ -533,34 +561,54 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
       // full of files no parser handles, and refusing them all would leave the
       // common case undecided.
       return best(members, [
-        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0) },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
-        { rung: "stable_identity", value: identity },
+        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0), display: pixels },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        {
+          rung: "newest_modified",
+          value: (m) => -(modified(m) ?? 0),
+          display: modified,
+        },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "largest":
       return best(members, [
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
-        { rung: "stable_identity", value: identity },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        {
+          rung: "newest_modified",
+          value: (m) => -(modified(m) ?? 0),
+          display: modified,
+        },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "smallest":
       return best(members, [
-        { rung: "smallest_size", value: size },
-        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
-        { rung: "stable_identity", value: identity },
+        { rung: "smallest_size", value: size, display: size },
+        {
+          rung: "newest_modified",
+          value: (m) => -(modified(m) ?? 0),
+          display: modified,
+        },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "longest_filename":
       return best(members, [
-        { rung: "longest_filename", value: (m) => -filename(m).length },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "stable_identity", value: identity },
+        {
+          rung: "longest_filename",
+          value: (m) => -filename(m).length,
+          display: (m) => filename(m).length,
+        },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "shortest_filename":
       return best(members, [
-        { rung: "shortest_filename", value: (m) => filename(m).length },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "stable_identity", value: identity },
+        {
+          rung: "shortest_filename",
+          value: (m) => filename(m).length,
+          display: (m) => filename(m).length,
+        },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     case "newest":
     case "oldest": {
@@ -571,9 +619,10 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
         {
           rung: policy === "newest" ? "newest_modified" : "oldest_modified",
           value: (m) => sign * (modified(m) ?? 0),
+          display: modified,
         },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "stable_identity", value: identity },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     }
     case "highest_resolution": {
@@ -581,9 +630,9 @@ export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): Ke
       // Refuse rather than guess: one unreadable file must not be ranked last.
       if (measured.length !== members.length || measured.length === 0) return null;
       return best(measured, [
-        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0) },
-        { rung: "largest_size", value: (m) => -size(m) },
-        { rung: "stable_identity", value: identity },
+        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0), display: pixels },
+        { rung: "largest_size", value: (m) => -size(m), display: size },
+        { rung: "stable_identity", value: identity, display: (m) => m.relative_path },
       ]);
     }
     default:
@@ -618,7 +667,7 @@ export interface ComparableFile {
   /** What to call it in the table. */
   label: string;
   /** Absent for a file the catalog holds no member record for. */
-  facts: MemberFacts | null;
+  facts: (Omit<MemberFacts, "size_bytes"> & { size_bytes: number | null }) | null;
   /** Which extractor supplied captured_at; null when the catalog did not record it. */
   capturedAtSource: string | null;
   confidence: MemberEvidence["confidence"] | null;
@@ -664,13 +713,13 @@ export function comparableFromRow(row: {
   source: string;
   folder: string;
   name: string;
-  sizeBytes: number;
+  sizeBytes: number | null;
   date: string | null;
   dateSource?: string | null;
   protected?: boolean;
   companionCount?: number;
   unitId?: string | null;
-  unitPrimary?: boolean;
+  unitPrimary?: boolean | null;
   companions?: PreviewItem["companions"];
   unitWarnings?: string[];
   destination?: string | null;

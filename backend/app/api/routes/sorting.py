@@ -2,10 +2,10 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validator
 
 from app.api.deps import ContainerDep
 from app.api.schemas import (
@@ -22,6 +22,12 @@ from app.core.filesystem_capabilities import (
 )
 from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
+from app.core.plan_store import (
+    InvalidPlanStoreError,
+    PlanExpiredError,
+    PlanStoreError,
+    UnsupportedPlanStoreVersionError,
+)
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import (
     FrozenSortImpact,
@@ -113,20 +119,102 @@ class PlanImpactRequest(TaskStartRequest):
     reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
 
 
+ReviewSetId = Annotated[str, Field(min_length=1, max_length=512)]
+
+
+class ReviewDecisionState(BaseModel):
+    group_id: ReviewSetId
+    kind: Literal["keeper", "keep_all"]
+    member_id: str | None = Field(default=None, max_length=4096)
+
+    @model_validator(mode="after")
+    def validate_member(self) -> "ReviewDecisionState":
+        if self.kind == "keeper" and not self.member_id:
+            raise ValueError("a keeper decision requires member_id")
+        if self.kind == "keep_all" and self.member_id is not None:
+            raise ValueError("a keep-all decision cannot name member_id")
+        return self
+
+
+class PlanReviewState(BaseModel):
+    """Durable UI state attached to one exact frozen plan."""
+
+    schema_version: Literal[1] = 1
+    config_fingerprint: str = Field(min_length=1)
+    decisions: list[ReviewDecisionState] = Field(default_factory=list, max_length=100_000)
+    selected_set_ids: list[ReviewSetId] = Field(default_factory=list, max_length=100_000)
+    mode: Literal["browse", "resolve"]
+    queue_set_id: str | None = Field(default=None, max_length=512)
+    detail_path: str | None = Field(default=None, max_length=4096)
+    viewer_path: str | None = Field(default=None, max_length=4096)
+    search: str = Field(max_length=4096)
+    tree_path: str | None = Field(default=None, max_length=4096)
+    view: Literal["list", "grid"]
+    sort: Literal["name", "size", "date"]
+    keep_policy: Literal[
+        "smart",
+        "best_quality",
+        "newest",
+        "oldest",
+        "largest",
+        "smallest",
+        "highest_resolution",
+        "longest_filename",
+        "shortest_filename",
+        "manual",
+    ]
+
+    @model_validator(mode="after")
+    def validate_unique_sets(self) -> "PlanReviewState":
+        decision_ids = [decision.group_id for decision in self.decisions]
+        if len(decision_ids) != len(set(decision_ids)):
+            raise ValueError("each duplicate set may have only one explicit decision")
+        if len(self.selected_set_ids) != len(set(self.selected_set_ids)):
+            raise ValueError("selected duplicate set ids must be unique")
+        return self
+
+
 class PlanRecoveryResponse(BaseModel):
     plan_id: str
     config_fingerprint: str
     destination_fingerprint: str
     source_fingerprints: dict[str, str]
     reviewed_sets: list[ReviewedSet]
+    preview_result: dict[str, JsonValue]
+    review_state: PlanReviewState | None
 
 
 def _recover_plan(container: Any, plan_id: str) -> PlanRecoveryResponse:
-    plan = container.preview_service.frozen_plan(plan_id)
-    if plan is None:
+    try:
+        stored = container.preview_service.stored_plan(plan_id)
+    except PlanExpiredError as exc:
+        raise ConflictError(
+            "The reviewed plan expired; generate preview again.",
+            details={"reason": "expired_plan", "plan_id": plan_id},
+        ) from exc
+    except UnsupportedPlanStoreVersionError as exc:
+        raise ConflictError(
+            "A newer MediaSorter build wrote this reviewed plan.",
+            details={"reason": "unsupported_plan", "plan_id": plan_id},
+        ) from exc
+    except InvalidPlanStoreError as exc:
         raise ConflictError(
             "The reviewed plan is no longer available; generate preview again.",
             details={"reason": "missing_plan", "plan_id": plan_id},
+        ) from exc
+    plan = stored.plan
+    if stored.preview_result is None:
+        raise ConflictError(
+            "The reviewed plan has no durable Review snapshot; generate preview again.",
+            details={"reason": "missing_review_snapshot", "plan_id": plan_id},
+        )
+    if (
+        stored.preview_result.get("plan_id") != plan.plan_id
+        or stored.preview_result.get("config_fingerprint") != plan.config_fingerprint
+    ):
+        raise ConflictError(
+            "The durable Review snapshot does not belong to this frozen plan.",
+            details={"reason": "stale_review_snapshot", "plan_id": plan_id},
         )
     current_config = config_fingerprint(container.config)
     if plan.config_fingerprint != current_config:
@@ -160,18 +248,60 @@ def _recover_plan(container: Any, plan_id: str) -> PlanRecoveryResponse:
                 details={"reason": "stale_recovery", "plan_id": plan_id},
             )
         fingerprints[action.source_path] = current
+    try:
+        review_state = (
+            PlanReviewState.model_validate(stored.review_state)
+            if stored.review_state is not None
+            else None
+        )
+    except ValidationError as exc:
+        raise ConflictError(
+            "The durable Review state is invalid and cannot be recovered.",
+            details={"reason": "invalid_review_state", "plan_id": plan_id},
+        ) from exc
+    if review_state is not None and review_state.config_fingerprint != plan.config_fingerprint:
+        raise ConflictError(
+            "The durable Review state belongs to a different configuration.",
+            details={"reason": "stale_review_state", "plan_id": plan_id},
+        )
     return PlanRecoveryResponse(
         plan_id=plan.plan_id,
         config_fingerprint=plan.config_fingerprint,
         destination_fingerprint=plan.destination_fingerprint,
         source_fingerprints=fingerprints,
         reviewed_sets=list(plan.reviewed_sets),
+        preview_result=stored.preview_result,
+        review_state=review_state,
     )
 
 
 @router.get("/sorting/plans/{plan_id}/recovery", response_model=PlanRecoveryResponse)
 async def recover_sort_plan(plan_id: str, container: ContainerDep) -> PlanRecoveryResponse:
     return await asyncio.to_thread(_recover_plan, container, plan_id)
+
+
+@router.put(
+    "/sorting/plans/{plan_id}/review-state",
+    response_model=PlanReviewState,
+)
+async def save_plan_review_state(
+    plan_id: str,
+    body: PlanReviewState,
+    container: ContainerDep,
+) -> PlanReviewState:
+    try:
+        await asyncio.to_thread(
+            container.preview_service.save_review_state,
+            plan_id,
+            body.model_dump(mode="json"),
+            expected_config_fingerprint=body.config_fingerprint,
+        )
+    except PlanStoreError as exc:
+        raise ConflictError(
+            "Review state could not be persisted for this plan.",
+            details={"reason": "review_state_not_persisted", "plan_id": plan_id},
+        ) from exc
+    return body
 
 
 @router.post("/sorting/impact", response_model=FrozenSortImpact)

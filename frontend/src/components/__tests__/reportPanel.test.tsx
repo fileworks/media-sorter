@@ -148,7 +148,11 @@ describe("run scope in reports", () => {
 
     expect(screen.getByText(translate("en", "report.unit.primary"))).toBeTruthy();
     expect(
-      screen.getByText(translate("en", "report.unit.companion", { role: "xmp sidecar" })),
+      screen.getByText(
+        translate("en", "report.unit.companion", {
+          role: "Unknown companion role (xmp_sidecar)",
+        }),
+      ),
     ).toBeTruthy();
     expect(screen.getAllByText(/Primary: IMG_0001\.jpg/)).toHaveLength(2);
     expect(screen.getByText("The primary changed; this sidecar was retained.")).toBeTruthy();

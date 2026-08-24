@@ -86,13 +86,13 @@ export interface ReviewRow {
   wouldBeDestination: string | null;
   status: RowStatus;
   flags: RowFlag[];
-  sizeBytes: number;
+  sizeBytes: number | null;
   date: string | null;
   dateSource: string;
   category: string | null;
   tags: string[];
   unitId: string | null;
-  unitPrimary: boolean;
+  unitPrimary: boolean | null;
   companionCount: number;
   companions?: PreviewItem["companions"];
   unitWarnings?: string[];
@@ -546,13 +546,13 @@ export function toReviewRows(
       wouldBeDestination: item.would_be_destination ?? null,
       status: baseline ? "baseline" : base,
       flags: flagsOf(item, nameCounts),
-      sizeBytes: item.file_size ?? 0,
+      sizeBytes: item.file_size ?? null,
       date: item.extracted_date,
       dateSource: item.metadata_source,
       category: item.category ?? null,
       tags: item.tags ?? [],
       unitId: item.unit_id ?? null,
-      unitPrimary: item.unit_primary ?? true,
+      unitPrimary: item.unit_primary ?? null,
       companionCount: item.companions?.length ?? 0,
       companions: item.companions ?? [],
       unitWarnings: item.unit_warnings ?? [],

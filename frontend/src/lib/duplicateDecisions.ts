@@ -24,11 +24,23 @@ export interface RationaleMessage {
 }
 
 export interface KeeperRationale {
+  primaryRung: RationaleMessage;
   winningRung: RationaleMessage;
   knownFacts: RationaleMessage[];
   unknownFacts: RationaleMessage[];
   tieBreak: RationaleMessage | null;
   limitation: RationaleMessage | null;
+  comparisons: RationaleComparison[];
+}
+
+export interface RationaleComparison {
+  member: string;
+  selected: boolean;
+  values: Array<{
+    rung: RationaleMessage;
+    value: number | string | null;
+    format: "bytes" | "number" | "text";
+  }>;
 }
 
 function memberName(member: GroupMember): string {
@@ -74,6 +86,12 @@ const RUNG_KEYS: Record<KeeperRankingRung, string> = {
   shortest_filename: "review.resolve.rationale.rung.shortestFilename",
   stable_identity: "review.resolve.rationale.rung.stableIdentity",
 };
+
+function valueFormat(rung: KeeperRankingRung): "bytes" | "number" | "text" {
+  if (rung === "largest_size" || rung === "smallest_size") return "bytes";
+  if (rung === "stable_identity") return "text";
+  return "number";
+}
 
 function limitation(
   policy: KeeperPolicyId,
@@ -130,15 +148,28 @@ export function keeperRationale(
     }
   }
   const decisiveRung = ranking?.decisiveRung ?? "stable_identity";
+  const primaryRung = ranking?.primaryRung ?? decisiveRung;
   return {
+    primaryRung: { key: RUNG_KEYS[primaryRung] },
     winningRung: { key: RUNG_KEYS[decisiveRung] },
     knownFacts,
     unknownFacts,
     tieBreak:
-      decisiveRung === "stable_identity"
-        ? { key: "review.resolve.rationale.tie.stableIdentity" }
-        : null,
+      decisiveRung === primaryRung
+        ? null
+        : decisiveRung === "stable_identity"
+          ? { key: "review.resolve.rationale.tie.stableIdentity" }
+          : { key: RUNG_KEYS[decisiveRung] },
     limitation: limitation(policy, unknownFacts),
+    comparisons: group.members.map((member) => ({
+      member: memberName(member),
+      selected: member.member_id === memberId,
+      values: (ranking?.trace ?? []).map((criterion) => ({
+        rung: { key: RUNG_KEYS[criterion.rung] },
+        value: criterion.values[member.member_id] ?? null,
+        format: valueFormat(criterion.rung),
+      })),
+    })),
   };
 }
 

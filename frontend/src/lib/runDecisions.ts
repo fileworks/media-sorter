@@ -6,6 +6,8 @@ export interface RunDecisions {
   outstandingSets: number | null;
   proposedSets: number;
   undecidedSets: number;
+  persistenceState: "saving" | "saved" | "error";
+  persistenceError: string | null;
 }
 
 export type ReviewDecisionUpdate = Omit<RunDecisions, "planId">;
@@ -28,4 +30,6 @@ export const EMPTY_RUN_DECISIONS: RunDecisions = {
   outstandingSets: null,
   proposedSets: 0,
   undecidedSets: 0,
+  persistenceState: "saving",
+  persistenceError: null,
 };

@@ -17,12 +17,26 @@ const media = vi.hoisted(() => ({
     errored: false,
     unavailable: false,
   },
+  info: {
+    data: {
+      width: 100,
+      height: 100,
+      file_size: 1000,
+      extracted_date: null,
+      metadata_source: "unknown",
+      media_type: "image" as "image" | "video" | "other",
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/thumbnailQueue", () => ({
   useQueuedThumbnail: () => media.queued,
   useAuthorizedMedia: () => media.authorized,
 }));
+vi.mock("@/hooks/useMediaInfo", () => ({ useMediaInfo: () => media.info }));
 
 import { MediaViewer } from "@/components/screens/review/MediaViewer";
 import { MediaImage } from "@/components/ui/media-image";
@@ -51,6 +65,10 @@ function resetMedia() {
     errored: false,
     unavailable: false,
   });
+  media.info.data.media_type = "image";
+  media.info.isLoading = false;
+  media.info.isError = false;
+  media.info.refetch.mockReset();
 }
 
 beforeEach(resetMedia);
@@ -269,5 +287,27 @@ describe("always-visible media presentations", () => {
     media.queued.errored = true;
     renderLocalized(viewer());
     expect(screen.getByText(enText("preview.thumbnailFailed"))).toBeTruthy();
+  });
+
+  it("uses backend media identity for video controls and leaves video arrow keys alone", () => {
+    media.info.data.media_type = "video";
+    media.authorized.objectUrl = "blob:synthetic-video";
+    const next = vi.fn();
+    renderLocalized(
+      <MediaViewer
+        path="/camera/clip.mts"
+        name="clip.mts"
+        destination="/out/clip.mts"
+        position={null}
+        onPrevious={null}
+        onNext={next}
+        onClose={() => undefined}
+      />,
+    );
+
+    const video = screen.getByLabelText("clip.mts", { selector: "video" });
+    expect(screen.queryByRole("button", { name: enText("review.viewer.zoomIn") })).toBeNull();
+    fireEvent.keyDown(video, { key: "ArrowRight" });
+    expect(next).not.toHaveBeenCalled();
   });
 });

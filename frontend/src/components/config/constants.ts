@@ -1,80 +1,6 @@
 import type { SampleFile } from "@/lib/configSummary";
 import type { Config } from "@/types/api";
 
-export const DEFAULT_AI_LABELS = [
-  // Places & environments
-  "beach",
-  "mountain",
-  "forest",
-  "city",
-  "landscape",
-  "sunset",
-  "sunrise",
-  "sky",
-  "snow",
-  "water",
-  "night",
-  "indoor",
-  "outdoor",
-  // People
-  "portrait",
-  "selfie",
-  "group photo",
-  // Events & activities
-  "wedding",
-  "birthday",
-  "party",
-  "concert",
-  "sport",
-  "hiking",
-  "camping",
-  // Food & drink
-  "food",
-  "drink",
-  // Animals
-  "pet",
-  "dog",
-  "cat",
-  "bird",
-  "wildlife",
-  "flower",
-  // Vehicles
-  "car",
-  "boat",
-  "airplane",
-  // Urban
-  "building",
-  "street",
-  // Travel
-  "travel",
-  "landmark",
-  // Documents & screen
-  "document",
-  "screenshot",
-  "receipt",
-  "whiteboard",
-  "text",
-  // Art & media
-  "artwork",
-  "meme",
-  "graph",
-  "map",
-];
-
-export const DEFAULT_CATEGORIES = [
-  "screenshots",
-  "documents",
-  "receipts",
-  "food",
-  "nature",
-  "people",
-  "pets",
-  "travel",
-  "events",
-  "sports",
-  "memes",
-];
-
 export const MAX_FILE_SIZE_INPUT = 1_000_000;
 
 export const DISK_BYTES_OPTS = { maxUnit: "TB", nullPlaceholder: "0 B" } as const;
@@ -88,21 +14,21 @@ export function clampFileSize(raw: string): number | null {
   return Math.min(Math.max(0, Math.round(n)), MAX_FILE_SIZE_INPUT);
 }
 
-export function clampMaxTags(raw: string): number {
+export function clampMaxTags(raw: string, fallback: number): number {
   const n = Math.round(Number(raw));
-  if (!Number.isFinite(n)) return 10;
+  if (!Number.isFinite(n)) return fallback;
   return Math.min(Math.max(1, n), 50);
 }
 
-export function clampConfidence(raw: string): number {
+export function clampConfidence(raw: string, fallback: number): number {
   const n = Number(raw);
-  if (!Number.isFinite(n)) return 0.5;
+  if (!Number.isFinite(n)) return fallback;
   return Math.min(Math.max(0, n), 1);
 }
 
-export function clampMargin(raw: string): number {
+export function clampMargin(raw: string, fallback: number): number {
   const n = Number(raw);
-  if (!Number.isFinite(n)) return 0.15;
+  if (!Number.isFinite(n)) return fallback;
   return Math.min(Math.max(0, n), 0.5);
 }
 

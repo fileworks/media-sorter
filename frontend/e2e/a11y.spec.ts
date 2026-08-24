@@ -3,7 +3,6 @@ import {
   MIN_TARGET_PX,
   E2E_ANALYSIS,
   E2E_PREVIEW_RESULT,
-  E2E_RECOVERY,
   contrastViolations,
   focusObscuredBy,
   stubBackend,
@@ -25,13 +24,18 @@ import {
 test.beforeEach(async ({ page }) => {
   await stubBackend(page);
   await page.addInitScript(
-    ({ result, recovery, analysis }) => {
+    ({ result, analysis }) => {
       localStorage.setItem(
         "mediasort_completed_plan",
-        JSON.stringify({ schemaVersion: 2, planId: result.plan_id, result, recovery, analysis }),
+        JSON.stringify({
+          schemaVersion: 3,
+          planId: result.plan_id,
+          configFingerprint: result.config_fingerprint,
+          analysis,
+        }),
       );
     },
-    { result: E2E_PREVIEW_RESULT, recovery: E2E_RECOVERY, analysis: E2E_ANALYSIS },
+    { result: E2E_PREVIEW_RESULT, analysis: E2E_ANALYSIS },
   );
   await page.goto("/");
   // The shell mounts behind a lazy boundary; wait for real content, not a spinner.
@@ -249,6 +253,29 @@ test.describe("2.4.11 focus not obscured", () => {
     expect(after).not.toBeNull();
     expect(after?.coveredBy).toContain("focus-veil");
   });
+
+  test("the focus walk distinguishes controls with the same visible label", async ({ page }) => {
+    await page.evaluate(() => {
+      for (const child of Array.from(document.body.children)) {
+        if (child instanceof HTMLElement) child.inert = true;
+      }
+      const probe = document.createElement("div");
+      probe.id = "focus-identity-probe";
+      for (let index = 0; index < 2; index += 1) {
+        const button = document.createElement("button");
+        button.textContent = "Same label";
+        probe.appendChild(button);
+      }
+      document.body.appendChild(probe);
+    });
+
+    let inspected = 0;
+    for await (const stop of tabStops(page, 4)) {
+      void stop;
+      inspected += 1;
+    }
+    expect(inspected).toBe(2);
+  });
 });
 
 test.describe("later stages", () => {
@@ -283,11 +310,12 @@ test.describe("later stages", () => {
     // Every committed real-format fixture must be inspectable in Chromium.
     // The facts below are intentionally read from the UI, not inferred from
     // file extensions or nearby API assertions.
+    await page.getByRole("tab", { name: /browse the result/i }).click();
     let detail = await openDetail(page, "corrupt.jpg");
     await expectDetailFact(detail, "File type", "JPG");
     await expectDetailFact(detail, "Resolution", "unknown");
     await expectDetailFact(detail, "Goes to", "no destination");
-    await expectDetailFact(detail, "Planned result", "unreadable");
+    await expectDetailFact(detail, "Planned result", "Could not be read");
     await expectDetailFact(detail, "Protection", "Input — eligible for planned action");
     await expect(detail.getByText("No preview for this file")).toBeVisible();
     await closeDetail(page);
@@ -318,7 +346,11 @@ test.describe("later stages", () => {
     await closeDetail(page);
 
     await page.getByRole("tab", { name: /decide the duplicates/i }).click();
-    await expect(page.getByText(/winning rung/i)).toBeVisible();
+    await expect(page.getByText(/primary rule/i)).toBeVisible();
+    await expect(page.getByText(/deciding fact/i)).toBeVisible();
+    await expect(page.getByText(/unknown facts/i)).toBeVisible();
+    await expect(page.getByText(/tie-break/i)).toBeVisible();
+    await expect(page.getByText(/limitation/i)).toBeVisible();
     await expect(page.getByText(/modification date unknown.*IMG_0001-copy/i)).toBeVisible();
     await expectTargetsAndFocus(page, "Resolve");
 
@@ -348,20 +380,25 @@ test.describe("later stages", () => {
       "true",
     );
     await expect(page.getByText(/every set has been decided/i)).toBeVisible();
-    const persistedDecisions = await page.evaluate(() => {
-      const raw = localStorage.getItem("mediasort_review_state:e2e-plan");
-      return raw === null
-        ? null
-        : (JSON.parse(raw) as { decisions?: Array<[string, { kind: string }]> }).decisions;
+    const persistedDecisions = await page.evaluate(async () => {
+      const response = await fetch("http://127.0.0.1:8000/api/sorting/plans/e2e-plan/recovery");
+      const recovery = (await response.json()) as {
+        review_state: { decisions: Array<{ group_id: string; kind: string }> } | null;
+      };
+      return recovery.review_state?.decisions ?? null;
     });
-    expect(persistedDecisions).toEqual([["e2e-exact-set", { kind: "keep_all" }]]);
+    expect(persistedDecisions).toEqual([
+      { group_id: "e2e-exact-set", kind: "keep_all", member_id: null },
+    ]);
 
     await page.getByRole("button", { name: /to execute/i }).click();
     await expect(
       page.getByRole("heading", { name: /before this runs|execute/i }).first(),
     ).toBeVisible();
     await page.getByText(/media-unit evidence \(1\)/i).click();
-    await expect(page.getByText(/IMG_0001\.mov.*motion part.*attached/i)).toBeVisible();
+    await expect(
+      page.getByText(/IMG_0001\.mov.*motion component.*planned with the primary file/i),
+    ).toBeVisible();
     await expectTargetsAndFocus(page, "Execute preflight");
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /execute the reviewed plan/i }).click();
@@ -381,6 +418,21 @@ test.describe("later stages", () => {
     const narrow = await layoutOverflow(page);
     expect(narrow, JSON.stringify(narrow, null, 2)).toMatchObject({ document: false, body: false });
 
+    await page.getByRole("button", { name: /^compare$/i }).click();
+    const comparison = page.getByRole("dialog", { name: /compare copies/i });
+    await expect(comparison).toBeVisible();
+    const comparisonBox = await comparison.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(comparisonBox.scrollWidth).toBe(comparisonBox.clientWidth);
+    const comparedNarrow = await layoutOverflow(page);
+    expect(comparedNarrow, JSON.stringify(comparedNarrow, null, 2)).toMatchObject({
+      document: false,
+      body: false,
+    });
+    await page.getByRole("button", { name: /close/i }).last().click();
+
     await page.setViewportSize({ width: 720, height: 800 });
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
@@ -395,9 +447,14 @@ test.describe("later stages", () => {
   test("stale recovery evidence is rejected after restart", async ({ page }) => {
     await page.route("**/api/sorting/plans/e2e-plan/recovery", async (route) => {
       await route.fulfill({
-        status: 200,
+        status: 409,
         contentType: "application/json",
-        body: JSON.stringify({ ...E2E_RECOVERY, destination_fingerprint: "changed-after-review" }),
+        body: JSON.stringify({
+          detail: {
+            code: "PLAN_STALE",
+            message: "The destination changed after this plan was reviewed.",
+          },
+        }),
       });
     });
     await page.reload();

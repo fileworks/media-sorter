@@ -16,6 +16,7 @@ from app.core.bootstrap import AppFactory
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.library_profiles import LibraryProfile, LibraryRoot
+from app.core.plan_store import PlanExpiredError, UnsupportedPlanStoreVersionError
 
 
 @pytest.fixture(scope="module")
@@ -94,13 +95,12 @@ def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path: Path) -> N
     source.mkdir()
     destination.mkdir()
     Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-photo.jpg")
-    app = AppFactory.create(
-        config=Config(
-            source_directory=str(source),
-            target_directory=str(destination),
-            copy_instead_of_move=True,
-        )
+    config = Config(
+        source_directory=str(source),
+        target_directory=str(destination),
+        copy_instead_of_move=True,
     )
+    app = AppFactory.create(config=config)
     with TestClient(app) as local:
         preview = local.post("/api/preview").json()
         missing = local.post(
@@ -127,6 +127,158 @@ def test_sort_accepts_the_exact_plan_id_returned_by_preview(tmp_path: Path) -> N
     assert missing.json()["details"]["reason"] == "missing_plan"
     assert status["status"] == "completed"
     assert Path(preview["items"][0]["destination"]).is_file()
+
+
+def test_review_snapshot_and_decisions_recover_after_backend_restart(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    Image.new("RGB", (16, 16), "navy").save(source / "2024-01-02-photo.jpg")
+    config = Config(
+        source_directory=str(source),
+        target_directory=str(destination),
+        copy_instead_of_move=True,
+    )
+    app = AppFactory.create(config=config)
+
+    with TestClient(app) as local:
+        preview_response = local.post("/api/preview")
+        assert preview_response.status_code == 200
+        preview = preview_response.json()
+        review_state = {
+            "schema_version": 1,
+            "config_fingerprint": preview["config_fingerprint"],
+            "decisions": [],
+            "selected_set_ids": [],
+            "mode": "resolve",
+            "queue_set_id": None,
+            "detail_path": None,
+            "viewer_path": None,
+            "search": "",
+            "tree_path": None,
+            "view": "grid",
+            "sort": "date",
+            "keep_policy": "smart",
+        }
+        saved = local.put(
+            f"/api/sorting/plans/{preview['plan_id']}/review-state",
+            json=review_state,
+        )
+        assert saved.status_code == 200
+
+    # A new app/container has no in-memory plan. Recovery must come entirely
+    # from the durable envelope through the public HTTP contract.
+    with TestClient(AppFactory.create(config=config)) as restarted:
+        recovered = restarted.get(f"/api/sorting/plans/{preview['plan_id']}/recovery")
+
+    assert recovered.status_code == 200
+    assert recovered.json()["preview_result"] == preview
+    assert recovered.json()["review_state"] == review_state
+
+
+def test_review_state_rejects_ambiguous_duplicate_decisions(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    Image.new("RGB", (8, 8), "navy").save(source / "2024-01-02-photo.jpg")
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        response = local.put(
+            f"/api/sorting/plans/{preview['plan_id']}/review-state",
+            json={
+                "schema_version": 1,
+                "config_fingerprint": preview["config_fingerprint"],
+                "decisions": [
+                    {"group_id": "set-1", "kind": "keeper", "member_id": "member-1"},
+                    {"group_id": "set-1", "kind": "keep_all", "member_id": None},
+                ],
+                "selected_set_ids": [],
+                "mode": "resolve",
+                "queue_set_id": None,
+                "detail_path": None,
+                "viewer_path": None,
+                "search": "",
+                "tree_path": None,
+                "view": "list",
+                "sort": "name",
+                "keep_policy": "smart",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+def test_review_state_bounds_every_selected_set_identity(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    Image.new("RGB", (8, 8), "navy").save(source / "2024-01-02-photo.jpg")
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        response = local.put(
+            f"/api/sorting/plans/{preview['plan_id']}/review-state",
+            json={
+                "schema_version": 1,
+                "config_fingerprint": preview["config_fingerprint"],
+                "decisions": [],
+                "selected_set_ids": ["x" * 513],
+                "mode": "resolve",
+                "queue_set_id": None,
+                "detail_path": None,
+                "viewer_path": None,
+                "search": "",
+                "tree_path": None,
+                "view": "list",
+                "sort": "name",
+                "keep_policy": "smart",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("failure", "reason"),
+    [
+        (PlanExpiredError("expired"), "expired_plan"),
+        (UnsupportedPlanStoreVersionError("newer"), "unsupported_plan"),
+    ],
+)
+def test_recovery_returns_typed_conflicts_for_durable_store_refusals(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    reason: str,
+) -> None:
+    service = client.app.state.container.preview_service  # type: ignore[attr-defined]
+
+    def refuse(_plan_id: str) -> None:
+        raise failure
+
+    monkeypatch.setattr(service, "stored_plan", refuse)
+    response = client.get("/api/sorting/plans/sortplan_refused/recovery")
+
+    assert response.status_code == 409
+    assert response.json()["details"]["reason"] == reason
 
 
 def test_not_duplicates_survives_the_start_wire_and_real_sort(tmp_path: Path) -> None:

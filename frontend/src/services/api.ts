@@ -923,6 +923,30 @@ export interface PlanRecoveryResponse {
   destination_fingerprint: string;
   source_fingerprints: Record<string, string>;
   reviewed_sets: ReviewedSet[];
+  preview_result: PreviewResult;
+  review_state: PlanReviewState | null;
+}
+
+export interface ReviewDecisionState {
+  group_id: string;
+  kind: "keeper" | "keep_all";
+  member_id: string | null;
+}
+
+export interface PlanReviewState {
+  schema_version: 1;
+  config_fingerprint: string;
+  decisions: ReviewDecisionState[];
+  selected_set_ids: string[];
+  mode: "browse" | "resolve";
+  queue_set_id: string | null;
+  detail_path: string | null;
+  viewer_path: string | null;
+  search: string;
+  tree_path: string | null;
+  view: "list" | "grid";
+  sort: "name" | "size" | "date";
+  keep_policy: KeeperPolicyId;
 }
 
 export type SortingStatus = TaskStatus<{ operation_id?: string } & Record<string, unknown>>;
@@ -1603,6 +1627,15 @@ export class MediaSorterApiClient {
     await this.ensureReady();
     const { data } = await this.http.get<PlanRecoveryResponse>(
       `/api/sorting/plans/${encodeURIComponent(planId)}/recovery`,
+    );
+    return data;
+  }
+
+  async savePlanReviewState(planId: string, state: PlanReviewState): Promise<PlanReviewState> {
+    await this.ensureReady();
+    const { data } = await this.http.put<PlanReviewState>(
+      `/api/sorting/plans/${encodeURIComponent(planId)}/review-state`,
+      state,
     );
     return data;
   }

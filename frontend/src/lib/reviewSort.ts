@@ -26,7 +26,7 @@ export function isReviewSort(value: string): value is ReviewSort {
 export interface SortModel {
   name: string;
   /** Bytes. A set contributes its largest copy — that is what it "weighs". */
-  size: number;
+  size: number | null;
   /**
    * The recorded date, kept as the string the plan carries. These are ISO-ish
    * and so sort correctly as text; parsing them to a number here would invent
@@ -45,7 +45,15 @@ export function setSortModel(entry: SetEntry): SortModel {
   const lead = entry.keeper ?? rows[0] ?? null;
   return {
     name: lead?.name ?? entry.id,
-    size: rows.reduce((largest, row) => Math.max(largest, row.sizeBytes), 0),
+    size: rows.reduce<number | null>(
+      (largest, row) =>
+        row.sizeBytes === null
+          ? largest
+          : largest === null
+            ? row.sizeBytes
+            : Math.max(largest, row.sizeBytes),
+      null,
+    ),
     date: rows.reduce(
       (latest, row) => (row.date !== null && row.date > latest ? row.date : latest),
       "",
@@ -71,7 +79,12 @@ export function compareBySort(
 ): number {
   const byName = () => a.name.localeCompare(b.name, locale, { sensitivity: "base" });
   if (sort === "name") return byName();
-  if (sort === "size") return b.size - a.size || byName();
+  if (sort === "size") {
+    if (a.size === null && b.size === null) return byName();
+    if (a.size === null) return 1;
+    if (b.size === null) return -1;
+    return b.size - a.size || byName();
+  }
   // "" is no date, and belongs at the end rather than at the top of a
   // newest-first list, so it is compared as if it were older than everything.
   if (a.date === b.date) return byName();

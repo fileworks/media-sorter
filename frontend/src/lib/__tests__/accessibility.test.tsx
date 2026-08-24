@@ -61,6 +61,7 @@ beforeEach(() => {
     partial_index: false,
     kind: "exact",
   });
+  vi.spyOn(api, "savePlanReviewState").mockImplementation(async (_planId, state) => state);
   vi.spyOn(api, "getConfig").mockResolvedValue(ACCESSIBILITY_CONFIG);
   vi.spyOn(api, "validateConfig").mockResolvedValue({
     valid: true,
@@ -413,6 +414,7 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
     () => (
       <ExecutePreflight
         input={{
+          impactState: "ready",
           actionableGroups: 1,
           quarantineCount: 0,
           quarantineBytes: 0,
