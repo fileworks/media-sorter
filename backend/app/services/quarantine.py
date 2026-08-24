@@ -24,7 +24,7 @@ from typing import Literal
 
 from app.core.integrity import utc_now
 from app.core.logging_config import get_logger
-from app.services.verified_transfer import stream_sha256, transfer_path
+from app.services.verified_transfer import revalidate_sha256, stream_sha256, transfer_path
 
 logger = get_logger(__name__)
 
@@ -50,6 +50,17 @@ RetentionState = Literal["retained", "restored", "removed"]
 #: record exists. Anything still ``pending`` after a crash is an original whose
 #: fate is unknown — reported as pending, never as removed.
 IntentState = Literal["pending", "committed", "abandoned"]
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Persist append-created directory entries where the platform supports it."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 class QuarantineError(RuntimeError):
@@ -108,7 +119,9 @@ class QuarantineIntent:
     declared_at: str
     state: IntentState = "pending"
     expected_sha256: str | None = None
+    expected_size_bytes: int | None = None
     keeper_path: str | None = None
+    quarantine_path: str | None = None
     #: Set when the intent is committed, so an auditor can walk intent → record.
     record_id: str | None = None
     #: Set when the intent is abandoned, so "nothing happened" is also evidence.
@@ -231,7 +244,9 @@ class QuarantineStore:
         operation_id: str,
         reason: QuarantineReason,
         expected_sha256: str | None = None,
+        expected_size_bytes: int | None = None,
         keeper_path: Path | None = None,
+        quarantine_path: Path | None = None,
     ) -> QuarantineIntent:
         """Record, durably, that *source* is about to be quarantined.
 
@@ -245,7 +260,9 @@ class QuarantineStore:
             original_path=str(source),
             declared_at=utc_now().isoformat(),
             expected_sha256=expected_sha256,
+            expected_size_bytes=expected_size_bytes,
             keeper_path=None if keeper_path is None else str(keeper_path),
+            quarantine_path=None if quarantine_path is None else str(quarantine_path),
         )
         return self._append_intent(intent)
 
@@ -306,13 +323,14 @@ class QuarantineStore:
         return tuple(intent for intent in self._iter_removals() if intent.state == "pending")
 
     def _append_removal(self, intent: RemovalIntent) -> RemovalIntent:
-        self.root.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(asdict(intent), ensure_ascii=False)
         try:
+            self._ensure_root_durable()
             with self.removals_path.open("a", encoding="utf-8") as handle:
                 handle.write(payload + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            _fsync_directory(self.root)
         except OSError as exc:
             raise QuarantineError(f"Could not record removal intent: {exc}") from exc
         return intent
@@ -345,13 +363,14 @@ class QuarantineStore:
             yield latest[intent_id]
 
     def _append_intent(self, intent: QuarantineIntent) -> QuarantineIntent:
-        self.root.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(asdict(intent), ensure_ascii=False)
         try:
+            self._ensure_root_durable()
             with self.intents_path.open("a", encoding="utf-8") as handle:
                 handle.write(payload + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            _fsync_directory(self.root)
         except OSError as exc:
             raise QuarantineError(f"Could not record quarantine intent: {exc}") from exc
         return intent
@@ -385,13 +404,14 @@ class QuarantineStore:
             yield latest[intent_id]
 
     def _append(self, record: QuarantineRecord) -> QuarantineRecord:
-        self.root.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(asdict(record), ensure_ascii=False)
         try:
+            self._ensure_root_durable()
             with self.records_path.open("a", encoding="utf-8") as handle:
                 handle.write(payload + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            _fsync_directory(self.root)
         except OSError as exc:
             raise QuarantineError(f"Could not record quarantine entry: {exc}") from exc
         return record
@@ -406,37 +426,236 @@ class QuarantineStore:
         root_id: str | None = None,
         move: bool = True,
         known_sha256: str | None = None,
+        known_size_bytes: int | None = None,
         notes: tuple[str, ...] = (),
+        intent: QuarantineIntent | None = None,
     ) -> QuarantineRecord:
-        """Move (or copy) one file into quarantine and record how to undo it.
+        """Move (or copy) one file with an intrinsic durable intent protocol.
 
-        The record is written *after* the transfer verified the destination, so
-        a record always describes a file that exists — never a promise.
+        A pending intent names the exact destination before transfer. If a
+        process dies after transfer but before record publication, reopening
+        the store and retrying the same operation adopts that artifact and
+        publishes the same deterministic record instead of moving a second
+        copy.
         """
-        destination = self._destination_for(source, reason)
-        result = transfer_path(source, destination, move=move)
+        pending = intent or self._pending_for(source, operation_id=operation_id, reason=reason)
+        destination = self._resume_destination(pending, source, reason)
+        if pending is not None:
+            if (
+                known_sha256 is not None
+                and pending.expected_sha256 is not None
+                and known_sha256 != pending.expected_sha256
+            ):
+                raise QuarantineError(
+                    "Retry identity disagrees with the pending quarantine intent."
+                )
+            if (
+                known_size_bytes is not None
+                and pending.expected_size_bytes is not None
+                and known_size_bytes != pending.expected_size_bytes
+            ):
+                raise QuarantineError("Retry size disagrees with the pending quarantine intent.")
+            expected = pending.expected_sha256 or known_sha256
+            expected_size = (
+                pending.expected_size_bytes
+                if pending.expected_size_bytes is not None
+                else known_size_bytes
+            )
+            if pending.quarantine_path is None or expected is None or expected_size is None:
+                observed_path = (
+                    destination if destination.is_file() else source if source.is_file() else None
+                )
+                if observed_path is not None:
+                    observed, observed_size = revalidate_sha256(
+                        observed_path,
+                        expected_sha256=expected,
+                    )
+                    if expected_size is not None and observed_size != expected_size:
+                        raise QuarantineError(
+                            "Pending quarantine artifact does not match its declared size."
+                        )
+                    expected = expected or observed
+                    expected_size = observed_size if expected_size is None else expected_size
+                pending = self._append_intent(
+                    replace(
+                        pending,
+                        quarantine_path=str(destination),
+                        expected_sha256=expected,
+                        expected_size_bytes=expected_size,
+                    )
+                )
+        if pending is None:
+            expected = known_sha256
+            expected_size = known_size_bytes
+            if source.is_file() and (expected is None or expected_size is None):
+                observed, observed_size = revalidate_sha256(
+                    source,
+                    expected_sha256=expected,
+                )
+                if expected_size is not None and observed_size != expected_size:
+                    raise QuarantineError("Source does not match its declared quarantine size.")
+                expected = expected or observed
+                expected_size = observed_size if expected_size is None else expected_size
+            pending = self.declare_intent(
+                source,
+                operation_id=operation_id,
+                reason=reason,
+                expected_sha256=expected,
+                expected_size_bytes=expected_size,
+                keeper_path=keeper_path,
+                quarantine_path=destination,
+            )
+
+        existing_record = self._record_for_intent(pending)
+        if existing_record is not None:
+            if known_sha256 is not None and existing_record.sha256 != known_sha256:
+                raise QuarantineError(
+                    "Retry identity disagrees with the committed quarantine record."
+                )
+            if known_size_bytes is not None and existing_record.size_bytes != known_size_bytes:
+                raise QuarantineError("Retry size disagrees with the committed quarantine record.")
+            if pending.state != "committed" or pending.record_id != existing_record.record_id:
+                self.commit_intent(pending, existing_record)
+            return existing_record
+
+        if pending.expected_sha256 is None or pending.expected_size_bytes is None:
+            raise QuarantineError("Quarantine transfer has no complete durable byte identity.")
+
+        try:
+            if destination.is_file() and pending.expected_sha256 is not None:
+                observed, _size = stream_sha256(destination)
+                if observed != pending.expected_sha256:
+                    raise QuarantineError(
+                        "Pending quarantine destination does not match its declared identity."
+                    )
+                result = None
+            else:
+                result = transfer_path(
+                    source,
+                    destination,
+                    move=move,
+                    expected_sha256=pending.expected_sha256,
+                    expected_size_bytes=pending.expected_size_bytes,
+                )
+        except BaseException as exc:
+            # A hard process kill cannot reach this branch and intentionally
+            # leaves the intent pending for recovery. Ordinary failures are
+            # resolved as "nothing happened" and never silently discarded.
+            if (
+                not isinstance(exc, (KeyboardInterrupt, SystemExit))
+                and source.exists()
+                and not destination.exists()
+            ):
+                self.abandon_intent(pending, f"{type(exc).__name__}: {exc}")
+            raise
         # A same-volume move is published by linking rather than copying, so it
         # may carry identity evidence instead of a hash. The record needs a real
         # digest either way — it is what a later restore is checked against.
-        sha256 = known_sha256 or (
-            result.integrity.observed_source_sha256 if result.integrity else None
+        sha256 = pending.expected_sha256 or (
+            result.integrity.observed_source_sha256 if result and result.integrity else None
         )
         if not sha256:
-            sha256 = stream_sha256(result.destination_path)[0]
+            sha256 = stream_sha256(destination)[0]
+        size_bytes = (
+            result.observed_metadata.size_bytes
+            if result is not None
+            else destination.stat().st_size
+        )
+        record_id = pending.record_id or f"qtn_{pending.intent_id.removeprefix('qti_')}"
         record = QuarantineRecord(
-            record_id=f"qtn_{uuid.uuid4().hex[:16]}",
+            record_id=record_id,
             operation_id=operation_id,
             reason=reason,
             original_path=str(source),
-            quarantine_path=str(result.destination_path),
+            quarantine_path=str(destination),
             sha256=sha256,
-            size_bytes=result.observed_metadata.size_bytes,
+            size_bytes=size_bytes,
             quarantined_at=utc_now().isoformat(),
             keeper_path=None if keeper_path is None else str(keeper_path),
             root_id=root_id,
             notes=notes,
         )
-        return self._append(record)
+        stored = self._append(record)
+        self.commit_intent(pending, stored)
+        return stored
+
+    def _pending_for(
+        self,
+        source: Path,
+        *,
+        operation_id: str,
+        reason: QuarantineReason,
+    ) -> QuarantineIntent | None:
+        candidates = [
+            intent
+            for intent in self._iter_intents()
+            if intent.state != "abandoned"
+            and intent.operation_id == operation_id
+            and intent.reason == reason
+            and intent.original_path == str(source)
+        ]
+        return candidates[-1] if candidates else None
+
+    def _resume_destination(
+        self,
+        intent: QuarantineIntent | None,
+        source: Path,
+        reason: QuarantineReason,
+    ) -> Path:
+        """Resolve the one artifact a durable intent is allowed to adopt."""
+        if intent is None:
+            return self._destination_for(source, reason)
+        if intent.quarantine_path is not None:
+            return Path(intent.quarantine_path)
+        directory = self.root / reason
+        try:
+            names = [directory / source.name]
+            names.extend(sorted(directory.glob(f"{source.stem}_[0-9]*{source.suffix}")))
+        except OSError:
+            names = []
+        matches: list[Path] = []
+        for candidate in names:
+            try:
+                if not candidate.is_file() or candidate.is_symlink():
+                    continue
+                observed = None
+                if intent.expected_sha256 is not None:
+                    observed, _size = stream_sha256(candidate)
+            except OSError:
+                continue
+            if intent.expected_sha256 is None or observed == intent.expected_sha256:
+                matches.append(candidate)
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise QuarantineError(
+                "Multiple artifacts match the pending quarantine intent; manual review is required."
+            )
+        if source.is_file():
+            return self._destination_for(source, reason)
+        raise QuarantineError(
+            "The pending quarantine intent has no verifiable source or destination artifact."
+        )
+
+    def _ensure_root_durable(self) -> None:
+        """Create the store and persist every newly created directory entry."""
+        missing: list[Path] = []
+        cursor = self.root
+        while not cursor.exists():
+            missing.append(cursor)
+            if cursor.parent == cursor:
+                break
+            cursor = cursor.parent
+        self.root.mkdir(parents=True, exist_ok=True)
+        for created in reversed(missing):
+            _fsync_directory(created.parent)
+            _fsync_directory(created)
+
+    def _record_for_intent(self, intent: QuarantineIntent) -> QuarantineRecord | None:
+        if intent.record_id is not None:
+            return self.find(intent.record_id)
+        deterministic = f"qtn_{intent.intent_id.removeprefix('qti_')}"
+        return self.find(deterministic)
 
     def _destination_for(self, source: Path, reason: QuarantineReason) -> Path:
         """A stable, collision-free location grouped by why the file is here."""

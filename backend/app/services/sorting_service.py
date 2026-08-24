@@ -17,8 +17,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
-from app.core.exceptions import PlanAuthorizationError
-from app.core.integrity import OperationOutcomeCode
+from app.core.exceptions import IntegrityTransferError, PlanAuthorizationError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
@@ -26,7 +25,7 @@ from app.core.media_units import CompanionRole, MediaUnit
 from app.core.paths import path_identity_key, resolve_app_paths
 from app.core.rules import normalized_key
 from app.core.run_scope import apply_run_scope
-from app.core.sort_plan import FrozenSortPlan
+from app.core.sort_plan import FrozenSortPlan, destination_fingerprint
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
 from app.services.config_service import ConfigService
@@ -72,7 +71,15 @@ from app.services.outcome_provenance import build_outcome_provenance
 from app.services.quarantine import store_for_state_root
 from app.services.repair_service import RepairService
 from app.services.rule_engine_service import RuleEngineService
-from app.services.sorting_support import SortingSupportMixin, root_identifier
+from app.services.sorting_support import (
+    SortingSupportMixin,
+    operation_outcome,
+    root_identifier,
+)
+from app.services.transfer_failures import (
+    record_integrity_transfer_failure,
+    record_plan_authorization_failure,
+)
 from app.services.verified_transfer import TransferResult
 from app.utils.media_utils import is_image, is_video
 from app.utils.path_utils import (
@@ -86,6 +93,7 @@ if TYPE_CHECKING:
     from app.background_tasks.task_manager import Task
 
 logger = get_logger(__name__)
+_operation_outcome = operation_outcome
 
 
 def _transition_task(task: Any, phase: str, *, total: int = 0) -> None:
@@ -130,25 +138,6 @@ _DUPLICATE_STATUS_BY_SCOPE = {
     "destination": "already_in_destination",
     "run": "duplicate",
 }
-
-
-def _operation_outcome(stats: dict[str, Any], *, cancelled: bool) -> OperationOutcomeCode:
-    if cancelled:
-        return "cancelled"
-    if stats["failed"] and stats["sorted"]:
-        return "partial"
-    if stats.get("incomplete_units"):
-        return "partial"
-    if stats["failed"]:
-        return "failed"
-    if (
-        stats["corrupted"]
-        or stats["issues"]
-        or stats["partial"]
-        or stats.get("unmatched_companions")
-    ):
-        return "completed_with_warnings"
-    return "completed"
 
 
 def _digest(path: Path) -> str:
@@ -377,6 +366,18 @@ class SortingService(SortingSupportMixin):
         self._collisions_planned = 0
         collisions_reported = 0
         protected_roots = tuple(item.canonical_path for item in library.references)
+        if frozen_plan is not None and not dry_run:
+            if frozen_plan.destination_fingerprint is None:
+                raise ValueError(
+                    "The reviewed plan has no destination-freshness evidence; "
+                    "generate and review a new plan."
+                )
+            live_destination = await asyncio.to_thread(destination_fingerprint, dest_root)
+            if live_destination != frozen_plan.destination_fingerprint:
+                raise ValueError(
+                    "The destination changed while execution was preparing; "
+                    "generate and review a new plan."
+                )
         execution = (
             None
             if dry_run
@@ -659,7 +660,11 @@ class SortingService(SortingSupportMixin):
         stats["operation_id"] = operation_id
 
         if execution is not None:
-            operation_outcome = _operation_outcome(stats, cancelled=cancel_signal.is_set())
+            operation_outcome = (
+                "partial"
+                if execution.unresolved and not cancel_signal.is_set()
+                else _operation_outcome(stats, cancelled=cancel_signal.is_set())
+            )
             report_path = await asyncio.to_thread(execution.store_report, operation_outcome)
             execution.finish(operation_outcome)
             stats["outcome"] = operation_outcome
@@ -1524,25 +1529,22 @@ class SortingService(SortingSupportMixin):
             record["status"] = "cancelled"
             return record
         except PlanAuthorizationError as exc:
-            # Not a problem with this file: the plan and the executor disagree
-            # about what was reviewed. Filing it as `failed` put it beside
-            # genuinely unreadable media, under advice — "generate preview
-            # again" — that rebuilds the same plan and fails identically.
-            reason = str(exc.details.get("reason") or "unplanned_action")
-            logger.error(
-                "Placement is not in the reviewed plan", path=str(file_path), reason=reason
+            record_plan_authorization_failure(
+                exc,
+                file_path=file_path,
+                record=record,
+                execution=execution,
+                action_id=f"unplanned_{_digest(file_path)}",
             )
-            if execution is not None:
-                execution.emit(
-                    "integrity.violation", phase="sorting", reason=reason, path=str(file_path)
-                )
-                execution.record_failure(
-                    action_id=f"unplanned_{_digest(file_path)}",
-                    source_path=file_path,
-                    code="blocked",
-                    diagnostic_code=reason,
-                )
-            record.update(status="blocked", error_message=str(exc))
+            return record
+        except IntegrityTransferError as exc:
+            record_integrity_transfer_failure(
+                exc,
+                file_path=file_path,
+                record=record,
+                execution=execution,
+                fallback_action_id=f"integrity_{_digest(file_path)}",
+            )
             return record
         except Exception as exc:
             logger.error("Failed to process file", path=str(file_path), error=str(exc))

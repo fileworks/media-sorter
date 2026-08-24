@@ -16,6 +16,8 @@ still recoverable.
 
 from __future__ import annotations
 
+import errno
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -355,8 +357,9 @@ class TestPublication:
             )
 
         assert published.read_bytes() == before
-        # The intent is abandoned on the record, so recovery is not left guessing.
-        assert [intent.state for intent in store.intents()] == ["abandoned"]
+        # The generic primitive was refused before it entered its intrinsic
+        # intent protocol, so no movement claim is invented by this caller.
+        assert store.intents() == ()
         assert store.pending_intents() == ()
 
 
@@ -380,6 +383,33 @@ class TestNoClobberPromotion:
         assert promote_no_clobber(candidate, target) == target
         assert target.read_bytes() == payload
         assert not candidate.exists()
+
+    def test_no_link_fallback_retains_candidate_rewritten_after_copy(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import verified_transfer
+
+        candidate = _png(tmp_path / "candidate.jpg")
+        original = candidate.read_bytes()
+        target = tmp_path / "target.jpg"
+        original_hash = verified_transfer._hash_open_source
+
+        def no_links(*_args: object, **_kwargs: object) -> None:
+            raise OSError(errno.EPERM, "hard links unavailable")
+
+        def rewrite_after_copy_hash(handle: object) -> tuple[str, int]:
+            observed = original_hash(handle)  # type: ignore[arg-type]
+            candidate.write_bytes(b"rewritten candidate bytes")
+            return observed
+
+        monkeypatch.setattr(os, "link", no_links)
+        monkeypatch.setattr(verified_transfer, "_hash_open_source", rewrite_after_copy_hash)
+
+        with pytest.raises(ConversionPublicationError, match="candidate changed"):
+            promote_no_clobber(candidate, target)
+
+        assert candidate.read_bytes() == b"rewritten candidate bytes"
+        assert target.read_bytes() == original
 
     def test_a_destination_created_after_the_proof_is_not_overwritten(self, tmp_path: Path) -> None:
         """The C-09 window: a file appears between the precheck and the write."""

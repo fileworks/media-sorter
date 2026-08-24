@@ -10,6 +10,7 @@ reconciliation classifies the trailing state from that prefix.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -67,9 +68,9 @@ class DurableActionJournal:
         self._state: JournalState = "active"
         self._handle: IO[str] | None = None
 
-    def _open_handle(self) -> None:
+    def _open_handle(self, *, exclusive: bool = False) -> None:
         try:
-            self._handle = self.path.open("a", encoding="utf-8")
+            self._handle = self.path.open("x" if exclusive else "a", encoding="utf-8")
         except OSError as exc:
             raise JournalDurabilityError(f"Cannot open action journal {self.path}: {exc}") from exc
 
@@ -94,23 +95,30 @@ class DurableActionJournal:
             operation_id=manifest.operation_id,
             root=root,
         )
-        journal._open_handle()
-        _fsync_directory(directory)
-        journal._append(
-            {
-                "record": "header",
-                "schema_version": JOURNAL_SCHEMA_VERSION,
-                "journal_id": journal.journal_id,
-                "manifest_id": journal.manifest_id,
-                "operation_id": journal.operation_id,
-                "plan_id": manifest.plan_id,
-                "profile_id": manifest.profile_id,
-                "effective_config_sha256": manifest.effective_config_sha256,
-                "action_ids": [action.action_id for action in manifest.actions],
-                "created_at": utc_now().isoformat(),
-            }
-        )
-        return journal
+        created = False
+        try:
+            journal._open_handle(exclusive=True)
+            created = True
+            _fsync_directory(directory)
+            journal._append(
+                {
+                    "record": "header",
+                    "schema_version": JOURNAL_SCHEMA_VERSION,
+                    "journal_id": journal.journal_id,
+                    "manifest_id": journal.manifest_id,
+                    "operation_id": journal.operation_id,
+                    "plan_id": manifest.plan_id,
+                    "profile_id": manifest.profile_id,
+                    "effective_config_sha256": manifest.effective_config_sha256,
+                    "action_ids": [action.action_id for action in manifest.actions],
+                    "created_at": utc_now().isoformat(),
+                }
+            )
+            return journal
+        except BaseException:
+            if created:
+                _discard_fresh_journal(journal, directory)
+            raise
 
     @classmethod
     def open_operation(
@@ -138,23 +146,33 @@ class DurableActionJournal:
             operation_id=operation_id,
             root=root,
         )
-        journal._open_handle()
-        _fsync_directory(directory)
-        journal._append(
-            {
-                "record": "header",
-                "schema_version": JOURNAL_SCHEMA_VERSION,
-                "journal_id": operation_id,
-                "manifest_id": operation_id,
-                "operation_id": operation_id,
-                "plan_id": plan_id,
-                "profile_id": profile_id,
-                "effective_config_sha256": effective_config_sha256,
-                "streaming_manifest": True,
-                "created_at": utc_now().isoformat(),
-            }
-        )
-        return journal
+        created = False
+        try:
+            journal._open_handle(exclusive=True)
+            created = True
+            _fsync_directory(directory)
+            journal._append(
+                {
+                    "record": "header",
+                    "schema_version": JOURNAL_SCHEMA_VERSION,
+                    "journal_id": operation_id,
+                    "manifest_id": operation_id,
+                    "operation_id": operation_id,
+                    "plan_id": plan_id,
+                    "profile_id": profile_id,
+                    "effective_config_sha256": effective_config_sha256,
+                    "streaming_manifest": True,
+                    "created_at": utc_now().isoformat(),
+                }
+            )
+            return journal
+        except BaseException:
+            # A headerless or torn streaming journal has no recoverable
+            # authorization. Remove only this freshly-created path, leaving no
+            # ambiguous artifact that a later startup could interpret as a run.
+            if created:
+                _discard_fresh_journal(journal, directory)
+            raise
 
     def authorize(self, action: MutationManifestAction) -> MutationManifestAction:
         """Durably record one action's authorization before it is executed."""
@@ -472,6 +490,20 @@ def _safe_name(identifier: str) -> str:
         for character in identifier
     )
     return safe[:128] or "journal"
+
+
+def _discard_fresh_journal(journal: DurableActionJournal, directory: Path) -> None:
+    """Remove only a journal this open attempt proved it created."""
+    with contextlib.suppress(OSError):
+        journal.close()
+    try:
+        journal.path.unlink()
+        _fsync_directory(directory)
+    except OSError as exc:
+        raise JournalDurabilityError(
+            f"Fresh partial journal {journal.path} could not be removed; "
+            "it remains explicit recovery evidence."
+        ) from exc
 
 
 def _fsync_directory(directory: Path) -> None:

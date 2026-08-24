@@ -33,8 +33,14 @@ def store(tmp_path: Path) -> QuarantineStore:
     return QuarantineStore(tmp_path / "state" / "quarantine")
 
 
-def _quarantined(store: QuarantineStore, tmp_path: Path, payload: bytes = b"original bytes") -> str:
-    source = tmp_path / "incoming" / "photo.jpg"
+def _quarantined(
+    store: QuarantineStore,
+    tmp_path: Path,
+    payload: bytes = b"original bytes",
+    *,
+    name: str = "photo.jpg",
+) -> str:
+    source = tmp_path / "incoming" / name
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(payload)
     record = store.quarantine(source, operation_id="op1", reason="duplicate")
@@ -215,8 +221,11 @@ class TestSuccessAndRecovery:
     def test_cancellation_stops_before_the_next_object(
         self, store: QuarantineStore, tmp_path: Path
     ) -> None:
-        first = _quarantined(store, tmp_path, b"first")
-        second = _quarantined(store, tmp_path, b"second")
+        # Durable quarantine intents intentionally converge retries for one
+        # source identity. Use two distinct source objects to test cancellation
+        # between independent cleanup items.
+        first = _quarantined(store, tmp_path, b"first", name="first.jpg")
+        second = _quarantined(store, tmp_path, b"second", name="second.jpg")
         impact = preview_cleanup(store, [first, second])
         calls = {"n": 0}
 

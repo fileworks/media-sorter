@@ -21,6 +21,7 @@ that `pending_intents()` reports — never a file that is simply gone.
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import shutil
 from collections.abc import Callable
@@ -28,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.core.exceptions import IntegrityTransferError
 from app.core.logging_config import get_logger
 from app.services.conversion_guard import (
     CandidateProof,
@@ -37,8 +39,22 @@ from app.services.conversion_guard import (
     validate_converted_video,
 )
 from app.services.quarantine import QuarantineError, QuarantineRecord, QuarantineStore
+from app.services.verified_transfer import stream_sha256, unlink_revalidated_pair
 
 logger = get_logger(__name__)
+
+_NO_LINK_ERRNOS = frozenset(
+    code
+    for code in (
+        errno.EXDEV,
+        errno.EPERM,
+        errno.EACCES,
+        getattr(errno, "ENOTSUP", None),
+        getattr(errno, "EOPNOTSUPP", None),
+        getattr(errno, "EMLINK", None),
+    )
+    if code is not None
+)
 
 #: Private, on the destination filesystem so promotion is a same-volume rename,
 #: and dot-prefixed so it does not appear in the tree the user browses.
@@ -74,17 +90,23 @@ def promote_no_clobber(candidate: Path, target: Path) -> Path:
     fails with `FileExistsError` when the target exists, and that failure is the
     guarantee — the link is created or nothing happened.
 
-    Falls back to an exclusive create plus copy when the filesystem has no hard
-    links (exFAT, some SMB mounts), which keeps the same refusal semantics.
+    Falls back to an exclusive create plus verified copy when the filesystem has
+    no hard links (exFAT, some SMB mounts). Candidate removal still goes through
+    the final open-handle source/destination identity guard.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
+    expected_sha256, expected_size = stream_sha256(candidate)
     try:
         os.link(candidate, target)
     except FileExistsError:
         raise ConversionPublicationError(
             f"refusing to replace an existing file at {target}"
         ) from None
-    except OSError:
+    except OSError as link_error:
+        if link_error.errno not in _NO_LINK_ERRNOS:
+            raise ConversionPublicationError(
+                f"could not publish candidate safely at {target}: {link_error}"
+            ) from link_error
         # No hard links here. `O_EXCL` gives the same "create or fail" promise.
         try:
             handle = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
@@ -92,9 +114,33 @@ def promote_no_clobber(candidate: Path, target: Path) -> Path:
             raise ConversionPublicationError(
                 f"refusing to replace an existing file at {target}"
             ) from None
-        os.close(handle)
-        shutil.copyfile(candidate, target)
-    candidate.unlink(missing_ok=True)
+        try:
+            with os.fdopen(handle, "wb") as destination, candidate.open("rb") as source:
+                shutil.copyfileobj(source, destination)
+                destination.flush()
+                os.fsync(destination.fileno())
+            unlink_revalidated_pair(
+                candidate,
+                target,
+                expected_sha256=expected_sha256,
+                expected_size_bytes=expected_size,
+            )
+        except (OSError, IntegrityTransferError) as exc:
+            raise ConversionPublicationError(
+                f"candidate changed or could not be removed after verified publication at {target}"
+            ) from exc
+        return target
+    try:
+        unlink_revalidated_pair(
+            candidate,
+            target,
+            expected_sha256=expected_sha256,
+            expected_size_bytes=expected_size,
+        )
+    except (OSError, IntegrityTransferError) as exc:
+        raise ConversionPublicationError(
+            f"candidate changed or could not be removed after verified publication at {target}"
+        ) from exc
     return target
 
 
@@ -157,14 +203,9 @@ def publish_converted_file(
             kept_original_because=rejection.reason,
         )
 
-    # From here the candidate has earned publication. The original is protected
-    # *before* it is displaced, and the intent is durable before either.
-    intent = quarantine.declare_intent(
-        original,
-        operation_id=operation_id,
-        reason="optimization_original",
-        keeper_path=target,
-    )
+    # From here the candidate has earned publication. ``quarantine`` owns the
+    # complete durable intent/transfer/record protocol intrinsically; a second
+    # caller-managed intent can diverge at the crash boundary.
     try:
         record = quarantine.quarantine(
             original,
@@ -175,7 +216,6 @@ def publish_converted_file(
             notes=(f"replaced by conversion to {expected_suffix.lstrip('.')}", proof.detail),
         )
     except (OSError, QuarantineError) as exc:
-        quarantine.abandon_intent(intent, f"{type(exc).__name__}: {exc}")
         candidate.unlink(missing_ok=True)
         _clear_stage(stage)
         # A failed quarantine must never be masked into "keeping original and
@@ -183,8 +223,6 @@ def publish_converted_file(
         raise ConversionPublicationError(
             f"could not quarantine the original before publishing: {exc}"
         ) from exc
-    quarantine.commit_intent(intent, record)
-
     try:
         published = promote_no_clobber(candidate, target)
     except ConversionPublicationError:

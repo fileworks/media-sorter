@@ -35,8 +35,10 @@ dependencies = [
     "pillow-heif>=1.5.0",
     # RAW decoding (bundles libraw via the wheel)
     "rawpy>=0.18.0",
-    # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes; pin explicitly
-    "numpy>=1.24.0",
+    # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
+    # NumPy 2.5+ requires Python 3.12 and its stubs cannot represent this
+    # project's Python 3.10 API contract; lift the cap when the product floor moves.
+    "numpy>=1.24.0,<2.5",
 
     # HTTP
     "httpx>=0.25.0",
@@ -70,7 +72,7 @@ dev = [
 ]
 
 # Local, offline AI tagging (CLIP/SigLIP zero-shot + GPS geocoding). Optional so
-# CI/tests and the cloud-only path don't pull onnxruntime; release builds freeze
+# CI/tests do not pull onnxruntime; release builds freeze
 # the inference runtime but never model weights. Those are installed explicitly
 # from immutable, checksum-covered sources. fastembed provides the CLIP runtime
 # without torch and does not pin pillow/numpy, so it coexists with pillow-heif/rawpy.

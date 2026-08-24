@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
 from app.core.exceptions import MutationPolicyError
-from app.core.integrity import MutationActionKind, PreservationProfile
+from app.core.integrity import MutationActionKind, OperationOutcomeCode, PreservationProfile
 from app.core.integrity_policy import MutationAuthorization
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionRole
@@ -40,6 +40,26 @@ if TYPE_CHECKING:
     from app.services.metadata_service import MetadataService
 
 logger = get_logger(__name__)
+
+
+def operation_outcome(stats: dict[str, Any], *, cancelled: bool) -> OperationOutcomeCode:
+    """Reduce detailed counters to the durable terminal operation outcome."""
+    if cancelled:
+        return "cancelled"
+    if stats["failed"] and stats["sorted"]:
+        return "partial"
+    if stats.get("incomplete_units"):
+        return "partial"
+    if stats["failed"]:
+        return "failed"
+    if (
+        stats["corrupted"]
+        or stats["issues"]
+        or stats["partial"]
+        or stats.get("unmatched_companions")
+    ):
+        return "completed_with_warnings"
+    return "completed"
 
 
 def _tags_to_json(tags: list[str]) -> str:

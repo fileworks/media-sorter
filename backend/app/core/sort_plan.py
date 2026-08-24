@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -103,6 +104,53 @@ def measured_identity(path: Path) -> tuple[str, int]:
     """
     observed = path.stat()
     return _fingerprint_of(observed), observed.st_size
+
+
+def destination_fingerprint(root: Path) -> str:
+    """Hash every destination entry and its current bytes.
+
+    The destination is intentionally outside the input catalog. A generation
+    number from that catalog cannot prove that a destination file was not
+    added, rewritten, deleted, or renamed. This token covers regular files,
+    directories, symlinks, and the identity of special filesystem nodes, so
+    those changes invalidate a frozen plan before execution.
+    """
+    if not root.exists():
+        return "destination-v1:missing"
+    if not root.is_dir() or root.is_symlink():
+        raise OSError(f"destination is not a directory: {root}")
+    entries: list[str] = []
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as iterator:
+            children = sorted(iterator, key=lambda entry: entry.name)
+        for entry in children:
+            path = Path(entry.path)
+            relative = path.relative_to(root).as_posix()
+            if entry.is_symlink():
+                entries.append(f"link:{relative}:{os.readlink(path)}")
+            elif entry.is_dir(follow_symlinks=False):
+                # Empty directories are real destination occupants. A newly
+                # created one can block a planned file path, and a rename or
+                # deletion is still freshness drift even when it has no files.
+                entries.append(f"dir:{relative}")
+                pending.append(path)
+            elif entry.is_file(follow_symlinks=False):
+                digest = hashlib.sha256()
+                with path.open("rb") as handle:
+                    while chunk := handle.read(1024 * 1024):
+                        digest.update(chunk)
+                entries.append(f"file:{relative}:{digest.hexdigest()}")
+            else:
+                observed = entry.stat(follow_symlinks=False)
+                entries.append(
+                    f"other:{relative}:{stat.S_IFMT(observed.st_mode):o}:"
+                    f"{observed.st_dev}:{observed.st_ino}:"
+                    f"{observed.st_rdev}:{observed.st_size}"
+                )
+    payload = "\n".join(sorted(entries)).encode("utf-8")
+    return "destination-v1:" + hashlib.sha256(payload).hexdigest()
 
 
 class FrozenSortAction(BaseModel):
@@ -226,6 +274,8 @@ class FrozenSortPlan(BaseModel):
     #: before this field are read: they are not refused, because refusing every
     #: older plan is a worse answer than the one defect this prevents.
     catalog_generation: int = 0
+    #: Complete destination token, separate from the input/reference catalog.
+    destination_fingerprint: str | None = None
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
@@ -668,6 +718,7 @@ def build_frozen_sort_plan(
     config: Config,
     *,
     catalog_generation: int = 0,
+    destination_token: str | None = None,
 ) -> FrozenSortPlan:
     """Freeze preview outcomes and derive their impact from those same actions."""
     actions: list[FrozenSortAction] = []
@@ -802,10 +853,18 @@ def build_frozen_sort_plan(
             )
 
     converts_media = config.convert_images or config.convert_videos
+    if destination_token is None and config.target_directory:
+        try:
+            destination_token = destination_fingerprint(Path(config.target_directory))
+        except OSError:
+            # The plan remains reviewable, but a live start will fail closed
+            # because it has no complete destination evidence.
+            destination_token = None
     return FrozenSortPlan(
         plan_id=f"sortplan_{uuid.uuid4().hex[:20]}",
         config_fingerprint=config_fingerprint(config),
         catalog_generation=catalog_generation,
+        destination_fingerprint=destination_token,
         actions=tuple(actions),
         impact=build_impact(
             actions,

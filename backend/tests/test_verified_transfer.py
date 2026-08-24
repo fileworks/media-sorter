@@ -230,7 +230,10 @@ def test_same_volume_move_publishes_without_copying_after_full_revalidation(
     assert result.integrity_source == "measured"
     assert result.integrity is not None
     assert result.integrity.verified is True
-    assert hashed == [source]
+    # The final source proof now reads the already-open descriptor inside the
+    # unlink helper, so the path-based calls are only the initial source and
+    # destination-first boundary checks.
+    assert hashed == [source, destination]
     assert result.source_removed is True
     assert result.source_safety == "destination_verified"
     assert result.reduced_guarantee is None
@@ -314,7 +317,7 @@ def test_same_volume_move_rehashes_the_source_when_asked(
 
     result = execute_transfer(action, rehash_source=True)
 
-    assert hashed == [source]
+    assert hashed == [source, destination]
     assert result.integrity_source == "measured"
     assert destination.read_bytes() == b"rehash me"
 
@@ -502,6 +505,66 @@ def test_unremovable_source_reports_redundant_verified_copies(
     assert destination.read_bytes() == b"undeletable"
     assert source.read_bytes() == b"undeletable"
     assert _stages(state)[-1] == "terminal"
+
+
+def test_source_rewritten_while_destination_is_revalidated_survives_unlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The final source check must be the last read before unlink.
+
+    Checking the source first leaves a full destination-hash window in which
+    replacement bytes can acquire the already-authorized path and then be
+    deleted. This mutation forces that exact interleaving.
+    """
+    state = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "destination.bin"
+    source.write_bytes(b"authorized-old")
+    action = _move_action(source, destination)
+    monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_: False)
+    original_revalidate = verified_transfer.revalidate_sha256
+
+    def rewrite_during_destination_check(path: Path, **kwargs: object) -> tuple[str, int]:
+        if path == destination:
+            source.write_bytes(b"new user bytes")
+        return original_revalidate(path, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(verified_transfer, "revalidate_sha256", rewrite_during_destination_check)
+
+    with _journal(state, action) as journal:
+        with pytest.raises(IntegrityTransferError):
+            execute_transfer(action, journal=journal)
+
+    assert source.read_bytes() == b"new user bytes"
+    assert destination.read_bytes() == b"authorized-old"
+    assert _stages(state)[-1] == "terminal"
+
+
+def test_source_rewritten_after_final_hash_callback_survives_unlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validation cannot return to a caller that still owns the unlink."""
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "destination.bin"
+    source.write_bytes(b"authorized-old")
+    action = _move_action(source, destination)
+    monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_: False)
+    original_hash = verified_transfer._hash_open_source
+
+    def rewrite_after_hash(handle: object) -> tuple[str, int]:
+        observed = original_hash(handle)  # type: ignore[arg-type]
+        source.write_bytes(b"new user bytes")
+        return observed
+
+    monkeypatch.setattr(verified_transfer, "_hash_open_source", rewrite_after_hash)
+
+    with pytest.raises(IntegrityTransferError, match="changed"):
+        execute_transfer(action)
+
+    assert source.read_bytes() == b"new user bytes"
+    assert destination.read_bytes() == b"authorized-old"
 
 
 def test_interrupted_move_leaves_a_recoverable_journal_and_both_copies(
