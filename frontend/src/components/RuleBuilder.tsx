@@ -328,9 +328,9 @@ export function RuleBuilderInline({
         <strong>{t("rules.title")}</strong> {t("rules.explanation")}
         <div className="mt-1 font-mono">{t("rules.example")}</div>
       </div>
-      <SettingRow label={t("rules.enable")} htmlFor="rules-enabled" last>
+      <SettingRow label={t("rules.enable")} htmlFor="rule-builder-enabled" last>
         <Toggle
-          id="rules-enabled"
+          id="rule-builder-enabled"
           checked={config.rules_enabled}
           onChange={(rules_enabled) => updateConfig({ rules_enabled })}
         />

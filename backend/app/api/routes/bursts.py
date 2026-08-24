@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from app.api.deps import ContainerDep
+from app.core.library_validation import validate_configured_library
 from app.core.paths import resolve_app_paths
 from app.services.burst_detection import (
-    BurstGroup,
     BurstQuarantinePlan,
     build_burst_report,
     execute_burst_quarantine,
@@ -28,29 +30,60 @@ router = APIRouter()
 _PLANS: dict[str, BurstQuarantinePlan] = {}
 
 
+def _authority_roots(
+    container: ContainerDep,
+) -> tuple[tuple[Path, ...], tuple[Path, ...], tuple[Path, ...], tuple[str, ...]]:
+    library = validate_configured_library(container.config)
+    return (
+        tuple(root.canonical_path for root in library.inputs),
+        tuple(root.canonical_path for root in library.references),
+        tuple(exclusion for root in library.inputs for exclusion in root.exclusions),
+        tuple(container.config.exclude_patterns),
+    )
+
+
 class BurstReviewRequest(BaseModel):
-    group: BurstGroup
+    model_config = ConfigDict(extra="forbid")
+
+    group_id: str
     keep_frame_ids: tuple[str, ...] = ()
     dismissed: bool = False
 
 
 class BurstExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     acknowledged: bool = False
 
 
 class BurstExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     format: Literal["json", "csv"] = "json"
 
 
 @router.post("/review/bursts/decision")
-async def decide_burst(body: BurstReviewRequest) -> dict[str, object]:
+async def decide_burst(container: ContainerDep, body: BurstReviewRequest) -> dict[str, object]:
+    group = container.burst_detection_service.issued_group(body.group_id)
+    if group is None:
+        raise HTTPException(status_code=409, detail="Burst group was not issued by this server")
+    allowed, protected, excluded, patterns = _authority_roots(container)
     reviewed = review_burst(
-        body.group,
+        group,
         keep_frame_ids=body.keep_frame_ids,
         dismissed=body.dismissed,
     )
     quarantine = quarantine_candidates(reviewed)
-    plan = plan_burst_quarantine(reviewed)
+    try:
+        plan = plan_burst_quarantine(
+            reviewed,
+            allowed_roots=allowed,
+            protected_roots=protected,
+            excluded_roots=excluded,
+            exclude_patterns=patterns,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if plan.members:
         _PLANS[plan.plan_id] = plan
     return {
@@ -80,6 +113,7 @@ async def decide_burst(body: BurstReviewRequest) -> dict[str, object]:
 async def execute_burst_plan(
     plan_id: str,
     body: BurstExecuteRequest,
+    container: ContainerDep,
 ) -> dict[str, object]:
     plan = _PLANS.get(plan_id)
     if plan is None:
@@ -87,6 +121,7 @@ async def execute_burst_plan(
     if not body.acknowledged:
         raise HTTPException(status_code=409, detail="Review and acknowledge the impact first")
     state_root = resolve_app_paths().data_dir
+    allowed, protected, excluded, patterns = _authority_roots(container)
     operation_id = f"burst_{uuid.uuid4().hex[:16]}"
     try:
         records = await asyncio.to_thread(
@@ -94,6 +129,10 @@ async def execute_burst_plan(
             plan,
             store_for_state_root(state_root),
             operation_id=operation_id,
+            allowed_roots=allowed,
+            protected_roots=protected,
+            excluded_roots=excluded,
+            exclude_patterns=patterns,
         )
         report = build_burst_report(plan, records, operation_id=operation_id)
         await asyncio.to_thread(save_burst_report, report, state_root)

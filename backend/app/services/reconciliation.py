@@ -23,6 +23,7 @@ from app.core.action_journal import (
     unresolved_journals,
 )
 from app.core.events import EventRecorder, structlog_sink
+from app.core.exceptions import IntegrityTransferError
 from app.core.integrity import (
     ActionJournal,
     ActionStage,
@@ -30,7 +31,7 @@ from app.core.integrity import (
     MutationManifestAction,
 )
 from app.core.logging_config import get_logger
-from app.services.verified_transfer import stage_glob, stream_sha256
+from app.services.verified_transfer import stage_glob, stream_sha256, unlink_revalidated_pair
 
 logger = get_logger(__name__)
 
@@ -188,10 +189,10 @@ def apply_safe_recovery(root: Path, report: ReconciliationReport) -> RecoveryOut
             # fresh measurement instead, which is what this function's contract
             # already claimed: "the destination independently hashes to the
             # authorized content".
-            still_verified = item.destination_verified and _destination_still_verified(
+            destination_still_verified = item.destination_verified and _destination_still_verified(
                 root, report, item
             )
-            if still_verified:
+            if destination_still_verified:
                 outcome.discarded_stages.extend(_discard(item.verified_stages))
                 outcome.discarded_stages.extend(_discard(item.unverified_stages))
             elif item.destination_verified:
@@ -201,9 +202,12 @@ def apply_safe_recovery(root: Path, report: ReconciliationReport) -> RecoveryOut
                     destination=str(item.destination_path),
                 )
             if item.recommended == "remove_verified_source":
-                if still_verified:
-                    _remove(item.source_path, outcome)
+                if destination_still_verified and _source_still_verified(root, report, item):
+                    _remove(root, report, item, outcome)
                 else:
+                    # A destination-only match is not destructive authority.
+                    # The source may have been rewritten after the journal was
+                    # written; retain it and make the recovery unresolved.
                     outcome.unresolved_actions.append(item.action_id)
             elif item.recommended != "none":
                 outcome.unresolved_actions.append(item.action_id)
@@ -306,6 +310,20 @@ def _destination_still_verified(
     return present and matches
 
 
+def _source_still_verified(
+    root: Path,
+    report: ReconciliationReport,
+    item: ActionReconciliation,
+) -> bool:
+    """Require the source to still be the reviewed bytes before unlinking it."""
+    authorized = {action.action_id: action for action in _authorized_by_id(root, report)}
+    action = authorized.get(item.action_id)
+    if action is None:
+        return False
+    present, matches = _content_state(Path(item.source_path), action)
+    return present and matches
+
+
 def _authorized_by_id(
     root: Path, report: ReconciliationReport
 ) -> tuple[MutationManifestAction, ...]:
@@ -403,13 +421,29 @@ def _discard(stages: tuple[Path, ...]) -> list[Path]:
     return discarded
 
 
-def _remove(source: Path, outcome: RecoveryOutcome) -> None:
+def _remove(
+    root: Path,
+    report: ReconciliationReport,
+    item: ActionReconciliation,
+    outcome: RecoveryOutcome,
+) -> None:
+    """Revalidate both copies at the final recovery-unlink boundary."""
+    authorized = {action.action_id: action for action in _authorized_by_id(root, report)}
+    action = authorized.get(item.action_id)
+    if action is None:
+        outcome.unresolved_actions.append(item.action_id)
+        return
     try:
-        source.unlink()
-    except FileNotFoundError:
+        unlink_revalidated_pair(
+            item.source_path,
+            item.destination_path,
+            expected_sha256=action.source.sha256,
+            expected_size_bytes=action.expected_size_bytes,
+        )
+    except (OSError, IntegrityTransferError) as exc:
+        logger.warning(
+            "Could not remove verified source", source=str(item.source_path), error=str(exc)
+        )
+        outcome.unresolved_actions.append(item.action_id)
         return
-    except OSError as exc:
-        logger.warning("Could not remove verified source", source=str(source), error=str(exc))
-        outcome.unresolved_actions.append(str(source))
-        return
-    outcome.removed_sources.append(source)
+    outcome.removed_sources.append(item.source_path)

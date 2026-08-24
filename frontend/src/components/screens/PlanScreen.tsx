@@ -1,5 +1,6 @@
 import { FiAlertTriangle, FiCheck } from "react-icons/fi";
 
+import { CompanionEvidencePanel } from "@/components/CompanionEvidencePanel";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -14,7 +15,7 @@ interface PlanScreenProps {
 }
 
 export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }: PlanScreenProps) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const issueCount = Math.max(result.issues.length, result.stats.issue_count ?? 0);
   const duplicateCount = Math.max(result.impact.unresolved_count, result.stats.will_skip_duplicate);
   const safeBoundary = result.impact.source_mutations === 0;
@@ -25,20 +26,18 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
     [issueCount.toLocaleString(locale), t("plan.metric.issues")],
   ];
   const steps = [
-    [t("plan.sequence.read.title"), t("plan.sequence.read.detail", { count: inputCount })],
+    [t("plan.sequence.read.title"), tCount("plan.sequence.read.detail", inputCount)],
     [
       t("plan.sequence.organize.title"),
-      t("plan.sequence.organize.detail", { count: result.impact.actionable_groups }),
+      tCount("plan.sequence.organize.detail", result.impact.actionable_groups),
     ],
     [
       t("plan.sequence.duplicates.title"),
-      t("plan.sequence.duplicates.detail", { count: duplicateCount }),
+      tCount("plan.sequence.duplicates.detail", duplicateCount),
     ],
     [
       t("plan.sequence.write.title"),
-      t("plan.sequence.write.detail", {
-        count: result.impact.copy_count + result.impact.move_count,
-      }),
+      tCount("plan.sequence.write.detail", result.impact.copy_count + result.impact.move_count),
     ],
   ];
 
@@ -72,7 +71,7 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
             {t("plan.summary.title", { count: result.stats.total.toLocaleString(locale) })}
           </h2>
           <p className="relative mt-1 text-xs text-muted-foreground">
-            {t("plan.summary.detail", { count: duplicateCount })}
+            {tCount("plan.summary.detail", duplicateCount)}
           </p>
           <dl className="relative mt-5 grid grid-cols-2 gap-4 border-t border-success/20 pt-4 sm:grid-cols-4">
             {metrics.map(([value, label]) => (
@@ -103,9 +102,7 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
                 t("plan.check.boundary"),
                 safeBoundary
                   ? t("plan.check.boundary.safe")
-                  : t("plan.check.boundary.mutations", {
-                      count: result.impact.source_mutations,
-                    }),
+                  : tCount("plan.check.boundary.mutations", result.impact.source_mutations),
               ],
             ].map(([safe, title, detail]) => (
               <div
@@ -156,6 +153,8 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
           ))}
         </ol>
       </section>
+
+      <CompanionEvidencePanel items={result.items} />
     </div>
   );
 }

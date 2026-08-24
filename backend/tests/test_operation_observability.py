@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from support import authorize_mutations
 
-from app.core.action_journal import DurableActionJournal
+from app.core.action_journal import DurableActionJournal, JournalDurabilityError
 from app.core.config import Config
 from app.core.exceptions import IntegrityTransferError
 from app.core.integrity import OperationEvent
@@ -180,7 +180,7 @@ def test_a_failed_placement_still_reaches_exactly_one_terminal_event(tmp_path: P
     assert execution.events.terminal is not None
 
 
-def test_a_missing_journal_is_reported_as_degraded_diagnostics(
+def test_a_missing_journal_fails_closed_before_live_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -189,10 +189,20 @@ def test_a_missing_journal_is_reported_as_degraded_diagnostics(
 
     monkeypatch.setattr(DurableActionJournal, "open_operation", refuse)
 
-    execution = _execution(tmp_path)
+    with pytest.raises(JournalDurabilityError, match="requires a durable action journal"):
+        _execution(tmp_path)
 
-    assert execution.journal is None
-    assert "logging.degraded" in _codes(execution)
+
+def test_a_preexisting_streaming_journal_is_preserved_and_refused(tmp_path: Path) -> None:
+    journal_path = tmp_path / "state" / "journals" / "op_observability.journal.jsonl"
+    journal_path.parent.mkdir(parents=True)
+    sentinel = b'{"record":"existing-recovery-evidence"}\n'
+    journal_path.write_bytes(sentinel)
+
+    with pytest.raises(JournalDurabilityError):
+        _execution(tmp_path)
+
+    assert journal_path.read_bytes() == sentinel
 
 
 def test_recovery_emits_a_correlated_terminated_timeline(

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { catalogs, type MessageKey } from "@/i18n/messages";
+import { readStored, writeStored } from "@/lib/storage";
 
 export type Locale = keyof typeof catalogs;
 export type MessageParams = Record<string, string | number>;
@@ -17,6 +18,8 @@ interface I18nValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey | string, params?: MessageParams, fallback?: string) => string;
+  /** `t` for a counted thing: picks the singular form when there is one. */
+  tCount: (key: MessageKey | string, count: number, params?: MessageParams) => string;
   formatNumber: (value: number) => string;
   formatDate: (value: Date | string, options?: Intl.DateTimeFormatOptions) => string;
 }
@@ -25,11 +28,7 @@ const I18nContext = createContext<I18nValue | null>(null);
 const STORAGE_KEY = "mediasort_language";
 
 export function storedLocale(): Locale {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "de" ? "de" : "en";
-  } catch {
-    return "en";
-  }
+  return readStored(STORAGE_KEY) === "de" ? "de" : "en";
 }
 
 export function translate(
@@ -46,6 +45,27 @@ export function translate(
   );
 }
 
+/**
+ * A counted message, in the form the count calls for.
+ *
+ * `key.one` when there is exactly one and the catalogue offers that form, `key`
+ * otherwise. Both languages read as broken without it — "1 files", "1 Dateien"
+ * — and the alternative, a ternary at each call site, is how three places got
+ * it right and a dozen did not.
+ */
+export function plural(
+  locale: Locale,
+  key: MessageKey | string,
+  count: number,
+  params: MessageParams = {},
+): string {
+  const singular = `${key}.one`;
+  const chosen = count === 1 && singular in catalogs.en ? singular : key;
+  // An explicit `count` param wins: several call sites pass a locale-formatted
+  // count for display while the raw number decides the form.
+  return translate(locale, chosen, { count, ...params });
+}
+
 export function I18nProvider({
   children,
   initialLocale = storedLocale(),
@@ -56,11 +76,8 @@ export function I18nProvider({
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // Storage is optional; the persisted backend config remains authoritative.
-    }
+    // Storage is optional; the persisted backend config remains authoritative.
+    writeStored(STORAGE_KEY, next);
   }, []);
 
   useEffect(() => {
@@ -72,6 +89,7 @@ export function I18nProvider({
       locale,
       setLocale,
       t: (key, params, fallback) => translate(locale, key, params, fallback),
+      tCount: (key, count, params) => plural(locale, key, count, params),
       formatNumber: (number) => new Intl.NumberFormat(locale).format(number),
       formatDate: (raw, options) =>
         new Intl.DateTimeFormat(locale, options).format(raw instanceof Date ? raw : new Date(raw)),

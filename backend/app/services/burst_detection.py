@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import hashlib
 import io
 import os
+import unicodedata
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.duplicate_plans import DuplicateGroup, GroupMember
 from app.core.media_units import MediaUnit, bind_media_units
 from app.services.duplicate_service import DuplicateService
 from app.services.extraction_service import DateExtractionService
@@ -31,6 +35,7 @@ class BurstFrame(BaseModel):
     unit_id: str
     primary_path: str
     member_paths: tuple[str, ...]
+    member_fingerprints: tuple[str, ...]
     captured_at: datetime
     camera_identity: str
     perceptual_distance_from_previous: int | None = Field(default=None, ge=0)
@@ -66,6 +71,7 @@ class BurstQuarantinePlan(BaseModel):
     group_id: str
     kept_frame_ids: tuple[str, ...]
     members: tuple[BurstQuarantineMember, ...]
+    authority_fingerprint: str = ""
 
     @property
     def bytes_affected(self) -> int:
@@ -112,6 +118,7 @@ class _Candidate:
     captured_at: datetime
     camera: str
     digest: str
+    size_bytes: int
     signature: object | None = None
     distance: int | None = None
 
@@ -123,6 +130,53 @@ class BurstDetectionService:
         self.duplicate_service = DuplicateService()
         self.extraction = DateExtractionService()
         self.sharpness_computations = 0
+        self._issued_groups: dict[str, BurstGroup] = {}
+
+    def issued_group(self, group_id: str) -> BurstGroup | None:
+        """Return only a group this server instance actually detected."""
+        return self._issued_groups.get(group_id)
+
+    def issue_review_group(self, group: DuplicateGroup) -> BurstGroup:
+        """Authorize a catalog-backed Review burst for the legacy executor.
+
+        ``GET /review/groups`` is the production burst producer. The legacy
+        quarantine endpoint therefore receives paths and byte identities only
+        through this conversion of the exact server-issued page, never from a
+        client request. Media-unit companions are rediscovered beside each
+        catalog member and frozen into the issued frame as well.
+        """
+        if group.kind != "burst" or len(group.members) < 2:
+            raise ValueError("only a loaded catalog burst can be issued")
+        frames = tuple(self._frame_from_review_member(member) for member in group.members)
+        frame_ids = {frame.frame_id for frame in frames}
+        representative = (
+            group.anchor_member_id if group.anchor_member_id in frame_ids else frames[0].frame_id
+        )
+        issued = BurstGroup(
+            group_id=group.group_id,
+            frames=frames,
+            proposed_representative_id=representative,
+        )
+        self._issued_groups[group.group_id] = issued
+        return issued
+
+    def _frame_from_review_member(self, member: GroupMember) -> BurstFrame:
+        primary = Path(member.observed_path)
+        captured = _fact_datetime(member.facts.captured_at.value)
+        if captured is None:
+            raise ValueError("catalog burst member has no valid capture time")
+        unit = _media_unit_beside(primary)
+        paths = tuple(item.path for item in unit.members)
+        return BurstFrame(
+            frame_id=member.member_id,
+            unit_id=unit.unit_id,
+            primary_path=str(primary),
+            member_paths=tuple(str(path) for path in paths),
+            member_fingerprints=tuple(_fingerprint(path) for path in paths),
+            captured_at=captured,
+            camera_identity=self.extraction.extract_camera_model(primary) or "",
+            perceptual_distance_from_previous=member.evidence.distance,
+        )
 
     def detect(
         self,
@@ -143,12 +197,12 @@ class BurstDetectionService:
             camera = self.extraction.extract_camera_model(unit.primary) or ""
             if captured is None or (settings.require_camera_identity and not camera):
                 continue
-            digest = stream_sha256(unit.primary)[0]
+            digest, size_bytes = stream_sha256(unit.primary)
             # Exact duplicates take precedence and do not enter burst grouping.
             if digest in seen_hashes:
                 continue
             seen_hashes.add(digest)
-            candidates.append(_Candidate(unit, captured, camera, digest))
+            candidates.append(_Candidate(unit, captured, camera, digest, size_bytes))
         candidates.sort(key=lambda item: (item.captured_at, str(item.unit.primary)))
 
         raw_groups: list[list[_Candidate]] = []
@@ -184,7 +238,9 @@ class BurstDetectionService:
             current.append(candidate)
         if len(current) > 1:
             raw_groups.append(current)
-        return tuple(self._rank(group) for group in raw_groups)
+        groups = tuple(self._rank(group) for group in raw_groups)
+        self._issued_groups.update({group.group_id: group for group in groups})
+        return groups
 
     def _rank(self, candidates: list[_Candidate]) -> BurstGroup:
         frames: list[BurstFrame] = []
@@ -199,6 +255,12 @@ class BurstDetectionService:
                     unit_id=candidate.unit.unit_id,
                     primary_path=str(candidate.unit.primary),
                     member_paths=tuple(str(item.path) for item in candidate.unit.members),
+                    member_fingerprints=tuple(
+                        f"sha256:{candidate.digest}:{candidate.size_bytes}"
+                        if item.path == candidate.unit.primary
+                        else _fingerprint(item.path)
+                        for item in candidate.unit.members
+                    ),
                     captured_at=candidate.captured_at,
                     camera_identity=candidate.camera,
                     perceptual_distance_from_previous=candidate.distance,
@@ -254,19 +316,44 @@ def quarantine_candidates(group: BurstGroup) -> tuple[BurstFrame, ...]:
     return tuple(frame for frame in group.frames if frame.frame_id not in keep)
 
 
-def plan_burst_quarantine(group: BurstGroup) -> BurstQuarantinePlan:
+def plan_burst_quarantine(
+    group: BurstGroup,
+    *,
+    allowed_roots: Sequence[Path] = (),
+    protected_roots: Sequence[Path] = (),
+    excluded_roots: Sequence[Path] = (),
+    exclude_patterns: Sequence[str] = (),
+) -> BurstQuarantinePlan:
     """Freeze every member of each non-selected media unit before execution."""
+    if not allowed_roots:
+        raise ValueError("burst planning requires current mutable root authority")
     candidates = quarantine_candidates(group)
+    authority = _authority_fingerprint(
+        allowed_roots, protected_roots, excluded_roots, exclude_patterns
+    )
     members: list[BurstQuarantineMember] = []
     for frame in candidates:
-        for raw_path in frame.member_paths:
+        if len(frame.member_paths) != len(frame.member_fingerprints):
+            raise ValueError("burst group lacks complete server-issued member identity")
+        for raw_path, issued_fingerprint in zip(
+            frame.member_paths, frame.member_fingerprints, strict=True
+        ):
             path = Path(raw_path)
+            _assert_burst_scope(
+                path,
+                allowed_roots,
+                protected_roots,
+                excluded_roots,
+                exclude_patterns,
+            )
+            if _fingerprint(path) != issued_fingerprint:
+                raise ValueError("burst member changed after detection; detect the group again")
             members.append(
                 BurstQuarantineMember(
                     frame_id=frame.frame_id,
                     unit_id=frame.unit_id,
                     path=str(path),
-                    fingerprint=_fingerprint(path),
+                    fingerprint=issued_fingerprint,
                 )
             )
     return BurstQuarantinePlan(
@@ -274,6 +361,7 @@ def plan_burst_quarantine(group: BurstGroup) -> BurstQuarantinePlan:
         group_id=group.group_id,
         kept_frame_ids=group.kept_frame_ids,
         members=tuple(members),
+        authority_fingerprint=authority,
     )
 
 
@@ -282,19 +370,48 @@ def execute_burst_quarantine(
     store: QuarantineStore,
     *,
     operation_id: str,
+    allowed_roots: Sequence[Path] = (),
+    protected_roots: Sequence[Path] = (),
+    excluded_roots: Sequence[Path] = (),
+    exclude_patterns: Sequence[str] = (),
 ) -> tuple[QuarantineRecord, ...]:
     """Execute only the frozen plan; every transfer is verified and recoverable."""
     records: list[QuarantineRecord] = []
+    if not allowed_roots or not plan.authority_fingerprint:
+        raise ValueError("burst execution requires current mutable root authority")
+    current_authority = _authority_fingerprint(
+        allowed_roots, protected_roots, excluded_roots, exclude_patterns
+    )
+    if plan.authority_fingerprint != current_authority:
+        raise ValueError("burst authority changed after review; review the group again")
+    # Validate the complete frozen unit before moving its first member. A
+    # primary and its companions are one reviewed action; discovering drift in
+    # a later sidecar after an earlier primary moved would otherwise strand a
+    # partially quarantined plan.
+    validated: list[tuple[BurstQuarantineMember, Path, str, int]] = []
     for member in plan.members:
         source = Path(member.path)
+        _assert_burst_scope(
+            source,
+            allowed_roots,
+            protected_roots,
+            excluded_roots,
+            exclude_patterns,
+        )
         if _fingerprint(source) != member.fingerprint:
             raise ValueError("burst member changed after review; review the group again")
+        digest, size_bytes = _fingerprint_identity(member.fingerprint)
+        validated.append((member, source, digest, size_bytes))
+
+    for member, source, digest, size_bytes in validated:
         records.append(
             store.quarantine(
                 source,
                 operation_id=operation_id,
                 reason="user_request",
                 move=True,
+                known_sha256=digest,
+                known_size_bytes=size_bytes,
                 notes=(
                     f"burst_group={plan.group_id}",
                     f"burst_frame={member.frame_id}",
@@ -303,6 +420,61 @@ def execute_burst_quarantine(
             )
         )
     return tuple(records)
+
+
+def _authority_fingerprint(
+    allowed_roots: Sequence[Path],
+    protected_roots: Sequence[Path],
+    excluded_roots: Sequence[Path] = (),
+    exclude_patterns: Sequence[str] = (),
+) -> str:
+    payload = "|".join(
+        [
+            "allowed="
+            + ",".join(sorted(str(path.resolve(strict=False)) for path in allowed_roots)),
+            "protected="
+            + ",".join(sorted(str(path.resolve(strict=False)) for path in protected_roots)),
+            "excluded="
+            + ",".join(sorted(str(path.resolve(strict=False)) for path in excluded_roots)),
+            "patterns=" + ",".join(sorted(exclude_patterns)),
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _assert_burst_scope(
+    path: Path,
+    allowed_roots: Sequence[Path],
+    protected_roots: Sequence[Path],
+    excluded_roots: Sequence[Path] = (),
+    exclude_patterns: Sequence[str] = (),
+) -> None:
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("burst member is unavailable; review the group again") from exc
+    matching_roots = tuple(
+        root.resolve(strict=False)
+        for root in allowed_roots
+        if resolved == root.resolve(strict=False) or root.resolve(strict=False) in resolved.parents
+    )
+    allowed = bool(matching_roots)
+    protected = any(
+        resolved == root.resolve(strict=False) or root.resolve(strict=False) in resolved.parents
+        for root in protected_roots
+    )
+    excluded = any(
+        resolved == root.resolve(strict=False) or root.resolve(strict=False) in resolved.parents
+        for root in excluded_roots
+    )
+    pattern_excluded = any(
+        fnmatch.fnmatch(part, pattern)
+        for root in matching_roots
+        for part in resolved.relative_to(root).parts
+        for pattern in exclude_patterns
+    )
+    if not allowed or protected or excluded or pattern_excluded:
+        raise ValueError("burst member is outside the active mutable roots")
 
 
 def build_burst_report(
@@ -384,9 +556,55 @@ def export_burst_report(
     return output.getvalue()
 
 
+def _fact_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _media_unit_beside(primary: Path) -> MediaUnit:
+    """Resolve one server-observed primary and its same-stem companions."""
+    normalized_stem = unicodedata.normalize("NFC", primary.stem).casefold()
+    candidates: list[Path] = []
+    for sibling in primary.parent.iterdir():
+        if (
+            unicodedata.normalize("NFC", sibling.stem).casefold() == normalized_stem
+            and sibling.is_file()
+            and not sibling.is_symlink()
+        ):
+            candidates.append(sibling)
+    units, _unmatched = bind_media_units(candidates, primary.parent)
+    for unit in units:
+        if any(member.path == primary for member in unit.members):
+            return unit
+    raise ValueError("catalog burst member no longer belongs to an observable media unit")
+
+
 def _fingerprint(path: Path) -> str:
-    observed = path.stat()
-    return f"{observed.st_size}:{observed.st_mtime_ns}:{observed.st_ino}"
+    digest, size = stream_sha256(path)
+    return f"sha256:{digest}:{size}"
+
+
+def _fingerprint_identity(fingerprint: str) -> tuple[str, int]:
+    try:
+        prefix, digest, raw_size = fingerprint.split(":", 2)
+        size = int(raw_size)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("burst group has an invalid server-issued member identity") from exc
+    if (
+        prefix != "sha256"
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError("burst group has an invalid server-issued member identity")
+    if size < 0:
+        raise ValueError("burst group has an invalid server-issued member identity")
+    return digest, size
 
 
 def _capture_time(path: Path) -> datetime | None:

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, Query
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.api.deps import ContainerDep
 from app.api.schemas import (
@@ -23,7 +23,12 @@ from app.core.filesystem_capabilities import (
 from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
-from app.core.sort_plan import FrozenSortImpact, ReviewedSet
+from app.core.sort_plan import (
+    FrozenSortImpact,
+    ReviewedSet,
+    destination_fingerprint,
+    source_fingerprint,
+)
 from app.services.catalog_location import live_catalog_generation
 from app.services.quarantine import PreflightResult, preflight, store_for_state_root
 
@@ -106,6 +111,67 @@ class PlanImpactRequest(TaskStartRequest):
     plan_id: str
     excluded_roots: list[str] = Field(default_factory=list)
     reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
+
+
+class PlanRecoveryResponse(BaseModel):
+    plan_id: str
+    config_fingerprint: str
+    destination_fingerprint: str
+    source_fingerprints: dict[str, str]
+    reviewed_sets: list[ReviewedSet]
+
+
+def _recover_plan(container: Any, plan_id: str) -> PlanRecoveryResponse:
+    plan = container.preview_service.frozen_plan(plan_id)
+    if plan is None:
+        raise ConflictError(
+            "The reviewed plan is no longer available; generate preview again.",
+            details={"reason": "missing_plan", "plan_id": plan_id},
+        )
+    current_config = config_fingerprint(container.config)
+    if plan.config_fingerprint != current_config:
+        raise ConflictError(
+            "The reviewed plan is stale because configuration changed.",
+            details={"reason": "stale_recovery", "plan_id": plan_id},
+        )
+    if plan.destination_fingerprint is None:
+        raise ConflictError(
+            "The reviewed plan has no complete destination evidence.",
+            details={"reason": "stale_recovery", "plan_id": plan_id},
+        )
+    current_destination = destination_fingerprint(Path(container.config.target_directory))
+    if current_destination != plan.destination_fingerprint:
+        raise ConflictError(
+            "The reviewed plan is stale because the destination changed.",
+            details={"reason": "stale_recovery", "plan_id": plan_id},
+        )
+    fingerprints: dict[str, str] = {}
+    for action in plan.actions:
+        try:
+            current = source_fingerprint(Path(action.source_path))
+        except OSError as exc:
+            raise ConflictError(
+                "The reviewed plan is stale because a source is unavailable.",
+                details={"reason": "stale_recovery", "plan_id": plan_id},
+            ) from exc
+        if current != action.source_fingerprint:
+            raise ConflictError(
+                "The reviewed plan is stale because a source changed.",
+                details={"reason": "stale_recovery", "plan_id": plan_id},
+            )
+        fingerprints[action.source_path] = current
+    return PlanRecoveryResponse(
+        plan_id=plan.plan_id,
+        config_fingerprint=plan.config_fingerprint,
+        destination_fingerprint=plan.destination_fingerprint,
+        source_fingerprints=fingerprints,
+        reviewed_sets=list(plan.reviewed_sets),
+    )
+
+
+@router.get("/sorting/plans/{plan_id}/recovery", response_model=PlanRecoveryResponse)
+async def recover_sort_plan(plan_id: str, container: ContainerDep) -> PlanRecoveryResponse:
+    return await asyncio.to_thread(_recover_plan, container, plan_id)
 
 
 @router.post("/sorting/impact", response_model=FrozenSortImpact)
@@ -192,6 +258,26 @@ async def start_sorting(
                     "plan_id": request.plan_id,
                     "plan_catalog_generation": frozen_plan.catalog_generation,
                     "current_catalog_generation": live_generation,
+                },
+            )
+        live_destination_fingerprint = await asyncio.to_thread(
+            destination_fingerprint,
+            Path(scope.config.target_directory),
+        )
+        if frozen_plan.destination_fingerprint is None:
+            raise ConflictError(
+                "The reviewed plan has no complete destination-freshness evidence; "
+                "generate preview again.",
+                details={"reason": "destination_evidence_missing", "plan_id": request.plan_id},
+            )
+        if frozen_plan.destination_fingerprint != live_destination_fingerprint:
+            raise ConflictError(
+                "The destination changed after preview; generate and review a new plan.",
+                details={
+                    "reason": "stale_destination",
+                    "plan_id": request.plan_id,
+                    "plan_destination_fingerprint": frozen_plan.destination_fingerprint,
+                    "current_destination_fingerprint": live_destination_fingerprint,
                 },
             )
         if request.reviewed_sets:

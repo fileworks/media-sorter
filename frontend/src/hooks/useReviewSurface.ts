@@ -4,13 +4,107 @@ import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 import { keeperProposals, type DuplicateDecision } from "@/lib/duplicateDecisions";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import { REVIEW_SORTS, type ReviewSort } from "@/lib/reviewSort";
+import { dropScopedExcept, readStored, writeStored } from "@/lib/storage";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
-import type { KeeperPolicyId } from "@/services/api";
+import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/services/api";
 import type { PreviewResult } from "@/types/api";
 
 const VIEW_KEY = "mediasort_review_view";
 const MODE_KEY = "mediasort_review_mode";
 const SORT_KEY = "mediasort_review_sort";
+const REVIEW_STATE_PREFIX = "mediasort_review_state:";
+
+interface PersistedReviewState {
+  schemaVersion: 2;
+  planId: string;
+  configFingerprint: string;
+  decisions: Array<[string, DuplicateDecision]>;
+  selectedSetIds: string[];
+  mode: ReviewMode;
+  queueSetId: string | null;
+  detailPath: string | null;
+  viewerPath: string | null;
+  search: string;
+  treePath: string | null;
+  view: ViewMode;
+  sort: ReviewSort;
+  keepPolicy: KeeperPolicyId;
+}
+
+function reviewStateKey(planId: string): string {
+  return `${REVIEW_STATE_PREFIX}${planId}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isDecision(value: unknown): value is DuplicateDecision {
+  if (!isRecord(value)) return false;
+  if (value.kind === "keep_all") return Object.keys(value).length === 1;
+  return (
+    value.kind === "keeper" &&
+    typeof value.memberId === "string" &&
+    value.memberId.length > 0 &&
+    Object.keys(value).every((key) => key === "kind" || key === "memberId")
+  );
+}
+
+function isDecisionEntries(value: unknown): value is Array<[string, DuplicateDecision]> {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  return value.every((entry) => {
+    if (
+      !Array.isArray(entry) ||
+      entry.length !== 2 ||
+      typeof entry[0] !== "string" ||
+      entry[0].length === 0 ||
+      ids.has(entry[0]) ||
+      !isDecision(entry[1])
+    ) {
+      return false;
+    }
+    ids.add(entry[0]);
+    return true;
+  });
+}
+
+function readReviewState(planId: string, configFingerprint: string): PersistedReviewState | null {
+  const raw = readStored(reviewStateKey(planId));
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+    const valid =
+      parsed.schemaVersion === 2 &&
+      parsed.planId === planId &&
+      parsed.configFingerprint === configFingerprint &&
+      isDecisionEntries(parsed.decisions) &&
+      isStringArray(parsed.selectedSetIds) &&
+      (parsed.mode === "browse" || parsed.mode === "resolve") &&
+      isNullableString(parsed.queueSetId) &&
+      isNullableString(parsed.detailPath) &&
+      isNullableString(parsed.viewerPath) &&
+      typeof parsed.search === "string" &&
+      isNullableString(parsed.treePath) &&
+      (parsed.view === "list" || parsed.view === "grid") &&
+      typeof parsed.sort === "string" &&
+      (REVIEW_SORTS as readonly string[]).includes(parsed.sort) &&
+      typeof parsed.keepPolicy === "string" &&
+      (SELECTABLE_KEEPER_POLICIES as readonly string[]).includes(parsed.keepPolicy);
+    return valid ? (parsed as unknown as PersistedReviewState) : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Browsing what the run would build, or deciding between copies.
@@ -23,8 +117,7 @@ const SORT_KEY = "mediasort_review_sort";
 export type ReviewMode = "browse" | "resolve";
 
 function stored<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
-  if (typeof localStorage === "undefined") return fallback;
-  const value = localStorage.getItem(key);
+  const value = readStored(key);
   return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
@@ -39,35 +132,104 @@ export function useReviewSurface(
   result: PreviewResult,
   stacks: DuplicateGroup[],
   defaultKeepPolicy: KeeperPolicyId,
+  catalogReady = true,
 ) {
-  const [mode, setModeState] = useState<ReviewMode>(() =>
-    stored<ReviewMode>(MODE_KEY, "browse", ["browse", "resolve"]),
+  const [initialState] = useState<PersistedReviewState | null>(() =>
+    readReviewState(result.plan_id, result.config_fingerprint),
+  );
+  const [mode, setModeState] = useState<ReviewMode>(
+    () => initialState?.mode ?? stored<ReviewMode>(MODE_KEY, "browse", ["browse", "resolve"]),
   );
   /** Which set the queue is on. Null means "the first one still undecided". */
-  const [queueSetId, setQueueSetId] = useState<string | null>(null);
+  const [queueSetId, setQueueSetId] = useState<string | null>(initialState?.queueSetId ?? null);
   /** The file the detail view is open on, by source path. */
-  const [detailPath, setDetailPath] = useState<string | null>(null);
+  const [detailPath, setDetailPath] = useState<string | null>(initialState?.detailPath ?? null);
   /** The file being examined full screen, which may be opened over the detail view. */
-  const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [viewerPath, setViewerPath] = useState<string | null>(initialState?.viewerPath ?? null);
   // Keeper choices, held here and sent with the run — never round-tripped.
   // They used to POST to `/api/review/decide`, which wrote a server-side plan
   // nothing read back: the refetch that followed returned identical data, so
   // the screen showed the same thing before and after every decision.
-  const [decisions, setDecisions] = useState<Map<string, DuplicateDecision>>(new Map());
+  const [decisions, setDecisions] = useState<Map<string, DuplicateDecision>>(
+    () => new Map(initialState?.decisions ?? []),
+  );
   /** Set-level selection shared by Browse and Resolve. */
-  const [selectedSetIds, setSelectedSetIds] = useState<Set<string>>(new Set());
+  const [selectedSetIds, setSelectedSetIds] = useState<Set<string>>(
+    () => new Set(initialState?.selectedSetIds ?? []),
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastToggled, setLastToggled] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [treePath, setTreePath] = useState<string | null>(null);
-  const [view, setViewState] = useState<ViewMode>(() =>
-    stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]),
+  const [search, setSearch] = useState(initialState?.search ?? "");
+  const [treePath, setTreePath] = useState<string | null>(initialState?.treePath ?? null);
+  const [view, setViewState] = useState<ViewMode>(
+    () => initialState?.view ?? stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]),
   );
   /** One order for both toolbars — see `lib/reviewSort`. */
-  const [sort, setSortState] = useState<ReviewSort>(() =>
-    stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS),
+  const [sort, setSortState] = useState<ReviewSort>(
+    () => initialState?.sort ?? stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS),
   );
-  const [keepPolicy, setKeepPolicy] = useState<KeeperPolicyId>(defaultKeepPolicy);
+  const [keepPolicy, setKeepPolicy] = useState<KeeperPolicyId>(
+    initialState?.keepPolicy ?? defaultKeepPolicy,
+  );
+  const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(result.plan_id);
+
+  useEffect(() => {
+    const saved = readReviewState(result.plan_id, result.config_fingerprint);
+    setDecisions(new Map(saved?.decisions ?? []));
+    setSelectedSetIds(new Set(saved?.selectedSetIds ?? []));
+    // Without a snapshot for this plan the durable *preferences* still apply:
+    // resetting them to the hardcoded defaults would silently discard the
+    // user's chosen mode, layout, and order on every new plan.
+    setModeState(saved?.mode ?? stored<ReviewMode>(MODE_KEY, "browse", ["browse", "resolve"]));
+    setQueueSetId(saved?.queueSetId ?? null);
+    setDetailPath(saved?.detailPath ?? null);
+    setViewerPath(saved?.viewerPath ?? null);
+    setSearch(saved?.search ?? "");
+    setTreePath(saved?.treePath ?? null);
+    setViewState(saved?.view ?? stored<ViewMode>(VIEW_KEY, "list", ["list", "grid"]));
+    setSortState(saved?.sort ?? stored<ReviewSort>(SORT_KEY, "name", REVIEW_SORTS));
+    setKeepPolicy(saved?.keepPolicy ?? defaultKeepPolicy);
+    setHydratedPlanId(result.plan_id);
+  }, [defaultKeepPolicy, result.config_fingerprint, result.plan_id]);
+
+  useEffect(() => {
+    if (hydratedPlanId !== result.plan_id) return;
+    const state: PersistedReviewState = {
+      schemaVersion: 2,
+      planId: result.plan_id,
+      configFingerprint: result.config_fingerprint,
+      decisions: [...decisions.entries()],
+      selectedSetIds: [...selectedSetIds],
+      mode,
+      queueSetId,
+      detailPath,
+      viewerPath,
+      search,
+      treePath,
+      view,
+      sort,
+      keepPolicy,
+    };
+    writeStored(reviewStateKey(result.plan_id), JSON.stringify(state));
+    // One plan is reviewable at a time; every earlier plan's snapshot is dead
+    // weight that would otherwise grow until the quota refused this write.
+    dropScopedExcept(REVIEW_STATE_PREFIX, result.plan_id);
+  }, [
+    decisions,
+    detailPath,
+    hydratedPlanId,
+    keepPolicy,
+    mode,
+    queueSetId,
+    result.config_fingerprint,
+    result.plan_id,
+    search,
+    selectedSetIds,
+    sort,
+    treePath,
+    view,
+    viewerPath,
+  ]);
 
   const proposals = useMemo(
     () => keeperProposals(stacks, keepPolicy, decisions),
@@ -90,17 +252,17 @@ export function useReviewSurface(
 
   const setView = useCallback((next: ViewMode) => {
     setViewState(next);
-    if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEY, next);
+    writeStored(VIEW_KEY, next);
   }, []);
 
   const setMode = useCallback((next: ReviewMode) => {
     setModeState(next);
-    if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
+    writeStored(MODE_KEY, next);
   }, []);
 
   const setSort = useCallback((next: ReviewSort) => {
     setSortState(next);
-    if (typeof localStorage !== "undefined") localStorage.setItem(SORT_KEY, next);
+    writeStored(SORT_KEY, next);
   }, []);
 
   const rows = useMemo(
@@ -112,6 +274,17 @@ export function useReviewSurface(
     () => rows.filter((row) => selected.has(row.source)),
     [rows, selected],
   );
+
+  const liveSources = useMemo(() => new Set(rows.map((row) => row.source)), [rows]);
+
+  useEffect(() => {
+    setSelected((current) => {
+      const valid = [...current].filter((source) => liveSources.has(source));
+      return valid.length === current.size ? current : new Set(valid);
+    });
+    setDetailPath((current) => (current !== null && !liveSources.has(current) ? null : current));
+    setViewerPath((current) => (current !== null && !liveSources.has(current) ? null : current));
+  }, [liveSources]);
 
   /**
    * Select one file, or every file between it and the last one selected.
@@ -164,11 +337,33 @@ export function useReviewSurface(
    * re-enter itself. Reading the catalog alone dropped every decision made on a
    * set only the dry run found, the moment it was made.
    */
-  const liveSetIds = useMemo(() => {
-    const ids = new Set(stacks.map((group) => group.group_id));
-    for (const set of planDuplicateSets(result.items)) ids.add(set.id);
-    return ids;
+  const liveMembersBySet = useMemo(() => {
+    const members = new Map<string, Set<string>>();
+    for (const group of stacks) {
+      members.set(
+        group.group_id,
+        new Set(
+          group.members
+            .filter((member) => member.role !== "reference")
+            .map((member) => member.member_id),
+        ),
+      );
+    }
+    for (const set of planDuplicateSets(result.items)) {
+      members.set(set.id, new Set(set.memberPaths));
+    }
+    return members;
   }, [result.items, stacks]);
+
+  const protectedSetIds = useMemo(
+    () =>
+      new Set(
+        stacks
+          .filter((group) => group.members.some((member) => member.role === "reference"))
+          .map((group) => group.group_id),
+      ),
+    [stacks],
+  );
 
   // Reconcile against vanished groups: a re-preview that still holds the group
   // keeps the decision, and one that does not drops it rather than sending the
@@ -176,22 +371,48 @@ export function useReviewSurface(
   useEffect(() => {
     setDecisions((current) => {
       if (current.size === 0) return current;
-      if ([...current.keys()].every((id) => liveSetIds.has(id))) return current;
-      return new Map([...current].filter(([id]) => liveSetIds.has(id)));
+      const valid = [...current].filter(([id, decision]) => {
+        if (protectedSetIds.has(id)) return false;
+        const members = liveMembersBySet.get(id);
+        // Catalog sets arrive asynchronously. Preserve their durable choices
+        // until that catalog has either loaded or failed visibly; plan-derived
+        // ids can be checked immediately against the frozen preview.
+        if (members === undefined) return !catalogReady && !id.startsWith("plan:");
+        return decision.kind === "keep_all" || members.has(decision.memberId);
+      });
+      return valid.length === current.size ? current : new Map(valid);
     });
     setSelectedSetIds((current) => {
-      if ([...current].every((id) => liveSetIds.has(id))) return current;
-      return new Set([...current].filter((id) => liveSetIds.has(id)));
+      const valid = [...current].filter(
+        (id) =>
+          !protectedSetIds.has(id) &&
+          (liveMembersBySet.has(id) || (!catalogReady && !id.startsWith("plan:"))),
+      );
+      return valid.length === current.size ? current : new Set(valid);
     });
-  }, [liveSetIds]);
+    setQueueSetId((current) => {
+      if (current === null) return current;
+      return liveMembersBySet.has(current) || (!catalogReady && !current.startsWith("plan:"))
+        ? current
+        : null;
+    });
+  }, [catalogReady, liveMembersBySet, protectedSetIds]);
 
-  const chooseKeeper = useCallback((groupId: string, memberId: string) => {
-    setDecisions((current) => new Map(current).set(groupId, { kind: "keeper", memberId }));
-  }, []);
+  const chooseKeeper = useCallback(
+    (groupId: string, memberId: string) => {
+      if (protectedSetIds.has(groupId)) return;
+      setDecisions((current) => new Map(current).set(groupId, { kind: "keeper", memberId }));
+    },
+    [protectedSetIds],
+  );
 
-  const markNotDuplicates = useCallback((groupId: string) => {
-    setDecisions((current) => new Map(current).set(groupId, { kind: "keep_all" }));
-  }, []);
+  const markNotDuplicates = useCallback(
+    (groupId: string) => {
+      if (protectedSetIds.has(groupId)) return;
+      setDecisions((current) => new Map(current).set(groupId, { kind: "keep_all" }));
+    },
+    [protectedSetIds],
+  );
 
   const clearDecision = useCallback((groupId: string) => {
     setDecisions((current) => {
@@ -214,11 +435,12 @@ export function useReviewSurface(
     setDecisions((current) => {
       const next = new Map(current);
       for (const [groupId, proposal] of proposals) {
+        if (protectedSetIds.has(groupId)) continue;
         next.set(groupId, { kind: "keeper", memberId: proposal.memberId });
       }
       return next;
     });
-  }, [proposals]);
+  }, [proposals, protectedSetIds]);
 
   const toggleSetSelection = useCallback((groupId: string) => {
     setSelectedSetIds((current) => {

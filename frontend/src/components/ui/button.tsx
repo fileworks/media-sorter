@@ -18,8 +18,10 @@ const variantClasses: Record<Variant, string> = {
     "border-primary bg-primary text-primary-foreground hover:border-primary-hover hover:bg-primary-hover focus-visible:ring-ring",
   destructive:
     "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive",
+  // A disabled ghost stays transparent. Filling it made the one action the
+  // toolbar cannot take the heaviest thing in the row, above the ones it can.
   ghost:
-    "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring",
+    "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring disabled:border-transparent disabled:bg-transparent disabled:hover:border-transparent disabled:hover:bg-transparent",
   // The outline button darkens its edge *and* raises its fill on hover. Fill
   // alone left it indistinguishable from a hovered row behind it.
   outline:
@@ -56,6 +58,7 @@ export function Button({
         // reflows the label and the icon beside it reads as a stutter.
         "active:translate-y-px active:transition-none",
         "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint disabled:opacity-100 disabled:shadow-none disabled:active:translate-y-0",
+        "disabled:hover:border-border disabled:hover:bg-muted disabled:hover:text-faint",
         variantClasses[variant],
         sizeClasses[size],
         className,

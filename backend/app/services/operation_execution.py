@@ -76,12 +76,7 @@ class OperationExecution:
         protected_roots: Sequence[Path] = (),
         frozen_plan: FrozenSortPlan | None = None,
     ) -> OperationExecution:
-        """Open the durable record, degrading to unjournalled execution safely.
-
-        A journal that cannot be created is a real problem, but it is not a
-        reason to refuse to organize media: verification still happens on every
-        byte. The degradation is logged as a warning so it is visible.
-        """
+        """Open the durable record before any live mutation is possible."""
         execution = cls(
             operation_id=operation_id,
             state_root=state_root,
@@ -121,12 +116,16 @@ class OperationExecution:
                 effective_config_sha256=effective_config_sha256,
             )
         except (JournalDurabilityError, OSError) as exc:
-            logger.warning(
-                "Operation is running without a durable action journal",
+            logger.error(
+                "Refusing live operation because its durable action journal is unavailable",
                 operation_id=operation_id,
                 error=str(exc),
             )
-            execution.emit("logging.degraded", reason="action_journal_unavailable")
+            execution.emit("operation.authorization_refused", reason="action_journal_unavailable")
+            raise JournalDurabilityError(
+                "Live sorting requires a durable action journal; no filesystem mutation "
+                "was allowed."
+            ) from exc
         return execution
 
     def emit(self, code: str, **fields: Any) -> None:

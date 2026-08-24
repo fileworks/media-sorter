@@ -17,11 +17,12 @@ import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { FiCheck } from "react-icons/fi";
 
+import { CompanionEvidencePanel } from "@/components/CompanionEvidencePanel";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes, formatDuration } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import type { Config, SortingStatus, TaskProgress } from "@/types/api";
+import type { Config, PreviewItem, SortingStatus, TaskProgress } from "@/types/api";
 
 type Phase = NonNullable<TaskProgress["phase"]>;
 
@@ -53,6 +54,7 @@ interface ExecuteScreenProps {
   onRetryReport?: () => void;
   onStartNewRun?: () => void;
   onOpenHistory?: () => void;
+  companionItems?: readonly PreviewItem[];
   /** Rendered under the cards — the live log. */
   children?: React.ReactNode;
 }
@@ -70,6 +72,7 @@ export function ExecuteScreen({
   onRetryReport,
   onStartNewRun,
   onOpenHistory,
+  companionItems = [],
   children,
 }: ExecuteScreenProps) {
   const { t, locale } = useI18n();
@@ -301,6 +304,8 @@ export function ExecuteScreen({
           </p>
         </section>
       </div>
+
+      <CompanionEvidencePanel items={companionItems} compact />
 
       {children}
     </div>

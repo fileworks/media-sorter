@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const media = vi.hoisted(() => ({
   queued: {
@@ -26,6 +26,7 @@ vi.mock("@/lib/thumbnailQueue", () => ({
 
 import { MediaViewer } from "@/components/screens/review/MediaViewer";
 import { MediaImage } from "@/components/ui/media-image";
+import { MediaVideo } from "@/components/ui/media-video";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { I18nProvider, translate } from "@/i18n/I18nContext";
 import { de, en } from "@/i18n/messages";
@@ -207,6 +208,15 @@ describe("thumbnail presentations", () => {
 });
 
 describe("always-visible media presentations", () => {
+  it("falls back honestly when fetched video bytes cannot be decoded", () => {
+    media.authorized.objectUrl = "blob:synthetic-video";
+    renderLocalized(<MediaVideo path="/video.mp4" name="video.mp4" />);
+
+    fireEvent.error(screen.getByLabelText("video.mp4"));
+
+    expect(screen.getByRole("status").textContent).toBe(enText("review.viewer.videoUnavailable"));
+  });
+
   it("distinguishes a difference image's loading, unsupported, and failed states", () => {
     media.authorized.loading = true;
     const loading = renderLocalized(

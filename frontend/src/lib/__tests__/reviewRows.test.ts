@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   catalogGroupsForRun,
   comparePair,
+  reviewedSetsFrom,
   selectionActions,
   toReviewRows,
   type ReviewRow,
@@ -319,6 +320,25 @@ describe("toReviewRows", () => {
     expect(rows[0].stack?.hasBaseline).toBe(true);
   });
 
+  it("keeps a protected reference authoritative despite a stale client decision", () => {
+    const decision = new Map([["g1", "m2"]]);
+    const rows = toReviewRows(
+      result(item({ source: "/ref/base.jpg" }), item({ source: "/in/copy.jpg" })),
+      [
+        stack({
+          anchor_member_id: "m2",
+          members: [member("m1", "/ref/base.jpg", "reference"), member("m2", "/in/copy.jpg")],
+        } as Partial<DuplicateGroup>),
+      ],
+      decision,
+    );
+
+    expect(rows[0]).toMatchObject({ status: "baseline", protected: true });
+    expect(rows[0].stack).toMatchObject({ isKeeper: true, decisionKind: null });
+    expect(rows[1].stack).toMatchObject({ isKeeper: false, decisionKind: null });
+    expect(reviewedSetsFrom(rows, decision)).toEqual([]);
+  });
+
   it("keeps unreadable and undated files visible at their planned review folders", () => {
     const rows = toReviewRows(
       result(
@@ -357,8 +377,8 @@ describe("selectionActions", () => {
   it("states a reason for every action it will not offer", () => {
     const actions = selectionActions([]);
 
-    expect(actions.reasons.keepOnlyThis).toMatch(/select exactly one/i);
-    expect(actions.reasons.compare).toMatch(/exactly two/i);
+    expect(actions.reasons.keepOnlyThis).toBe("selectOne");
+    expect(actions.reasons.compare).toBe("selectTwo");
   });
 
   it("enables Compare only with exactly two selected", () => {
@@ -369,6 +389,21 @@ describe("selectionActions", () => {
   it("offers Keep only this for exactly one member of a stack", () => {
     expect(selectionActions(rows.slice(0, 1)).canKeepOnlyThis).toBe(true);
     expect(selectionActions(rows).canKeepOnlyThis).toBe(false);
+  });
+
+  it("never offers a keeper override for a protected-reference set", () => {
+    const baselineRows = toReviewRows(
+      result(item({ source: "/ref/base.jpg" }), item({ source: "/in/copy.jpg" })),
+      [
+        stack({
+          members: [member("m1", "/ref/base.jpg", "reference"), member("m2", "/in/copy.jpg")],
+        } as Partial<DuplicateGroup>),
+      ],
+    );
+
+    const actions = selectionActions([baselineRows[1]]);
+    expect(actions.canKeepOnlyThis).toBe(false);
+    expect(actions.reasons.keepOnlyThis).toBe("baselineProtected");
   });
 });
 

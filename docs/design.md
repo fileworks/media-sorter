@@ -145,13 +145,13 @@ future versions are left alone.
 ## AI content tagging
 
 Opt-in (`ai_tagging_enabled`), sort-path only — preview stays AI-free rather than burn
-quota and CPU on a dry run. Best-effort throughout: a missing model, bad key or network
-error logs a warning and yields no tags instead of failing the sort.
+CPU on a dry run. Best-effort throughout: a missing model logs a warning and yields no
+tags instead of failing the sort. Media remains local; there is no cloud tagger.
 
-Providers sit behind one `AITagger` interface with a `build_tagger(config)` factory
-(`services/ai/base_tagger.py`). Taggers are deliberately **synchronous**:
-`_process_file` is already on a worker thread, so blocking ONNX and HTTP calls need no
-event-loop gymnastics.
+The local model sits behind one `AITagger` interface with a `build_tagger(config)` factory
+(`services/ai/base_tagger.py`). Tagging is deliberately **synchronous**:
+`_process_file` is already on a worker thread, so blocking ONNX calls need no event-loop
+gymnastics.
 
 Two decisions are worth knowing because the code alone does not explain them:
 
@@ -161,8 +161,7 @@ Two decisions are worth knowing because the code alone does not explain them:
 - **Emitted labels are separate from model prompts.** CLIP may keep English
   prompts for bundled concepts where that measurably helps, while emitting German
   labels; SigLIP uses per-locale templates. Custom labels are always verbatim.
-  Google results map through canonical aliases and unknown ones are dropped with
-  a warning rather than emitted in the wrong language.
+  Model failures yield no tags with a warning rather than failing the sort.
 
 ## Smart Categorization
 
@@ -233,7 +232,7 @@ its own runner.
 | Preview mode | verify before touching any file |
 | Rules before ML | simple rules cover the majority of tagging cases |
 | Tagging vs. categorization split | one writes metadata, the other decides placement; independent config, shared model |
-| Categorization local-only | cloud taxonomies can't map to the user's custom folder names |
+| Categorization local-only | local inference keeps custom folder names and media on the machine |
 | Quarantine, never delete | users can always recover anything that couldn't be placed |
 | Single background task | fine for typical run times; queueing deferred |
 | PyInstaller + bundled ffmpeg | one self-contained installer, no runtime dependencies |

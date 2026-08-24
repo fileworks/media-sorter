@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { readStored, writeStored } from "@/lib/storage";
 import { FiDownload, FiX, FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import { openExternal } from "@/lib/reveal";
@@ -13,19 +14,11 @@ interface UpdateBannerProps {
 const DISMISS_KEY = "mediasort_dismissed_version";
 
 function getDismissedVersion(): string | null {
-  try {
-    return localStorage.getItem(DISMISS_KEY);
-  } catch {
-    return null;
-  }
+  return readStored(DISMISS_KEY);
 }
 
 function setDismissedVersion(version: string): void {
-  try {
-    localStorage.setItem(DISMISS_KEY, version);
-  } catch {
-    // localStorage unavailable — silently ignore.
-  }
+  writeStored(DISMISS_KEY, version);
 }
 
 export function UpdateBanner({ info }: UpdateBannerProps) {

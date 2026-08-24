@@ -26,7 +26,7 @@ from app.core.integrity import (
     SourceIdentity,
 )
 from app.core.logging_config import get_logger
-from app.services import verified_transfer
+from app.services import reconciliation, verified_transfer
 from app.services.reconciliation import (
     apply_safe_recovery,
     reconcile_pending_operations,
@@ -146,6 +146,91 @@ def test_recovery_completes_the_record_without_repeating_the_transfer(tmp_path: 
     assert destination.read_bytes() == b"finish the record"
     assert read_journal(journal_path(root, "manifest-1")).state == "completed"
     assert reconcile_pending_operations(root) == ()
+
+
+def test_recovery_keeps_source_rewritten_after_the_reviewed_copy(tmp_path: Path) -> None:
+    root = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "source.bin"
+    source.write_bytes(b"authorized content")
+    manifest = _manifest(source, destination)
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"authorized content")
+    _interrupt(root, manifest, ("committed", "journal_durable", "source_removing"))
+
+    (report,) = reconcile_pending_operations(root)
+    source.write_bytes(b"newer user content")
+
+    outcome = apply_safe_recovery(root, report)
+
+    assert source.read_bytes() == b"newer user content"
+    assert destination.read_bytes() == b"authorized content"
+    assert outcome.removed_sources == []
+    assert outcome.unresolved_actions == ["action-1"]
+    assert outcome.journal_state == "reconciliation_required"
+
+
+def test_recovery_revalidates_source_inside_the_final_remove_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rewrite after recovery's preliminary check must still survive."""
+    root = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "source.bin"
+    source.write_bytes(b"authorized content")
+    manifest = _manifest(source, destination)
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"authorized content")
+    _interrupt(root, manifest, ("committed", "journal_durable", "source_removing"))
+    (report,) = reconcile_pending_operations(root)
+    original_check = reconciliation._source_still_verified
+
+    def rewrite_after_preliminary_check(*args: object, **kwargs: object) -> bool:
+        matches = original_check(*args, **kwargs)  # type: ignore[arg-type]
+        if matches:
+            source.write_bytes(b"newer user content")
+        return matches
+
+    monkeypatch.setattr(reconciliation, "_source_still_verified", rewrite_after_preliminary_check)
+
+    outcome = apply_safe_recovery(root, report)
+
+    assert source.read_bytes() == b"newer user content"
+    assert destination.read_bytes() == b"authorized content"
+    assert outcome.removed_sources == []
+    assert outcome.unresolved_actions == ["action-1"]
+    assert outcome.journal_state == "reconciliation_required"
+
+
+def test_recovery_rewrite_after_final_hash_callback_remains_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "source.bin"
+    source.write_bytes(b"authorized content")
+    manifest = _manifest(source, destination)
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(source.read_bytes())
+    _interrupt(root, manifest, ("committed", "journal_durable", "source_removing"))
+    (report,) = reconcile_pending_operations(root)
+    original_hash = verified_transfer._hash_open_source
+
+    def rewrite_after_hash(handle: object) -> tuple[str, int]:
+        observed = original_hash(handle)  # type: ignore[arg-type]
+        source.write_bytes(b"newer user content")
+        return observed
+
+    monkeypatch.setattr(verified_transfer, "_hash_open_source", rewrite_after_hash)
+
+    outcome = apply_safe_recovery(root, report)
+
+    assert source.read_bytes() == b"newer user content"
+    assert destination.read_bytes() == b"authorized content"
+    assert outcome.removed_sources == []
+    assert outcome.unresolved_actions == ["action-1"]
 
 
 def test_commit_without_journal_evidence_is_never_cleaned_up_automatically(

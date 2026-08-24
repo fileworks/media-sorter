@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SECTION_DEFAULTS } from "@/components/config/constants";
+import { TEST_CONFIG } from "@/lib/__tests__/configFixture";
 import {
   INVENTED_SAMPLES,
   activeJunkFilterCount,
@@ -22,8 +22,12 @@ const t = (key: string, params: Record<string, string | number> = {}): string =>
     name in params ? String(params[name]) : match,
   );
 
+/** The counted lookup, exactly as the app resolves it. */
+const tCount = (key: string, count: number, params: Record<string, string | number> = {}): string =>
+  t(`${key}.one` in en && count === 1 ? `${key}.one` : key, { count, ...params });
+
 const BASE = {
-  ...Object.assign({}, ...Object.values(SECTION_DEFAULTS)),
+  ...TEST_CONFIG,
   copy_instead_of_move: true,
   duplicate_keeper_policy: "newest",
   image_quality: 90,
@@ -43,7 +47,7 @@ const BASE = {
 
 describe("rail summaries", () => {
   it("gives every rail entry a line, and never a bare message key", () => {
-    const summaries = summariesFor(BASE, t);
+    const summaries = summariesFor(BASE, t, tCount);
     const entries = Object.entries(summaries);
 
     expect(entries.length).toBeGreaterThan(0);
@@ -54,36 +58,40 @@ describe("rail summaries", () => {
   });
 
   it("states the transfer posture and that it is verified", () => {
-    expect(summariesFor(BASE, t)["setting-transfer"]).toBe("Copy · verified");
-    expect(summariesFor({ ...BASE, copy_instead_of_move: false }, t)["setting-transfer"]).toBe(
-      "Move · verified",
-    );
+    expect(summariesFor(BASE, t, tCount)["setting-transfer"]).toBe("Copy · verified");
+    expect(
+      summariesFor({ ...BASE, copy_instead_of_move: false }, t, tCount)["setting-transfer"],
+    ).toBe("Move · verified");
   });
 
   it("names the keep rule, and says Off when duplicates are not looked for", () => {
-    expect(summariesFor(BASE, t)["setting-duplicates"]).toBe("Keep newest");
+    expect(summariesFor(BASE, t, tCount)["setting-duplicates"]).toBe("Keep newest");
     expect(
-      summariesFor({ ...BASE, duplicate_keeper_policy: "smallest" }, t)["setting-duplicates"],
+      summariesFor({ ...BASE, duplicate_keeper_policy: "smallest" }, t, tCount)[
+        "setting-duplicates"
+      ],
     ).toBe("Keep smallest");
-    expect(summariesFor({ ...BASE, remove_duplicates: false }, t)["setting-duplicates"]).toBe(
-      "Off",
-    );
+    expect(
+      summariesFor({ ...BASE, remove_duplicates: false }, t, tCount)["setting-duplicates"],
+    ).toBe("Off");
   });
 
   it("reports conversion by target format, not by a boolean", () => {
-    expect(summariesFor(BASE, t)["setting-conversion"]).toBe("Keep formats");
+    expect(summariesFor(BASE, t, tCount)["setting-conversion"]).toBe("Keep formats");
     expect(
-      summariesFor({ ...BASE, convert_images: true, image_format: "jpeg" }, t)[
+      summariesFor({ ...BASE, convert_images: true, image_format: "jpeg" }, t, tCount)[
         "setting-conversion"
       ],
     ).toBe("→ JPEG");
   });
 
   it("reports tagging as offline, the only way it runs", () => {
-    expect(summariesFor({ ...BASE, ai_tagging_enabled: true }, t)["setting-ai"]).toBe(
+    expect(summariesFor({ ...BASE, ai_tagging_enabled: true }, t, tCount)["setting-ai"]).toBe(
       "On · offline",
     );
-    expect(summariesFor({ ...BASE, ai_tagging_enabled: false }, t)["setting-ai"]).toBe("Off");
+    expect(summariesFor({ ...BASE, ai_tagging_enabled: false }, t, tCount)["setting-ai"]).toBe(
+      "Off",
+    );
   });
 });
 

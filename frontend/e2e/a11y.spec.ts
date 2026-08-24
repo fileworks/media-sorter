@@ -1,6 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   MIN_TARGET_PX,
+  E2E_ANALYSIS,
+  E2E_PREVIEW_RESULT,
+  E2E_RECOVERY,
   contrastViolations,
   focusObscuredBy,
   stubBackend,
@@ -21,6 +24,15 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await stubBackend(page);
+  await page.addInitScript(
+    ({ result, recovery, analysis }) => {
+      localStorage.setItem(
+        "mediasort_completed_plan",
+        JSON.stringify({ schemaVersion: 2, planId: result.plan_id, result, recovery, analysis }),
+      );
+    },
+    { result: E2E_PREVIEW_RESULT, recovery: E2E_RECOVERY, analysis: E2E_ANALYSIS },
+  );
   await page.goto("/");
   // The shell mounts behind a lazy boundary; wait for real content, not a spinner.
   await page.waitForSelector("main, [role='main'], button", { timeout: 30_000 });
@@ -29,6 +41,103 @@ test.beforeEach(async ({ page }) => {
     "the app must render, not its ErrorBoundary — otherwise this suite audits an error screen",
   ).toHaveCount(0);
 });
+
+async function goToPlan(page: Page) {
+  const configure = page.locator('[data-stage-id="configure"]');
+  await expect(configure).toBeEnabled();
+  await configure.click();
+  await expect(configure).toHaveAttribute("aria-current", "step");
+  const plan = page.locator('[data-stage-id="plan"]');
+  await expect(plan).toBeEnabled();
+  await plan.click();
+  await expect(plan).toHaveAttribute("aria-current", "step");
+}
+
+async function goToReview(page: Page) {
+  await goToPlan(page);
+  const review = page.locator('[data-stage-id="review"]');
+  await expect(review).toBeEnabled();
+  await review.click();
+  await expect(review).toHaveAttribute("aria-current", "step");
+}
+
+async function settleRendering(page: Page) {
+  await page.evaluate(async () => {
+    const finite = document.getAnimations().filter((animation) => {
+      const iterations = animation.effect?.getComputedTiming().iterations;
+      return iterations !== Infinity;
+    });
+    await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+}
+
+async function layoutOverflow(page: Page) {
+  return page.evaluate(() => ({
+    document: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    body: document.body.scrollWidth > document.body.clientWidth,
+    offenders: Array.from(document.querySelectorAll<HTMLElement>("*"))
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        if (style.overflowX === "auto" || style.overflowX === "scroll") return false;
+        return element.scrollWidth > element.clientWidth + 1;
+      })
+      .slice(0, 12)
+      .map((element) => ({
+        tag: element.tagName,
+        className: element.className,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      })),
+  }));
+}
+
+async function expectTargetsAndFocus(page: Page, stage: string) {
+  await settleRendering(page);
+  const contrast = await contrastViolations(page);
+  expect(contrast, `${stage}\n${JSON.stringify(contrast, null, 2)}`).toEqual([]);
+  const undersized = await undersizedTargets(page);
+  expect(
+    undersized,
+    `${stage}\n${undersized.map((target) => `${target.label} — ${target.width}x${target.height}`).join("\n")}`,
+  ).toEqual([]);
+
+  const obscured: string[] = [];
+  let inspected = 0;
+  await page.locator("main").focus();
+  for await (const stop of tabStops(page, 18)) {
+    void stop;
+    inspected += 1;
+    const hit = await focusObscuredBy(page);
+    if (hit) obscured.push(`${hit.label} covered by ${hit.coveredBy}`);
+  }
+  expect(inspected, `${stage} must expose real keyboard stops`).toBeGreaterThan(0);
+  expect(obscured, `${stage}\n${obscured.join("\n")}`).toEqual([]);
+}
+
+async function expectDetailFact(dialog: Locator, label: string, value: string | RegExp) {
+  const term = dialog.locator("dt").filter({ hasText: label });
+  await expect(term).toHaveCount(1);
+  await expect(term.locator("xpath=following-sibling::dd[1]")).toHaveText(value);
+}
+
+async function openDetail(page: Page, name: string) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exact = page.getByRole("button", { name, exact: true });
+  const trigger =
+    (await exact.count()) === 1
+      ? exact
+      : page.getByRole("button", { name: new RegExp(`^${escaped}(?:\\s|$)`) });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function closeDetail(page: Page) {
+  await page.getByRole("button", { name: /close/i }).last().click();
+}
 
 /**
  * The guard that keeps every "no violations" result meaningful.
@@ -64,7 +173,13 @@ test.describe("1.4.3 contrast", () => {
       await page.evaluate((mode) => {
         document.documentElement.classList.toggle("dark", mode === "dark");
       }, theme);
-      await page.waitForTimeout(150); // let the theme transition settle
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await settleRendering(page);
 
       const violations = await contrastViolations(page);
 
@@ -137,40 +252,245 @@ test.describe("2.4.11 focus not obscured", () => {
 });
 
 test.describe("later stages", () => {
-  /**
-   * `P2-TEST-001b` finding, recorded rather than papered over.
-   *
-   * Recipe, Configure, Plan, Review and Execute are gated on `rootsReady`,
-   * which is derived from validated root *state* rather than from configured
-   * roots — so stubbing config and `/api/config/validate` is not enough to
-   * enter them, and there is no route to deep-link to a stage because the flow
-   * holds its position in React state rather than in the URL.
-   *
-   * Reaching them from a browser test needs one of: a live backend with real
-   * folders, a fuller stub of the root-state endpoints, or a test-only entry
-   * point. Each is a decision about the app rather than about this suite, so
-   * this test states the gap and skips instead of asserting nothing quietly.
-   * The screens are not unaudited meanwhile — the jsdom suite renders every one
-   * of them; what is missing there is only contrast, 2.4.11 and 2.5.8.
-   */
-  test("configure and review are reachable for a browser-level audit", async ({ page }) => {
-    const configure = page.getByRole("button", { name: /configure/i }).first();
-    const reachable = (await configure.count()) > 0 && !(await configure.isDisabled());
-    test.skip(
-      !reachable,
-      "stages past Sources need validated root state; see P2-TEST-001b in the residual-risk register",
+  test("the media fixture reaches every screen, survives restart, and preserves evidence", async ({
+    page,
+  }) => {
+    test.slow();
+    await goToPlan(page);
+    await expect(page.getByText(/media-unit evidence \(1\)/i)).toBeVisible();
+    await expect(page.getByText(/IMG_0001\.xmp.*edit sidecar.*attached/i)).toBeVisible();
+    await expectTargetsAndFocus(page, "Plan");
+    await page
+      .getByRole("button", { name: /to review|review/i })
+      .last()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: /check the plan|review/i }).first(),
+    ).toBeVisible();
+    if (process.env.UPDATE_MEDIA_SORTER_SCREENSHOT === "1") {
+      // The documented screenshot is the Review screen with its real plan in
+      // it. Waiting only for the heading captured an empty, still-animating
+      // page, and the button that was clicked to get here keeps focus — which
+      // holds its tooltip open across the shot.
+      await expect(page.getByRole("tab", { name: /decide the duplicates/i })).toBeVisible();
+      await expect(page.getByText(/IMG_0001\.jpg/).first()).toBeVisible();
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await settleRendering(page);
+      await page.screenshot({ path: "../docs/assets/screenshot.png", fullPage: false });
+    }
+
+    // Every committed real-format fixture must be inspectable in Chromium.
+    // The facts below are intentionally read from the UI, not inferred from
+    // file extensions or nearby API assertions.
+    let detail = await openDetail(page, "corrupt.jpg");
+    await expectDetailFact(detail, "File type", "JPG");
+    await expectDetailFact(detail, "Resolution", "unknown");
+    await expectDetailFact(detail, "Goes to", "no destination");
+    await expectDetailFact(detail, "Planned result", "unreadable");
+    await expectDetailFact(detail, "Protection", "Input — eligible for planned action");
+    await expect(detail.getByText("No preview for this file")).toBeVisible();
+    await closeDetail(page);
+
+    await page.getByRole("button", { name: /show the contents of 08/i }).click();
+    for (const fixture of [
+      { name: "synthetic.heic", type: "HEIC" },
+      { name: "synthetic.dng", type: "DNG" },
+    ]) {
+      detail = await openDetail(page, fixture.name);
+      await expectDetailFact(detail, "File type", fixture.type);
+      await expectDetailFact(detail, "Resolution", "3024 × 4032");
+      await expectDetailFact(detail, "Protection", "Input — eligible for planned action");
+      await closeDetail(page);
+    }
+
+    detail = await openDetail(page, "synthetic.mp4");
+    await expectDetailFact(detail, "File type", "MP4");
+    await expectDetailFact(detail, "Resolution", "unknown");
+    await expectDetailFact(detail, "Duration", "unknown");
+    await expectDetailFact(detail, "Video codec", "unknown");
+    await expectDetailFact(detail, "Protection", "Input — eligible for planned action");
+    await expect(
+      detail
+        .getByLabel("synthetic.mp4")
+        .or(detail.getByRole("status", { name: /authenticated video|video preview/i })),
+    ).toBeVisible();
+    await closeDetail(page);
+
+    await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+    await expect(page.getByText(/winning rung/i)).toBeVisible();
+    await expect(page.getByText(/modification date unknown.*IMG_0001-copy/i)).toBeVisible();
+    await expectTargetsAndFocus(page, "Resolve");
+
+    await openDetail(page, "IMG_0001.jpg");
+    await expect(page.getByText(/primary in unit unit-live-photo/i)).toBeVisible();
+    await expect(page.getByText(/IMG_0001\.xmp.*edit sidecar/i)).toBeVisible();
+    await expectTargetsAndFocus(page, "Detail");
+    await closeDetail(page);
+
+    await page.getByRole("button", { name: /^compare$/i }).click();
+    await expect(page.getByRole("dialog", { name: /compare copies/i })).toBeVisible();
+    await expect(page.getByText(/primary in unit unit-live-photo/i)).toBeVisible();
+    expect(await page.getByText("unknown", { exact: true }).count()).toBeGreaterThan(0);
+    await expect(page.getByText(/0 × 0/)).toHaveCount(0);
+    await expectTargetsAndFocus(page, "Compare");
+    await page.getByRole("button", { name: /close/i }).last().click();
+
+    await page.getByRole("button", { name: /these are not duplicates/i }).click();
+    await expect(page.getByRole("button", { name: /to execute/i })).toBeEnabled();
+
+    // A page reload recreates the renderer. The backend recovery proof and the
+    // exact Review position plus the explicit keep-all decision must survive it.
+    await page.reload();
+    await expect(page.locator('[data-stage-id="review"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.getByRole("tab", { name: /decide the duplicates/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
+    await expect(page.getByText(/every set has been decided/i)).toBeVisible();
+    const persistedDecisions = await page.evaluate(() => {
+      const raw = localStorage.getItem("mediasort_review_state:e2e-plan");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as { decisions?: Array<[string, { kind: string }]> }).decisions;
+    });
+    expect(persistedDecisions).toEqual([["e2e-exact-set", { kind: "keep_all" }]]);
 
+    await page.getByRole("button", { name: /to execute/i }).click();
+    await expect(
+      page.getByRole("heading", { name: /before this runs|execute/i }).first(),
+    ).toBeVisible();
+    await page.getByText(/media-unit evidence \(1\)/i).click();
+    await expect(page.getByText(/IMG_0001\.mov.*motion part.*attached/i)).toBeVisible();
+    await expectTargetsAndFocus(page, "Execute preflight");
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /execute the reviewed plan/i }).click();
+
+    await expect(page.getByRole("heading", { name: /finished|done/i }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole("cell", { name: "IMG_0001.xmp", exact: true })).toBeVisible();
+    await expect(page.getByText(/edit sidecar/i).first()).toBeVisible();
+    await expect(page.getByText(/motion metadata remained unknown/i)).toBeVisible();
+    await expectTargetsAndFocus(page, "Finished run");
+  });
+
+  test("360px and measured 200% Chromium page scale preserve reflow", async ({ page }) => {
+    await goToReview(page);
+    await page.setViewportSize({ width: 360, height: 800 });
+    const narrow = await layoutOverflow(page);
+    expect(narrow, JSON.stringify(narrow, null, 2)).toMatchObject({ document: false, body: false });
+
+    await page.setViewportSize({ width: 720, height: 800 });
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+    const metrics = await cdp.send("Page.getLayoutMetrics");
+    expect(metrics.visualViewport.scale).toBe(2);
+    expect(metrics.visualViewport.clientWidth).toBe(360);
+    const zoomed = await layoutOverflow(page);
+    expect(zoomed, JSON.stringify(zoomed, null, 2)).toMatchObject({ document: false, body: false });
+    await cdp.send("Emulation.resetPageScaleFactor");
+  });
+
+  test("stale recovery evidence is rejected after restart", async ({ page }) => {
+    await page.route("**/api/sorting/plans/e2e-plan/recovery", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...E2E_RECOVERY, destination_fingerprint: "changed-after-review" }),
+      });
+    });
+    await page.reload();
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("mediasort_completed_plan")))
+      .toBeNull();
+    // Planning remains available so the user can recompute against the new
+    // destination. Only the stale reviewed result must lose authority.
+    await expect(page.locator('[data-stage-id="review"]')).toBeDisabled();
+  });
+
+  test("later screens pass target, keyboard, focus, locale, theme and width checks", async ({
+    page,
+  }) => {
+    const cases = [
+      { width: 360, locale: "de", theme: "dark", motion: "reduce" },
+      { width: 768, locale: "en", theme: "light", motion: "no-preference" },
+      { width: 1280, locale: "de", theme: "light", motion: "reduce" },
+      { width: 1920, locale: "en", theme: "dark", motion: "no-preference" },
+    ] as const;
+
+    for (const item of cases) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.emulateMedia({
+        colorScheme: item.theme,
+        reducedMotion: item.motion,
+      });
+      const languageSaved = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/config") && response.request().method() === "POST",
+      );
+      await page.getByRole("combobox", { name: /Language|Sprache/ }).selectOption(item.locale);
+      await languageSaved;
+      await page.evaluate(({ theme }) => {
+        localStorage.setItem("mediasort_theme", theme);
+      }, item);
+      await page.reload();
+      await goToReview(page);
+      await page.setViewportSize({ width: item.width, height: 900 });
+      await expect(page.locator("html")).toHaveAttribute("lang", item.locale);
+      await expect(page.locator("html")).toHaveClass(
+        item.theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b)/,
+      );
+
+      const overflow = await layoutOverflow(page);
+      expect(
+        overflow,
+        `${JSON.stringify(item)}\n${JSON.stringify(overflow, null, 2)}`,
+      ).toMatchObject({ document: false, body: false });
+      expect(await contrastViolations(page), JSON.stringify(item)).toEqual([]);
+      await expectTargetsAndFocus(page, `Review ${JSON.stringify(item)}`);
+    }
+  });
+
+  test("the reset comparison stacks at 360px and its associated label activates", async ({
+    page,
+  }) => {
+    const configure = page.locator('[data-stage-id="configure"]');
     await configure.click();
-    await page.waitForTimeout(500);
-    const violations = await contrastViolations(page);
-    const undersized = await undersizedTargets(page);
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expectTargetsAndFocus(page, "Configure at 360px");
+    await page.getByRole("button", { name: /edit settings/i }).click();
+    await page.getByRole("button", { name: /discard and edit/i }).click();
 
-    expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
-    expect(
-      undersized,
-      undersized.map((t) => `${t.label} — ${t.width}x${t.height}`).join("\n"),
-    ).toEqual([]);
+    const input = page.locator("#remove-duplicates");
+    await expect(input).toBeVisible();
+    const id = await input.getAttribute("id");
+    expect(id).not.toBeNull();
+    const label = page.locator(`label[for="${id}"]`);
+    await expect(label).toBeVisible();
+    const before = await input.isChecked();
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/config") && response.request().method() === "POST",
+    );
+    await label.click();
+    await saved;
+    if (before) await expect(input).not.toBeChecked();
+    else await expect(input).toBeChecked();
+
+    await page.getByRole("button", { name: /settings overview/i }).click();
+    await page.getByRole("button", { name: /reset all settings/i }).click();
+    const region = page.getByRole("region", { name: /setting comparison/i });
+    await expect(region).toBeVisible();
+    const dimensions = await region.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      cards: element.querySelectorAll("article").length,
+      visibleValues: (element.textContent ?? "").trim().length,
+    }));
+    expect(dimensions.scrollWidth).toBe(dimensions.clientWidth);
+    expect(dimensions.cards).toBeGreaterThan(0);
+    expect(dimensions.visibleValues).toBeGreaterThan(0);
   });
 });
 
@@ -184,12 +504,12 @@ test.describe("2.5.8 target size", () => {
     ).toEqual([]);
   });
 
-  test("the check fails on a target smaller than the minimum", async ({ page }) => {
+  test("strict project policy rejects an isolated target despite spacing", async ({ page }) => {
     await page.evaluate((minimum) => {
       const probe = document.createElement("button");
       probe.id = "tiny-probe";
       probe.textContent = "x";
-      probe.style.cssText = `width:${minimum - 8}px;height:${minimum - 8}px;padding:0;position:fixed;bottom:0;right:0`;
+      probe.style.cssText = `width:${minimum - 8}px;height:${minimum - 8}px;padding:0;position:fixed;bottom:40px;right:40px`;
       document.body.appendChild(probe);
     }, MIN_TARGET_PX);
     await page.locator("#tiny-probe").waitFor({ state: "visible" });
@@ -197,5 +517,29 @@ test.describe("2.5.8 target size", () => {
     const undersized = await undersizedTargets(page);
 
     expect(undersized.some((t) => t.label === "x")).toBe(true);
+  });
+
+  test("an explicit associated label is the measured and working activation area", async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      const input = document.createElement("input");
+      input.id = "label-target-probe";
+      input.type = "checkbox";
+      input.style.cssText = "width:12px;height:12px";
+      const label = document.createElement("label");
+      label.htmlFor = input.id;
+      label.textContent = "associated target probe";
+      label.style.cssText =
+        "position:fixed;bottom:24px;left:24px;display:flex;align-items:center;min-width:120px;min-height:32px;background:#fff;color:#000";
+      document.body.append(input, label);
+    });
+
+    const input = page.locator("#label-target-probe");
+    await page.getByText("associated target probe", { exact: true }).click();
+    await expect(input).toBeChecked();
+    expect((await undersizedTargets(page)).some((target) => target.label.includes("input#"))).toBe(
+      false,
+    );
   });
 });

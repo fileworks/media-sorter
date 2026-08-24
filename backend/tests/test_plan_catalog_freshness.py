@@ -12,13 +12,16 @@ halves, and it has to be answered before a run begins rather than during it.
 
 from __future__ import annotations
 
+import os
+import socket
+import tempfile
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Config
-from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan
+from app.core.sort_plan import FrozenSortPlan, build_frozen_sort_plan, destination_fingerprint
 
 
 def _plan(tmp_path: Path, *, generation: int) -> FrozenSortPlan:
@@ -35,6 +38,87 @@ def _plan(tmp_path: Path, *, generation: int) -> FrozenSortPlan:
         }
     ]
     return build_frozen_sort_plan(items, config, catalog_generation=generation)
+
+
+def test_destination_evidence_covers_add_rewrite_delete_and_rename(tmp_path: Path) -> None:
+    destination = tmp_path / "target"
+    destination.mkdir()
+    original = destination / "original.jpg"
+    original.write_bytes(b"one")
+    baseline = destination_fingerprint(destination)
+
+    added = destination / "added.jpg"
+    added.write_bytes(b"two")
+    assert destination_fingerprint(destination) != baseline
+    added.unlink()
+
+    original.write_bytes(b"rewritten")
+    assert destination_fingerprint(destination) != baseline
+    original.write_bytes(b"one")
+
+    original.unlink()
+    assert destination_fingerprint(destination) != baseline
+    original.write_bytes(b"one")
+
+    original.rename(destination / "renamed.jpg")
+    assert destination_fingerprint(destination) != baseline
+
+
+@pytest.mark.skipif(os.name == "nt" or not hasattr(socket, "AF_UNIX"), reason="Unix nodes only")
+def test_destination_evidence_distinguishes_special_node_types() -> None:
+    # Darwin limits AF_UNIX names to 104 bytes; pytest's nested temp root can be
+    # longer than that before the socket's own name is appended.
+    with tempfile.TemporaryDirectory(prefix="msfp-", dir="/tmp") as temporary:
+        destination = Path(temporary)
+        special = destination / "special"
+        os.mkfifo(special)
+        fifo = destination_fingerprint(destination)
+        special.unlink()
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            server.bind(str(special))
+            assert destination_fingerprint(destination) != fifo
+        finally:
+            server.close()
+            special.unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix nodes only")
+def test_destination_evidence_distinguishes_same_kind_special_node_replacement(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "target"
+    destination.mkdir()
+    special = destination / "special"
+    replacement = tmp_path / "replacement"
+    os.mkfifo(special)
+    os.mkfifo(replacement)
+    assert special.stat().st_ino != replacement.stat().st_ino
+    baseline = destination_fingerprint(destination)
+
+    special.unlink()
+    replacement.rename(special)
+
+    assert destination_fingerprint(destination) != baseline
+
+
+def test_destination_evidence_includes_empty_directory_add_delete_and_rename(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "target"
+    destination.mkdir()
+    baseline = destination_fingerprint(destination)
+    empty = destination / "planned-file.jpg"
+
+    empty.mkdir()
+    added = destination_fingerprint(destination)
+    assert added != baseline
+
+    empty.rename(destination / "renamed-empty")
+    assert destination_fingerprint(destination) != added
+
+    (destination / "renamed-empty").rmdir()
+    assert destination_fingerprint(destination) == baseline
 
 
 class TestThePlanCarriesTheGeneration:
@@ -125,3 +209,32 @@ class TestTheStartRouteRefusesAStalePlan:
 
         payload = response.json()  # type: ignore[attr-defined]
         assert payload.get("details", {}).get("reason") != "stale_catalog"
+
+    @pytest.mark.parametrize("mutation", ["add", "rewrite", "delete", "rename"])
+    def test_real_destination_mutations_are_refused_before_task_creation(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation: str,
+    ) -> None:
+        container = client.app.state.container  # type: ignore[attr-defined]
+        destination = Path(container.config.target_directory)
+        destination.mkdir(parents=True, exist_ok=True)
+        original = destination / f"freshness-{mutation}.jpg"
+        original.write_bytes(b"reviewed")
+        plan = self._live_plan(client, generation=0)
+        monkeypatch.setattr(container.preview_service, "frozen_plan", lambda _id: plan)
+
+        if mutation == "add":
+            (destination / f"added-{mutation}.jpg").write_bytes(b"new")
+        elif mutation == "rewrite":
+            original.write_bytes(b"changed")
+        elif mutation == "delete":
+            original.unlink()
+        else:
+            original.rename(destination / f"renamed-{mutation}.jpg")
+
+        response = self._start(client, plan.plan_id)
+
+        assert response.status_code == 409  # type: ignore[attr-defined]
+        assert response.json()["details"]["reason"] == "stale_destination"  # type: ignore[attr-defined]

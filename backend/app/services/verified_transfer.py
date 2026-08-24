@@ -467,14 +467,20 @@ def transfer_path(
     action_id: str | None = None,
     journal: DurableActionJournal | None = None,
     on_progress: ProgressCallback | None = None,
+    expected_sha256: str | None = None,
+    expected_size_bytes: int | None = None,
 ) -> TransferResult:
-    """Copy or move a file under the measured content-integrity contract."""
+    """Copy or move a file under a measured or frozen identity contract."""
+    if (expected_sha256 is None) != (expected_size_bytes is None):
+        raise ValueError("an expected digest and size must be supplied together")
     return _run(
         _TransferRequest(
             action_id=action_id or uuid.uuid4().hex,
             source=source,
             destination=destination,
             removes_source=move,
+            expected_sha256=expected_sha256,
+            expected_size_bytes=expected_size_bytes,
         ),
         journal=journal,
         on_progress=on_progress,
@@ -570,7 +576,13 @@ def _transfer_same_volume(
         warnings.append(reduced)
     if protocol == "same_volume_link":
         _record(journal, request, "source_removing", "redundant_verified_copies")
-        _remove_verified_source(request, journal=journal, warnings=warnings)
+        _remove_verified_source(
+            request,
+            journal=journal,
+            warnings=warnings,
+            authorized_sha256=integrity.expected_sha256 if integrity is not None else None,
+            authorized_size_bytes=integrity.expected_size_bytes if integrity is not None else None,
+        )
     _record(journal, request, "source_removed", "destination_verified", integrity=integrity)
     _record(journal, request, "terminal", "destination_verified", integrity=integrity)
     return TransferResult(
@@ -655,7 +667,13 @@ def _transfer_staged(
         )
 
     _record(journal, request, "source_removing", "redundant_verified_copies")
-    _remove_verified_source(request, journal=journal, warnings=warnings)
+    _remove_verified_source(
+        request,
+        journal=journal,
+        warnings=warnings,
+        authorized_sha256=staged.integrity.expected_sha256,
+        authorized_size_bytes=staged.integrity.expected_size_bytes,
+    )
     _record(journal, request, "source_removed", "destination_verified", integrity=staged.integrity)
     _record(journal, request, "terminal", "destination_verified", integrity=staged.integrity)
     return TransferResult(
@@ -709,29 +727,186 @@ def _remove_verified_source(
     *,
     journal: DurableActionJournal | None,
     warnings: list[str],
+    authorized_sha256: str | None,
+    authorized_size_bytes: int | None,
 ) -> None:
-    """Remove the source only after the destination is verified and journalled."""
+    """Remove only bytes freshly authorized on both sides of the boundary.
+
+    The copy/link checks earlier in the protocol are not enough: another
+    process can rewrite the source after ``journal_durable`` and immediately
+    before this unlink.  Re-read both closed files here, using the immutable
+    manifest hash (or the measured transfer hash for an unplanned move).
+    """
+    if authorized_sha256 is None or authorized_size_bytes is None:
+        raise IntegrityTransferError(
+            "A source removal needs a complete authorized identity.",
+            reason="source_identity_unavailable",
+            action_id=request.action_id,
+            source_path=str(request.source),
+            destination_path=str(request.destination),
+            source_safety="source_retained",
+        )
     try:
-        request.source.unlink()
-    except FileNotFoundError:
-        warnings.append("source_already_absent")
+        # The helper owns the open-handle validation *and* the unlink. Returning
+        # validated facts to this caller and unlinking afterward reopened a
+        # destructive callback window in which the pathname could be rewritten.
+        # Keep destination-first ordering, then make the source's final fstat,
+        # pathname identity check, and unlink one indivisible call boundary.
+        unlink_revalidated_pair(
+            request.source,
+            request.destination,
+            expected_sha256=authorized_sha256,
+            expected_size_bytes=authorized_size_bytes,
+        )
+    except IntegrityTransferError as exc:
+        if exc.details.get("reason") == "source_removal_failed":
+            _record(
+                journal,
+                request,
+                "terminal",
+                "redundant_verified_copies",
+                diagnostic_code="source_removal_failed",
+            )
+            raise IntegrityTransferError(
+                "The destination is verified but the source could not be removed.",
+                reason="source_removal_failed",
+                action_id=request.action_id,
+                source_path=str(request.source),
+                destination_path=str(request.destination),
+                source_safety="redundant_verified_copies",
+                os_error=exc.details.get("os_error"),
+            ) from exc
+        _record(
+            journal,
+            request,
+            "terminal",
+            "source_retained",
+            diagnostic_code="source_or_destination_drift_before_unlink",
+        )
+        raise IntegrityTransferError(
+            "Source or destination changed before the destructive unlink; both files remain.",
+            reason="source_or_destination_drift_before_unlink",
+            action_id=request.action_id,
+            source_path=str(request.source),
+            destination_path=str(request.destination),
+            source_safety="source_retained",
+            causal_reason=exc.details.get("reason"),
+        ) from exc
     except OSError as exc:
         _record(
             journal,
             request,
             "terminal",
-            "redundant_verified_copies",
-            diagnostic_code="source_removal_failed",
+            "source_retained",
+            diagnostic_code="source_or_destination_drift_before_unlink",
         )
         raise IntegrityTransferError(
-            "The destination is verified but the source could not be removed.",
-            reason="source_removal_failed",
+            "Source or destination changed before the destructive unlink; both files remain.",
+            reason="source_or_destination_drift_before_unlink",
             action_id=request.action_id,
             source_path=str(request.source),
             destination_path=str(request.destination),
-            source_safety="redundant_verified_copies",
-            os_error=exc.errno,
+            source_safety="source_retained",
+            causal_reason=type(exc).__name__,
         ) from exc
+
+
+def unlink_revalidated_pair(
+    source: Path,
+    destination: Path,
+    *,
+    expected_sha256: str,
+    expected_size_bytes: int,
+) -> None:
+    """Unlink *source* only while an open handle still proves its identity.
+
+    Destination bytes are measured first. The source is then opened without
+    following links, hashed through that descriptor, checked for in-place
+    writes through pre/post ``fstat``, matched back to the pathname, and
+    unlinked before this function returns. Callers therefore cannot insert a
+    rewrite between a successful validator return and the destructive syscall.
+    """
+    destination_sha256, destination_size = revalidate_sha256(
+        destination,
+        expected_sha256=expected_sha256,
+    )
+    if destination_sha256 != expected_sha256 or destination_size != expected_size_bytes:
+        raise IntegrityTransferError(
+            "Destination changed before the destructive unlink.",
+            reason="destination_drift_before_unlink",
+            source_path=str(source),
+            destination_path=str(destination),
+            source_safety="source_retained",
+        )
+
+    with _open_regular_source(source) as source_handle:
+        before = os.fstat(source_handle.fileno())
+        source_sha256, source_size = _hash_open_source(source_handle)
+        after = os.fstat(source_handle.fileno())
+        try:
+            named = source.lstat()
+        except OSError as exc:
+            raise IntegrityTransferError(
+                "Source pathname changed before the destructive unlink.",
+                reason="source_drift_before_unlink",
+                source_path=str(source),
+                destination_path=str(destination),
+                source_safety="source_retained",
+            ) from exc
+        stable_descriptor = (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and before.st_ctime_ns == after.st_ctime_ns
+        )
+        same_named_file = (
+            stat.S_ISREG(named.st_mode)
+            and not stat.S_ISLNK(named.st_mode)
+            and named.st_dev == after.st_dev
+            and named.st_ino == after.st_ino
+            and named.st_size == after.st_size
+            and named.st_mtime_ns == after.st_mtime_ns
+            and named.st_ctime_ns == after.st_ctime_ns
+        )
+        if (
+            not stable_descriptor
+            or not same_named_file
+            or source_sha256 != expected_sha256
+            or source_size != expected_size_bytes
+        ):
+            raise IntegrityTransferError(
+                "Source changed at the destructive unlink boundary.",
+                reason="source_drift_before_unlink",
+                source_path=str(source),
+                destination_path=str(destination),
+                source_safety="source_retained",
+                observed_sha256=source_sha256,
+                observed_size=source_size,
+            )
+        try:
+            source.unlink()
+        except OSError as exc:
+            raise IntegrityTransferError(
+                "The destination is verified but the source could not be removed.",
+                reason="source_removal_failed",
+                source_path=str(source),
+                destination_path=str(destination),
+                source_safety="redundant_verified_copies",
+                os_error=exc.errno,
+            ) from exc
+    _fsync_directory(source.parent)
+
+
+def _hash_open_source(source: BinaryIO) -> tuple[str, int]:
+    """Hash a freshly opened source descriptor without reopening its path."""
+    source.seek(0)
+    digest = hashlib.sha256()
+    size = 0
+    while chunk := source.read(TRANSFER_CHUNK_BYTES):
+        digest.update(chunk)
+        size += len(chunk)
+    return digest.hexdigest(), size
 
 
 def _identity_evidence(

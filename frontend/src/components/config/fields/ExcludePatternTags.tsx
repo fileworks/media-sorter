@@ -21,7 +21,7 @@ export function ExcludePatternTags({
           <button
             type="button"
             onClick={() => onRemove(pattern)}
-            className="ml-0.5 text-muted-foreground transition-colors hover:text-foreground"
+            className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={t("common.removeValue", { value: pattern })}
           >
             ×

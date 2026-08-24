@@ -72,9 +72,15 @@ full screen and returns to the unchanged comparison. Video pairs additionally sh
 and codec. Unknown measurements stay unknown and never create a winner.
 
 Resolve remains, for the other shape of the same task: working through twelve sets in
-sequence rather than meeting one while browsing. It shows one set at a time, **activating a
-copy keeps it**, number keys pick a copy, left and right move between sets, and nothing in
-it needs a pointer. Both surfaces route through the same handlers, so there is one decision
+sequence rather than meeting one while browsing. It shows one set at a time: activating a
+copy — by pointer or by its number key — **drafts** it, and confirming commits the decision
+and moves to the next set still open. Left and right move between sets, and nothing in it
+needs a pointer. The draft step is deliberate: the recommendation is visible beside the
+copies, and a keeper is chosen rather than triggered.
+
+The list, the position, and the arrow keys all read one order — the one the sort control
+sets. A counter that named a row twelve places down the list was worse than no counter.
+Both surfaces route through the same handlers, so there is one decision
 path and not two. The command `<select>` that used to sit in each set's header is gone; it
 offered a *rule* to a person who had already looked at the pictures.
 
@@ -100,9 +106,10 @@ a disabled command on every set:
   ranking it would pick a keeper on grounds the user was never shown. See
   `planDuplicateSets` in `lib/reviewRows.ts`.
 
-A set with a protected reference never enters the queue: the baseline wins and there is
-nothing to choose. Opening one deliberately from Browse shows it with the reference marked
-protected and says so.
+A set with a protected reference is never *open*: the baseline wins, there is nothing to
+choose, and "Next open" passes over it. It is still listed and still reachable — from Browse,
+or with the arrow keys — and shows the reference marked protected and says so. No surface
+offers it a keeper decision, and a stale decision naming one is ignored rather than applied.
 
 **An outstanding set is visible before the run, not after it.** Browse separates proposals
 from undecided sets under *Stays where it is*. Both bind nothing, both count toward the one

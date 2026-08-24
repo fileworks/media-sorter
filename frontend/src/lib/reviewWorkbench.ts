@@ -8,7 +8,7 @@
  * decides anything, it only draws what these functions already decided.
  */
 
-import type { KeeperPolicyId } from "@/services/api";
+import type { KeeperPolicyId, PreviewItem } from "@/services/api";
 
 /** Three kinds of stack, one shape. Mirrors the backend's `GroupKind`. */
 export type GroupKind = "exact" | "similar" | "burst";
@@ -16,12 +16,8 @@ export type GroupKind = "exact" | "similar" | "burst";
 /**
  * Whether the catalog can produce burst stacks at all.
  *
- * `burst_groups` reads perceptual signatures and media facts out of the
- * catalog, and nothing in production writes either one: `catalog_indexing`
- * runs discovery and hashing only, and `store_signature` / `store_media_facts`
- * have test callers exclusively. The catalog-backed burst view is therefore
- * empty *by construction*, not by configuration — so offering a switch for it
- * promises a result the product cannot produce.
+ * Indexing writes perceptual signatures, capture time, and camera identity;
+ * the detector consumes those catalog facts when the setting is enabled.
  *
  * The direct `POST /api/review/bursts/detect` endpoint that used to sit beside
  * this path has been removed: nothing in the app called it and no client in the
@@ -393,7 +389,32 @@ export function bulkImpactView(impact: BulkImpact, currentGeneration: string): B
  * A refusal is deliberate. Treating an unmeasured file as the smallest one is
  * how the only good copy gets quarantined, so those sets go to a person.
  */
-export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): string | null {
+export type KeeperRankingRung =
+  | "copy_markers"
+  | "path_depth"
+  | "oldest_modified"
+  | "newest_modified"
+  | "largest_size"
+  | "smallest_size"
+  | "pixel_count"
+  | "longest_filename"
+  | "shortest_filename"
+  | "stable_identity";
+
+export interface KeeperRanking {
+  memberId: string;
+  /** The first ordered criterion that left only the selected member. */
+  decisiveRung: KeeperRankingRung;
+}
+
+/**
+ * Rank a group and retain the decisive criterion used by that same ordering.
+ *
+ * The explanation must not independently reimplement the policy: if selection
+ * and prose each sort the members, one can drift while both test green. This
+ * trace is therefore the source for both the selected id and the UI rationale.
+ */
+export function keeperRanking(group: DuplicateGroup, policy: KeeperPolicyId): KeeperRanking | null {
   const members = group.members;
   if (members.length === 0) return null;
 
@@ -460,21 +481,37 @@ export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): s
   const identity = (member: GroupMember) =>
     `${member.root_id}:${member.relative_path}:${member.member_id}`;
 
+  interface Criterion {
+    rung: KeeperRankingRung;
+    value: (member: GroupMember) => number | string;
+  }
+
   const best = (
     pool: readonly GroupMember[],
-    rank: (member: GroupMember) => (number | string)[],
-  ): string | null => {
+    criteria: readonly Criterion[],
+  ): KeeperRanking | null => {
     if (pool.length === 0) return null;
     const sorted = [...pool].sort((a, b) => {
-      const left = rank(a);
-      const right = rank(b);
-      for (let index = 0; index < left.length; index += 1) {
-        if (left[index] < right[index]) return -1;
-        if (left[index] > right[index]) return 1;
+      for (const criterion of criteria) {
+        const left = criterion.value(a);
+        const right = criterion.value(b);
+        if (left < right) return -1;
+        if (left > right) return 1;
       }
       return 0;
     });
-    return sorted[0].member_id;
+    const winner = sorted[0];
+    let contenders = [...pool];
+    let decisiveRung = criteria[criteria.length - 1].rung;
+    for (const criterion of criteria) {
+      const winningValue = criterion.value(winner);
+      contenders = contenders.filter((member) => criterion.value(member) === winningValue);
+      if (contenders.length === 1) {
+        decisiveRung = criterion.rung;
+        break;
+      }
+    }
+    return { memberId: winner.member_id, decisiveRung };
   };
 
   switch (policy) {
@@ -483,39 +520,71 @@ export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): s
       // separate them. What differs is where they live and what they are called:
       // fewest copy marks, then shallowest path, then oldest, then largest, then
       // identity. An unknown mtime sorts last rather than reading as zero.
-      return best(members, (m) => [
-        copyMarks(m),
-        depth(m),
-        modified(m) ?? Number.POSITIVE_INFINITY,
-        -size(m),
-        identity(m),
+      return best(members, [
+        { rung: "copy_markers", value: copyMarks },
+        { rung: "path_depth", value: depth },
+        { rung: "oldest_modified", value: (m) => modified(m) ?? Number.POSITIVE_INFINITY },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "stable_identity", value: identity },
       ]);
     case "best_quality":
       // Most pixels, then most bytes. Unlike `highest_resolution` it does not
       // refuse a set whose dimensions could not all be read: a photo library is
       // full of files no parser handles, and refusing them all would leave the
       // common case undecided.
-      return best(members, (m) => [-(pixels(m) ?? 0), -size(m), -(modified(m) ?? 0), identity(m)]);
+      return best(members, [
+        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0) },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
+        { rung: "stable_identity", value: identity },
+      ]);
     case "largest":
-      return best(members, (m) => [-size(m), -(modified(m) ?? 0), identity(m)]);
+      return best(members, [
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
+        { rung: "stable_identity", value: identity },
+      ]);
     case "smallest":
-      return best(members, (m) => [size(m), -(modified(m) ?? 0), identity(m)]);
+      return best(members, [
+        { rung: "smallest_size", value: size },
+        { rung: "newest_modified", value: (m) => -(modified(m) ?? 0) },
+        { rung: "stable_identity", value: identity },
+      ]);
     case "longest_filename":
-      return best(members, (m) => [-filename(m).length, -size(m), identity(m)]);
+      return best(members, [
+        { rung: "longest_filename", value: (m) => -filename(m).length },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "stable_identity", value: identity },
+      ]);
     case "shortest_filename":
-      return best(members, (m) => [filename(m).length, -size(m), identity(m)]);
+      return best(members, [
+        { rung: "shortest_filename", value: (m) => filename(m).length },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "stable_identity", value: identity },
+      ]);
     case "newest":
     case "oldest": {
       const dated = members.filter((member) => modified(member) !== null);
       if (dated.length === 0) return null;
       const sign = policy === "newest" ? -1 : 1;
-      return best(dated, (m) => [sign * (modified(m) ?? 0), -size(m), identity(m)]);
+      return best(dated, [
+        {
+          rung: policy === "newest" ? "newest_modified" : "oldest_modified",
+          value: (m) => sign * (modified(m) ?? 0),
+        },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "stable_identity", value: identity },
+      ]);
     }
     case "highest_resolution": {
       const measured = members.filter((member) => pixels(member) !== null);
       // Refuse rather than guess: one unreadable file must not be ranked last.
       if (measured.length !== members.length || measured.length === 0) return null;
-      return best(measured, (m) => [-(pixels(m) ?? 0), -size(m), identity(m)]);
+      return best(measured, [
+        { rung: "pixel_count", value: (m) => -(pixels(m) ?? 0) },
+        { rung: "largest_size", value: (m) => -size(m) },
+        { rung: "stable_identity", value: identity },
+      ]);
     }
     default:
       // `manual`, `protected_reference` and `preferred_root` never decide here:
@@ -523,6 +592,10 @@ export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): s
       // third needs a root order the interface no longer lets anyone set.
       return null;
   }
+}
+
+export function keeperByPolicy(group: DuplicateGroup, policy: KeeperPolicyId): string | null {
+  return keeperRanking(group, policy)?.memberId ?? null;
 }
 
 // ── Comparison ───────────────────────────────────────────────────────────────
@@ -549,6 +622,14 @@ export interface ComparableFile {
   /** Which extractor supplied captured_at; null when the catalog did not record it. */
   capturedAtSource: string | null;
   confidence: MemberEvidence["confidence"] | null;
+  protected?: boolean;
+  companionCount?: number;
+  unitId?: string | null;
+  unitPrimary?: boolean | null;
+  companions?: PreviewItem["companions"];
+  unitWarnings?: string[];
+  destination?: string | null;
+  plannedStatus?: string | null;
 }
 
 export function comparableFromMember(
@@ -562,6 +643,7 @@ export function comparableFromMember(
     facts: member.facts,
     capturedAtSource,
     confidence: member.evidence.confidence,
+    protected: member.role === "reference",
   };
 }
 
@@ -585,6 +667,14 @@ export function comparableFromRow(row: {
   sizeBytes: number;
   date: string | null;
   dateSource?: string | null;
+  protected?: boolean;
+  companionCount?: number;
+  unitId?: string | null;
+  unitPrimary?: boolean;
+  companions?: PreviewItem["companions"];
+  unitWarnings?: string[];
+  destination?: string | null;
+  status?: string;
 }): ComparableFile {
   return {
     id: row.source,
@@ -602,5 +692,13 @@ export function comparableFromRow(row: {
     },
     capturedAtSource: row.dateSource ?? null,
     confidence: null,
+    protected: row.protected ?? false,
+    companionCount: row.companionCount ?? 0,
+    unitId: row.unitId ?? null,
+    unitPrimary: row.unitId ? (row.unitPrimary ?? null) : null,
+    companions: row.companions,
+    unitWarnings: row.unitWarnings,
+    destination: row.destination ?? null,
+    plannedStatus: row.status ?? null,
   };
 }

@@ -5,12 +5,14 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import piexif
 import pytest
 from PIL import Image, ImageDraw
 
 import app.services.burst_detection as burst_module
+from app.core.exceptions import IntegrityTransferError
 from app.services.burst_detection import (
     BurstDetectionService,
     BurstSettings,
@@ -20,7 +22,7 @@ from app.services.burst_detection import (
     review_burst,
 )
 from app.services.duplicate_service import DuplicateRegistry, DuplicateService
-from app.services.quarantine import QuarantineStore
+from app.services.quarantine import QuarantineRecord, QuarantineStore
 
 
 class _FixtureHash:
@@ -162,13 +164,14 @@ def test_reviewed_burst_uses_frozen_verified_quarantine_plan(tmp_path: Path) -> 
         BurstSettings(enabled=True, max_perceptual_distance=12),
     )[0]
     reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
-    plan = plan_burst_quarantine(reviewed)
+    plan = plan_burst_quarantine(reviewed, allowed_roots=(tmp_path,))
 
     assert {Path(item.path).name for item in plan.members} == {"b.jpg", "b.xmp"}
     records = execute_burst_quarantine(
         plan,
         QuarantineStore(tmp_path / "managed-quarantine"),
         operation_id="burst-test",
+        allowed_roots=(tmp_path,),
     )
 
     assert first.exists()
@@ -177,6 +180,154 @@ def test_reviewed_burst_uses_frozen_verified_quarantine_plan(tmp_path: Path) -> 
     assert len(records) == 2
     assert all(Path(record.quarantine_path).exists() for record in records)
     assert all(record.retention == "retained" for record in records)
+
+
+def test_execution_preflights_every_member_before_the_first_quarantine(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "a.jpg"
+    second = tmp_path / "b.jpg"
+    sidecar = tmp_path / "b.xmp"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    sidecar.write_text("reviewed edit")
+    group = BurstDetectionService().detect(
+        [first, second, sidecar],
+        tmp_path,
+        BurstSettings(enabled=True, max_perceptual_distance=12),
+    )[0]
+    reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
+    plan = plan_burst_quarantine(reviewed, allowed_roots=(tmp_path,))
+    planned_sources = tuple(Path(member.path) for member in plan.members)
+    assert len(planned_sources) == 2
+
+    planned_sources[-1].write_text("changed after review")
+    quarantine_root = tmp_path / "managed-quarantine"
+
+    with pytest.raises(ValueError, match="changed after review"):
+        execute_burst_quarantine(
+            plan,
+            QuarantineStore(quarantine_root),
+            operation_id="burst-late-drift",
+            allowed_roots=(tmp_path,),
+        )
+
+    assert all(source.exists() for source in planned_sources)
+    assert not quarantine_root.exists()
+
+
+def test_each_burst_transfer_enforces_the_frozen_identity_after_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = tmp_path / "a.jpg"
+    second = tmp_path / "b.jpg"
+    sidecar = tmp_path / "b.xmp"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    sidecar.write_text("reviewed edit")
+    group = BurstDetectionService().detect(
+        [first, second, sidecar],
+        tmp_path,
+        BurstSettings(enabled=True, max_perceptual_distance=12),
+    )[0]
+    reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
+    plan = plan_burst_quarantine(reviewed, allowed_roots=(tmp_path,))
+    planned_sources = tuple(Path(member.path) for member in plan.members)
+    later = planned_sources[-1]
+    store = QuarantineStore(tmp_path / "managed-quarantine")
+    quarantine = store.quarantine
+    changed = False
+
+    def quarantine_then_change_later(source: Path, **kwargs: Any) -> QuarantineRecord:
+        nonlocal changed
+        record = quarantine(source, **kwargs)
+        if not changed:
+            later.write_text("changed after complete preflight")
+            changed = True
+        return record
+
+    monkeypatch.setattr(store, "quarantine", quarantine_then_change_later)
+
+    with pytest.raises(IntegrityTransferError, match="authorized manifest"):
+        execute_burst_quarantine(
+            plan,
+            store,
+            operation_id="burst-concurrent-drift",
+            allowed_roots=(tmp_path,),
+        )
+
+    assert later.read_text() == "changed after complete preflight"
+    assert len(store.records()) == 1
+    assert all(record.original_path != str(later) for record in store.records())
+
+
+def test_replacing_a_member_after_server_issuance_is_refused_before_planning(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "a.jpg"
+    second = tmp_path / "b.jpg"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    group = BurstDetectionService().detect(
+        [first, second],
+        tmp_path,
+        BurstSettings(enabled=True, max_perceptual_distance=12),
+    )[0]
+    reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
+    second.write_bytes(b"replacement not issued by the server")
+
+    with pytest.raises(ValueError, match="changed after detection"):
+        plan_burst_quarantine(reviewed, allowed_roots=(tmp_path,))
+
+    assert second.read_bytes() == b"replacement not issued by the server"
+
+
+def test_new_root_exclusion_invalidates_an_unchanged_reviewed_burst(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "input"
+    excluded = root / "excluded"
+    excluded.mkdir(parents=True)
+    first = excluded / "a.jpg"
+    second = excluded / "b.jpg"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    group = BurstDetectionService().detect(
+        [first, second],
+        root,
+        BurstSettings(enabled=True, max_perceptual_distance=12),
+    )[0]
+    reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
+    plan = plan_burst_quarantine(reviewed, allowed_roots=(root,))
+    before = second.read_bytes()
+
+    with pytest.raises(ValueError, match="authority changed"):
+        execute_burst_quarantine(
+            plan,
+            QuarantineStore(tmp_path / "managed-quarantine"),
+            operation_id="burst-excluded",
+            allowed_roots=(root,),
+            excluded_roots=(excluded,),
+        )
+
+    assert second.read_bytes() == before
+
+
+def test_burst_planning_without_mutable_root_authority_is_refused(tmp_path: Path) -> None:
+    first = tmp_path / "a.jpg"
+    second = tmp_path / "b.jpg"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    group = BurstDetectionService().detect(
+        [first, second],
+        tmp_path,
+        BurstSettings(enabled=True, max_perceptual_distance=12),
+    )[0]
+    reviewed = review_burst(group, keep_frame_ids=(group.frames[0].frame_id,))
+
+    with pytest.raises(ValueError, match="mutable root authority"):
+        plan_burst_quarantine(reviewed)
 
 
 def test_enabling_bursts_cannot_change_duplicate_verdicts(tmp_path: Path) -> None:

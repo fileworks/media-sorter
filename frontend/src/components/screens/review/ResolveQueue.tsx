@@ -1,30 +1,22 @@
 /** Duplicate resolver with explicit draft and confirmed states. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiArrowLeft, FiArrowRight, FiCheck, FiLock } from "react-icons/fi";
+import { FiArrowLeft, FiArrowRight, FiCheck } from "react-icons/fi";
 
 import { RuleImpactModal, type RuleImpact } from "@/components/screens/review/RuleImpactModal";
-import { SortControl } from "@/components/screens/review/SortControl";
-import { StackVisual } from "@/components/screens/review/StackVisual";
-import { Badge } from "@/components/ui/badge";
+import { CopyRow } from "@/components/screens/review/CopyRow";
+import { ResolveToolbar } from "@/components/screens/review/ResolveToolbar";
+import { SetQueueList } from "@/components/screens/review/SetQueueList";
+import { SetSelectionBar } from "@/components/screens/review/SetSelectionBar";
 import { Button } from "@/components/ui/button";
-import { Select, SelectItem } from "@/components/ui/select";
-import { Thumbnail } from "@/components/ui/thumbnail";
 import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useI18n } from "@/i18n/I18nContext";
 import { isDecidedState, isProposedState, sourceFolder } from "@/lib/duplicateDecisions";
 import { formatBytes } from "@/lib/formatters";
-import { formatMetadataSource } from "@/lib/metadataSource";
-import { cn } from "@/lib/utils";
-import type { SetEntry } from "@/lib/reviewBrowse";
-import { folderLeaf, relativeDestination, type ReviewRow } from "@/lib/reviewRows";
-import { sortRows, sortSets, type ReviewSort } from "@/lib/reviewSort";
-import { SELECTABLE_KEEPER_POLICIES, type KeeperPolicyId } from "@/types/api";
-
-/** Still awaiting a decision: no baseline copy, and nothing decided yet. */
-function isOpenSet(entry: SetEntry): boolean {
-  return !entry.hasBaseline && !isDecidedState(entry.decisionState);
-}
+import { isOpenSet, type SetEntry } from "@/lib/reviewBrowse";
+import type { ReviewRow } from "@/lib/reviewRows";
+import { sortRows, type ReviewSort } from "@/lib/reviewSort";
+import type { KeeperPolicyId } from "@/types/api";
 
 /** Derive one factual comparison note without inferring media quality. */
 function candidateNote(
@@ -66,6 +58,8 @@ interface ResolveQueueProps {
   onOpenSet: (setId: string) => void;
   onKeep: (setId: string, source: string) => void;
   onKeepAll: (setId: string) => void;
+  onReset?: (setId: string) => void;
+  onResetAll?: () => void;
   onAcceptProposal: (setId: string) => void;
   onCompare: (entry: SetEntry) => void;
   onOpenDetail: (source: string) => void;
@@ -96,6 +90,8 @@ export function ResolveQueue({
   onOpenSet,
   onKeep,
   onKeepAll,
+  onReset,
+  onResetAll,
   onAcceptProposal,
   onCompare,
   onOpenDetail,
@@ -114,7 +110,7 @@ export function ResolveQueue({
   sort,
   onSort,
 }: ResolveQueueProps) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [preferredFolder, setPreferredFolder] = useState("");
   const [draftSource, setDraftSource] = useState<string | null>(null);
@@ -130,7 +126,9 @@ export function ResolveQueue({
     setEditingDecision(false);
   }, [confirmedSource, current?.id]);
 
-  const orderedSets = useMemo(() => sortSets(allSets, sort, locale), [allSets, locale, sort]);
+  // `allSets` arrives in the panel's one order — the list, the position
+  // indicator and the arrow keys all read it, so it is not re-sorted here.
+  const orderedSets = allSets;
   const setWindow = useVirtualWindow({
     count: orderedSets.length,
     estimateSize: 64,
@@ -283,6 +281,23 @@ export function ResolveQueue({
     }
     return openSets.find((entry) => entry.id !== current.id);
   }, [allSets, current, openSets]);
+  /**
+   * Decide this set, then move to the next one still open.
+   *
+   * A queue that stays put after a decision makes every set cost two gestures
+   * — decide, then navigate — and fifteen sets forty-five clicks. The set just
+   * decided keeps its place in the list, so ← walks straight back to it, and
+   * the last decision advances nowhere and lets the finished state show.
+   */
+  const decideAndAdvance = useCallback(
+    (decide: () => void) => {
+      const following = nextOpen;
+      decide();
+      if (following !== undefined && following.id !== current?.id) onOpenSet(following.id);
+    },
+    [current?.id, nextOpen, onOpenSet],
+  );
+
   const proposedRow = current?.rows.find((row) => row.stack?.isProposedKeeper === true) ?? null;
   const candidates = current === null ? [] : sortRows(current.rows, sort, locale);
 
@@ -313,86 +328,25 @@ export function ResolveQueue({
         {t("review.setSelection.noFolders")}
       </p>
 
-      {/* Separate rule, order, selection, and queue-position controls. */}
-      <div className="flex min-h-14 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border bg-card px-2.5 py-2">
-        <div
-          className="flex min-w-0 flex-wrap items-center gap-2"
-          aria-label={t("review.keepRule")}
-        >
-          <label
-            htmlFor="review-keep-rule"
-            className="whitespace-nowrap text-3xs text-muted-foreground"
-          >
-            {t("review.keepRule")}
-          </label>
-          <Select
-            id="review-keep-rule"
-            size="sm"
-            value={rule}
-            onValueChange={(value) => onRule(value as KeeperPolicyId)}
-            className="min-w-[13rem]"
-          >
-            {SELECTABLE_KEEPER_POLICIES.map((policy) => (
-              <SelectItem key={policy} value={policy}>
-                {t(`config.keeper.${policy}`)}
-              </SelectItem>
-            ))}
-          </Select>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={openSets.length === 0}
-            onClick={() => setRuleImpactOpen(true)}
-          >
-            {t("review.ruleImpact.check")}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={proposalCount === 0}
-            onClick={onAcceptAllProposals}
-          >
-            {t("review.proposal.acceptAll", { count: proposalCount })}
-          </Button>
-        </div>
-
-        <div className="flex items-center border-border pl-2.5 sm:border-l">
-          <SortControl id="review-resolve-sort" value={sort} onChange={onSort} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-border pl-2.5 sm:border-l">
-          <span className="text-3xs text-muted-foreground" role="status">
-            {t("review.setSelection.count", { count: selectedSets.length })}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={selectableSetIds.length === 0}
-            onClick={() => onSelectSets(selectableSetIds)}
-          >
-            {t("review.setSelection.selectAll", { count: selectableSetIds.length })}
-          </Button>
-          {selectedSets.length > 0 && (
-            <Button size="sm" variant="ghost" onClick={onClearSetSelection}>
-              {t("review.clearSelection")}
-            </Button>
-          )}
-        </div>
-
-        <div className="ml-auto flex items-center gap-2 border-border pl-2.5 sm:border-l">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={nextOpen === undefined}
-            onClick={() => nextOpen && onOpenSet(nextOpen.id)}
-          >
-            {t("review.resolve.nextOpen")}
-          </Button>
-          <span className="whitespace-nowrap text-3xs tabular-nums text-muted-foreground">
-            {t("review.resolve.decidedCount", { decided: decidedCount, total: allSets.length })}
-          </span>
-        </div>
-      </div>
+      <ResolveToolbar
+        rule={rule}
+        onRule={onRule}
+        openCount={openCount}
+        decidedCount={decidedCount}
+        totalSets={allSets.length}
+        proposalCount={proposalCount}
+        onCheckImpact={() => setRuleImpactOpen(true)}
+        onAcceptAllProposals={onAcceptAllProposals}
+        onResetAll={onResetAll}
+        sort={sort}
+        onSort={onSort}
+        selectableSetIds={selectableSetIds}
+        onSelectSets={onSelectSets}
+        hasNextOpen={nextOpen !== undefined}
+        onNextOpen={() => {
+          if (nextOpen !== undefined) onOpenSet(nextOpen.id);
+        }}
+      />
 
       {openCount > 0 && (
         <p className="border-b border-border bg-muted/25 px-3 py-2 text-3xs leading-relaxed text-muted-foreground">
@@ -411,132 +365,90 @@ export function ResolveQueue({
         }}
       />
 
-      {selectedSets.length > 0 && (
-        <div className="border-b border-border bg-muted/30 p-2">
-          <label className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            {t("review.bulk.folder")}
-            <select
-              value={preferredFolder}
-              disabled={folderOptions.length === 0}
-              onChange={(event) => setPreferredFolder(event.target.value)}
-              className="max-w-48 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground"
-            >
-              {folderOptions.map((folder) => (
-                <option key={folder} value={folder}>
-                  {folder}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <BulkAction
-              id="rule"
-              label={t("review.bulk.applyRule")}
-              decide={ruleCanDecide}
-              skip={selectedSets.length - ruleCanDecide}
-              cannotKey="review.bulk.cannotRule"
-              disabled={false}
-              disabledReasonId="review-set-selection-empty"
-              onApply={() => applyChoices(ruleChoices)}
-            />
-            <BulkAction
-              id="distinct"
-              label={t("review.bulk.notDuplicates")}
-              decide={selectedSets.length}
-              skip={0}
-              disabled={false}
-              disabledReasonId="review-set-selection-empty"
-              onApply={() => {
-                for (const entry of selectedSets) onKeepAll(entry.id);
-              }}
-            />
-            <BulkAction
-              id="folder"
-              label={t("review.bulk.keepFromFolder")}
-              decide={folderCanDecide}
-              skip={selectedSets.length - folderCanDecide}
-              cannotKey="review.bulk.cannotFolder"
-              disabled={preferredFolder === ""}
-              disabledReasonId="review-set-selection-no-folders"
-              onApply={() => applyChoices(folderChoices)}
-            />
-          </div>
-        </div>
-      )}
+      <SetSelectionBar
+        selectedCount={selectedSets.length}
+        folders={folderOptions}
+        folder={preferredFolder}
+        onFolderChange={setPreferredFolder}
+        onClear={onClearSetSelection}
+        actions={[
+          {
+            id: "rule",
+            label: t("review.bulk.applyRule"),
+            decide: ruleCanDecide,
+            skip: selectedSets.length - ruleCanDecide,
+            cannotKey: "review.bulk.cannotRule",
+            disabled: false,
+            disabledReasonId: "review-set-selection-empty",
+            onApply: () => applyChoices(ruleChoices),
+          },
+          {
+            id: "distinct",
+            label: t("review.bulk.notDuplicates"),
+            decide: selectedSets.length,
+            skip: 0,
+            disabled: false,
+            disabledReasonId: "review-set-selection-empty",
+            onApply: () => {
+              for (const entry of selectedSets) onKeepAll(entry.id);
+            },
+          },
+          {
+            id: "folder",
+            label: t("review.bulk.keepFromFolder"),
+            decide: folderCanDecide,
+            skip: selectedSets.length - folderCanDecide,
+            cannotKey: "review.bulk.cannotFolder",
+            disabled: preferredFolder === "",
+            disabledReasonId: "review-set-selection-no-folders",
+            onApply: () => applyChoices(folderChoices),
+          },
+        ]}
+      />
 
-      <div className="grid min-h-[32rem] min-w-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
-        <aside className="min-w-0 overflow-hidden border-b border-border bg-card lg:border-b-0 lg:border-r">
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-            <strong className="text-xs text-foreground">{t("review.resolve.allSets")}</strong>
-            <Badge tone={openCount > 0 ? "primary" : "success"} className="ml-auto">
-              {t("review.resolve.openCount", { count: openCount })}
-            </Badge>
-          </div>
-          <div
-            ref={setWindow.scrollRef}
-            onScroll={setWindow.onScroll}
-            className="max-h-[min(32rem,60dvh)] overflow-y-auto overscroll-contain"
-          >
-            <ul className="relative" style={{ height: setWindow.totalSize }}>
-              {setWindow.virtualItems.map((virtual) => {
-                const entry = orderedSets[virtual.index];
-                if (entry === undefined) return null;
-                const active = current?.id === entry.id;
-                const decided = entry.hasBaseline || isDecidedState(entry.decisionState);
-                const proposed = isProposedState(entry.decisionState);
-                return (
-                  <li
-                    key={entry.id}
-                    className="absolute inset-x-0 h-16 p-1.5"
-                    style={{ transform: `translateY(${virtual.start}px)` }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpenSet(entry.id)}
-                      className={cn(
-                        "grid h-full w-full grid-cols-[2.625rem_minmax(0,1fr)_auto] items-center gap-2 rounded-panel p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        active ? "bg-tint-primary" : "hover:bg-muted",
-                      )}
-                    >
-                      <StackVisual paths={entry.rows.map((row) => row.source)} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-semibold text-foreground">
-                          {entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id}
-                        </span>
-                        <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
-                          {decided
-                            ? t("review.resolve.queueDecided")
-                            : proposed
-                              ? t("review.resolve.queueProposed")
-                              : entry.setKind === "exact"
-                                ? t("review.stack.match.exact")
-                                : entry.setKind === "similar" && entry.similarity !== null
-                                  ? t("review.stack.match.similar", {
-                                      percent: entry.similarity,
-                                    })
-                                  : t(`review.stack.kind.${entry.setKind}`)}
-                        </span>
-                      </span>
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full",
-                          decided ? "bg-success" : "bg-primary",
-                        )}
-                      />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </aside>
+      {/* On a wide screen the workspace is bounded by the viewport and each
+          pane scrolls inside it, so the decision buttons are never left under
+          the sticky footer and the list never scrolls the page out from under
+          the set being read. Narrow screens keep the natural flow, where one
+          column and one scroll are the right answer. */}
+      <div className="grid min-h-[32rem] min-w-0 lg:h-[calc(100dvh-theme(spacing.actionzone)-21rem)] lg:min-h-[26rem] lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <SetQueueList
+          sets={orderedSets}
+          currentId={current?.id ?? null}
+          openCount={openCount}
+          onOpenSet={onOpenSet}
+          window={setWindow}
+        />
 
-        <div className="min-w-0 p-2.5 sm:p-3">
+        {/* `scroll-pb-*` matches the pinned decision bar: without it the browser
+            scrolls a focused copy to the bottom edge, where that bar covers it
+            (WCAG 2.4.11). Same reason `main` carries `scroll-pb-actionzone`. */}
+        <div className="min-w-0 overflow-y-auto overscroll-contain p-2.5 sm:p-3 lg:scroll-pb-28">
+          {/* Finishing is stated where the work was, not by replacing it: every
+              set stays reachable afterwards, so a decision can still be read
+              back or changed without hunting for the way in again. */}
+          {openCount === 0 && allSets.length > 0 && (
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-panel border border-success/35 bg-tint-success px-3 py-2.5">
+              <FiCheck className="h-4 w-4 shrink-0 text-success" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground">
+                  {t("review.resolve.doneTitle")}
+                </p>
+                <p className="mt-0.5 text-3xs text-muted-foreground">
+                  {t("review.resolve.doneHelp")}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={onBackToBrowse}>
+                <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
+                {t("review.resolve.backToBrowse")}
+              </Button>
+            </div>
+          )}
           {current === null ? (
             <div className="grid min-h-80 place-items-center text-center">
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {t("review.resolve.doneTitle")}
+                  {t("review.resolve.emptyTitle")}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">{t("review.resolve.doneHelp")}</p>
                 <Button size="sm" variant="outline" className="mt-4" onClick={onBackToBrowse}>
@@ -547,7 +459,7 @@ export function ResolveQueue({
             </div>
           ) : (
             <div>
-              <header className="flex flex-wrap items-start gap-2 pb-2.5">
+              <header className="flex flex-wrap items-start gap-2 bg-card pb-2.5 lg:sticky lg:top-0 lg:z-10">
                 <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
                   <span className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
                     {current.setKind === "exact"
@@ -624,6 +536,69 @@ export function ResolveQueue({
                         rule: t(`config.keeper.${current.proposalPolicy ?? rule}`),
                       })}
                     </p>
+                    {current.proposalRationale && (
+                      <dl className="mt-2 grid gap-1 text-3xs text-muted-foreground sm:grid-cols-2">
+                        <div>
+                          <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.winningRung")}
+                          </dt>
+                          <dd>
+                            {t(
+                              current.proposalRationale.winningRung.key,
+                              current.proposalRationale.winningRung.params,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.knownFacts")}
+                          </dt>
+                          <dd>
+                            {current.proposalRationale.knownFacts
+                              .map((fact) => t(fact.key, fact.params))
+                              .join(", ")}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.unknownFacts")}
+                          </dt>
+                          <dd>
+                            {current.proposalRationale.unknownFacts.length > 0
+                              ? current.proposalRationale.unknownFacts
+                                  .map((fact) => t(fact.key, fact.params))
+                                  .join(", ")
+                              : t("review.resolve.rationale.none")}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-foreground">
+                            {t("review.resolve.rationale.tieBreak")}
+                          </dt>
+                          <dd>
+                            {current.proposalRationale.tieBreak
+                              ? t(
+                                  current.proposalRationale.tieBreak.key,
+                                  current.proposalRationale.tieBreak.params,
+                                )
+                              : t("review.resolve.rationale.none")}
+                          </dd>
+                        </div>
+                        {current.proposalRationale.limitation && (
+                          <div className="sm:col-span-2">
+                            <dt className="font-semibold text-foreground">
+                              {t("review.resolve.rationale.limitation")}
+                            </dt>
+                            <dd>
+                              {t(
+                                current.proposalRationale.limitation.key,
+                                current.proposalRationale.limitation.params,
+                              )}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
                   </div>
                 </aside>
               )}
@@ -648,15 +623,21 @@ export function ResolveQueue({
                     <p className="mt-0.5 text-3xs text-muted-foreground">
                       {current.decisionKind === "keep_all"
                         ? t("review.resolve.resolvedAllHelp")
-                        : t("review.resolve.resolvedHelp", {
-                            count: Math.max(0, current.rows.length - 1),
-                          })}
+                        : tCount(
+                            "review.resolve.resolvedHelp",
+                            Math.max(0, current.rows.length - 1),
+                          )}
                     </p>
                   </div>
                   {!current.hasBaseline && (
-                    <Button size="sm" variant="outline" onClick={() => setEditingDecision(true)}>
-                      {t("review.resolve.editDecision")}
-                    </Button>
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => setEditingDecision(true)}>
+                        {t("review.resolve.editDecision")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => onReset?.(current.id)}>
+                        {t("review.resolve.resetOne")}
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm"
@@ -678,7 +659,7 @@ export function ResolveQueue({
                   <ul className="grid gap-2">
                     {candidates.map((row) => (
                       <li key={row.source}>
-                        <Copy
+                        <CopyRow
                           row={row}
                           // Shortcut numbers follow stable set order.
                           position={current.rows.indexOf(row)}
@@ -700,8 +681,11 @@ export function ResolveQueue({
                     ))}
                   </ul>
 
-                  {/* Keep evidence and decision actions visually separate. */}
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-panel border border-border bg-card px-2.5 py-2.5">
+                  {/* Keep evidence and decision actions visually separate — and
+                      on a bounded workspace, keep the actions in view: a long
+                      set used to scroll its own confirm button away, so the
+                      copies were readable and the decision was not. */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-panel border border-border bg-card px-2.5 py-2.5 lg:sticky lg:bottom-0 lg:z-10 lg:shadow-card">
                     <div className="mr-auto min-w-0" aria-live="polite">
                       <strong className="block text-xs text-foreground">
                         {draftSource === null
@@ -741,7 +725,8 @@ export function ResolveQueue({
                       size="sm"
                       disabled={draftSource === null || draftSource === confirmedSource}
                       onClick={() => {
-                        if (draftSource !== null) onKeep(current.id, draftSource);
+                        if (draftSource === null) return;
+                        decideAndAdvance(() => onKeep(current.id, draftSource));
                       }}
                     >
                       {t("review.resolve.confirmSelection")}
@@ -750,7 +735,7 @@ export function ResolveQueue({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onAcceptProposal(current.id)}
+                        onClick={() => decideAndAdvance(() => onAcceptProposal(current.id))}
                       >
                         {t("review.proposal.acceptOne")}
                       </Button>
@@ -760,7 +745,7 @@ export function ResolveQueue({
                       variant="outline"
                       disabled={current.hasBaseline}
                       aria-describedby={current.hasBaseline ? "review-baseline-rule" : undefined}
-                      onClick={() => onKeepAll(current.id)}
+                      onClick={() => decideAndAdvance(() => onKeepAll(current.id))}
                     >
                       {t("review.resolve.keepAll")}
                     </Button>
@@ -771,14 +756,10 @@ export function ResolveQueue({
               {(individualOnly.perceptual > 0 || individualOnly.unmeasured > 0) && (
                 <div className="mt-2 space-y-1 text-3xs text-muted-foreground">
                   {individualOnly.perceptual > 0 && (
-                    <p>
-                      {t("review.resolve.individualOnly", { count: individualOnly.perceptual })}
-                    </p>
+                    <p>{tCount("review.resolve.individualOnly", individualOnly.perceptual)}</p>
                   )}
                   {individualOnly.unmeasured > 0 && (
-                    <p>
-                      {t("review.resolve.unmeasuredOnly", { count: individualOnly.unmeasured })}
-                    </p>
+                    <p>{tCount("review.resolve.unmeasuredOnly", individualOnly.unmeasured)}</p>
                   )}
                 </div>
               )}
@@ -787,186 +768,5 @@ export function ResolveQueue({
         </div>
       </div>
     </div>
-  );
-}
-
-function BulkAction({
-  id,
-  label,
-  decide,
-  skip,
-  cannotKey,
-  disabled,
-  disabledReasonId,
-  onApply,
-}: {
-  id: string;
-  label: string;
-  decide: number;
-  skip: number;
-  cannotKey?: string;
-  disabled: boolean;
-  disabledReasonId: string;
-  onApply: () => void;
-}) {
-  const { t } = useI18n();
-  const impactId = `review-bulk-${id}-impact`;
-  return (
-    <div className="rounded-lg border border-border bg-card p-2.5">
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full"
-        disabled={disabled}
-        aria-describedby={`${impactId}${disabled ? ` ${disabledReasonId}` : ""}`}
-        onClick={onApply}
-      >
-        {label}
-      </Button>
-      <p id={impactId} className="mt-1.5 text-3xs leading-relaxed text-muted-foreground">
-        {t("review.bulk.impact", { decide, skip })}
-        {skip > 0 && cannotKey ? ` ${t(cannotKey, { count: skip })}` : ""}
-      </p>
-    </div>
-  );
-}
-
-/** One candidate with textual proposal, draft, and confirmed states. */
-function Copy({
-  row,
-  position,
-  selected,
-  confirmed,
-  isProposed,
-  note,
-  onSelect,
-  onOpenDetail,
-  destinationRoot,
-  locale,
-}: {
-  row: ReviewRow;
-  position: number;
-  selected: boolean;
-  confirmed: boolean;
-  isProposed: boolean;
-  /** One comparative fact about this copy, or null when there is none. */
-  note: string | null;
-  onSelect: () => void;
-  onOpenDetail: () => void;
-  /** Library root, stripped from the planned destination so the cell shows the tail. */
-  destinationRoot: string;
-  locale: string;
-}) {
-  const { t } = useI18n();
-  const baseline = row.status === "baseline";
-
-  return (
-    <article
-      className={cn(
-        "candidate-grid relative min-h-[4.875rem] min-w-0 rounded-panel border bg-card px-2 py-1.5",
-        "transition-[border-color,box-shadow,background-color,transform] duration-150",
-        baseline ? "cursor-default" : "cursor-pointer",
-        selected && "selection-set",
-        selected
-          ? "border-primary bg-tint-primary/50 shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
-          : isProposed
-            ? "border-dashed border-success hover:border-border-strong"
-            : "border-border hover:border-border-strong",
-      )}
-    >
-      <div className="relative">
-        <Thumbnail path={row.source} maxPx={160} className="h-[3.625rem] w-[3.625rem] rounded-md" />
-        {/* Overlay state remains visible regardless of filename length. */}
-        <span
-          className={cn(
-            "pointer-events-none absolute left-1 top-1 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-bold shadow-sm",
-            selected
-              ? "bg-primary text-primary-foreground"
-              : baseline
-                ? "bg-card/90 text-muted-foreground"
-                : "bg-card/90 text-muted-foreground",
-          )}
-        >
-          {baseline ? (
-            <>
-              <FiLock className="h-2.5 w-2.5" aria-hidden />
-              {t("review.resolve.protected")}
-            </>
-          ) : selected ? (
-            <>
-              <FiCheck className="h-2.5 w-2.5" aria-hidden />
-              {confirmed ? t("review.resolve.kept") : t("review.resolve.selected")}
-            </>
-          ) : (
-            t("review.resolve.selectThis")
-          )}
-        </span>
-      </div>
-
-      <div className="min-w-0">
-        {/* Sibling controls keep selection and detail actions independent. */}
-        <button
-          type="button"
-          disabled={baseline}
-          aria-describedby={baseline ? "review-baseline-rule" : undefined}
-          aria-pressed={selected}
-          onClick={onSelect}
-          aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
-          className="absolute inset-0 rounded-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-        />
-        <button
-          type="button"
-          onClick={onOpenDetail}
-          className="relative z-10 block max-w-full truncate text-left text-2xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {row.name}
-        </button>
-        <span className="block truncate text-3xs text-muted-foreground" title={row.folder}>
-          {folderLeaf(row.folder)}
-        </span>
-        {note !== null && (
-          <p
-            className={cn(
-              "mt-0.5 flex items-center gap-1.5 truncate text-3xs leading-snug",
-              isProposed ? "font-semibold text-success" : "text-muted-foreground",
-            )}
-          >
-            <span
-              className={cn(
-                "h-1 w-1 shrink-0 rounded-full",
-                isProposed ? "bg-success" : "bg-border-strong",
-              )}
-              aria-hidden
-            />
-            <span className="truncate">{note}</span>
-          </p>
-        )}
-      </div>
-
-      <span className="text-right text-3xs tabular-nums text-muted-foreground">
-        {formatBytes(row.sizeBytes, { locale })}
-      </span>
-
-      <span className="candidate-date text-right text-3xs text-muted-foreground">
-        {row.date === null ? t("review.resolve.noDate") : row.date}
-      </span>
-
-      <span className="candidate-date-source text-right text-3xs text-faint">
-        {row.date === null ? "" : formatMetadataSource(row.dateSource, t)}
-      </span>
-
-      <span
-        className="candidate-destination truncate font-mono text-3xs text-faint"
-        title={row.destination ?? undefined}
-      >
-        {row.destination !== null && `→ ${relativeDestination(row.destination, destinationRoot)}`}
-      </span>
-
-      {isProposed && !selected && (
-        <span className="candidate-recommendation-badge pointer-events-none absolute right-1.5 top-1.5 z-10 rounded border border-success/40 bg-tint-success px-1.5 py-0.5 text-3xs font-bold text-success">
-          {t("review.resolve.recommendation")}
-        </span>
-      )}
-    </article>
   );
 }

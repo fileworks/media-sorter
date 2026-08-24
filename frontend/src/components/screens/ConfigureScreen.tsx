@@ -14,7 +14,7 @@ import { CleanGroup } from "@/components/config/groups/CleanGroup";
 import { EnrichGroup } from "@/components/config/groups/EnrichGroup";
 import { SortGroup } from "@/components/config/groups/SortGroup";
 import { CONFIG_GROUPS, CONFIG_RAIL, type GroupId } from "@/components/config/groups";
-import { SECTION_DEFAULTS, type SectionId } from "@/components/config/constants";
+import { SECTION_FIELDS, type SectionId } from "@/components/config/constants";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,7 @@ export function ConfigureScreen({
   savedRecipes,
   samples,
 }: ConfigureScreenProps) {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
   const { config, isLoading, error, fieldErrors, resetConfig } = useConfig();
   const defaults = useConfigDefaults();
   const sectionMeta = useConfigSections();
@@ -92,7 +92,10 @@ export function ConfigureScreen({
   const [recipeName, setRecipeName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const summaries = useMemo(() => (config ? summariesFor(config, t) : {}), [config, t]);
+  const summaries = useMemo(
+    () => (config ? summariesFor(config, t, tCount) : {}),
+    [config, t, tCount],
+  );
   const [pendingReset, setPendingReset] = useState<{
     title: string;
     destinations: ResetDestination[];
@@ -114,8 +117,7 @@ export function ConfigureScreen({
   );
 
   const sectionFields = useCallback(
-    (id: SectionId): string[] =>
-      sectionMeta.get(id)?.fields ?? Object.keys(SECTION_DEFAULTS[id] ?? {}),
+    (id: SectionId): string[] => sectionMeta.get(id)?.fields ?? [...SECTION_FIELDS[id]],
     [sectionMeta],
   );
 
@@ -124,9 +126,7 @@ export function ConfigureScreen({
     (group: GroupId): (keyof Config)[] => {
       const sections = CONFIG_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
       return sections.flatMap((section) =>
-        defaults
-          ? (sectionFields(section) as (keyof Config)[])
-          : (Object.keys(SECTION_DEFAULTS[section] ?? {}) as (keyof Config)[]),
+        defaults ? (sectionFields(section) as (keyof Config)[]) : [...SECTION_FIELDS[section]],
       );
     },
     [defaults, sectionFields],

@@ -16,6 +16,7 @@ from app.background_tasks.task_manager import Task
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
+from app.core.exceptions import IntegrityTransferError
 from app.core.integrity import PreservationProfile
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.sort_plan import build_frozen_sort_plan
@@ -117,6 +118,92 @@ async def test_review_only_configuration_plans_no_transfer_or_mutation(tmp_path:
     copy.assert_not_called()
     move.assert_not_called()
     process.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_destination_drift_during_scan_is_refused_before_execution_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svc = _make_service(tmp_path)
+    source = Path(svc._config.source_directory)
+    destination = Path(svc._config.target_directory)
+    source.mkdir(parents=True, exist_ok=True)
+    destination.mkdir(parents=True, exist_ok=True)
+    plan = build_frozen_sort_plan([], svc._config)
+    original_traverse = svc._fs.traverse_roots
+
+    async def traverse_then_change_destination(*args: object, **kwargs: object) -> object:
+        result = await original_traverse(*args, **kwargs)  # type: ignore[arg-type]
+        (destination / "appeared-during-scan.jpg").write_bytes(b"late")
+        return result
+
+    monkeypatch.setattr(svc._fs, "traverse_roots", traverse_then_change_destination)
+    with patch.object(
+        OperationExecution,
+        "start",
+        side_effect=AssertionError("execution journal opened after destination drift"),
+    ):
+        with pytest.raises(ValueError, match="destination changed while execution was preparing"):
+            await svc.run(_fake_task(), frozen_plan=plan)
+
+
+def test_integrity_drift_is_unresolved_and_never_requarantined(
+    tmp_path: Path,
+) -> None:
+    svc = _make_service(tmp_path, copy_instead_of_move=False)
+    source_root = Path(svc._config.source_directory)
+    destination = Path(svc._config.target_directory)
+    source_root.mkdir(parents=True, exist_ok=True)
+    destination.mkdir(parents=True, exist_ok=True)
+    source = source_root / "changed.jpg"
+    source.write_bytes(b"changed user bytes")
+    execution = OperationExecution.start(
+        operation_id="integrity-drift",
+        state_root=tmp_path / "state",
+        preservation=svc._config.preservation_profile,
+        authorization=authorize_config_mutations(svc._config),
+        effective_config_sha256=config_fingerprint(svc._config),
+    )
+
+    with (
+        patch.object(
+            svc._extraction,
+            "extract_detailed",
+            return_value=ExtractionResult(extracted_date=date(2024, 1, 2), source="exif"),
+        ),
+        patch.object(
+            svc,
+            "_place",
+            side_effect=IntegrityTransferError(
+                "source changed at unlink boundary",
+                reason="source_or_destination_drift_before_unlink",
+                action_id="placement-1",
+                source_safety="source_retained",
+            ),
+        ),
+        patch.object(
+            svc,
+            "_quarantine_auto",
+            side_effect=AssertionError("integrity drift must not be moved again"),
+        ),
+    ):
+        record = svc._process_file(
+            file_path=source,
+            source_root=source_root,
+            dest_root=destination,
+            config=svc._config,
+            dry_run=False,
+            registry=DuplicateRegistry(),
+            operation_id="integrity-drift",
+            execution=execution,
+        )
+
+    execution.finish("partial")
+    assert source.read_bytes() == b"changed user bytes"
+    assert record["status"] == "blocked"
+    assert record["source_safety"] == "source_retained"
+    assert record["integrity_diagnostic"] == "source_or_destination_drift_before_unlink"
+    assert [outcome.code for outcome in execution.outcomes] == ["reconciliation_required"]
 
 
 # ------------------------------------------------------------------ #

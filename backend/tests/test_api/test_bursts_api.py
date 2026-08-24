@@ -67,18 +67,16 @@ def test_burst_plan_requires_preflight_and_persists_exportable_report(
     )
     container.set_config(configured)
     try:
-        # `/review/bursts/detect` is gone — nothing in the app ever called it.
-        # The decision → plan → execute → report flow below is what this test is
-        # about, so the group it needs comes straight from the service.
-        detected = container.burst_detection_service.detect(
-            [first, second], source, _settings(enabled=True)
-        )
-        group = list(detected)[0].model_dump(mode="json")
+        preview = client.post("/api/preview")
+        assert preview.status_code == 200
+        listed = client.get("/api/review/groups", params={"kind": "burst"})
+        assert listed.status_code == 200
+        (group,) = listed.json()["groups"]
         decided = client.post(
             "/api/review/bursts/decision",
             json={
-                "group": group,
-                "keep_frame_ids": [group["frames"][0]["frame_id"]],
+                "group_id": group["group_id"],
+                "keep_frame_ids": [group["members"][0]["member_id"]],
                 "dismissed": False,
             },
         )
@@ -149,3 +147,47 @@ def test_detection_honors_the_stored_burst_setting(
     groups = list(service.detect([first, second], source, _settings(enabled=True)))
     assert len(groups) == 1
     assert len(groups[0].frames) == 2
+
+
+def test_decision_rejects_client_supplied_member_paths(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "input"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    first = source / "a.jpg"
+    second = source / "b.jpg"
+    unrelated = tmp_path / "unrelated.txt"
+    _frame(first, "2026:01:02 10:00:00")
+    _frame(second, "2026:01:02 10:00:01")
+    unrelated.write_bytes(b"must remain")
+    container = client.app.state.container  # type: ignore[attr-defined]
+    original = Config.from_dict(container.config.to_dict())
+    container.set_config(
+        Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+            burst_detection_enabled=True,
+        )
+    )
+    try:
+        group = container.burst_detection_service.detect(
+            [first, second], source, _settings(enabled=True)
+        )[0]
+        response = client.post(
+            "/api/review/bursts/decision",
+            json={
+                "group_id": group.group_id,
+                "keep_frame_ids": [group.frames[0].frame_id],
+                "member_paths": [str(unrelated)],
+            },
+        )
+
+        assert response.status_code == 422
+        assert unrelated.read_bytes() == b"must remain"
+        assert first.exists() and second.exists()
+    finally:
+        container.set_config(original)

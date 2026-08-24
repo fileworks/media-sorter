@@ -117,7 +117,7 @@ describe("revealed sub-settings render as their own block", () => {
 /**
  * The inverse of what this asserted under `W0-UI-001`, which hid the control
  * because a setting that cannot deliver its result is worse than an absent one.
- * `P2-DEDUP-D3` landed the producer, so the burst view can return groups and
+ * Catalog indexing writes the producer facts, so the burst view can return groups and
  * the control is back — `P2-DEDUP-D9`.
  *
  * That the *feature* works is proven where it lives, against a real indexed

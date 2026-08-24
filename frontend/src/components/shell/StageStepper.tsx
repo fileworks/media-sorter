@@ -107,6 +107,7 @@ export function StageStepper({
               <Tooltip label={readiness.reason ?? t(entry.descriptionKey)}>
                 <button
                   type="button"
+                  data-stage-id={entry.id}
                   disabled={!reachable}
                   aria-current={active ? "step" : undefined}
                   aria-label={`${t(entry.labelKey)}${isComplete ? `, ${t("stage.complete")}` : ""}`}

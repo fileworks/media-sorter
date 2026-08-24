@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -93,6 +96,187 @@ class TestManager:
 
         assert Path(record.quarantine_path).is_file()
         assert store.summary()["retained_count"] == 2
+
+    def test_a_record_failure_leaves_recoverable_intent_and_retry_converges(
+        self, store: QuarantineStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = _file(tmp_path / "library" / "copy.jpg", b"retry me")
+        original_append = store._append
+        calls = {"count": 0}
+
+        def fail_once(record: object) -> object:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise OSError("record volume interrupted")
+            return original_append(record)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(store, "_append", fail_once)
+        with pytest.raises(OSError, match="record volume interrupted"):
+            store.quarantine(source, operation_id="op-retry", reason="duplicate")
+
+        assert not source.exists()
+        reopened = QuarantineStore(store.root)
+        assert len(reopened.pending_intents()) == 1
+
+        record = reopened.quarantine(source, operation_id="op-retry", reason="duplicate")
+
+        assert len(reopened.records()) == 1
+        assert len(reopened.pending_intents()) == 0
+        assert Path(record.quarantine_path).read_bytes() == b"retry me"
+
+    def test_a_legacy_pending_intent_adopts_its_existing_artifact(
+        self, store: QuarantineStore, tmp_path: Path
+    ) -> None:
+        """Pre-destination intents remain recoverable after an upgrade."""
+        source = _file(tmp_path / "library" / "copy.jpg", b"legacy transfer")
+        expected = hashlib.sha256(source.read_bytes()).hexdigest()
+        intent = store.declare_intent(
+            source,
+            operation_id="op-legacy",
+            reason="duplicate",
+            expected_sha256=expected,
+        )
+        artifact = store.root / "duplicate" / source.name
+        artifact.parent.mkdir(parents=True)
+        source.replace(artifact)
+
+        reopened = QuarantineStore(store.root)
+        record = reopened.quarantine(source, operation_id="op-legacy", reason="duplicate")
+
+        assert record.record_id == f"qtn_{intent.intent_id.removeprefix('qti_')}"
+        assert Path(record.quarantine_path) == artifact
+        assert artifact.read_bytes() == b"legacy transfer"
+        assert len(reopened.records()) == 1
+        assert reopened.pending_intents() == ()
+
+    def test_a_shipped_intent_without_digest_or_path_adopts_one_artifact(
+        self, store: QuarantineStore, tmp_path: Path
+    ) -> None:
+        source = _file(tmp_path / "library" / "copy.jpg", b"old schema transfer")
+        intent = store.declare_intent(
+            source,
+            operation_id="op-old-schema",
+            reason="optimization_original",
+        )
+        artifact = store.root / "optimization_original" / source.name
+        artifact.parent.mkdir(parents=True)
+        source.replace(artifact)
+
+        reopened = QuarantineStore(store.root)
+        records = [
+            reopened.quarantine(
+                source,
+                operation_id="op-old-schema",
+                reason="optimization_original",
+            )
+            for _attempt in range(4)
+        ]
+
+        assert {record.record_id for record in records} == {
+            f"qtn_{intent.intent_id.removeprefix('qti_')}"
+        }
+        assert {record.quarantine_path for record in records} == {str(artifact)}
+        assert len(reopened.records()) == 1
+        assert reopened.pending_intents() == ()
+        upgraded = reopened.intents()[0]
+        assert upgraded.expected_sha256 == hashlib.sha256(b"old schema transfer").hexdigest()
+        assert upgraded.quarantine_path == str(artifact)
+
+    def test_first_intent_fsyncs_the_new_store_entry_in_its_parent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import quarantine as quarantine_module
+
+        root = tmp_path / "state" / "nested" / "quarantine"
+        source = _file(tmp_path / "library" / "copy.jpg")
+        synced: list[Path] = []
+        monkeypatch.setattr(quarantine_module, "_fsync_directory", synced.append)
+
+        QuarantineStore(root).declare_intent(
+            source,
+            operation_id="op-first",
+            reason="duplicate",
+        )
+
+        assert root.parent in synced
+        assert root in synced
+
+    def test_a_committed_intent_with_a_lost_record_republishes_that_record(
+        self, store: QuarantineStore, tmp_path: Path
+    ) -> None:
+        source = _file(tmp_path / "library" / "copy.jpg", b"publish once")
+        first = store.quarantine(source, operation_id="op-commit", reason="duplicate")
+        store.records_path.write_text("", encoding="utf-8")
+        reopened = QuarantineStore(store.root)
+        assert len(reopened.pending_intents()) == 1
+
+        recovered = reopened.quarantine(source, operation_id="op-commit", reason="duplicate")
+
+        assert recovered.record_id == first.record_id
+        assert recovered.quarantine_path == first.quarantine_path
+        assert Path(recovered.quarantine_path).read_bytes() == b"publish once"
+        assert len(reopened.records()) == 1
+        assert reopened.pending_intents() == ()
+
+    def test_process_death_after_transfer_before_record_converges_on_retry(
+        self, store: QuarantineStore, tmp_path: Path
+    ) -> None:
+        source = _file(tmp_path / "library" / "copy.jpg", b"survive process death")
+        child = """
+import os, sys
+from pathlib import Path
+from app.services.quarantine import QuarantineStore
+store = QuarantineStore(Path(sys.argv[1]))
+store._append = lambda _record: os._exit(91)
+store.quarantine(Path(sys.argv[2]), operation_id='op-kill', reason='duplicate')
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", child, str(store.root), str(source)], check=False
+        )
+        assert completed.returncode == 91
+        assert not source.exists()
+        reopened = QuarantineStore(store.root)
+        assert len(reopened.pending_intents()) == 1
+
+        results = [
+            reopened.quarantine(source, operation_id="op-kill", reason="duplicate")
+            for _attempt in range(5)
+        ]
+
+        assert len({record.record_id for record in results}) == 1
+        assert len({record.quarantine_path for record in results}) == 1
+        assert len(reopened.records()) == 1
+        assert len(reopened.records_path.read_text(encoding="utf-8").splitlines()) == 1
+        assert reopened.pending_intents() == ()
+        artifacts = tuple((store.root / "duplicate").iterdir())
+        assert len(artifacts) == 1
+        assert artifacts[0].read_bytes() == b"survive process death"
+
+    def test_commit_failure_after_record_reuses_the_single_published_record(
+        self, store: QuarantineStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = _file(tmp_path / "library" / "copy.jpg", b"record is durable")
+        original_append_intent = store._append_intent
+
+        def fail_commit(intent: object) -> object:
+            if getattr(intent, "state", None) == "committed":
+                raise OSError("intent commit interrupted")
+            return original_append_intent(intent)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(store, "_append_intent", fail_commit)
+        with pytest.raises(OSError, match="intent commit interrupted"):
+            store.quarantine(source, operation_id="op-commit-fail", reason="duplicate")
+        assert not source.exists()
+        assert len(store.records()) == 1
+        monkeypatch.undo()
+
+        reopened = QuarantineStore(store.root)
+        recovered = reopened.quarantine(source, operation_id="op-commit-fail", reason="duplicate")
+
+        assert recovered == reopened.records()[0]
+        assert len(reopened.records()) == 1
+        assert len(reopened.records_path.read_text(encoding="utf-8").splitlines()) == 1
+        assert reopened.pending_intents() == ()
 
 
 class TestPermanentRemoval:

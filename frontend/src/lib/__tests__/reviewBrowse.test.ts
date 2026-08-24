@@ -19,13 +19,20 @@ import {
   entriesIn,
   folderGroups,
   folderTrail,
-  resolveQueue,
+  isOpenSet,
   reviewStats,
   staysDivisionOf,
+  type BrowseEntry,
+  type SetEntry,
 } from "@/lib/reviewBrowse";
 import { toReviewRows } from "@/lib/reviewRows";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
 import type { PreviewItem, PreviewResult } from "@/types/api";
+
+/** The sets still open, read through the predicate the screen itself uses. */
+function openSets(entries: readonly BrowseEntry[]): SetEntry[] {
+  return entries.filter((entry): entry is SetEntry => entry.kind === "set" && isOpenSet(entry));
+}
 
 function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
   return {
@@ -245,7 +252,7 @@ describe("a set sits where its keeper sits", () => {
   it("carries the undecided-set count up every branch it belongs to", () => {
     const { entries } = fixture();
     const root = browseTree(entries);
-    const undecided = resolveQueue(entries).length;
+    const undecided = openSets(entries).length;
 
     // The root sees all of them, so a collapsed tree still says there is work.
     expect(root.undecidedSets).toBe(undecided);
@@ -283,7 +290,7 @@ describe("one derivation for every figure", () => {
       .find((child) => child.path === STAYS_PATH)
       ?.children.find((child) => child.path === `${STAYS_PATH}/undecided`);
 
-    expect(stats.undecided).toBe(resolveQueue(entries).length);
+    expect(stats.undecided).toBe(openSets(entries).length);
     expect(stats.undecided).toBe(undecidedNode?.count);
     expect(stats.undecided).toBe(1);
   });
@@ -298,7 +305,7 @@ describe("one derivation for every figure", () => {
   it("keeps a baseline set out of the queue — the reference always wins", () => {
     const { entries } = fixture();
 
-    expect(resolveQueue(entries).map((entry) => entry.id)).toEqual(["set-1"]);
+    expect(openSets(entries).map((entry) => entry.id)).toEqual(["set-1"]);
   });
 });
 

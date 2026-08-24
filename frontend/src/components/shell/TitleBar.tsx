@@ -64,7 +64,7 @@ export function TitleBar({
         : t("backend.connecting");
 
   return (
-    <header className="relative z-20 shrink-0 border-b border-border bg-card">
+    <header className="relative z-20 shrink-0 overflow-x-hidden border-b border-border bg-card">
       {busy && (
         <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />
       )}

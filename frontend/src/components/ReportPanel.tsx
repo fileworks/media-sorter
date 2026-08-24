@@ -340,6 +340,10 @@ const SORT_COLUMNS: { col: SortCol; key: string }[] = [
   { col: "status", key: "report.column.status" },
 ];
 
+function leaf(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
 function FileTableSection({
   files,
   suspiciousCount,
@@ -347,7 +351,7 @@ function FileTableSection({
   files: FileOperationRecord[];
   suspiciousCount: number;
 }) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const [tab, setTab] = useState<FilterTab>("all");
   const [search, setSearch] = useState("");
   const [sortCol, setSortCol] = useState<SortCol>("source_path");
@@ -378,7 +382,12 @@ function FileTableSection({
       else if (["unknown_date", "future_date", "corrupted", "junk"].includes(f.status))
         counts.quarantined++;
       else if (["duplicate", "already_in_destination"].includes(f.status)) counts.duplicates++;
-      else if (f.status === "failed") counts.failed++;
+      else if (
+        ["failed", "incomplete_unit", "unmatched_companion", "cancelled", "blocked"].includes(
+          f.status,
+        )
+      )
+        counts.failed++;
     }
     return counts;
   }, [files]);
@@ -464,7 +473,7 @@ function FileTableSection({
         <div className="px-4 pt-3">
           <ValidationBadge
             severity="warning"
-            message={t("report.suspiciousDates", {
+            message={tCount("report.suspiciousDates", suspiciousCount, {
               count: suspiciousCount.toLocaleString(locale),
             })}
           />
@@ -487,13 +496,16 @@ function FileTableSection({
                   <button
                     type="button"
                     onClick={() => handleSortClick(col)}
-                    className="select-none rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="inline-flex min-h-6 select-none items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     {t(key)}
                     <SortIcon col={col} />
                   </button>
                 </th>
               ))}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                {t("report.column.mediaUnit")}
+              </th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                 {t("report.column.tags")}
               </th>
@@ -502,7 +514,7 @@ function FileTableSection({
           <tbody className="divide-y divide-border">
             {pageFiles.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   {t("report.noFilterMatch")}
                 </td>
               </tr>
@@ -514,7 +526,7 @@ function FileTableSection({
                     className="max-w-[180px] truncate px-3 py-2 text-foreground"
                     title={f.source_path}
                   >
-                    {f.source_path.split(/[/\\]/).pop() ?? f.source_path}
+                    {leaf(f.source_path)}
                   </td>
                   <td
                     className="max-w-[180px] truncate px-3 py-2 text-muted-foreground"
@@ -553,6 +565,36 @@ function FileTableSection({
                           );
                         })()}
                     </div>
+                    {f.error_message && (
+                      <p className="mt-1 max-w-[220px] whitespace-normal text-3xs text-warning">
+                        {f.error_message}
+                      </p>
+                    )}
+                  </td>
+                  <td className="max-w-[180px] px-3 py-2 text-muted-foreground">
+                    {f.unit_id ? (
+                      <div className="space-y-0.5">
+                        <p className="text-foreground">
+                          {f.unit_primary_path === f.source_path
+                            ? t("report.unit.primary")
+                            : f.companion_role
+                              ? t("report.unit.companion", {
+                                  role: f.companion_role.replace(/_/g, " "),
+                                })
+                              : t("report.unit.unknownRole")}
+                        </p>
+                        <p className="truncate" title={f.unit_primary_path ?? undefined}>
+                          {f.unit_primary_path
+                            ? t("report.unit.primaryFile", { file: leaf(f.unit_primary_path) })
+                            : t("report.unit.primaryUnknown")}
+                        </p>
+                        <p className="truncate font-mono text-3xs" title={f.unit_id}>
+                          {t("report.unit.id", { id: f.unit_id })}
+                        </p>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td
                     className="max-w-[120px] truncate px-3 py-2 text-muted-foreground"
@@ -571,7 +613,7 @@ function FileTableSection({
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">
-            {t("report.pagination", {
+            {tCount("report.pagination", sorted.length, {
               count: sorted.length.toLocaleString(locale),
               from: (safePage * FILE_PAGE_SIZE + 1).toLocaleString(locale),
               to: Math.min((safePage + 1) * FILE_PAGE_SIZE, sorted.length).toLocaleString(locale),

@@ -124,8 +124,11 @@ listed exactly in [state-and-recovery.md](state-and-recovery.md).
 
 ## Releasing
 
-Releases are driven by **Conventional Commits** — you don't tag by hand. Push `fix:` or
-`feat:` commits to `main` and the release-it workflow computes the next version,
+Releases are driven by **Conventional Commits** — you don't tag by hand, and you don't
+release by accident either. Land `fix:` or `feat:` commits on `main` as usual, then
+dispatch **Version Release** (`gh workflow run version-release.yml`) when that history is
+meant to ship. Publishing is a decision, so it is a deliberate dispatch rather than a
+side effect of merging. The workflow computes the next version from those commits,
 updates `CHANGELOG.md`, syncs that version everywhere (`scripts/sync-version.mjs` →
 `_version.py`, `tauri.conf.json`, `Cargo.toml`, …), and pushes a `v<version>` tag. That
 tag triggers the release workflow, which builds every OS natively — macOS arm64 + Intel

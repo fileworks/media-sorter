@@ -138,6 +138,39 @@ def test_media_info_requires_path(client: TestClient) -> None:
     assert client.get("/api/media/info").status_code == 422
 
 
+def test_media_info_keeps_unknown_video_facts_unknown(client: TestClient, tmp_path: Path) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"not a decodable video")
+
+    response = client.get("/api/media/info", params={"path": str(video)})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["media_type"] == "video"
+    assert body["duration_seconds"] is None
+    assert body["codec"] is None
+
+
+def test_authenticated_video_content_returns_the_original_bytes(
+    client: TestClient, tmp_path: Path
+) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"synthetic-video-bytes")
+
+    response = client.get("/api/media/content", params={"path": str(video)})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "video/mp4"
+    assert response.content == video.read_bytes()
+
+
+def test_video_content_rejects_non_video_files(client: TestClient, tmp_path: Path) -> None:
+    image = tmp_path / "photo.jpg"
+    _write_jpeg(image)
+
+    assert client.get("/api/media/content", params={"path": str(image)}).status_code == 415
+
+
 # ── /api/media/diff ────────────────────────────────────────────────────────────
 
 

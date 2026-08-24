@@ -6,7 +6,7 @@ import {
   duplicateSetEntries,
   entriesIn,
   folderGroups,
-  resolveQueue,
+  isOpenSet,
   reviewStats,
   type BrowseEntry,
   type SetEntry,
@@ -22,6 +22,11 @@ import {
 } from "@/lib/duplicateDecisions";
 import { readiness, type StageInputs } from "@/lib/stageModel";
 import type { PreviewItem, PreviewResult } from "@/types/api";
+
+/** The sets still open, read through the predicate the screen itself uses. */
+function openSets(entries: readonly BrowseEntry[]): SetEntry[] {
+  return entries.filter((entry): entry is SetEntry => entry.kind === "set" && isOpenSet(entry));
+}
 
 /**
  * A small deterministic generator for the Review surface's pure derivations.
@@ -215,7 +220,18 @@ function generatedPlan(seed: number): GeneratedPlan {
   const catalogState = (id: string, memberIds: readonly string[]): void => {
     const state = random.int(0, 3);
     const memberId = random.pick(memberIds);
-    if (state === 1) proposals.set(id, { memberId, policy: "newest" });
+    if (state === 1)
+      proposals.set(id, {
+        memberId,
+        policy: "newest",
+        rationale: {
+          winningRung: { key: "review.resolve.rationale.rung.newestDate" },
+          knownFacts: [{ key: "review.resolve.rationale.fact.members", params: { count: 2 } }],
+          unknownFacts: [],
+          tieBreak: null,
+          limitation: null,
+        },
+      });
     if (state === 2) decisions.set(id, { kind: "keeper", memberId });
     if (state === 3) decisions.set(id, { kind: "keep_all" });
   };
@@ -424,7 +440,7 @@ function assertPlanInvariants(seed: number): void {
   const outstanding = allSetEntries.filter(
     (entry) => !entry.hasBaseline && isOutstandingState(entry.decisionState),
   );
-  const queue = resolveQueue(entries);
+  const queue = openSets(entries);
   const staysOutstanding = entries.filter(
     (entry): entry is SetEntry =>
       entry.kind === "set" &&

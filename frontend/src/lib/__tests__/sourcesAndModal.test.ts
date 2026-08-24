@@ -12,7 +12,7 @@ import {
   activeCards,
   applyRemap,
   blockingConflicts,
-  cardStatus,
+  cardTone,
   changeRole,
   excludeForRun,
   isWithin,
@@ -217,26 +217,27 @@ describe("sources interactions", () => {
   });
 });
 
-describe("cardStatus", () => {
+describe("cardTone", () => {
   it("shows a conflict ahead of anything else", () => {
     const conflicts = validateRoots([
       card({ rootId: "in", role: "input", path: "/library" }),
       card({ rootId: "out", role: "destination", path: "/library/sorted" }),
     ]);
 
-    expect(cardStatus(card({ rootId: "out" }), conflicts).tone).toBe("error");
+    expect(cardTone(card({ rootId: "out" }), conflicts)).toBe("error");
   });
 
-  it("says how much is indexed and how fresh it is", () => {
-    const status = cardStatus(card(), []);
+  it("reads a fully indexed, fresh folder as ready", () => {
+    expect(cardTone(card(), [])).toBe("ready");
+  });
 
-    expect(status.tone).toBe("ready");
-    expect(status.detail).toMatch(/1,200 files/);
-    expect(status.detail).toMatch(/up to date/);
+  it("refuses to call a partial or offline index ready", () => {
+    expect(cardTone(card({ freshness: "partial" }), [])).toBe("warning");
+    expect(cardTone(card({ freshness: "offline" }), [])).toBe("warning");
   });
 
   it("marks a never-scanned folder as unchecked rather than ready", () => {
-    expect(cardStatus(card({ state: "unknown" }), []).tone).toBe("warning");
+    expect(cardTone(card({ state: "unknown" }), [])).toBe("warning");
   });
 });
 

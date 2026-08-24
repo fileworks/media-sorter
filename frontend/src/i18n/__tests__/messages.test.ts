@@ -12,8 +12,8 @@ import recipeScreenSource from "@/components/screens/RecipeScreen.tsx?raw";
 import runLogSource from "@/components/screens/RunLog.tsx?raw";
 import titleBarSource from "@/components/shell/TitleBar.tsx?raw";
 import stageStepperSource from "@/components/shell/StageStepper.tsx?raw";
-import { de, en } from "@/i18n/messages";
-import { storedLocale, translate } from "@/i18n/I18nContext";
+import { catalogs, de, en } from "@/i18n/messages";
+import { plural, storedLocale, translate } from "@/i18n/I18nContext";
 import { formatBytes, formatCount, formatDuration } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 
@@ -21,11 +21,20 @@ import { formatMetadataSource } from "@/lib/metadataSource";
  * Every source file, so key usage can be checked against the catalogue rather
  * than against a hand-maintained list that goes stale the moment a file moves.
  */
-const RAW_SOURCES = import.meta.glob("../../**/*.{ts,tsx}", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+const RAW_SOURCES = {
+  ...(import.meta.glob("../../**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>),
+  // The browser suite names keys too, and a key it builds from a template is
+  // still a key nothing may delete.
+  ...(import.meta.glob("../../../e2e/**/*.ts", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>),
+};
 
 /** Surfaces `remove-unreachable-frontend-surfaces` deleted outright. */
 const REMOVED_NAMESPACES = [
@@ -43,9 +52,14 @@ const REMOVED_NAMESPACES = [
   "review.shortcut",
 ];
 
-const PRODUCT_SOURCES = Object.entries(RAW_SOURCES).filter(
-  ([path]) => !path.includes("__tests__") && !path.includes("i18n/messages.ts"),
+// `import.meta.glob` keys are relative to this file, so the catalogue arrives
+// as `../messages.ts`: the old `includes("i18n/messages.ts")` filter matched
+// nothing and every key silently counted as a mention of itself.
+const ALL_SOURCES = Object.entries(RAW_SOURCES).filter(
+  ([path]) => !path.endsWith("i18n/messages.ts") && !path.endsWith("../messages.ts"),
 );
+
+const PRODUCT_SOURCES = ALL_SOURCES.filter(([path]) => !path.includes("__tests__"));
 
 /**
  * Keys named by a string literal at a `t(...)` or `translate(...)` call site.
@@ -58,17 +72,36 @@ const PRODUCT_SOURCES = Object.entries(RAW_SOURCES).filter(
 function literalKeyReferences(): Set<string> {
   const keys = new Set<string>();
   for (const [, source] of PRODUCT_SOURCES) {
-    for (const match of source.matchAll(/\bt\(\s*"([^"]+)"/g)) keys.add(match[1]);
+    for (const match of source.matchAll(/\bt(?:Count)?\(\s*"([^"]+)"/g)) keys.add(match[1]);
     for (const match of source.matchAll(/\btranslate\(\s*[^,()]+,\s*"([^"]+)"/g))
       keys.add(match[1]);
   }
   return keys;
 }
 
+/**
+ * Every catalogue key named anywhere by a quoted string.
+ *
+ * Broader than {@link literalKeyReferences} on purpose: this one decides what
+ * may be *deleted*, and a key is also named where it is stored rather than
+ * where it is resolved — `labelKey: "recipes.scratch.label"`, or the
+ * `cannotKey="review.bulk.cannotRule"` a component passes down. Missing one of
+ * those and deleting the key would leave the interface rendering the key.
+ */
+function quotedKeyMentions(): Set<string> {
+  const mentions = new Set<string>();
+  for (const [, source] of ALL_SOURCES) {
+    for (const match of source.matchAll(/["'`]([a-zA-Z][a-zA-Z0-9._-]*)["'`]/g)) {
+      mentions.add(match[1]);
+    }
+  }
+  return mentions;
+}
+
 /** Prefixes of keys assembled at runtime, e.g. `` `config.keeper.${id}` `` . */
 function templateKeyPrefixes(): Set<string> {
   const prefixes = new Set<string>();
-  for (const [, source] of PRODUCT_SOURCES) {
+  for (const [, source] of ALL_SOURCES) {
     for (const match of source.matchAll(/`([a-zA-Z][a-zA-Z0-9_.]*\.)\$\{/g)) prefixes.add(match[1]);
   }
   return prefixes;
@@ -106,6 +139,71 @@ describe("English/German resources", () => {
     );
 
     expect(missing, "keys used by the interface but absent from the catalogue").toEqual([]);
+  });
+
+  it("carries no key the interface never asks for", () => {
+    // The catalogue drifted to a quarter dead weight once, because nothing
+    // could tell a key that is resolved at runtime from one whose surface was
+    // deleted years ago. Both rules below are deliberately generous — a key
+    // survives on any mention at all — so a failure here is a key with no
+    // remaining reader, not a scanning artefact.
+    const mentioned = quotedKeyMentions();
+    const prefixes = [...templateKeyPrefixes()];
+    const orphaned = Object.keys(en).filter((key) => {
+      if (mentioned.has(key)) return false;
+      if (prefixes.some((prefix) => key.startsWith(prefix))) return false;
+      // `plural()` resolves `key.one` from the base key alone.
+      return !(key.endsWith(".one") && mentioned.has(key.slice(0, -".one".length)));
+    });
+
+    expect(orphaned, "catalogue keys nothing reads — delete them").toEqual([]);
+  });
+
+  it("states counts in words, never as a bracketed suffix", () => {
+    // "1 file(s)" is a sentence nobody writes for one reader and one language.
+    // The catalogue carries `key` and `key.one` instead, and `tCount` picks.
+    // This is a gate because a grep for it is easy to get wrong: the suffix
+    // hides mid-sentence as readily as it sits at the end.
+    // Both catalogues, separately: they share every key, so spreading one over
+    // the other would check the second and silently skip the first.
+    const bracketed: string[] = [];
+    for (const [language, catalogue] of [
+      ["en", en],
+      ["de", de],
+    ] as const) {
+      for (const [key, text] of Object.entries(catalogue)) {
+        if (/\((s|n|e|en|es)\)/.test(text)) bracketed.push(`${language}: ${key}`);
+      }
+    }
+
+    expect(bracketed).toEqual([]);
+  });
+
+  it("pairs every singular form with the plural it belongs to", () => {
+    const catalogue = new Set(Object.keys(en));
+    const singulars = Object.keys(en).filter((entry) => entry.endsWith(".one"));
+
+    expect(singulars.length).toBeGreaterThan(0);
+    for (const key of singulars) {
+      expect(catalogue.has(key.slice(0, -".one".length)), `${key} without its plural`).toBe(true);
+      expect(key in de, `${key} missing from the German catalogue`).toBe(true);
+    }
+  });
+
+  it("picks the singular for exactly one and the plural for anything else", () => {
+    for (const locale of ["en", "de"] as const) {
+      expect(plural(locale, "review.setSelection.count", 1)).toBe(
+        catalogs[locale]["review.setSelection.count.one"],
+      );
+      expect(plural(locale, "review.setSelection.count", 2)).toContain("2");
+      expect(plural(locale, "review.setSelection.count", 0)).toContain("0");
+    }
+    // A key with no singular form still renders rather than resolving to itself.
+    expect(plural("en", "review.stack.copies", 1)).toBe("1 copies");
+    // And a call site may format the count it shows without losing the form.
+    expect(plural("en", "review.browse.folderCount", 1200, { count: "1,200" })).toBe(
+      "1,200 entries",
+    );
   });
 
   it("keeps every runtime-assembled key family populated", () => {
@@ -153,27 +251,20 @@ describe("English/German resources", () => {
 
   it("localizes progress, errors, and accessible names", () => {
     expect(translate("de", "preview.failed")).toBe("Vorschau fehlgeschlagen.");
-    expect(translate("de", "operation.cancel")).toBe("Aktuellen Vorgang abbrechen");
+    expect(translate("de", "review.compare.title")).toBe("Kopien vergleichen");
     expect(
-      translate("de", "progress.previewFiles", {
+      translate("de", "progress.files", {
         current: "1.234",
         total: "5.678",
+        percentage: "21",
       }),
-    ).toBe("Vorschau: 1.234 / 5.678 Dateien");
+    ).toBe("1.234 / 5.678 Dateien · 21 %");
   });
 
   it("localizes singular counts and metadata-source labels", () => {
-    expect(translate("de", "analysis.filesFound.one", { count: 1 })).toBe("1 Datei gefunden");
-    expect(translate("en", "report.organized.one", { count: 1 })).toBe("1 file organized");
-    expect(
-      translate("de", "history.operationSummary.one", {
-        date: "25. Juli 2026",
-        total: 1,
-        sorted: 1,
-        percentage: "100,0",
-        duration: "0s",
-      }),
-    ).toContain("1 Datei");
+    expect(translate("de", "sources.facts.indexed.one")).toBe("1 Datei indiziert");
+    expect(translate("en", "config.reset.confirm.one")).toBe("Reset 1 setting");
+    expect(translate("de", "review.setSelection.count.one")).toBe("1 Satz ausgewählt");
     expect(formatMetadataSource("video_metadata", (key) => translate("de", key))).toBe(
       "Videometadaten",
     );

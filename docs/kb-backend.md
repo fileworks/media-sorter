@@ -40,7 +40,8 @@ There is **no ORM**. `core/database.py` owns SQLite:
 - `Config` is a **stdlib dataclass** (deliberate — not BaseSettings): `core/config.py`, persisted atomically as a versioned `config.json`; `core/paths.py` owns config/data/database/log roots and their four `MEDIASORT_*` path overrides
 - `core/state_migration.py` runs before config, SQLite, or file logging; it retains legacy sources, snapshots WAL databases, preserves conflicts, and journals outcomes in an atomic manifest
 - `MEDIASORT_<FIELD>` env vars override any field; `_coerce_env_value` resolves the declared field type (unwraps both `typing.Union` and PEP 604 `types.UnionType` — see P2-1 in `REFACTOR_PROGRESS.md`)
-- Never hardcode secrets; cloud AI keys live in config fields the user supplies
+- Never add cloud media providers or credential fields; AI tagging and categorization are
+  local-only and model downloads are explicit, checksum-verified operations.
 
 ## Pydantic v2 — Schemas
 - Per-route request/response models live in the route file; shared ones (used by >1 route) in `api/schemas.py`

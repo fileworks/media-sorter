@@ -23,7 +23,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 24 10% 12%;
 
-    --primary: 19 86% 40%;
+    --primary: 19 88% 37%;
     --primary-foreground: 0 0% 100%;
     /* Keep white text AA-compliant on hover. */
     --primary-hover: 19 88% 33%;
@@ -44,7 +44,7 @@
     /* Strong hover edge for bordered controls. */
     --border-strong: 27 8% 68%;
     --input: 28 10% 89%;
-    --ring: 19 86% 40%;
+    --ring: 19 88% 37%;
 
     --radius: 0.75rem;
 
@@ -68,7 +68,7 @@
     --color-success: 158 80% 26%;
     --color-warning: 33 92% 31%;
     --color-error: 2 72% 44%;
-    --color-info: 214 82% 42%;
+    --color-info: 214 82% 38%;
 
     /* Categorical chart series, separate from status semantics. */
     --chart-1: 217 80% 52%;
@@ -113,7 +113,7 @@
     --input: 220 9% 22%;
     --ring: 20 95% 58%;
 
-    --faint: 215 9% 58%;
+    --faint: 215 10% 70%;
 
     /* Dark decorative accents already clear AA. */
     --brand: 20 95% 58%;
@@ -185,7 +185,7 @@
   /* Select · thumbnail · name · date · status · destination. */
   .asset-grid {
     display: grid;
-    grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5.875rem 5.125rem 5.75rem;
+    grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.875rem 5.125rem 5.75rem;
     align-items: center;
     gap: 0.5625rem;
   }
@@ -200,7 +200,7 @@
   /* One column short: the planned destination folds away first. */
   @media (max-width: 1280px) {
     .asset-grid {
-      grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5.25rem 4.75rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.25rem 4.75rem;
     }
     .asset-grid > *:nth-child(6) {
       display: none;
@@ -216,7 +216,7 @@
   /* Name and one figure. Everything else lives in the detail view. */
   @media (max-width: 900px) {
     .asset-grid {
-      grid-template-columns: 0.875rem 2.375rem minmax(0, 1fr) 5rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5rem;
     }
     .asset-grid > *:nth-child(5),
     .asset-grid > *:nth-child(6) {
@@ -388,17 +388,42 @@ input[type="checkbox"]:not(.sr-only):focus-visible {
   outline-offset: 2px;
 }
 
+/* A Toggle's real checkbox owns the full visible 36×24 switch target. The
+   ordinary 16px checkbox rules above must not collapse that activation area. */
+input[type="checkbox"].toggle-control {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+}
+
+input[type="checkbox"].toggle-control::after {
+  content: none;
+}
+
 /* ── Range input (slider) styling ─────────────────────────────────────────── */
 
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
+  height: 24px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
   background: hsl(var(--input));
-  outline: none;
-  cursor: pointer;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -411,6 +436,7 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: pointer;
   border: 1.5px solid hsl(var(--primary));
   box-shadow: 0 0 0 3px hsl(var(--background));
+  margin-top: -6px;
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -424,7 +450,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 input[type="range"]::-moz-range-track {
-  background: transparent;
+  height: 6px;
+  border-radius: 3px;
+  background: hsl(var(--input));
   border: none;
 }
 

@@ -5,6 +5,7 @@ import { FiArrowLeft, FiArrowRight, FiExternalLink, FiMaximize } from "react-ico
 import { DestinationExplanation } from "@/components/screens/review/DestinationExplanation";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
+import { MediaVideo } from "@/components/ui/media-video";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useMediaInfo, useReviewOutcome } from "@/hooks/useMediaInfo";
@@ -12,7 +13,9 @@ import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
+import { getBasename } from "@/lib/pathUtils";
 import { cn } from "@/lib/utils";
+import { orderFacts, REVIEW_FACT_LABELS, type ReviewFactId } from "@/lib/reviewFacts";
 import type { SetEntry } from "@/lib/reviewBrowse";
 import type { ReviewRow } from "@/lib/reviewRows";
 
@@ -36,6 +39,13 @@ interface DetailViewProps {
 }
 
 /** One labelled value in the planned-state definition list. */
+/** One row of the shared fact list, before the canonical order is applied. */
+interface DetailFact {
+  id: ReviewFactId;
+  value: string;
+  unknown?: boolean;
+}
+
 function Fact({ label, value, unknown }: { label: string; value: string; unknown?: boolean }) {
   return (
     <>
@@ -110,13 +120,19 @@ export function DetailView({
         {/* Keep the preview and its facts visible together on wide screens. */}
         <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-h-[16rem] overflow-hidden rounded-panel bg-muted sm:min-h-[22rem] lg:min-h-[27rem]">
-            <Thumbnail
-              path={row.source}
-              maxPx={1200}
-              className="h-full w-full"
-              onOpen={onEnlarge}
-              openLabel={t("review.viewer.open", { name: row.name })}
-            />
+            {info.data?.media_type === "video" ? (
+              <div className="flex h-full min-h-[16rem] items-center justify-center p-3 sm:min-h-[22rem] lg:min-h-[27rem]">
+                <MediaVideo path={row.source} name={row.name} className="h-full w-full" />
+              </div>
+            ) : (
+              <Thumbnail
+                path={row.source}
+                maxPx={1200}
+                className="h-full w-full"
+                onOpen={onEnlarge}
+                openLabel={t("review.viewer.open", { name: row.name })}
+              />
+            )}
           </div>
 
           <aside className="self-start overflow-hidden rounded-panel border border-border">
@@ -141,61 +157,118 @@ export function DetailView({
               />
             ) : null}
             <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2.5 gap-y-2 px-2.5 py-2.5">
-              {type !== null && <Fact label={t("review.detail.fileType")} value={type} />}
-              {!info.isLoading && infoFailure === null && (
+              {orderFacts<DetailFact>([
+                type === null ? null : { id: "fileType", value: type },
+                info.isLoading || infoFailure !== null
+                  ? null
+                  : { id: "resolution", value: resolution, unknown: resolution === unknown },
+                info.data?.media_type === "video"
+                  ? {
+                      id: "duration",
+                      value:
+                        info.data.duration_seconds == null
+                          ? unknown
+                          : `${info.data.duration_seconds.toFixed(1)} s`,
+                      unknown: info.data.duration_seconds == null,
+                    }
+                  : null,
+                info.data?.media_type === "video"
+                  ? {
+                      id: "codec",
+                      value: info.data.codec ?? unknown,
+                      unknown: info.data.codec == null,
+                    }
+                  : null,
+                { id: "size", value: size, unknown: size === unknown },
+                {
+                  id: "date",
+                  value:
+                    row.date === null
+                      ? unknown
+                      : t("review.detail.dateFrom", {
+                          date: row.date,
+                          source: formatMetadataSource(row.dateSource, t),
+                        }),
+                  unknown: row.date === null,
+                },
+                {
+                  id: "source",
+                  value: row.folder === "" ? unknown : row.folder,
+                  unknown: row.folder === "",
+                },
+                {
+                  id: "destination",
+                  value: row.destination ?? t("review.destination.none"),
+                  unknown: row.destination === null,
+                },
+                { id: "result", value: row.status.replace(/_/g, " ") },
+                { id: "reason", value: t(row.reason.key, row.reason.params) },
+                { id: "category", value: row.category ?? unknown, unknown: row.category === null },
+                {
+                  id: "tags",
+                  value: row.tags.length > 0 ? row.tags.join(", ") : unknown,
+                  unknown: row.tags.length === 0,
+                },
+                {
+                  id: "protection",
+                  value: row.protected
+                    ? t("review.referenceProtected")
+                    : t("review.detail.mutable"),
+                },
+                row.unitId
+                  ? {
+                      id: "mediaUnit",
+                      value: t(
+                        row.unitPrimary
+                          ? "review.detail.mediaUnit.primary"
+                          : "review.detail.mediaUnit.member",
+                        { id: row.unitId },
+                      ),
+                    }
+                  : null,
+                row.companionCount > 0
+                  ? {
+                      id: "companions",
+                      value:
+                        row.companions
+                          ?.map((companion) =>
+                            t("review.detail.companionEvidence", {
+                              file: getBasename(companion.source),
+                              role: companion.role.replace(/_/g, " "),
+                              status: companion.status.replace(/_/g, " "),
+                              destination: companion.destination ?? t("review.destination.none"),
+                              warning: companion.warning ?? t("review.detail.companionNoWarning"),
+                            }),
+                          )
+                          .join("; ") ?? String(row.companionCount),
+                    }
+                  : null,
+                set === null
+                  ? null
+                  : {
+                      id: "set",
+                      value: t("review.detail.setMembership", {
+                        count: set.rows.length,
+                        kind: t(`review.stack.kind.${set.setKind}`),
+                      }),
+                    },
+              ]).map((fact) => (
                 <Fact
-                  label={t("review.column.resolution")}
-                  value={resolution}
-                  unknown={resolution === unknown}
+                  key={fact.id}
+                  label={t(REVIEW_FACT_LABELS[fact.id])}
+                  value={fact.value}
+                  unknown={fact.unknown}
                 />
-              )}
-              <Fact label={t("review.column.size")} value={size} unknown={size === unknown} />
-              <Fact
-                label={t("review.column.date")}
-                value={
-                  row.date === null
-                    ? unknown
-                    : t("review.detail.dateFrom", {
-                        date: row.date,
-                        source: formatMetadataSource(row.dateSource, t),
-                      })
-                }
-                unknown={row.date === null}
-              />
-              <Fact
-                label={t("review.detail.source")}
-                value={row.folder === "" ? unknown : row.folder}
-                unknown={row.folder === ""}
-              />
-              <Fact
-                label={t("review.detail.destination")}
-                value={row.destination ?? t("review.destination.none")}
-                unknown={row.destination === null}
-              />
-              <Fact
-                label={t("review.detail.reason")}
-                value={t(row.reason.key, row.reason.params)}
-              />
-              <Fact
-                label={t("review.detail.category")}
-                value={row.category ?? unknown}
-                unknown={row.category === null}
-              />
-              <Fact
-                label={t("review.detail.tags")}
-                value={row.tags.length > 0 ? row.tags.join(", ") : unknown}
-                unknown={row.tags.length === 0}
-              />
-              {set !== null && (
-                <Fact
-                  label={t("review.detail.set")}
-                  value={t("review.detail.setMembership", {
-                    count: set.rows.length,
-                    kind: t(`review.stack.kind.${set.setKind}`),
-                  })}
-                />
-              )}
+              ))}
             </dl>
+            {row.unitWarnings && row.unitWarnings.length > 0 && (
+              <p
+                role="alert"
+                className="border-t border-warning/30 bg-tint-warning px-2.5 py-2 text-3xs text-warning"
+              >
+                {row.unitWarnings.join(" ")}
+              </p>
+            )}
           </aside>
         </div>
 

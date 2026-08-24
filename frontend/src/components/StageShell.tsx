@@ -272,7 +272,7 @@ export function StageShell({
           <div
             key={`${state.stage}:${state.key.planVersion}`}
             inert={locked || undefined}
-            className={cn("stage-enter", locked && "select-none opacity-75")}
+            className={cn("stage-enter", locked && "select-none")}
           >
             {children(state, nav, locked)}
           </div>

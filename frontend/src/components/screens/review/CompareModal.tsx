@@ -1,7 +1,7 @@
 /** Compare any two files; keeper actions require a shared duplicate set. */
 
 import { useEffect, useState } from "react";
-import { FiCheck, FiChevronLeft, FiChevronRight, FiMaximize } from "react-icons/fi";
+import { FiCheck, FiChevronLeft, FiChevronRight, FiInfo, FiMaximize } from "react-icons/fi";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Segmented } from "@/components/ui/setting-row";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes, formatDuration } from "@/lib/formatters";
+import { orderFacts, REVIEW_FACT_LABELS, type ReviewFactId } from "@/lib/reviewFacts";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,8 @@ interface CompareModalProps {
   recommendedId?: string | null;
   recommendedLabel?: string | null;
   recommendationReason?: string | null;
+  /** Reference-root sets can be inspected here but never re-decided. */
+  decisionLocked?: boolean;
   onKeep: (memberId: string) => void;
   onKeepBoth: () => void;
   onClose: () => void;
@@ -50,6 +53,16 @@ interface CompareModalProps {
 }
 
 /** Identify a fact's winning side with both text and styling. */
+/** One comparison row, before the shared order is applied. */
+interface CompareFact {
+  id: ReviewFactId;
+  left: string;
+  right: string;
+  winner?: "a" | "b" | null;
+  /** Why this side wins. Omitted where neither side can win. */
+  winnerNote?: string;
+}
+
 function FactRow({
   label,
   left,
@@ -90,7 +103,9 @@ function FactRow({
   );
   return (
     <div className="grid grid-cols-[5rem_1fr_1fr] items-start gap-2.5 border-b border-border px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
-      <span className="pt-1 text-faint">{label}</span>
+      <span data-testid="fact-row-label" className="pt-1 text-faint">
+        {label}
+      </span>
       {cell(left, "a")}
       {cell(right, "b")}
     </div>
@@ -153,6 +168,7 @@ export function CompareModal({
   recommendedId = null,
   recommendedLabel = null,
   recommendationReason = null,
+  decisionLocked = false,
   onKeep,
   onKeepBoth,
   onClose,
@@ -179,6 +195,7 @@ export function CompareModal({
   const nameB = getBasename(b.label);
   const unknown = t("review.detail.unknown");
   const sameSet = setId !== null;
+  const decisionEnabled = sameSet && !decisionLocked;
   const aspect = pairAspect(a, b);
   const frameAspect = mode === "side" ? aspect * 2 : aspect;
   const bothVideos = a.facts?.media_kind === "video" && b.facts?.media_kind === "video";
@@ -206,6 +223,33 @@ export function CompareModal({
     return fact?.known && fact.value !== null && fact.value !== undefined
       ? String(fact.value)
       : unknown;
+  };
+  const unit = (file: ComparableFile) => {
+    if (file.unitId === undefined) return unknown;
+    if (file.unitId === null) return t("review.compare.unit.standalone");
+    return t(file.unitPrimary ? "review.compare.unit.primary" : "review.compare.unit.member", {
+      id: file.unitId,
+    });
+  };
+  const companionEvidence = (file: ComparableFile) => {
+    if (file.companions === undefined) return unknown;
+    if (file.companions.length === 0) return t("review.compare.companions.none");
+    return file.companions
+      .map((companion) =>
+        t("review.compare.companions.entry", {
+          role: companion.role.replace(/_/g, " "),
+          status: companion.status.replace(/_/g, " "),
+          destination: companion.destination ?? unknown,
+          warning: companion.warning ?? t("review.compare.companions.noWarning"),
+        }),
+      )
+      .join("; ");
+  };
+  const warnings = (file: ComparableFile) => {
+    if (file.unitWarnings === undefined) return unknown;
+    return file.unitWarnings.length > 0
+      ? file.unitWarnings.join(" ")
+      : t("review.compare.unitWarnings.none");
   };
 
   return (
@@ -249,7 +293,7 @@ export function CompareModal({
             step={5}
             value={zoom}
             onChange={(event) => setZoom(Number(event.target.value))}
-            className="w-24 sm:w-36"
+            className="h-6 w-24 cursor-pointer sm:w-36"
           />
           <output className="w-10 text-right font-mono text-3xs tabular-nums">{zoom}%</output>
         </label>
@@ -395,8 +439,22 @@ export function CompareModal({
         </div>
 
         <div className="space-y-2.5 border-y border-border bg-card px-3 py-3">
-          <div className="flex min-w-0 gap-2 rounded-panel border border-success/35 bg-tint-success px-2.5 py-2">
-            <FiCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+          {/* Only an actual recommendation is styled as one: a green card whose
+              text says no recommendation exists reads as an endorsement of
+              nothing, and drains the colour of its meaning everywhere else. */}
+          <div
+            className={cn(
+              "flex min-w-0 gap-2 rounded-panel border px-2.5 py-2",
+              recommendedLabel === null
+                ? "border-border bg-muted/40"
+                : "border-success/35 bg-tint-success",
+            )}
+          >
+            {recommendedLabel === null ? (
+              <FiInfo className="mt-0.5 h-4 w-4 shrink-0 text-faint" aria-hidden />
+            ) : (
+              <FiCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+            )}
             <div className="min-w-0">
               <strong className="block text-xs text-foreground">
                 {recommendedLabel === null
@@ -410,24 +468,24 @@ export function CompareModal({
               </p>
             </div>
           </div>
-          {sameSet && (
+          {decisionEnabled && (
             <fieldset>
               <legend className="mb-1.5 text-3xs font-semibold text-muted-foreground">
                 {t("review.compare.selectToKeep")}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
+                {/* Radios, not toggle buttons: exactly one copy is kept, and a
+                    pair of independent `aria-pressed` buttons neither says so
+                    nor answers the arrow keys a reader reaches for. */}
                 {([a, b] as const).map((file, index) => {
                   const selected = draftId === file.id;
                   const recommended = recommendedId === file.id;
                   return (
-                    <button
+                    <label
                       key={file.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => setDraftId(file.id)}
                       className={cn(
-                        "flex min-h-10 min-w-0 items-center justify-between gap-2 rounded-control border px-2.5 py-1.5 text-left",
-                        "transition-[border-color,background-color,box-shadow]",
+                        "flex min-h-10 min-w-0 cursor-pointer items-center justify-between gap-2 rounded-control border px-2.5 py-1.5 text-left",
+                        "transition-[border-color,background-color,box-shadow] focus-within:ring-2 focus-within:ring-ring",
                         selected
                           ? "border-primary bg-tint-primary shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
                           : recommended
@@ -446,18 +504,14 @@ export function CompareModal({
                             : t("review.compare.notSelected")}
                         </span>
                       </span>
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border text-3xs",
-                          selected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border-strong",
-                        )}
-                      >
-                        {selected && <FiCheck className="h-3 w-3" />}
-                      </span>
-                    </button>
+                      <input
+                        type="radio"
+                        name="review-compare-keeper"
+                        checked={selected}
+                        onChange={() => setDraftId(file.id)}
+                        className="h-4 w-4 shrink-0 border-border-strong text-primary focus-visible:outline-none"
+                      />
+                    </label>
                   );
                 })}
               </div>
@@ -485,7 +539,7 @@ export function CompareModal({
                 <button
                   type="button"
                   onClick={() => onOpenDetail(file.path)}
-                  className="truncate text-left uppercase tracking-[0.07em] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex min-h-6 min-w-0 items-center truncate rounded text-left uppercase tracking-[0.07em] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {label}
                 </button>
@@ -495,80 +549,100 @@ export function CompareModal({
             </span>
           ))}
         </div>
-        <FactRow
-          label={t("review.column.date")}
-          left={capture(a)}
-          right={capture(b)}
-          winner={larger(capturedAt(a), capturedAt(b))}
-          winnerNote={t("review.compare.wins.newer")}
-        />
-        <FactRow
-          label={t("review.column.resolution")}
-          left={resolution(a)}
-          right={resolution(b)}
-          winner={larger(pixels(a), pixels(b))}
-          winnerNote={t("review.compare.wins.moreDetail")}
-        />
-        <FactRow
-          label={t("review.column.megapixels")}
-          left={megapixels(a)}
-          right={megapixels(b)}
-          winner={larger(pixels(a), pixels(b))}
-          winnerNote={t("review.compare.wins.moreDetail")}
-        />
-        <FactRow
-          label={t("review.column.size")}
-          left={a.facts ? formatBytes(a.facts.size_bytes, { locale }) : unknown}
-          right={b.facts ? formatBytes(b.facts.size_bytes, { locale }) : unknown}
-          winnerNote={t("review.compare.wins.larger")}
-          winner={larger(a.facts?.size_bytes ?? null, b.facts?.size_bytes ?? null)}
-        />
-        <FactRow
-          label={t("review.column.location")}
-          left={a.label}
-          right={b.label}
-          winner={null}
-          winnerNote=""
-        />
-        <FactRow
-          label={t("review.column.evidence")}
-          left={a.confidence === null ? unknown : t(`review.confidenceValue.${a.confidence}`)}
-          right={b.confidence === null ? unknown : t(`review.confidenceValue.${b.confidence}`)}
-          winner={larger(
-            a.confidence === null ? null : (CONFIDENCE_RANK[a.confidence] ?? null),
-            b.confidence === null ? null : (CONFIDENCE_RANK[b.confidence] ?? null),
-          )}
-          winnerNote={t("review.compare.wins.stronger")}
-        />
-        {bothVideos && (
-          <>
-            <FactRow
-              label={t("review.column.duration")}
-              left={formatDuration(factNumber(a, "duration_seconds"), {
-                locale,
-                nullPlaceholder: unknown,
-              })}
-              right={formatDuration(factNumber(b, "duration_seconds"), {
-                locale,
-                nullPlaceholder: unknown,
-              })}
-              winner={larger(factNumber(a, "duration_seconds"), factNumber(b, "duration_seconds"))}
-              winnerNote={t("review.compare.wins.longer")}
-            />
-            <FactRow
-              label={t("review.column.codec")}
-              left={codec(a)}
-              right={codec(b)}
-              winner={null}
-              winnerNote=""
-            />
-          </>
-        )}
+        {orderFacts<CompareFact>([
+          {
+            id: "resolution",
+            left: resolution(a),
+            right: resolution(b),
+            winner: larger(pixels(a), pixels(b)),
+            winnerNote: t("review.compare.wins.moreDetail"),
+          },
+          {
+            id: "megapixels",
+            left: megapixels(a),
+            right: megapixels(b),
+            winner: larger(pixels(a), pixels(b)),
+            winnerNote: t("review.compare.wins.moreDetail"),
+          },
+          bothVideos
+            ? {
+                id: "duration",
+                left: formatDuration(factNumber(a, "duration_seconds"), {
+                  locale,
+                  nullPlaceholder: unknown,
+                }),
+                right: formatDuration(factNumber(b, "duration_seconds"), {
+                  locale,
+                  nullPlaceholder: unknown,
+                }),
+                winner: larger(
+                  factNumber(a, "duration_seconds"),
+                  factNumber(b, "duration_seconds"),
+                ),
+                winnerNote: t("review.compare.wins.longer"),
+              }
+            : null,
+          bothVideos ? { id: "codec", left: codec(a), right: codec(b) } : null,
+          {
+            id: "size",
+            left: a.facts ? formatBytes(a.facts.size_bytes, { locale }) : unknown,
+            right: b.facts ? formatBytes(b.facts.size_bytes, { locale }) : unknown,
+            winner: larger(a.facts?.size_bytes ?? null, b.facts?.size_bytes ?? null),
+            winnerNote: t("review.compare.wins.larger"),
+          },
+          {
+            id: "date",
+            left: capture(a),
+            right: capture(b),
+            winner: larger(capturedAt(a), capturedAt(b)),
+            winnerNote: t("review.compare.wins.newer"),
+          },
+          { id: "source", left: a.label, right: b.label },
+          {
+            id: "destination",
+            left: a.destination === undefined ? unknown : (a.destination ?? unknown),
+            right: b.destination === undefined ? unknown : (b.destination ?? unknown),
+          },
+          {
+            id: "result",
+            left: a.plannedStatus ?? unknown,
+            right: b.plannedStatus ?? unknown,
+          },
+          {
+            id: "confidence",
+            left: a.confidence === null ? unknown : t(`review.confidenceValue.${a.confidence}`),
+            right: b.confidence === null ? unknown : t(`review.confidenceValue.${b.confidence}`),
+            winner: larger(
+              a.confidence === null ? null : (CONFIDENCE_RANK[a.confidence] ?? null),
+              b.confidence === null ? null : (CONFIDENCE_RANK[b.confidence] ?? null),
+            ),
+            winnerNote: t("review.compare.wins.stronger"),
+          },
+          {
+            id: "protection",
+            left: a.protected ? t("review.referenceProtected") : t("review.detail.mutable"),
+            right: b.protected ? t("review.referenceProtected") : t("review.detail.mutable"),
+          },
+          { id: "mediaUnit", left: unit(a), right: unit(b) },
+          { id: "companions", left: companionEvidence(a), right: companionEvidence(b) },
+          { id: "unitWarnings", left: warnings(a), right: warnings(b) },
+        ]).map((fact) => (
+          <FactRow
+            key={fact.id}
+            label={t(REVIEW_FACT_LABELS[fact.id])}
+            left={fact.left}
+            right={fact.right}
+            winner={fact.winner ?? null}
+            winnerNote={fact.winnerNote ?? ""}
+          />
+        ))}
       </ModalBody>
 
       <ModalFooter>
         <span className="mr-auto min-w-0 text-3xs text-faint">
-          {sameSet ? (
+          {decisionLocked ? (
+            <span className="block">{t("review.compare.referenceLocked")}</span>
+          ) : sameSet ? (
             <>
               <span className="block" aria-live="polite">
                 {draftId === null
@@ -636,7 +710,7 @@ export function CompareModal({
         <Button size="sm" variant="ghost" onClick={onClose}>
           {t("review.compare.back")}
         </Button>
-        {sameSet && (
+        {decisionEnabled && (
           <>
             <Button size="sm" variant="outline" onClick={onKeepBoth}>
               {t("review.compare.keepBoth")}

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import ConfigDep, ContainerDep
 from app.core.config_fingerprint import config_fingerprint
 from app.core.duplicate_plans import BulkImpact, BulkScopeId, DecisionAction, DuplicateGroup
+from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
 from app.core.run_scope import apply_run_scope
 from app.services.catalog import MediaCatalog
@@ -63,6 +64,7 @@ from app.services.review_plan import (
 )
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 #: The perceptual distance the listing endpoint defaults to. The plan registers
 #: similar groups at the same distance, so a stack a user can see is a stack the
@@ -252,6 +254,18 @@ def _list_groups(
         after = _resume_after(cursor, identity=identity, generation=generation)
         scoped_groups, truncated = _take_scoped_groups(produced, excluded_ids, limit, after=after)
         partial_index = catalog.has_partial_generation()
+    if kind == "burst" and getattr(config, "burst_detection_enabled", False):
+        for group in scoped_groups:
+            try:
+                container.burst_detection_service.issue_review_group(group)
+            except (OSError, ValueError) as exc:
+                # Listing remains observational, while the destructive endpoint
+                # stays fail-closed because no issued identity is registered.
+                logger.warning(
+                    "review.burst_group_not_issued",
+                    group_id=group.group_id,
+                    error=str(exc),
+                )
     next_cursor = (
         encode_cursor({"q": identity, "g": generation, "id": scoped_groups[-1].group_id})
         if truncated and scoped_groups

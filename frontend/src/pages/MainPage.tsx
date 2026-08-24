@@ -51,6 +51,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useI18n, type Locale } from "@/i18n/I18nContext";
 import { splitValidation } from "@/lib/configGates";
+import { dropScopedExcept, readStored, writeStored } from "@/lib/storage";
 import { sampleFiles } from "@/lib/configSummary";
 import { extractErrorMessage } from "@/lib/errorUtils";
 import {
@@ -84,11 +85,24 @@ const FinishedRun = lazy(() =>
   import("@/components/screens/FinishedRun").then((module) => ({ default: module.FinishedRun })),
 );
 
+const REVIEW_STOP_PREFIX = "mediasort_review_stop:";
+
+function recoveredReviewStop(planId: string): "plan" | "review" {
+  return readStored(`${REVIEW_STOP_PREFIX}${planId}`) === "review" ? "review" : "plan";
+}
+
+function storeReviewStop(planId: string, view: "plan" | "review"): void {
+  writeStored(`${REVIEW_STOP_PREFIX}${planId}`, view);
+  // Only the plan currently under review can be returned to; older stops are
+  // unreachable state that would grow with every dry run.
+  dropScopedExcept(REVIEW_STOP_PREFIX, planId);
+}
+
 export default function MainPage() {
   const { toast } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
   const { config, validationErrors, updateConfig, saveError, retrySave } = useConfig();
-  const { setLocale, locale, t } = useI18n();
+  const { setLocale, locale, t, tCount } = useI18n();
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [operationCenterOpen, setOperationCenterOpen] = useState(false);
@@ -106,7 +120,11 @@ export default function MainPage() {
 
   const configDefaults = useConfigDefaults();
   const analysis = useAnalysis();
-  const preview = usePreview();
+  const preview = usePreview(analysis.result);
+  // A restored plan brings its scan back with it. Everything that asks "has
+  // this been scanned?" reads the same answer, so the stepper cannot say a
+  // stage is complete while the screen behind it says nothing was scanned.
+  const scan = analysis.result ?? preview.recoveredScan;
   const sorting = useSorting();
   const loaderActive = useGlobalLoader();
   const { logs } = useLogs();
@@ -141,10 +159,27 @@ export default function MainPage() {
 
   useEffect(() => {
     setImpactAcknowledged(false);
-    setReviewView("plan");
-  }, [preview.result]);
+    if (preview.result === null) {
+      setReviewView("plan");
+      return;
+    }
+    if (preview.recovered) {
+      setReviewView(recoveredReviewStop(preview.result.plan_id));
+      setRequestedStage("review");
+    } else {
+      setReviewView("plan");
+    }
+  }, [preview.recovered, preview.result]);
 
-  const scanned = analysis.result !== null && analysis.error === null;
+  const changeReviewView = useCallback(
+    (next: "plan" | "review") => {
+      setReviewView(next);
+      if (preview.result !== null) storeReviewStop(preview.result.plan_id, next);
+    },
+    [preview.result],
+  );
+
+  const scanned = scan !== null && analysis.error === null;
   const planned = preview.result !== null && preview.error === null;
   const isSorting = sorting.status === "running" || sorting.status === "pending";
   const activeTask = diagnostics?.active_task ?? null;
@@ -190,8 +225,8 @@ export default function MainPage() {
   }, [activeTask, analysis, analysis.loading, isSorting, preview, preview.loading, sorting]);
 
   const configuredCards = useMemo(
-    () => rootCards(config, scanned, analysis.result?.total_files ?? 0),
-    [analysis.result?.total_files, config, scanned],
+    () => rootCards(config, scanned, scan?.total_files ?? 0),
+    [config, scan?.total_files, scanned],
   );
   // The probe is the authority on whether a folder is usable; the scan only
   // knows what it saw last time it ran.
@@ -338,7 +373,7 @@ export default function MainPage() {
       toast(issueText(blocker), "warning");
       return false;
     }
-    if (!analysis.result) {
+    if (scan === null) {
       preview.clear();
       // A failure or cancellation is surfaced on Review; pressing on would
       // plan on nothing.
@@ -351,6 +386,7 @@ export default function MainPage() {
     excludedForRun,
     issueText,
     preview,
+    scan,
     recoveryBlock,
     rootBlocker,
     rootIssue,
@@ -423,7 +459,7 @@ export default function MainPage() {
       duplicateReviewReason:
         runDecisions.planId !== preview.result?.plan_id || runDecisions.outstandingSets === null
           ? t("stage.gate.duplicateLoading")
-          : t("stage.gate.duplicates", { count: runDecisions.outstandingSets }),
+          : tCount("stage.gate.duplicates", runDecisions.outstandingSets),
       executionActive: isSorting || activeTask?.operation_kind === "sort",
       blocked: recoveryBlock.blocked,
       blockedReason: recoveryBlock.reason,
@@ -442,6 +478,7 @@ export default function MainPage() {
       runDecisions.planId,
       scanned,
       t,
+      tCount,
       preview.result?.plan_id,
     ],
   );
@@ -684,7 +721,7 @@ export default function MainPage() {
         stageKey={stageKey}
         requestedStage={requestedStage}
         reviewView={reviewView}
-        onReviewViewChange={setReviewView}
+        onReviewViewChange={changeReviewView}
         titleBar={titleBar}
         banners={banners}
         planExists={planExists}
@@ -698,7 +735,7 @@ export default function MainPage() {
           <StageFooter
             stage={state.stage}
             nav={nav}
-            analysis={analysis.result}
+            analysis={scan}
             busy={analysis.loading || preview.loading}
             previewReady={{
               ok: rootsReady && settingIssue === null && !isAnyRunning,
@@ -717,7 +754,7 @@ export default function MainPage() {
               void buildPlan();
             }}
             reviewView={reviewView}
-            onOpenReview={() => setReviewView("review")}
+            onOpenReview={() => changeReviewView("review")}
           />
         )}
       >
@@ -727,7 +764,7 @@ export default function MainPage() {
               <SourcesScreen
                 cards={cards}
                 excludedForRun={excludedForRun}
-                analysis={analysis.result}
+                analysis={scan}
                 config={config}
                 disabled={isAnyRunning}
                 onChange={changeRoots}
@@ -847,6 +884,7 @@ export default function MainPage() {
                 />
                 <ExecutePreflight
                   input={preflightInput}
+                  companionItems={preview.result?.items ?? []}
                   onAcknowledge={setImpactAcknowledged}
                   onExecute={startRun}
                   busy={isSorting}
@@ -859,6 +897,7 @@ export default function MainPage() {
               status={sorting.status === "pending" ? "running" : sorting.status}
               progress={sorting.progress?.progress ?? null}
               outcomes={sorting.progress?.progress?.outcomes ?? {}}
+              companionItems={preview.result?.items ?? []}
               error={sorting.error}
               config={config}
               reportPath={null}

@@ -71,6 +71,8 @@ export interface RowStack {
   /** The candidate a rule ranked without binding. */
   isProposedKeeper: boolean;
   proposalPolicy: import("@/services/api").KeeperPolicyId | null;
+  proposalRationale?: import("@/lib/duplicateDecisions").KeeperRationale | null;
+  protected?: boolean;
   /** Group similarity as a percentage; exact matches are always 100. */
   similarity?: number | null;
 }
@@ -92,6 +94,9 @@ export interface ReviewRow {
   unitId: string | null;
   unitPrimary: boolean;
   companionCount: number;
+  companions?: PreviewItem["companions"];
+  unitWarnings?: string[];
+  protected?: boolean;
   /** The plan's own explanation; carried into Detail without a row-level request. */
   provenance: OutcomeProvenance | null;
   stack: RowStack | null;
@@ -163,7 +168,7 @@ function flagsOf(item: PreviewItem, nameCounts: Map<string, number>): RowFlag[] 
     flags.push("name_clash");
   }
   if (item.duplicate_evaluation === "unknown") flags.push("duplicate_pending");
-  if (item.unit_id && (item.companions?.length ?? 0) > 0) flags.push("unit_member");
+  if (item.unit_id) flags.push("unit_member");
   return flags;
 }
 
@@ -314,8 +319,15 @@ export function catalogGroupsForRun(
 }
 
 /** `perceptual` is what the plan calls what the catalog calls `similar`. */
-function planKind(items: readonly PreviewItem[], members: ReadonlySet<string>) {
-  return items.some((item) => members.has(item.source) && item.duplicate_type === "perceptual")
+/**
+ * Whether a plan-derived set was matched by look rather than by content.
+ *
+ * Takes the set of perceptually matched sources rather than the whole item
+ * list: asked once per set against every item, this was the second half of a
+ * sets × items scan that ran on every keeper decision.
+ */
+function planKind(perceptual: ReadonlySet<string>, members: readonly string[]) {
+  return members.some((source) => perceptual.has(source))
     ? ("similar" as const)
     : ("exact" as const);
 }
@@ -350,6 +362,9 @@ export function planDuplicateSets(items: readonly PreviewItem[]): PlanDuplicateS
   }
 
   const present = new Set(items.map((item) => item.source));
+  const perceptual = new Set(
+    items.filter((item) => item.duplicate_type === "perceptual").map((item) => item.source),
+  );
   const sets: PlanDuplicateSet[] = [];
   for (const [keeper, copies] of copiesByKeeper) {
     // The kept copy belongs to its own set, but only when the run holds it too:
@@ -358,7 +373,7 @@ export function planDuplicateSets(items: readonly PreviewItem[]): PlanDuplicateS
     if (memberPaths.length < 2) continue;
     sets.push({
       id: `plan:${keeper}`,
-      kind: planKind(items, new Set(memberPaths)),
+      kind: planKind(perceptual, memberPaths),
       memberPaths,
     });
   }
@@ -380,6 +395,16 @@ function planStacks(
   proposals: ReadonlyMap<string, KeeperProposal>,
 ): Map<string, RowStack> {
   const stacks = new Map<string, RowStack>();
+  // One pass for the measured similarities, not one pass per set: this used to
+  // filter every item for every set — with a linear membership test inside the
+  // filter — so a run whose duplicates the dry run found itself cost sets ×
+  // items × members on every keeper decision.
+  const similarityBySource = new Map<string, number>();
+  for (const item of items) {
+    if (item.duplicate_similarity != null) {
+      similarityBySource.set(item.source, item.duplicate_similarity);
+    }
+  }
   for (const set of planDuplicateSets(items)) {
     const members = set.memberPaths.filter((path) => !claimed.has(path));
     if (members.length < 2) continue;
@@ -391,9 +416,9 @@ function planStacks(
     const keeper = chosen !== undefined && members.includes(chosen) ? chosen : members[0];
     const proposal = proposals.get(set.id);
     const state = decisionState(set.id, decisions, proposals);
-    const measuredSimilarity = items
-      .filter((item) => members.includes(item.source) && item.duplicate_similarity != null)
-      .map((item) => item.duplicate_similarity as number);
+    const measuredSimilarity = members
+      .map((source) => similarityBySource.get(source))
+      .filter((value): value is number => value !== undefined);
     const similarity =
       set.kind === "exact"
         ? 100
@@ -414,6 +439,8 @@ function planStacks(
         decisionKind: decision?.kind ?? null,
         isProposedKeeper: proposal?.memberId === source,
         proposalPolicy: proposal?.policy ?? null,
+        proposalRationale: proposal?.rationale ?? null,
+        protected: false,
         origin: "plan",
         similarity,
       });
@@ -458,18 +485,24 @@ export function toReviewRows(
 
   const stackBySource = new Map<string, RowStack>();
   for (const group of catalogGroupsForRun(result.items, stacks)) {
+    const reference = group.members.find((member) => member.role === "reference");
+    const hasBaseline = reference !== undefined;
     // The override the user made on this screen, else the group's own anchor.
     // Previously this read a `plans` map that nothing ever populated, so the
     // anchor always won and every keeper decision repainted nothing.
-    const decision = decisions.get(group.group_id);
+    // A reference root is comparison-only and is always authoritative. Ignore
+    // stale or forged client decisions for such a set before deriving any row
+    // state, so every surface sees the same protected keeper.
+    const decision = hasBaseline ? undefined : decisions.get(group.group_id);
     const requestedKeeperId =
       decision?.kind === "keeper" ? decision.memberId : group.anchor_member_id;
     const keeper =
-      group.members.find((member) => member.member_id === requestedKeeperId) ?? group.members[0];
+      reference ??
+      group.members.find((member) => member.member_id === requestedKeeperId) ??
+      group.members[0];
     const keeperId = keeper?.member_id ?? null;
-    const hasBaseline = group.members.some((member) => member.role === "reference");
-    const proposal = proposals.get(group.group_id);
-    const state = decisionState(group.group_id, decisions, proposals);
+    const proposal = hasBaseline ? undefined : proposals.get(group.group_id);
+    const state = hasBaseline ? "decided" : decisionState(group.group_id, decisions, proposals);
     const similarity = catalogSimilarity(group);
     for (const member of group.members) {
       const isKeeper = member.member_id === keeperId;
@@ -485,6 +518,8 @@ export function toReviewRows(
         decisionKind: decision?.kind ?? null,
         isProposedKeeper: proposal?.memberId === member.member_id,
         proposalPolicy: proposal?.policy ?? null,
+        proposalRationale: proposal?.rationale ?? null,
+        protected: member.role === "reference",
         origin: "catalog",
         similarity,
       });
@@ -519,6 +554,9 @@ export function toReviewRows(
       unitId: item.unit_id ?? null,
       unitPrimary: item.unit_primary ?? true,
       companionCount: item.companions?.length ?? 0,
+      companions: item.companions ?? [],
+      unitWarnings: item.unit_warnings ?? [],
+      protected: stack?.protected ?? false,
       provenance: item.provenance ?? null,
       stack,
       reason: reasonOf(item, stack),
@@ -545,7 +583,7 @@ export function reviewedSetsFrom(
   const decisions = normalizeDecisions(decisionInput);
   const bySet = new Map<string, ReviewRow[]>();
   for (const row of rows) {
-    if (row.stack === null || !decisions.has(row.stack.id)) continue;
+    if (row.stack === null || row.stack.hasBaseline || !decisions.has(row.stack.id)) continue;
     const members = bySet.get(row.stack.id);
     if (members) members.push(row);
     else bySet.set(row.stack.id, [row]);
@@ -639,8 +677,10 @@ export interface SelectionActions {
   canKeepOnlyThis: boolean;
   canCompare: boolean;
   /** Why each disabled action does not apply, keyed by action. */
-  reasons: Partial<Record<"keepOnlyThis" | "compare", string>>;
+  reasons: Partial<Record<"keepOnlyThis" | "compare", SelectionReason>>;
 }
+
+export type SelectionReason = "notInSet" | "selectOne" | "baselineProtected" | "selectTwo";
 
 /**
  * What the selection bar may offer, and why not when it may not.
@@ -650,16 +690,20 @@ export interface SelectionActions {
  */
 export function selectionActions(selected: ReviewRow[]): SelectionActions {
   const reasons: SelectionActions["reasons"] = {};
-  const canKeepOnlyThis = selected.length === 1 && selected[0]?.stack !== null;
+  const only = selected.length === 1 ? selected[0] : undefined;
+  const canKeepOnlyThis =
+    only !== undefined && only.stack !== null && only.stack.hasBaseline !== true;
   const canCompare = selected.length === 2;
   if (!canKeepOnlyThis) {
     reasons.keepOnlyThis =
-      selected.length === 1
-        ? "This file is not one of a set of copies."
-        : "Select exactly one copy.";
+      only?.stack?.hasBaseline === true
+        ? "baselineProtected"
+        : selected.length === 1
+          ? "notInSet"
+          : "selectOne";
   }
   if (!canCompare) {
-    reasons.compare = "Select exactly two files to compare.";
+    reasons.compare = "selectTwo";
   }
   return { canKeepOnlyThis, canCompare, reasons };
 }
