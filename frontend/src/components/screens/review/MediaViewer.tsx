@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FiArrowLeft, FiArrowRight, FiMaximize, FiMinus, FiPlus } from "react-icons/fi";
 
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal";
+import { MediaVideo } from "@/components/ui/media-video";
 import { useI18n } from "@/i18n/I18nContext";
 import { useQueuedThumbnail } from "@/lib/thumbnailQueue";
 import { api } from "@/services/api";
@@ -39,6 +40,7 @@ export function MediaViewer({
   const frameRef = useRef<HTMLDivElement>(null);
   const [zoomStep, setZoomStep] = useState(0);
   const zoom = ZOOM_STEPS[zoomStep];
+  const isVideo = /\.(avi|m4v|mkv|mov|mp4|webm)$/i.test(path);
 
   // Each newly opened file starts fitted to the viewport.
   useEffect(() => setZoomStep(0), [path]);
@@ -120,7 +122,13 @@ export function MediaViewer({
           zoom === 1 ? "flex items-center justify-center overflow-hidden" : "overflow-auto",
         )}
       >
-        <ViewerImage path={path} name={name} zoom={zoom} />
+        {isVideo ? (
+          <div className="flex h-full w-full items-center justify-center p-4">
+            <MediaVideo path={path} name={name} className="max-h-full max-w-full" />
+          </div>
+        ) : (
+          <ViewerImage path={path} name={name} zoom={zoom} />
+        )}
       </div>
 
       <ModalFooter>

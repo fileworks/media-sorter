@@ -340,7 +340,7 @@ function GroupHeader({
         <button
           type="button"
           onClick={onOpen}
-          className="shrink-0 rounded-md px-2 py-0.5 text-3xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-6 shrink-0 items-center rounded-md px-2 py-0.5 text-3xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("review.browse.openFolder")}
         </button>
@@ -361,7 +361,7 @@ function FolderTile({
   onOpen: () => void;
   locale: string;
 }) {
-  const { t } = useI18n();
+  const { tCount } = useI18n();
   const faces = useMemo(() => {
     const paths: string[] = [];
     for (const entry of group.entries) {
@@ -391,7 +391,9 @@ function FolderTile({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-semibold text-foreground">{label}</span>
         <span className="block text-3xs text-faint">
-          {t("review.browse.folderCount", { count: group.entries.length.toLocaleString(locale) })}
+          {tCount("review.browse.folderCount", group.entries.length, {
+            count: group.entries.length.toLocaleString(locale),
+          })}
         </span>
       </span>
       <FiChevronRight className="h-4 w-4 shrink-0 text-faint" aria-hidden />
@@ -436,21 +438,23 @@ function SetHeader({
       )}
     >
       {!entry.hasBaseline && (
-        <input
-          type="checkbox"
-          checked={selected}
-          aria-label={t("review.setSelection.toggle", {
-            name: entry.keeper?.name ?? entry.id,
-          })}
-          onChange={onToggleSelection}
-          className="h-4 w-4 shrink-0 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
-        />
+        <label className="grid h-6 w-6 shrink-0 place-items-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            aria-label={t("review.setSelection.toggle", {
+              name: entry.keeper?.name ?? entry.id,
+            })}
+            onChange={onToggleSelection}
+            className="h-4 w-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
       )}
       <button
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-panel py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-6 min-w-0 flex-1 items-center gap-2.5 rounded-panel py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {expanded ? (
           <FiChevronDown className="h-3 w-3 shrink-0 text-faint" aria-hidden />
@@ -490,16 +494,18 @@ function SetHeader({
               </span>
             )}
             {undecided && (
-              <span className="min-w-0 truncate font-semibold text-primary">
+              <span className="min-w-0 truncate font-semibold text-foreground">
                 · {t("review.browse.setUndecided")}
               </span>
             )}
+            {/* The keep rule named itself on every row — the same words fifteen
+                times, where only the file differs. It is stated once, with its
+                full reasoning, on the screen that owns it. */}
             {proposed && entry.proposedKeeper && (
-              <span className="min-w-0 truncate font-semibold text-primary">
+              <span className="min-w-0 truncate">
                 ·{" "}
                 {t("review.browse.setProposed", {
                   name: entry.proposedKeeper.name,
-                  rule: t(`config.keeper.${entry.proposalPolicy ?? "manual"}`),
                 })}
               </span>
             )}
@@ -525,7 +531,7 @@ function SetHeader({
         type="button"
         onClick={onResolve}
         className={cn(
-          "shrink-0 rounded-[5px] px-1.5 py-0.5 text-3xs font-bold transition-colors",
+          "inline-flex min-h-6 shrink-0 items-center rounded-[5px] px-1.5 py-0.5 text-3xs font-bold transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           settled ? "text-success hover:bg-tint-success" : "text-primary hover:bg-tint-primary",
         )}
@@ -594,7 +600,12 @@ function SetCopies({
                   onOpen={() => onEnlarge(row.source)}
                   openLabel={t("review.viewer.open", { name: row.name })}
                 />
-                <label className={cn(MIN_TARGET_24, "absolute left-1 top-1")}>
+                <label
+                  className={cn(
+                    MIN_TARGET_24,
+                    "absolute left-1 top-1 h-6 w-6 items-center justify-center",
+                  )}
+                >
                   <input
                     type="checkbox"
                     checked={selected.has(row.source)}
@@ -655,13 +666,16 @@ function SetCopies({
                     {t(`review.setAside.${row.setAsideCategory}`)}
                   </p>
                 )}
+                {mediaUnitSummary(row, t) && (
+                  <p className="line-clamp-3 text-faint">{mediaUnitSummary(row, t)}</p>
+                )}
               </div>
 
               <div className="px-2 pb-2">
-                {locked ? (
+                {locked || entry.hasBaseline ? (
                   <p className="flex items-center gap-1 text-3xs font-semibold text-muted-foreground">
                     <FiLock className="h-3 w-3" aria-hidden />
-                    {t("review.resolve.protected")}
+                    {t(locked ? "review.resolve.protected" : "review.resolve.baselineWins")}
                   </p>
                 ) : (
                   <Button
@@ -796,7 +810,10 @@ function FileLine({
       )}
       data-selected={selected}
     >
-      <label className={MIN_TARGET_24} onClick={(event) => event.stopPropagation()}>
+      <label
+        className={cn(MIN_TARGET_24, "h-6 w-6 items-center justify-center")}
+        onClick={(event) => event.stopPropagation()}
+      >
         <input
           type="checkbox"
           checked={selected}
@@ -851,7 +868,13 @@ function FileLine({
             {t(`review.setAside.${row.setAsideCategory}`)}
           </span>
         ) : row.flags.length > 0 ? (
-          <Tooltip label={t(`review.flag.${row.flags[0]}.help`)}>
+          <Tooltip
+            label={
+              row.flags[0] === "unit_member"
+                ? (mediaUnitSummary(row, t) ?? t("review.flag.unit_member.help"))
+                : t(`review.flag.${row.flags[0]}.help`)
+            }
+          >
             <span className="truncate rounded border border-border px-1.5 py-0.5 text-3xs font-semibold text-muted-foreground">
               {t(`review.flag.${row.flags[0]}`)}
             </span>
@@ -876,6 +899,27 @@ function FileLine({
 function destinationFolder(relative: string): string {
   const separator = relative.lastIndexOf("/");
   return separator === -1 ? "" : `${relative.slice(0, separator)}/`;
+}
+
+function mediaUnitSummary(
+  row: ReviewRow,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string | null {
+  if (!row.unitId) return null;
+  const membership = t(
+    row.unitPrimary ? "review.browse.unit.primary" : "review.browse.unit.member",
+    { id: row.unitId },
+  );
+  const companions = (row.companions ?? []).map((companion) =>
+    t("review.browse.unit.companion", {
+      role: companion.role.replace(/_/g, " "),
+      status: companion.status.replace(/_/g, " "),
+      destination: companion.destination ?? t("review.destination.none"),
+      warning: companion.warning ?? t("review.browse.unit.noWarning"),
+    }),
+  );
+  const warnings = row.unitWarnings ?? [];
+  return [membership, ...companions, ...warnings].join(" · ");
 }
 
 /** One file in the grid: the tile opens it, the corner checkbox selects it. */
@@ -909,7 +953,11 @@ function GridTile({
         onOpen={onEnlarge}
         openLabel={t("review.viewer.open", { name: row.name })}
       />
-      <Tooltip label={`${row.name} — ${t(row.reason.key, row.reason.params)}`}>
+      <Tooltip
+        label={[row.name, t(row.reason.key, row.reason.params), mediaUnitSummary(row, t)]
+          .filter(Boolean)
+          .join(" — ")}
+      >
         <button
           type="button"
           onClick={onOpenDetail}
@@ -925,7 +973,7 @@ function GridTile({
       <label
         className={cn(
           MIN_TARGET_24,
-          "absolute left-1 top-1 rounded bg-card/90 p-1 transition-opacity",
+          "absolute left-1 top-1 h-6 w-6 items-center justify-center rounded bg-card/90 transition-opacity",
           selected
             ? "opacity-100"
             : "opacity-0 focus-within:opacity-100 group-hover/tile:opacity-100",

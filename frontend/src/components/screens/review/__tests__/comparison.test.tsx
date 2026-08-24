@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { CompareModal } from "@/components/screens/review/CompareModal";
-import { I18nProvider } from "@/i18n/I18nContext";
+import { I18nProvider, translate } from "@/i18n/I18nContext";
+import { REVIEW_FACT_LABELS, REVIEW_FACT_ORDER } from "@/lib/reviewFacts";
+import compareSource from "@/components/screens/review/CompareModal.tsx?raw";
+import detailSource from "@/components/screens/review/DetailView.tsx?raw";
 import type { ComparableFile, FactValue, MemberFacts } from "@/lib/reviewWorkbench";
 
 vi.mock("@/components/ui/thumbnail", () => ({
@@ -101,7 +104,7 @@ describe("duplicate comparison", () => {
     );
 
     expect(screen.getByText("Recommended: a.jpg")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /B.*b\.jpg/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /B.*b\.jpg/ }));
     expect(onKeep).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm selection" }));
     expect(onKeep).toHaveBeenCalledWith("b");
@@ -242,7 +245,7 @@ describe("duplicate comparison", () => {
     );
 
     expect(screen.getByText("Duration")).not.toBeNull();
-    expect(screen.getByText("Codec")).not.toBeNull();
+    expect(screen.getByText("Video codec")).not.toBeNull();
     expect(screen.getByText("h264")).not.toBeNull();
     expect(screen.getByText("hevc")).not.toBeNull();
     unmount();
@@ -255,6 +258,47 @@ describe("duplicate comparison", () => {
     expect(screen.queryByText("Codec")).toBeNull();
   });
 
+  it("shows companion membership, role, destination, warning, and planned result", () => {
+    const primary: ComparableFile = {
+      ...file("primary", facts({ width: 2000, height: 3000 })),
+      unitId: "unit-1",
+      unitPrimary: true,
+      companions: [
+        {
+          source: "/source/primary.xmp",
+          destination: "/sorted/2026/primary.xmp",
+          role: "edit_sidecar",
+          status: "attached",
+          warning: "Sidecar metadata was unreadable.",
+        },
+      ],
+      unitWarnings: ["One companion needs review."],
+      destination: "/sorted/2026/primary.jpg",
+      plannedStatus: "organize",
+    };
+    const standalone: ComparableFile = {
+      ...file("standalone", facts({ width: 1000, height: 1500 })),
+      unitId: null,
+      unitPrimary: null,
+      companions: [],
+      unitWarnings: [],
+      destination: null,
+      plannedStatus: "keep_in_place",
+    };
+
+    renderComparison(primary, standalone);
+
+    expect(screen.getByText("Primary in unit unit-1")).toBeTruthy();
+    expect(screen.getByText("Standalone file")).toBeTruthy();
+    expect(
+      screen.getByText(/edit sidecar.*attached.*primary\.xmp.*metadata was unreadable/),
+    ).toBeTruthy();
+    expect(screen.getByText("/sorted/2026/primary.jpg")).toBeTruthy();
+    expect(screen.getByText("One companion needs review.")).toBeTruthy();
+    expect(screen.getByText("organize")).toBeTruthy();
+    expect(screen.getByText("keep_in_place")).toBeTruthy();
+  });
+
   it("opens either side full screen without dismissing the comparison", () => {
     const onEnlarge = renderComparison(
       file("a", facts({ width: 1000, height: 1500 })),
@@ -265,5 +309,39 @@ describe("duplicate comparison", () => {
     fireEvent.click(screen.getByRole("button", { name: "Look at b.jpg full screen" }));
     expect(onEnlarge.mock.calls).toEqual([["/source/a.jpg"], ["/source/b.jpg"]]);
     expect(screen.getByRole("dialog", { name: "Compare copies" })).not.toBeNull();
+  });
+});
+
+describe("one fact order everywhere", () => {
+  /**
+   * Both surfaces render from `REVIEW_FACT_ORDER`, so a test that only reads
+   * the rendered order cannot fail — reordering the list reorders the output
+   * with it. What can still diverge is a row added *beside* the ordered list,
+   * which is how the two orders drifted apart in the first place. Each surface
+   * therefore has exactly one place that renders a fact.
+   */
+  it("renders every fact from the one ordered list, on both surfaces", () => {
+    expect(compareSource.match(/<FactRow/g)).toHaveLength(1);
+    expect(detailSource.match(/<Fact\b/g)).toHaveLength(1);
+    // And the label of that single row comes from the shared table.
+    expect(compareSource).toContain("label={t(REVIEW_FACT_LABELS[fact.id])}");
+    expect(detailSource).toContain("label={t(REVIEW_FACT_LABELS[fact.id])}");
+  });
+
+  it("reads the comparison table in the catalogue's canonical order", () => {
+    renderComparison(
+      file("a", facts({ width: 2000, height: 3000 })),
+      file("b", facts({ width: 1000, height: 1500 })),
+    );
+
+    // The row labels, in the order the table renders them.
+    const shown = screen
+      .getAllByTestId("fact-row-label")
+      .map((element) => element.textContent?.trim() ?? "");
+    const canonical = REVIEW_FACT_ORDER.map((id) => translate("en", REVIEW_FACT_LABELS[id])).filter(
+      (label) => shown.includes(label),
+    );
+
+    expect(shown).toEqual(canonical);
   });
 });

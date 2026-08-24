@@ -21,11 +21,23 @@
 
 import { describe, expect, it } from "vitest";
 
-import { browseEntries, browseTree, resolveQueue, reviewStats } from "@/lib/reviewBrowse";
+import {
+  browseEntries,
+  browseTree,
+  isOpenSet,
+  reviewStats,
+  type BrowseEntry,
+  type SetEntry,
+} from "@/lib/reviewBrowse";
 import { duplicateTally } from "@/lib/reviewPlan";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
 import type { PreviewItem, PreviewResult } from "@/types/api";
+
+/** The sets still open, read through the predicate the screen itself uses. */
+function openSets(entries: readonly BrowseEntry[]): SetEntry[] {
+  return entries.filter((entry): entry is SetEntry => entry.kind === "set" && isOpenSet(entry));
+}
 
 function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
   return {
@@ -121,7 +133,7 @@ describe("the reported plan", () => {
   });
 
   it("offers that set for decision, where the queue was once empty", () => {
-    expect(resolveQueue(entries).map((entry) => entry.id)).toEqual(["plan:/hdd-a/IMG_0031.jpg"]);
+    expect(openSets(entries).map((entry) => entry.id)).toEqual(["plan:/hdd-a/IMG_0031.jpg"]);
   });
 
   it("does not claim every set is decided while one is waiting", () => {
@@ -129,7 +141,7 @@ describe("the reported plan", () => {
   });
 
   it("marks the set as found by the run rather than by the catalog", () => {
-    const set = resolveQueue(entries)[0];
+    const set = openSets(entries)[0];
     expect(set.origin).toBe("plan");
   });
 
@@ -287,7 +299,7 @@ describe("the two detections are reconciled", () => {
     expect(stats.sets).toBe(1);
     // The catalog wins the overlap: the set carries catalog identity, so a
     // decision on it survives into the next run.
-    expect(resolveQueue(entries)[0].origin).toBe("catalog");
+    expect(openSets(entries)[0].origin).toBe("catalog");
   });
 
   it("counts a set present in both detections once in the tally", () => {

@@ -1,4 +1,10 @@
-import { keeperByPolicy, type DuplicateGroup } from "@/lib/reviewWorkbench";
+import {
+  keeperByPolicy,
+  keeperRanking,
+  type DuplicateGroup,
+  type GroupMember,
+  type KeeperRankingRung,
+} from "@/lib/reviewWorkbench";
 import type { KeeperPolicyId } from "@/services/api";
 
 /** A binding answer for one duplicate set. */
@@ -8,6 +14,132 @@ export type DuplicateDecision = { kind: "keeper"; memberId: string } | { kind: "
 export interface KeeperProposal {
   memberId: string;
   policy: KeeperPolicyId;
+  rationale: KeeperRationale;
+}
+
+/** Structured, reviewable evidence for a non-binding keeper proposal. */
+export interface RationaleMessage {
+  key: string;
+  params?: Record<string, string | number>;
+}
+
+export interface KeeperRationale {
+  winningRung: RationaleMessage;
+  knownFacts: RationaleMessage[];
+  unknownFacts: RationaleMessage[];
+  tieBreak: RationaleMessage | null;
+  limitation: RationaleMessage | null;
+}
+
+function memberName(member: GroupMember): string {
+  return member.relative_path.split(/[\\/]/).pop() ?? member.relative_path;
+}
+
+function unknownFactMessages(group: DuplicateGroup, policy: KeeperPolicyId): RationaleMessage[] {
+  const messages: RationaleMessage[] = [];
+  if (["newest", "oldest", "smart"].includes(policy)) {
+    const members = group.members
+      .filter((member) => !member.facts.modified_at.known)
+      .map(memberName);
+    if (members.length > 0) {
+      messages.push({
+        key: "review.resolve.rationale.unknown.modifiedDate",
+        params: { members: members.join(", ") },
+      });
+    }
+  }
+  if (["best_quality", "highest_resolution"].includes(policy)) {
+    const members = group.members
+      .filter((member) => !member.facts.width.known || !member.facts.height.known)
+      .map(memberName);
+    if (members.length > 0) {
+      messages.push({
+        key: "review.resolve.rationale.unknown.dimensions",
+        params: { members: members.join(", ") },
+      });
+    }
+  }
+  return messages;
+}
+
+const RUNG_KEYS: Record<KeeperRankingRung, string> = {
+  copy_markers: "review.resolve.rationale.rung.copyMarkers",
+  path_depth: "review.resolve.rationale.rung.pathDepth",
+  oldest_modified: "review.resolve.rationale.rung.oldestDate",
+  newest_modified: "review.resolve.rationale.rung.newestDate",
+  largest_size: "review.resolve.rationale.rung.largestSize",
+  smallest_size: "review.resolve.rationale.rung.smallestSize",
+  pixel_count: "review.resolve.rationale.rung.pixelCount",
+  longest_filename: "review.resolve.rationale.rung.longestFilename",
+  shortest_filename: "review.resolve.rationale.rung.shortestFilename",
+  stable_identity: "review.resolve.rationale.rung.stableIdentity",
+};
+
+function limitation(
+  policy: KeeperPolicyId,
+  unknownFacts: readonly RationaleMessage[],
+): RationaleMessage | null {
+  if (unknownFacts.length === 0) return null;
+  if (policy === "best_quality") {
+    return { key: "review.resolve.rationale.limitation.unmeasuredQuality" };
+  }
+  if (policy === "highest_resolution") {
+    return { key: "review.resolve.rationale.limitation.allDimensionsRequired" };
+  }
+  if (policy === "newest" || policy === "oldest") {
+    return { key: "review.resolve.rationale.limitation.undatedExcluded" };
+  }
+  if (policy === "smart") {
+    return { key: "review.resolve.rationale.limitation.undatedLast" };
+  }
+  return null;
+}
+
+/** Explain the exact facts and limits behind the rule's current candidate. */
+export function keeperRationale(
+  group: DuplicateGroup,
+  policy: KeeperPolicyId,
+  memberId: string,
+): KeeperRationale {
+  const winner = group.members.find((member) => member.member_id === memberId);
+  const ranking = keeperRanking(group, policy);
+  const unknownFacts = unknownFactMessages(group, policy);
+  const knownFacts: RationaleMessage[] = [
+    {
+      key: "review.resolve.rationale.fact.members",
+      params: { count: group.member_count },
+    },
+    { key: `review.resolve.rationale.fact.match.${group.kind}` },
+  ];
+  if (winner !== undefined) {
+    knownFacts.push({
+      key: "review.resolve.rationale.fact.size",
+      params: { bytes: winner.facts.size_bytes },
+    });
+    if (winner.facts.modified_at.known) {
+      knownFacts.push({ key: "review.resolve.rationale.fact.modifiedDate" });
+    }
+    if (winner.facts.width.known && winner.facts.height.known) {
+      knownFacts.push({
+        key: "review.resolve.rationale.fact.dimensions",
+        params: {
+          width: Number(winner.facts.width.value ?? 0),
+          height: Number(winner.facts.height.value ?? 0),
+        },
+      });
+    }
+  }
+  const decisiveRung = ranking?.decisiveRung ?? "stable_identity";
+  return {
+    winningRung: { key: RUNG_KEYS[decisiveRung] },
+    knownFacts,
+    unknownFacts,
+    tieBreak:
+      decisiveRung === "stable_identity"
+        ? { key: "review.resolve.rationale.tie.stableIdentity" }
+        : null,
+    limitation: limitation(policy, unknownFacts),
+  };
 }
 
 export type DuplicateDecisionState = "undecided" | "proposed" | "decided";
@@ -47,7 +179,13 @@ export function keeperProposals(
     if (decisions.has(group.group_id)) continue;
     if (group.members.some((member) => member.role === "reference")) continue;
     const memberId = keeperByPolicy(group, policy);
-    if (memberId !== null) proposals.set(group.group_id, { memberId, policy });
+    if (memberId !== null) {
+      proposals.set(group.group_id, {
+        memberId,
+        policy,
+        rationale: keeperRationale(group, policy, memberId),
+      });
+    }
   }
   return proposals;
 }

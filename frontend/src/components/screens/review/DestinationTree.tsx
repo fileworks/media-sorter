@@ -61,6 +61,7 @@ function Row({
   locale,
   label,
   t,
+  tCount,
 }: {
   node: TreeNode;
   depth: number;
@@ -71,6 +72,7 @@ function Row({
   locale: string;
   label: (node: TreeNode) => string;
   t: ReturnType<typeof useI18n>["t"];
+  tCount: ReturnType<typeof useI18n>["tCount"];
 }) {
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
@@ -83,7 +85,10 @@ function Row({
     <>
       <div
         className={cn(
-          "flex items-center gap-1 rounded-lg border-l-2 pr-1 text-xs",
+          // Square left edge: an accent border on a rounded box curves away at
+          // both corners and draws a parenthesis beside the row rather than a
+          // rule down it.
+          "flex items-center gap-1 rounded-r-lg border-l-2 pr-1 text-xs",
           selected ? "bg-tint-primary" : "hover:bg-muted",
           selected ? "border-primary" : stays ? "border-faint bg-muted/35" : "border-transparent",
         )}
@@ -96,7 +101,7 @@ function Row({
             onClick={() => onToggle(node.path)}
             aria-expanded={isOpen}
             aria-label={t("review.browse.expand", { folder: name })}
-            className="shrink-0 rounded p-0.5 text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {isOpen ? (
               <FiChevronDown className="h-3 w-3" aria-hidden />
@@ -105,7 +110,7 @@ function Row({
             )}
           </button>
         ) : (
-          <span className="w-4 shrink-0" aria-hidden />
+          <span className="w-6 shrink-0" aria-hidden />
         )}
 
         <button
@@ -113,7 +118,7 @@ function Row({
           aria-pressed={selected}
           aria-label={t("review.browse.showContents", { folder: name })}
           onClick={() => onSelect(selected ? null : node.path)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-6 min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span
             className={cn(
@@ -128,11 +133,11 @@ function Row({
 
         {/* Mark folders containing unresolved duplicate sets. */}
         {node.undecidedSets > 0 && (
-          <Tooltip label={t("review.tree.undecidedHere", { count: node.undecidedSets })}>
+          <Tooltip label={tCount("review.tree.undecidedHere", node.undecidedSets)}>
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
               role="img"
-              aria-label={t("review.tree.undecidedHere", { count: node.undecidedSets })}
+              aria-label={tCount("review.tree.undecidedHere", node.undecidedSets)}
             />
           </Tooltip>
         )}
@@ -187,7 +192,7 @@ export function DestinationTree({
   onQueryChange,
   embedded = false,
 }: DestinationTreeProps) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const [localQuery, setLocalQuery] = useState("");
   const query = controlledQuery ?? localQuery;
   const setQuery = onQueryChange ?? setLocalQuery;
@@ -277,14 +282,14 @@ export function DestinationTree({
         <button
           type="button"
           onClick={() => setExpanded(new Set([""]))}
-          className="shrink-0 text-3xs text-faint underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-6 shrink-0 items-center px-1 text-3xs text-faint underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("review.tree.collapseAll")}
         </button>
       </div>
 
       <div className={cn(embedded && "p-2")}>
-        <label className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
+        <label className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1">
           <FiSearch className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
           <span className="sr-only">{t("review.tree.filter")}</span>
           <input
@@ -297,7 +302,7 @@ export function DestinationTree({
               setQuery("");
             }}
             placeholder={t("review.tree.filter")}
-            className="min-w-0 flex-1 bg-transparent text-xs placeholder:text-faint focus-visible:outline-none"
+            className="h-6 min-w-0 flex-1 bg-transparent text-xs placeholder:text-faint focus-visible:outline-none"
           />
         </label>
 
@@ -332,6 +337,7 @@ export function DestinationTree({
                       locale={locale}
                       label={label}
                       t={t}
+                      tCount={tCount}
                     />
                   </li>
                 );
@@ -358,12 +364,7 @@ export function DestinationTree({
               ) : (
                 <FiChevronRight className="h-3 w-3 shrink-0" aria-hidden />
               )}
-              {t(
-                outOfScopeSets === 1
-                  ? "review.browse.alsoInLibrary.one"
-                  : "review.browse.alsoInLibrary",
-                { count: outOfScopeSets },
-              )}
+              {tCount("review.browse.alsoInLibrary", outOfScopeSets)}
             </button>
             {alsoOpen && (
               <div className="mt-1.5 space-y-2 pl-4">

@@ -83,6 +83,7 @@ export interface SetEntry {
   decisionKind: import("@/lib/duplicateDecisions").DuplicateDecision["kind"] | null;
   proposedKeeper: ReviewRow | null;
   proposalPolicy: import("@/services/api").KeeperPolicyId | null;
+  proposalRationale?: import("@/lib/duplicateDecisions").KeeperRationale | null;
   similarity: number | null;
   folder: string;
 }
@@ -152,6 +153,7 @@ export function duplicateSetEntries(rows: readonly ReviewRow[], root = ""): SetE
         decisionKind: row.stack.decisionKind,
         proposedKeeper: null,
         proposalPolicy: row.stack.proposalPolicy,
+        proposalRationale: row.stack.proposalRationale,
         similarity: row.stack.similarity ?? null,
         folder: "",
       };
@@ -410,18 +412,15 @@ function isSetAside(entry: BrowseEntry): boolean {
 }
 
 /**
- * The sets still waiting on a person, in the order Browse lists them.
+ * Still waiting on a person: no baseline copy, and no decision yet.
  *
- * A set with a baseline is not in the queue: the reference always wins and
- * there is nothing to choose. Everything else with no chosen keeper is here —
- * and it is the same predicate the `_stays/undecided` division uses, so the
- * queue's length and that folder's count cannot disagree.
+ * A set with a baseline is never open — the reference always wins and there is
+ * nothing to choose. Proposals are not decisions, so a proposed set is still
+ * open. Resolve had its own copy of this rule written the other way round
+ * (`!isDecidedState`), which is the same thing until one of them is edited.
  */
-export function resolveQueue(entries: readonly BrowseEntry[]): SetEntry[] {
-  return entries.filter(
-    (entry): entry is SetEntry =>
-      entry.kind === "set" && isOutstandingState(entry.decisionState) && !entry.hasBaseline,
-  );
+export function isOpenSet(entry: SetEntry): boolean {
+  return !entry.hasBaseline && isOutstandingState(entry.decisionState);
 }
 
 /**

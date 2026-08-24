@@ -28,7 +28,7 @@ export function RuleImpactModal({
   onApply: () => void;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
 
   const rows: [string, number][] = [
     [t("review.ruleImpact.open"), impact.open],
@@ -62,7 +62,7 @@ export function RuleImpactModal({
           {t("common.cancel")}
         </Button>
         <Button size="sm" disabled={impact.decides === 0} onClick={onApply}>
-          {t("review.ruleImpact.apply", { count: impact.decides })}
+          {tCount("review.ruleImpact.apply", impact.decides)}
         </Button>
       </ModalFooter>
     </Modal>

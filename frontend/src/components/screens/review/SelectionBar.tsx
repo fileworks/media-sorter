@@ -1,6 +1,6 @@
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
-import type { ReviewRow, SelectionActions } from "@/lib/reviewRows";
+import type { ReviewRow, SelectionActions, SelectionReason } from "@/lib/reviewRows";
 
 interface SelectionBarProps {
   selected: ReviewRow[];
@@ -21,18 +21,21 @@ export function SelectionBar({
   const { t, locale } = useI18n();
   if (selected.length === 0) return null;
 
+  const reasonText = (reason: SelectionReason | undefined) =>
+    reason === undefined ? undefined : t(`review.selection.reason.${reason}`);
+
   const button = (
     label: string,
     enabled: boolean,
-    reason: string | undefined,
+    reason: SelectionReason | undefined,
     onClick: () => void,
   ) => (
-    <Tooltip label={enabled ? label : (reason ?? label)}>
+    <Tooltip label={enabled ? label : (reasonText(reason) ?? label)}>
       <button
         type="button"
         disabled={!enabled}
         aria-label={label}
-        aria-description={!enabled ? reason : undefined}
+        aria-description={!enabled ? reasonText(reason) : undefined}
         onClick={onClick}
         className="rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
       >

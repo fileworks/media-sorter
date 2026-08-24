@@ -29,6 +29,8 @@ export interface Config {
   companion_handling: "keep_with_primary" | "leave_in_place" | "ignore";
   thumbnail_cache_enabled: boolean;
   thumbnail_cache_budget_bytes: number;
+  quarantine_budget_bytes: number;
+  quarantine_warning_age_days: number;
   rename: boolean;
   rename_pattern: string;
   remove_duplicates: boolean;
@@ -729,6 +731,10 @@ export interface MediaInfo {
   extracted_date: string | null;
   metadata_source: string;
   media_type: "image" | "video" | "other";
+  /** Duration is absent for non-video media and unknown when probing failed. */
+  duration_seconds?: number | null;
+  /** Codec is absent for non-video media and unknown when probing failed. */
+  codec?: string | null;
 }
 
 /** One candidate date the preview considered, and what became of it. */
@@ -911,6 +917,14 @@ export interface PreviewResult {
   }>;
 }
 
+export interface PlanRecoveryResponse {
+  plan_id: string;
+  config_fingerprint: string;
+  destination_fingerprint: string;
+  source_fingerprints: Record<string, string>;
+  reviewed_sets: ReviewedSet[];
+}
+
 export type SortingStatus = TaskStatus<{ operation_id?: string } & Record<string, unknown>>;
 export type PreviewStatus = TaskStatus<PreviewResult & Record<string, unknown>>;
 export type AnalysisStatus = TaskStatus<AnalysisResult & Record<string, unknown>>;
@@ -977,6 +991,12 @@ export interface FileOperationRecord {
   duplicate_of?: string | null;
   source_root?: string | null;
   would_be_destination?: string | null;
+  /** Durable media-unit membership recorded by the executor. */
+  unit_id?: string | null;
+  /** Null for a primary; otherwise the companion's explicit detected role. */
+  companion_role?: string | null;
+  /** Source path of the primary this record travelled with. */
+  unit_primary_path?: string | null;
 }
 
 export type OperationOutcome =
@@ -1579,6 +1599,14 @@ export class MediaSorterApiClient {
     return this.taskStatus<SortingStatus>(`/api/sorting/${taskId}`, afterSequence);
   }
 
+  async recoverSortPlan(planId: string): Promise<PlanRecoveryResponse> {
+    await this.ensureReady();
+    const { data } = await this.http.get<PlanRecoveryResponse>(
+      `/api/sorting/plans/${encodeURIComponent(planId)}/recovery`,
+    );
+    return data;
+  }
+
   async cancelSort(taskId: string): Promise<void> {
     await this.cancelTask(`/api/sorting/${taskId}/cancel`);
   }
@@ -1915,6 +1943,14 @@ export class MediaSorterApiClient {
     // displays. Omit it to keep the backend's small default (hover thumbnails).
     const size = maxPx ? `&size=${Math.round(maxPx)}` : "";
     return `${base}/api/thumbnail?path=${encodeURIComponent(path)}${size}`;
+  }
+
+  /** Authenticated source for video playback; callers fetch it with mediaFetch. */
+  mediaContentUrl(path: string): string | null {
+    const session = this.session();
+    return session === null
+      ? null
+      : `${session.baseUrl}/api/media/content?path=${encodeURIComponent(path)}`;
   }
 
   /**

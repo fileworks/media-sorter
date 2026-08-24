@@ -181,7 +181,7 @@ describe("selection-scoped duplicate decisions", () => {
     const distinct = screen.getByRole("button", { name: "Mark as not duplicates" });
     expect(
       within(distinct.parentElement as HTMLElement).getByText(
-        "This decides 200 selected sets and leaves 0 unchanged.",
+        "Decides 200 of the selected sets and leaves 0 of them unchanged.",
       ),
     ).toBeTruthy();
     fireEvent.click(distinct);
@@ -205,10 +205,10 @@ describe("selection-scoped duplicate decisions", () => {
 
     const ruleAction = screen.getByRole("button", { name: "Apply rule to selection" });
     expect(ruleAction.parentElement?.textContent).toContain(
-      "This decides 1 selected sets and leaves 1 unchanged.",
+      "Decides 1 of the selected sets and leaves 1 of them unchanged.",
     );
     expect(ruleAction.parentElement?.textContent).toContain(
-      "The rule cannot rank 1 selected sets because their comparable facts are missing.",
+      "The rule cannot rank the selected set because its comparable facts are missing.",
     );
 
     rerender(
@@ -220,7 +220,7 @@ describe("selection-scoped duplicate decisions", () => {
     );
     const recomputedRule = screen.getByRole("button", { name: "Apply rule to selection" });
     expect(recomputedRule.parentElement?.textContent).toContain(
-      "This decides 1 selected sets and leaves 0 unchanged.",
+      "Decides 1 of the selected sets and leaves 0 of them unchanged.",
     );
     fireEvent.click(recomputedRule);
 
@@ -248,7 +248,7 @@ describe("selection-scoped duplicate decisions", () => {
     const keepFromFolder = screen.getByRole("button", { name: "Keep from folder" });
     expect(
       within(keepFromFolder.parentElement as HTMLElement).getByText(
-        "This decides 2 selected sets and leaves 0 unchanged.",
+        "Decides 2 of the selected sets and leaves 0 of them unchanged.",
       ),
     ).toBeTruthy();
     fireEvent.click(keepFromFolder);

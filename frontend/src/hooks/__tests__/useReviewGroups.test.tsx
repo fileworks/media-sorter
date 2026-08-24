@@ -46,7 +46,7 @@ describe("useReviewGroups", () => {
 
   /**
    * The opposite of what this asserted under `W0-UI-001`, exactly as that test
-   * said it would: `P2-DEDUP-D3` landed the producer, so the catalog can answer
+   * said it would: catalog indexing writes the producer facts, so the catalog can answer
    * for burst stacks and the user's setting alone decides again.
    */
   it("requests burst stacks now that the catalog can produce them", async () => {

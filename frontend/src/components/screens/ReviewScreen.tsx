@@ -27,12 +27,12 @@ import {
   entriesIn,
   folderGroups,
   folderTrail,
-  resolveQueue,
   reviewStats,
   staysDivisionFor,
   STAYS_PATH,
   type SetEntry,
 } from "@/lib/reviewBrowse";
+import { sortSets } from "@/lib/reviewSort";
 import {
   catalogGroupsForRun,
   comparePair,
@@ -82,6 +82,7 @@ interface Comparison {
   recommendedId: string | null;
   recommendedLabel: string | null;
   recommendationReason: string | null;
+  decisionLocked: boolean;
 }
 
 export function ReviewScreen({
@@ -92,7 +93,7 @@ export function ReviewScreen({
   onOpenSources,
   onDecisionsChange,
 }: ReviewScreenProps) {
-  const { t, locale } = useI18n();
+  const { t, tCount, locale } = useI18n();
   const [comparing, setComparing] = useState<Comparison | null>(null);
   const [compareRefusal, setCompareRefusal] = useState<string | null>(null);
   const [expandedSets, setExpandedSets] = useState<ReadonlySet<string>>(new Set());
@@ -111,7 +112,12 @@ export function ReviewScreen({
     () => catalogGroupsForRun(result.items, groups.groups),
     [groups.groups, result.items],
   );
-  const surface = useReviewSurface(result, scopedGroups, config.duplicate_keeper_policy);
+  const surface = useReviewSurface(
+    result,
+    scopedGroups,
+    config.duplicate_keeper_policy,
+    !groups.isLoading && !groups.isError,
+  );
 
   useEffect(() => setDecidedSetIds(surface.decidedSetIds), [surface.decidedSetIds]);
 
@@ -121,10 +127,23 @@ export function ReviewScreen({
     [config.target_directory, surface.rows],
   );
   const stats = useMemo(() => reviewStats(surface.rows, entries), [entries, surface.rows]);
-  const tree = useMemo(() => browseTree(entries, t("review.tree.root")), [entries, t]);
+  // Only Browse draws the tree, and every decision invalidates it. Deciding is
+  // done in Resolve, so building it there is a folder tree nobody is looking
+  // at, rebuilt once per decision over the whole plan.
+  const tree = useMemo(
+    () =>
+      surface.mode === "browse"
+        ? browseTree(entries, t("review.tree.root"))
+        : browseTree([], t("review.tree.root")),
+    [entries, surface.mode, t],
+  );
+  // One order for the panel. The list is sorted by the toolbar's control while
+  // the queue used entry order, so "Set 3 of 15" named a row 12 places down the
+  // list and the arrow keys walked an order nothing on screen showed.
   const allSets = useMemo(
-    () => duplicateSetEntries(surface.rows, config.target_directory),
-    [config.target_directory, surface.rows],
+    () =>
+      sortSets(duplicateSetEntries(surface.rows, config.target_directory), surface.sort, locale),
+    [config.target_directory, locale, surface.rows, surface.sort],
   );
 
   // Do not expose a transient zero while catalog-backed decisions load.
@@ -145,15 +164,11 @@ export function ReviewScreen({
     stats.undecided,
     surface.reviewedSets,
   ]);
-  // Include a resolved set when Browse explicitly opens it in the queue.
-  const queue = useMemo(() => {
-    const waiting = resolveQueue(entries);
-    if (surface.queueSetId === null || waiting.some((entry) => entry.id === surface.queueSetId)) {
-      return waiting;
-    }
-    const opened = allSets.find((entry) => entry.id === surface.queueSetId);
-    return opened ? [...waiting, opened] : waiting;
-  }, [allSets, entries, surface.queueSetId]);
+  // Every set the panel lists, in the order it lists them: "Set 3 of 15" names
+  // the third row, and the total stops shrinking under the reader as decisions
+  // land. Which sets are still open is a separate question, answered by the
+  // open count and by "Next open".
+  const queue = allSets;
 
   const needle = surface.search.trim().toLowerCase();
   const paneEntries = useMemo(() => {
@@ -224,7 +239,18 @@ export function ReviewScreen({
     (row: ReviewRow): ComparableFile => {
       const group = row.stack ? groupFor(row.stack.id) : undefined;
       const member = group?.members.find((candidate) => candidate.observed_path === row.source);
-      return member ? comparableFromMember(member, row.dateSource) : comparableFromRow(row);
+      return member
+        ? {
+            ...comparableFromMember(member, row.dateSource),
+            companionCount: row.companionCount,
+            unitId: row.unitId,
+            unitPrimary: row.unitId ? row.unitPrimary : null,
+            companions: row.companions,
+            unitWarnings: row.unitWarnings,
+            destination: row.destination,
+            plannedStatus: row.status,
+          }
+        : comparableFromRow(row);
     },
     [groupFor],
   );
@@ -271,6 +297,7 @@ export function ReviewScreen({
             : t("review.compare.recommendationReason", {
                 rule: t(`config.keeper.${sharedEntry?.proposalPolicy ?? "manual"}`),
               }),
+        decisionLocked: sharedEntry?.hasBaseline === true,
       });
     },
     [allSets, comparableFor, t],
@@ -398,8 +425,10 @@ export function ReviewScreen({
 
   const scopeLabel =
     surface.treePath === null || surface.treePath === ""
-      ? t("review.browse.scopeAll", { count: paneEntries.length.toLocaleString(locale) })
-      : t("review.browse.scopeFolder", {
+      ? tCount("review.browse.scopeAll", paneEntries.length, {
+          count: paneEntries.length.toLocaleString(locale),
+        })
+      : tCount("review.browse.scopeFolder", paneEntries.length, {
           folder: folderLabel(surface.treePath, t),
           count: paneEntries.length.toLocaleString(locale),
         });
@@ -636,6 +665,12 @@ export function ReviewScreen({
               onOpenSet={(setId) => surface.setQueueSetId(setId)}
               onKeep={chooseKeeperBySource}
               onKeepAll={keepAll}
+              onReset={surface.clearDecision}
+              onResetAll={() => {
+                for (const entry of allSets) {
+                  if (!entry.hasBaseline) surface.clearDecision(entry.id);
+                }
+              }}
               onAcceptProposal={surface.acceptProposal}
               onCompare={compareSet}
               onOpenDetail={surface.setDetailPath}
@@ -684,7 +719,7 @@ export function ReviewScreen({
                     <button
                       type="button"
                       onClick={() => surface.setTreePath(null)}
-                      className="shrink-0 rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="inline-flex min-h-6 shrink-0 items-center rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {t("review.tree.root")}
                     </button>
@@ -704,7 +739,7 @@ export function ReviewScreen({
                             <button
                               type="button"
                               onClick={() => surface.setTreePath(step.path)}
-                              className="truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              className="inline-flex min-h-6 items-center truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               {folderNameFor(step.path, step.name)}
                             </button>
@@ -808,7 +843,10 @@ export function ReviewScreen({
               : null
           }
           onKeepThis={
-            detailSet !== null && detailRow.stack !== null && detailRow.status !== "baseline"
+            detailSet !== null &&
+            !detailSet.hasBaseline &&
+            detailRow.stack !== null &&
+            detailRow.status !== "baseline"
               ? () => {
                   chooseKeeperBySource(detailSet.id, detailRow.source);
                   surface.setDetailPath(null);
@@ -838,6 +876,7 @@ export function ReviewScreen({
           recommendedId={comparing.recommendedId}
           recommendedLabel={comparing.recommendedLabel}
           recommendationReason={comparing.recommendationReason}
+          decisionLocked={comparing.decisionLocked}
           onClose={() => setComparing(null)}
           onKeep={(memberId) => {
             if (comparing.setId) surface.chooseKeeper(comparing.setId, memberId);
