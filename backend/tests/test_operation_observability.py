@@ -387,3 +387,39 @@ def test_the_diagnostics_endpoint_reports_state_without_content(client: object) 
     assert isinstance(payload["operations_needing_review"], list)
     assert isinstance(payload["recovery_operations"], list)
     assert "message" not in payload["logging"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        JournalDurabilityError("journal volume is full"),
+        OSError(errno.EACCES, "state root is read-only"),
+    ],
+    ids=["durability", "os-error"],
+)
+def test_an_operation_refuses_to_start_when_its_journal_cannot_be_opened(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+) -> None:
+    """Journal-open failure must fail closed, before any mutation is possible.
+
+    A journal that cannot be opened once meant the run continued with
+    `journal = None`, so a live sort could move media with no durable record to
+    recover from. Both failure kinds the caller catches are exercised.
+    """
+    source = _source(tmp_path)
+    original = source.read_bytes()
+    destination_root = tmp_path / "sorted"
+
+    def refuse_to_open(*_args: object, **_kwargs: object) -> DurableActionJournal:
+        raise failure
+
+    monkeypatch.setattr(DurableActionJournal, "open_operation", refuse_to_open)
+
+    with pytest.raises(JournalDurabilityError):
+        _execution(tmp_path)
+
+    # Nothing may have been created or moved by the refused start.
+    assert source.read_bytes() == original
+    assert destination_root.exists() is False
