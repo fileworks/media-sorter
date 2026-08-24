@@ -1,5 +1,6 @@
 """Static checks for the supported GitHub Actions baseline."""
 
+import itertools
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,52 @@ ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
+def _matrix_rows(matrix: object) -> list[dict[str, object]]:
+    """Every combination a matrix expands to, `include` rows taken verbatim."""
+    if not isinstance(matrix, dict):
+        return [{}]
+    included = matrix.get("include")
+    if isinstance(included, list):
+        return [row for row in included if isinstance(row, dict)]
+    axes = {
+        str(key): value
+        for key, value in matrix.items()
+        if key not in {"include", "exclude"} and isinstance(value, list)
+    }
+    if not axes:
+        return [{}]
+    return [dict(zip(axes, values, strict=True)) for values in itertools.product(*axes.values())]
+
+
+def _emitted_contexts(document: object) -> set[str]:
+    """The exact check names this workflow reports, matrices expanded."""
+    contexts: set[str] = set()
+    assert isinstance(document, dict)
+    jobs = document.get("jobs")
+    assert isinstance(jobs, dict)
+    for job_id, raw_job in jobs.items():
+        assert isinstance(raw_job, dict)
+        template = str(raw_job.get("name") or job_id)
+        strategy = raw_job.get("strategy")
+        matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+        for row in _matrix_rows(matrix):
+            context = template
+            for key, value in row.items():
+                context = context.replace(f"${{{{ matrix.{key} }}}}", str(value))
+            assert "${{ matrix." not in context, f"unresolved context template: {context}"
+            contexts.add(context)
+    return contexts
+
+
+def _assert_workflow_policy(source: str, policy: dict[str, object]) -> None:
+    required = policy["required_contexts"]
+    assert isinstance(required, list)
+    assert _emitted_contexts(yaml.safe_load(source)) == {str(name) for name in required}
+    native = source.split("  native:", maxsplit=1)[1].split("\n  docs-links:", maxsplit=1)[0]
+    command = str(policy["native_clippy_command"])
+    assert native.count(command) == 1
+
+
 def _workflow_text() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for path in sorted(WORKFLOWS.glob("*.yml")))
 
@@ -18,6 +65,7 @@ def test_official_actions_use_node_24_compatible_generations() -> None:
     workflows = _workflow_text()
 
     approved = {
+        "actions/cache": {"v6"},
         "actions/checkout": {"v5", "v7"},
         "actions/setup-python": {"v7"},
         "actions/upload-artifact": {"v7"},
@@ -124,7 +172,76 @@ def test_release_native_gate_runs_on_a_shipped_platform() -> None:
     assert "runs-on: macos-latest" in native_gate
     assert "cargo check --locked" in native_gate
     assert "cargo test --locked" in native_gate
+    assert "cargo clippy --locked -- -D warnings" in native_gate
+    assert "components: rustfmt, clippy" in native_gate
     assert "needs: [check-ci, check-native]" in release
+
+
+def test_release_ref_is_verified_before_any_packaging_job_can_run() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    source_gate = release.split("  check-ci:", maxsplit=1)[1].split(
+        "\n  check-native:", maxsplit=1
+    )[0]
+
+    assert "fetch-depth: 0" in source_gate
+    assert "node --test scripts/releaseability.test.cjs" in source_gate
+    assert "node scripts/releaseability.cjs --verify-tag" in source_gate
+    assert "npm ci --ignore-scripts" in source_gate
+    assert source_gate.index("npm ci --ignore-scripts") < source_gate.index(
+        "node scripts/releaseability.cjs --verify-tag"
+    )
+    assert "needs: [check-ci, check-native]" in release
+
+
+def test_native_ci_denies_clippy_warnings() -> None:
+    workflow = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+    native = workflow.split("  native:", maxsplit=1)[1].split("\n  docs-links:", maxsplit=1)[0]
+
+    assert native.count("cargo clippy --locked -- -D warnings") == 1
+    assert "components: rustfmt, clippy" in native
+    assert "Canonical command: maintenance/workflows.py" in native
+
+
+def test_ci_emits_every_exact_generated_policy_context() -> None:
+    workflow = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+    policy = json.loads((ROOT / "contracts" / "workflow-policy.json").read_text(encoding="utf-8"))
+
+    _assert_workflow_policy(workflow, policy)
+
+
+def test_workflow_policy_guard_detects_context_and_clippy_mutations() -> None:
+    workflow = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+    policy = json.loads((ROOT / "contracts" / "workflow-policy.json").read_text(encoding="utf-8"))
+    mutations = (
+        workflow.replace("name: build", "name: build-renamed", 1),
+        workflow.replace(str(policy["native_clippy_command"]), "cargo clippy --locked", 1),
+    )
+
+    for mutated in mutations:
+        try:
+            _assert_workflow_policy(mutated, policy)
+        except AssertionError:
+            continue
+        raise AssertionError("workflow policy mutation was not detected")
+
+
+def test_active_media_tagging_documentation_is_uniformly_local_only() -> None:
+    required_claims = {
+        ROOT / "README.md": "no cloud media provider or credential path",
+        ROOT / "SECURITY.md": "stores no cloud media credentials",
+        ROOT / "docs" / "design.md": "there is no cloud tagger",
+        ROOT / "docs" / "settings-reference.md": "local-only",
+        ROOT / "docs" / "kb-api-contract.md": "Never add credentials or media-provider secrets",
+        ROOT / "docs" / "kb-backend.md": "Never add cloud media providers or credential fields",
+        ROOT / "docs" / "kb-testing.md": "there is no cloud media tagger",
+    }
+
+    missing = {
+        str(path.relative_to(ROOT)): claim
+        for path, claim in required_claims.items()
+        if claim not in path.read_text(encoding="utf-8")
+    }
+    assert missing == {}
 
 
 def test_release_retries_transient_tauri_bundler_download_failures() -> None:

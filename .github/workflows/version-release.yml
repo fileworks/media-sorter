@@ -1,7 +1,7 @@
 name: Version Release
 
-# Runs after every push to main. If the new commits contain a `feat:` or `fix:`
-# (or a breaking change), release-it:
+# Runs only after an explicitly reviewed manual dispatch. If the selected main
+# history contains a `feat:` or `fix:` (or a breaking change), release-it:
 #   1. computes the next version from Conventional Commits,
 #   2. syncs that version into the app (scripts/sync-version.mjs),
 #   3. updates CHANGELOG.md,
@@ -18,8 +18,6 @@ name: Version Release
 # release.yml against the tag (gh workflow run release.yml --ref v<version>).
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,11 +37,6 @@ jobs:
   release:
     name: Create release (if warranted)
     runs-on: ubuntu-latest
-    # Don't re-trigger on the `chore(release): …` commit that this workflow itself
-    # pushes back to main. (We deliberately omit `[skip ci]` from that commit so the
-    # tag push reliably triggers release.yml regardless of GitHub's tag/skip-ci
-    # semantics — this guard suppresses the redundant re-run instead.)
-    if: ${{ !contains(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v7
         with:

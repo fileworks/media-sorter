@@ -3,7 +3,7 @@
 // into every file that hardcodes the app/backend version, so the built installers
 // AND the running backend all report the same version.
 //
-// Invoked from .release-it.json via its after:bump hook:
+// Invoked from .release-it.cjs via its after:bump hook:
 //     node scripts/sync-version.mjs <version>
 // and runs from the repository root (release-it's cwd), so all paths below
 // are relative to the repo root. The files updated here are committed back to main

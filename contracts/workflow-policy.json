@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "required_contexts": [
+    "Archive security — macos-latest / Python 3.11",
+    "Archive security — ubuntu-latest / Python 3.10",
+    "Archive security — ubuntu-latest / Python 3.11",
+    "Archive security — ubuntu-latest / Python 3.14",
+    "Archive security — windows-latest / Python 3.11",
+    "Backend — Windows path / DirectML contracts",
+    "Backend — lint / typecheck / test",
+    "backend-types (core)",
+    "backend-types (shipped-local-ai)",
+    "build",
+    "dependency-audit",
+    "docs-links",
+    "native",
+    "release-integrity",
+    "Backend — macOS transfer and path semantics",
+    "a11y — browser-level WCAG checks",
+    "packaging — the bundle launches and mounts its UI"
+  ],
+  "native_clippy_command": "cargo clippy --locked -- -D warnings"
+}

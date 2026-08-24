@@ -173,6 +173,11 @@ branding:
 branding-check:
 	$(PYTHON) scripts/generate_branding.py --check
 
+contracts-check:
+	$(PYTHON) scripts/generate_review_status_contract.py --check
+	$(PYTHON) scripts/generate_keeper_golden_vector.py --check
+	$(PYTHON) scripts/generate_config_defaults.py --check
+
 # Backwards-compatible command name; all output now comes from the approved
 # canonical source rather than the historical procedural icon generator.
 generate-icons: branding

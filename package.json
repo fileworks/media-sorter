@@ -5,10 +5,12 @@
   "description": "Audited release tooling for MediaSorter. This private package is never versioned or published.",
   "scripts": {
     "release": "release-it --ci",
-    "release:dry": "release-it --ci --dry-run"
+    "release:dry": "release-it --ci --dry-run",
+    "release:guard:test": "node --test scripts/releaseability.test.cjs"
   },
   "devDependencies": {
     "@release-it/conventional-changelog": "^12.0.0",
+    "conventional-changelog": "^8.1.1",
     "release-it": "^21.0.1"
   }
 }
