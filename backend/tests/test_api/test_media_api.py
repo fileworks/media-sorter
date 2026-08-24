@@ -1,6 +1,9 @@
 """Integration tests for the media (thumbnail) API route."""
 
 import io
+import shutil
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -15,10 +18,23 @@ from app.core.config import Config
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
-    base = tmp_path_factory.mktemp("media")
+    # Every per-test `tmp_path` lives under this base, so the files these tests
+    # create are inside the configured library. The media routes require that
+    # now: a path outside every configured root is refused before it is opened.
+    base = tmp_path_factory.getbasetemp()
     config = Config(source_directory=str(base), target_directory=str(base / "dest"))
     app = AppFactory.create(config=config)
     return TestClient(app)
+
+
+@pytest.fixture
+def outside_library() -> Iterator[Path]:
+    """A real directory that is deliberately not under any configured root."""
+    location = Path(tempfile.mkdtemp(prefix="outside-library-"))
+    try:
+        yield location
+    finally:
+        shutil.rmtree(location, ignore_errors=True)
 
 
 def _write_jpeg(path: Any) -> None:
@@ -204,3 +220,102 @@ def test_media_diff_requires_both_paths(client: TestClient, tmp_path: Path) -> N
     a = tmp_path / "a.jpg"
     _write_jpeg(a)
     assert client.get("/api/media/diff", params={"a": str(a)}).status_code == 422
+
+
+# ------------------------------------------------------------------ #
+# Library scope                                                        #
+# ------------------------------------------------------------------ #
+#
+# Every path below arrives from the client. These routes used to open whatever
+# they were given, on the reasoning that a loopback backend has no other
+# origin. `app.core.api_security` exists because that is not true, so a read
+# outside the configured library is refused rather than served.
+
+
+def test_thumbnail_outside_the_library_is_refused(
+    client: TestClient, outside_library: Path
+) -> None:
+    secret = outside_library / "private.jpg"
+    _write_jpeg(secret)
+
+    response = client.get("/api/thumbnail", params={"path": str(secret)})
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "MEDIA_OUTSIDE_LIBRARY"
+
+
+def test_video_content_outside_the_library_is_refused(
+    client: TestClient, outside_library: Path
+) -> None:
+    secret = outside_library / "private.mp4"
+    secret.write_bytes(b"\x00" * 256)
+
+    response = client.get("/api/media/content", params={"path": str(secret)})
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "MEDIA_OUTSIDE_LIBRARY"
+
+
+def test_media_info_outside_the_library_is_refused(
+    client: TestClient, outside_library: Path
+) -> None:
+    secret = outside_library / "private.jpg"
+    _write_jpeg(secret)
+
+    response = client.get("/api/media/info", params={"path": str(secret)})
+
+    assert response.status_code == 403
+
+
+def test_media_diff_refuses_when_either_side_is_outside(
+    client: TestClient, tmp_path: Path, outside_library: Path
+) -> None:
+    inside = tmp_path / "inside.jpg"
+    _write_jpeg(inside)
+    secret = outside_library / "private.jpg"
+    _write_jpeg(secret)
+
+    assert (
+        client.get("/api/media/diff", params={"a": str(inside), "b": str(secret)}).status_code
+        == 403
+    )
+    assert (
+        client.get("/api/media/diff", params={"a": str(secret), "b": str(inside)}).status_code
+        == 403
+    )
+
+
+def test_a_symlink_inside_the_library_cannot_escape_it(
+    client: TestClient, tmp_path: Path, outside_library: Path
+) -> None:
+    """The check resolves links; a textual prefix comparison would serve this."""
+    secret = outside_library / "private.jpg"
+    _write_jpeg(secret)
+    bait = tmp_path / "holiday.jpg"
+    bait.symlink_to(secret)
+
+    # The bait's own path really is inside a configured root.
+    assert str(bait).startswith(str(tmp_path))
+
+    response = client.get("/api/thumbnail", params={"path": str(bait)})
+
+    assert response.status_code == 403
+
+
+def test_a_vanished_file_inside_the_library_still_degrades_normally(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Media on a disconnected share disappears routinely; that is not a probe."""
+    response = client.get("/api/media/info", params={"path": str(tmp_path / "gone.jpg")})
+
+    assert response.status_code == 200
+    assert response.json()["width"] is None
+
+
+def test_a_nonexistent_path_outside_the_library_is_still_refused(
+    client: TestClient, outside_library: Path
+) -> None:
+    """Otherwise a probe learns whether a path exists by which error it gets."""
+    response = client.get("/api/media/info", params={"path": str(outside_library / "nope.jpg")})
+
+    assert response.status_code == 403

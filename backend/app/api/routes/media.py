@@ -1,8 +1,13 @@
 """Media routes — on-demand thumbnails, file info, and visual diffs.
 
 Backs the preview hover card, the full-size preview modal, and the duplicate
-comparison view. Everything here works on the user's own local files; the
-backend is localhost-only, so reading an arbitrary local path is by design.
+comparison view.
+
+Every path here arrives from the client, so every path here is checked against
+the configured library roots before anything is read. These routes previously
+reasoned that "the backend is localhost-only, so reading an arbitrary local
+path is by design" — the same assumption `app.core.api_security` was written to
+refute. See `app.core.media_scope`.
 """
 
 import asyncio
@@ -17,8 +22,9 @@ from PIL import Image, ImageChops, ImageOps
 from pydantic import BaseModel
 from starlette.responses import FileResponse
 
-from app.api.deps import ContainerDep
+from app.api.deps import ConfigDep, ContainerDep
 from app.core.exceptions import UnsupportedMediaError
+from app.core.media_scope import assert_media_readable
 from app.services.filesystem_service import (
     IMAGE_EXTENSIONS,
     VIDEO_EXTENSIONS,
@@ -100,6 +106,7 @@ def _render_thumbnail(path_str: str, size: int = _THUMB_MAX_PX) -> bytes | None:
 @router.get("/thumbnail")
 async def thumbnail(
     container: ContainerDep,
+    config: ConfigDep,
     path: str = Query(...),
     size: int = Query(default=_THUMB_MAX_PX),
     if_none_match: str | None = Header(default=None, alias="If-None-Match"),
@@ -111,12 +118,12 @@ async def thumbnail(
     pixel size the client wants rendered (clamped to a sane range); pass ~2× the
     CSS display size for crisp HiDPI output. Videos seek to 10 % of duration
     (capped at 1 s) for the keyframe. Unreadable or unsupported files yield 415
-    so the client can fall back to a placeholder. The backend is localhost-only
-    and works on the user's own files, so reading an arbitrary local path here
-    is by design — there is no other origin.
+    so the client can fall back to a placeholder; a path outside every
+    configured root yields 403 and is never opened.
     """
     requested_size = max(_THUMB_MIN_PX, min(size, _THUMB_LIMIT_PX))
-    source = Path(path)
+    source = assert_media_readable(path, config)
+    path = str(source)
     try:
         key = await asyncio.to_thread(container.thumbnail_cache.key_for, source, requested_size)
     except OSError:
@@ -229,7 +236,9 @@ def _media_info(path_str: str, extraction_service: Any) -> dict[str, Any]:
 
 
 @router.get("/media/content")
-async def media_content(container: ContainerDep, path: str = Query(...)) -> FileResponse:
+async def media_content(
+    container: ContainerDep, config: ConfigDep, path: str = Query(...)
+) -> FileResponse:
     """Stream a local video through the authenticated API session.
 
     Browsers cannot attach the capability header to a plain ``<video src>``.
@@ -239,7 +248,7 @@ async def media_content(container: ContainerDep, path: str = Query(...)) -> File
     fallback as the thumbnail endpoint.
     """
     del container  # Dependency execution authenticates the request.
-    source = Path(path)
+    source = assert_media_readable(path, config)
     if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
         raise UnsupportedMediaError("No playable video is available for this file", file_path=path)
     media_type = mimetypes.guess_type(source.name)[0] or "video/mp4"
@@ -247,14 +256,17 @@ async def media_content(container: ContainerDep, path: str = Query(...)) -> File
 
 
 @router.get("/media/info", response_model=MediaInfoResponse)
-async def media_info(container: ContainerDep, path: str = Query(...)) -> MediaInfoResponse:
+async def media_info(
+    container: ContainerDep, config: ConfigDep, path: str = Query(...)
+) -> MediaInfoResponse:
     """Return resolution, size, and extracted date/source for a local file.
 
     Powers the resolution readout in the hover card, preview modal, and both
     panes of the duplicate comparison (the "original" side has no preview item,
     so its details are fetched here).
     """
-    info = await asyncio.to_thread(_media_info, path, container.extraction_service)
+    source = assert_media_readable(path, config)
+    info = await asyncio.to_thread(_media_info, str(source), container.extraction_service)
     return MediaInfoResponse(**info)
 
 
@@ -309,6 +321,7 @@ def _render_diff(a_str: str, b_str: str, size: int = _DIFF_MAX_PX) -> bytes | No
 
 @router.get("/media/diff")
 async def media_diff(
+    config: ConfigDep,
     a: str = Query(...),
     b: str = Query(...),
     size: int = Query(default=_DIFF_MAX_PX),
@@ -318,7 +331,9 @@ async def media_diff(
     Backs the duplicate comparison's "view diff" toggle. 415 when either path is
     not a readable image (e.g. a video), so the client can hide the affordance.
     """
-    data = await asyncio.to_thread(_render_diff, a, b, size)
+    left = assert_media_readable(a, config)
+    right = assert_media_readable(b, config)
+    data = await asyncio.to_thread(_render_diff, str(left), str(right), size)
     if data is None:
         raise UnsupportedMediaError("Cannot diff these files")
     return Response(
