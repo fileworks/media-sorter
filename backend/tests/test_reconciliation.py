@@ -203,6 +203,95 @@ def test_recovery_revalidates_source_inside_the_final_remove_boundary(
     assert outcome.journal_state == "reconciliation_required"
 
 
+def test_recovery_refuses_a_same_size_rewrite_inside_the_real_final_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The final check's own content comparison must reject a same-size rewrite.
+
+    The neighbouring boundary test stubs `_source_still_verified`, so it can
+    only prove the caller consults it. Drive the rewrite from the destination
+    check that runs immediately before instead, and the real comparison is the
+    thing under test: a source of identical length but different bytes is not
+    the reviewed content and must not be unlinked.
+    """
+    root = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "source.bin"
+    source.write_bytes(b"authorized content")
+    manifest = _manifest(source, destination)
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"authorized content")
+    _interrupt(root, manifest, ("committed", "journal_durable", "source_removing"))
+    (report,) = reconcile_pending_operations(root)
+
+    # The report still recommends removal; only the late rewrite makes it wrong.
+    assert report.actions[0].recommended == "remove_verified_source"
+
+    original_destination_check = reconciliation._destination_still_verified
+
+    def rewrite_source_after_destination_check(*args: object, **kwargs: object) -> bool:
+        verified = original_destination_check(*args, **kwargs)  # type: ignore[arg-type]
+        replacement = b"newer user content"
+        assert len(replacement) == len(b"authorized content")
+        source.write_bytes(replacement)
+        return verified
+
+    monkeypatch.setattr(
+        reconciliation,
+        "_destination_still_verified",
+        rewrite_source_after_destination_check,
+    )
+
+    outcome = apply_safe_recovery(root, report)
+
+    assert source.read_bytes() == b"newer user content"
+    assert destination.read_bytes() == b"authorized content"
+    assert outcome.removed_sources == []
+    assert outcome.unresolved_actions == ["action-1"]
+    assert outcome.journal_state == "reconciliation_required"
+
+
+def test_recovery_refuses_destination_drift_at_the_unlink_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The destination is re-measured inside the unlink boundary, not before it.
+
+    `_destination_still_verified` runs earlier, so a destination damaged after
+    it returns would otherwise reach the unlink with a stale verdict. Removing
+    the source then destroys the only good copy.
+    """
+    root = tmp_path / "state"
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "sorted" / "source.bin"
+    source.write_bytes(b"authorized content")
+    manifest = _manifest(source, destination)
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"authorized content")
+    _interrupt(root, manifest, ("committed", "journal_durable", "source_removing"))
+    (report,) = reconcile_pending_operations(root)
+
+    original_source_check = reconciliation._source_still_verified
+
+    def damage_destination_after_source_check(*args: object, **kwargs: object) -> bool:
+        verified = original_source_check(*args, **kwargs)  # type: ignore[arg-type]
+        destination.write_bytes(b"corrupted content!")
+        return verified
+
+    monkeypatch.setattr(
+        reconciliation,
+        "_source_still_verified",
+        damage_destination_after_source_check,
+    )
+
+    outcome = apply_safe_recovery(root, report)
+
+    assert source.read_bytes() == b"authorized content"
+    assert outcome.removed_sources == []
+    assert outcome.unresolved_actions == ["action-1"]
+
+
 def test_recovery_rewrite_after_final_hash_callback_remains_unresolved(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -113,6 +113,14 @@ jobs:
       # `test_root_identity.py` was absent from this list while three of its
       # contracts are `skipif(os.name != "nt")` — so they were skipped on every
       # runner and executed on none. A skip is never a pass (`P2-TEST-002`).
+      # `test_catalog.py` holds the future-schema preflight contract: the
+      # catalog must refuse a newer `user_version` *before* a writable open,
+      # leaving the database and any pre-existing `-wal`/`-shm`/hot-journal
+      # sibling byte- and stat-identical. That guarantee is filesystem
+      # behaviour, so proving it on macOS and Linux says nothing about NTFS.
+      # `test_filesystem_capabilities.py` and `test_integrity_contracts.py`
+      # cover the timestamp granularity and metadata preservation that go
+      # through Windows' own `SetFileTime` rather than POSIX `utime`.
       - name: Run Windows identity and provider tests
         working-directory: backend
         run: >-
@@ -120,6 +128,9 @@ jobs:
           tests/test_utils/test_path_utils.py
           tests/test_services/test_hardware.py
           tests/test_root_identity.py
+          tests/test_catalog.py
+          tests/test_filesystem_capabilities.py
+          tests/test_integrity_contracts.py
           -v
 
   backend-macos:
