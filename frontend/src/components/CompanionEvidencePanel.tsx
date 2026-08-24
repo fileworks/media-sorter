@@ -16,7 +16,11 @@ export function CompanionEvidencePanel({
   const units = items
     .filter(
       (item) =>
-        item.unit_id !== undefined ||
+        // `!= null` on purpose: JSON carries an absent unit as `null` as often
+        // as it omits the key, and `null !== undefined` is true — so a strict
+        // check listed every file that belongs to no unit at all, then rendered
+        // its membership as "Primary in unit null".
+        item.unit_id != null ||
         (item.companions?.length ?? 0) > 0 ||
         (item.unit_warnings?.length ?? 0) > 0,
     )
@@ -38,7 +42,7 @@ export function CompanionEvidencePanel({
             >
               <p className="break-all text-xs font-semibold text-foreground">{item.source}</p>
               <p className="text-3xs text-muted-foreground">
-                {item.unit_id === undefined
+                {item.unit_id == null
                   ? t("companionEvidence.membership.unknown")
                   : item.unit_primary === true
                     ? t("companionEvidence.membership.primary", { id: item.unit_id })

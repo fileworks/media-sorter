@@ -31,6 +31,28 @@ const ITEM = {
 afterEach(cleanup);
 
 describe("companion evidence shared by Plan, preflight, and Execute", () => {
+  it("never lists a file that belongs to no unit, or names the unit 'null'", () => {
+    // JSON carries an absent unit as `null` as readily as it omits the key, and
+    // `null !== undefined` is true — so the strict filter admitted every file
+    // with no unit at all and then rendered "Primary in unit null".
+    const orphan = {
+      ...ITEM,
+      source: "/input/IMG_9999.jpg",
+      unit_id: null,
+      companions: [],
+      unit_warnings: [],
+    } as unknown as PreviewItem;
+
+    const { container } = render(
+      <I18nProvider initialLocale="en">
+        <CompanionEvidencePanel items={[orphan]} />
+      </I18nProvider>,
+    );
+
+    expect(container.textContent ?? "").not.toContain("null");
+    expect(screen.queryByText("/input/IMG_9999.jpg")).toBeNull();
+  });
+
   it("renders role, membership, destination, warning, and outcome in English", () => {
     render(
       <I18nProvider initialLocale="en">

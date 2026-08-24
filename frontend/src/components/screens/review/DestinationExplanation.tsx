@@ -5,6 +5,7 @@ import { FiChevronRight, FiSettings } from "react-icons/fi";
 import { settingAnchorForDecision } from "@/components/config/groups";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
+import { formatDate } from "@/lib/dateFormatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { cn } from "@/lib/utils";
 import type { OutcomeProvenance } from "@/types/api";
@@ -114,7 +115,7 @@ export function DestinationExplanation({ provenance, onOpenSetting }: Destinatio
               {provenance.date.resolved_date === null
                 ? unknown
                 : t("review.detail.dateWinner", {
-                    date: provenance.date.resolved_date,
+                    date: formatDate(provenance.date.resolved_date, { locale }),
                     source: formatMetadataSource(provenance.date.winning_source ?? "none", t),
                   })}
             </p>

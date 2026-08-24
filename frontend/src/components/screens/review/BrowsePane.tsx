@@ -19,6 +19,7 @@ import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useViewportBudget } from "@/hooks/useViewportBudget";
 import { useI18n } from "@/i18n/I18nContext";
 import { MIN_TARGET_24 } from "@/lib/a11y";
+import { formatDate } from "@/lib/dateFormatters";
 import { formatBytes } from "@/lib/formatters";
 import { companionRoleLabel, companionStatusLabel } from "@/lib/evidenceLabels";
 import { formatMetadataSource } from "@/lib/metadataSource";
@@ -660,7 +661,7 @@ function SetCopies({
                   {row.date === null
                     ? t("review.resolve.noDate")
                     : t("review.resolve.dated", {
-                        date: row.date,
+                        date: formatDate(row.date, { locale }),
                         source: formatMetadataSource(row.dateSource, t),
                       })}
                 </p>
@@ -862,7 +863,7 @@ function FileLine({
       </button>
 
       <span className="truncate text-right text-3xs tabular-nums text-muted-foreground">
-        {row.date ?? t("review.resolve.noDate")}
+        {row.date === null ? t("review.resolve.noDate") : formatDate(row.date, { locale })}
       </span>
 
       <span className="flex justify-end gap-1">
