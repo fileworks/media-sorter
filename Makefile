@@ -1,6 +1,6 @@
 .PHONY: install install-rust check-deps branding branding-check generate-icons dev backend frontend \
         test test-cov test-ci test-unit test-integration test-e2e test-services test-api \
-        lint typecheck format clean \
+        lint typecheck format contracts-check clean \
         bundle-backend bundle-ffmpeg bundle-portable \
         build build-tauri release release-preflight release-prepare release-finalize \
         ci help
@@ -106,8 +106,12 @@ help:
 	@echo "  make build-tauri           Build Tauri app (requires bundled resources)"
 	@echo "  make release               Full build: bundle-backend + bundle-ffmpeg + build-tauri [+ bundle-portable on Windows]"
 	@echo ""
+	@echo "Contracts:"
+	@echo "  make contracts-check    Verify review-status, keeper vector and config defaults are fresh"
+	@echo ""
 	@echo "CI gate (run before pushing):"
-	@echo "  make ci                 lint + typecheck + test-ci"
+	@echo "  make ci                 branding-check + contracts-check + lint + typecheck + test-ci"
+	@echo "                          (backend only — CI additionally gates the frontend and Rust)"
 
 # ── Dependency checks ─────────────────────────────────────────────────────────
 
@@ -262,7 +266,13 @@ format:
 
 # ── CI gate ───────────────────────────────────────────────────────────────────
 
-ci: branding-check lint typecheck test-ci
+# `contracts-check` costs about a second and is the only local gate that catches
+# a generated contract going stale — the review-status vocabulary, the keeper
+# golden vector, and the frontend's config defaults. The frontend and Rust gates
+# deliberately stay out: ESLint and `tsc` alone run for minutes, and a pre-push
+# gate people stop running proves less than a short one they keep running. CI
+# runs those; `make ci` is the backend gate, and `make help` says so.
+ci: branding-check contracts-check lint typecheck test-ci
 	@echo ""
 	@echo "✓ All CI checks passed"
 
