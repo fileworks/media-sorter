@@ -193,14 +193,21 @@ class DurableActionJournal:
     def reopen(cls, path: Path) -> DurableActionJournal:
         """Continue an interrupted journal so recovery extends the same timeline.
 
-        A crash-truncated trailing record is dropped from the file first, so an
-        appended reconciliation record can never be glued onto half of an
-        earlier one.
+        A crash-truncated trailing record is dropped from the file *before* it is
+        read, so an appended reconciliation record can never be glued onto half
+        of an earlier one — and so the reopened timeline is exactly the durable
+        one. The two definitions of "complete" are not the same: `read_journal`
+        accepts any parseable line, while durability is only established by the
+        terminating newline that follows a successful `fsync`. Reading first let
+        a record that was parseable but never newline-terminated into
+        `_entries`, and the truncation then removed it from disk — leaving the
+        journal claiming a stage the file no longer recorded, and numbering the
+        next append past a sequence nothing would ever contain.
         """
+        _truncate_to_last_complete_record(path)
         stored = read_journal(path)
         if stored.state != "active":
             raise JournalDurabilityError(f"Journal {path} is already {stored.state}")
-        _truncate_to_last_complete_record(path)
         journal = cls(
             path,
             journal_id=stored.journal_id,
@@ -473,12 +480,20 @@ def read_manifest_actions(root: Path, operation_id: str) -> tuple[MutationManife
 
 
 def _truncate_to_last_complete_record(path: Path) -> None:
-    """Drop a partially written trailing line so appends stay parseable."""
-    raw = path.read_text(encoding="utf-8")
-    if raw.endswith("\n") or not raw:
+    """Drop a partially written trailing line so appends stay parseable.
+
+    Byte offsets, not character offsets. ``TextIOWrapper.truncate`` resizes the
+    stream in *bytes*, so an index computed from decoded text cut in the wrong
+    place — and potentially inside a multi-byte sequence — the moment a record
+    stopped being pure ASCII. Records are ASCII today only because
+    ``json.dumps`` escapes non-ASCII by default, and a durability boundary
+    should not rest on a default somewhere else.
+    """
+    raw = path.read_bytes()
+    if not raw or raw.endswith(b"\n"):
         return
-    keep = raw.rfind("\n")
-    with path.open("a", encoding="utf-8") as handle:
+    keep = raw.rfind(b"\n")
+    with path.open("ab") as handle:
         handle.truncate(keep + 1)
         handle.flush()
         os.fsync(handle.fileno())

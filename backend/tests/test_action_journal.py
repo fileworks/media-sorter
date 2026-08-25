@@ -12,6 +12,7 @@ import pytest
 from app.core.action_journal import (
     DurableActionJournal,
     JournalDurabilityError,
+    _truncate_to_last_complete_record,
     list_journals,
     read_journal,
     unresolved_journals,
@@ -206,3 +207,65 @@ def test_unreadable_journals_do_not_break_reconciliation_scanning(tmp_path: Path
     (tmp_path / "journals" / "broken.journal.jsonl").write_text("not json\n", encoding="utf-8")
 
     assert unresolved_journals(tmp_path) == ()
+
+
+def test_reopen_keeps_the_timeline_and_the_file_in_agreement(tmp_path: Path) -> None:
+    """A parseable-but-unterminated tail must not survive in memory only.
+
+    `read_journal` treats any parseable line as a record; durability is only
+    established by the newline that follows a successful `fsync`. A crash
+    between those two points produced a record the reader accepted and the
+    truncation then removed — so the reopened journal reported a stage the file
+    no longer held, and numbered its next append past a sequence that existed
+    nowhere.
+    """
+    journal = DurableActionJournal.open(tmp_path, _manifest())
+    journal.record("action-1", "staged", source_safety="source_retained")
+    journal.close()
+    path = list_journals(tmp_path)[0]
+    complete_but_unterminated = json.dumps(
+        {
+            "record": "entry",
+            "sequence": 2,
+            "action_id": "action-1",
+            "stage": "committed",
+            "staged_path": None,
+            "integrity": None,
+            "source_safety": "redundant_verified_copies",
+            "diagnostic_code": None,
+        },
+        separators=(",", ":"),
+    )
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(complete_but_unterminated)
+
+    reopened = DurableActionJournal.reopen(path)
+    try:
+        assert [entry.sequence for entry in reopened.entries] == [1]
+        assert reopened.last_stage("action-1") == "staged"
+        reopened.record("action-1", "reconciling", source_safety="source_retained")
+    finally:
+        reopened.finish("reconciliation_required")
+        reopened.close()
+
+    stored = read_journal(path)
+    assert [entry.sequence for entry in stored.entries] == [1, 2]
+    assert [entry.stage for entry in stored.entries] == ["staged", "reconciling"]
+
+
+def test_truncation_measures_bytes_not_characters(tmp_path: Path) -> None:
+    """`TextIOWrapper.truncate` takes bytes, so a character index cuts wrong.
+
+    Records are ASCII today only because `json.dumps` escapes non-ASCII by
+    default. Nothing about this boundary should depend on that: measured in
+    characters, a non-ASCII record loses one byte per multi-byte character and
+    the surviving prefix stops being the record that was actually written.
+    """
+    path = tmp_path / "multibyte.journal.jsonl"
+    complete = '{"record":"entry","note":"Grüße 🌍"}\n'
+    torn = '{"record":"entry","note":"Ausseng'
+    path.write_text(complete + torn, encoding="utf-8")
+
+    _truncate_to_last_complete_record(path)
+
+    assert path.read_bytes() == complete.encode("utf-8")
