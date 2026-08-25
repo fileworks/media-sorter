@@ -160,6 +160,14 @@ def _cases() -> list[tuple[str, KeeperPolicyId, DuplicateGroup, tuple[str, ...]]
         _member("twice", relative_path="IMG_0421 copy (2).jpg"),
         _member("once", relative_path="IMG_0421 copy.jpg"),
     )
+    # A leading dot is part of the name, not an extension. Python's `rpartition`
+    # split collapsed such a name to the empty string and scored it unmarked,
+    # while the TypeScript mirror read it in full and scored it marked — a
+    # disagreement no case here reached.
+    dot_leading_names = _group(
+        _member("marked", relative_path=".IMG_0421 copy"),
+        _member("plain", relative_path=".IMG_0421"),
+    )
 
     return [
         ("smart keeps the name without a copy marker", "smart", copy_marked, ()),
@@ -168,6 +176,7 @@ def _cases() -> list[tuple[str, KeeperPolicyId, DuplicateGroup, tuple[str, ...]]
         ("smart falls to the oldest when name and depth tie", "smart", same_name_dated, ()),
         ("smart does not mistake a camera counter for a copy", "smart", camera_names, ()),
         ("smart prefers the less marked name when every copy is marked", "smart", both_marked, ()),
+        ("smart reads a dot-leading name in full", "smart", dot_leading_names, ()),
         ("smart is total: identical names and depths still decide", "smart", ties, ()),
         ("best_quality prefers pixels over bytes", "best_quality", measured, ()),
         ("best_quality falls back to size between equal pixels", "best_quality", equal_pixels, ()),
