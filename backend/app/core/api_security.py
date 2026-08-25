@@ -51,8 +51,8 @@ class LocalApiSecurityMiddleware:
     `Access-Control-Request-Method`. Browsers cannot attach the capability
     header to a preflight, so refusing it would break the packaged client.
 
-    Both halves of that test are load-bearing. Exempting every `OPTIONS`
-    dispatched requests with **no `Origin` at all** to the application
+    Both halves of that test are load-bearing. Exempting every `OPTIONS` would
+    dispatch requests with **no `Origin` at all** to the application
     unauthenticated, because the origin check above only runs when an origin is
     present. The resource request that follows a real preflight is still
     authenticated normally.
