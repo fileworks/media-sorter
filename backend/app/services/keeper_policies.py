@@ -82,8 +82,9 @@ def _identity(member: GroupMember) -> str:
 
 #: Suffixes and prefixes the desktop, phone and file managers add when they
 #: write a second copy of a file that already exists. Matched against the stem
-#: (the filename without its extension), lower-cased. Ordered longest-first so
-#: " - copy (2)" is recognised before " - copy".
+#: (the filename without its extension), lower-cased. Membership is what counts,
+#: not order: a stem contributes one mark if it contains any of these, and the
+#: counter forms below are scored separately.
 _COPY_MARKERS: tuple[str, ...] = (
     " - copy",
     " - kopie",
@@ -97,10 +98,10 @@ _COPY_MARKERS: tuple[str, ...] = (
 
 _COPY_PREFIXES: tuple[str, ...] = ("copy of ", "kopie von ", "duplicate of ")
 
-#: A *bracketed* trailing counter — "IMG_0421 (1)", "IMG_0421 [2]". Brackets are
-#: required: a bare trailing number is how cameras name files, so counting
-#: "DSC_0002" as a copy of "DSC_0001" would treat half a memory card as
-#: duplicates. Anchored with a non-digit lookbehind so "0421" is not read as the
+#: A *bracketed* trailing counter — "IMG_0421 (1)", "IMG_0421 [2]". The brackets
+#: are what make this safe: a bare trailing number is how cameras name files, so
+#: counting "DSC_0002" as a copy of "DSC_0001" would treat half a memory card as
+#: duplicates. Requiring them is also why "IMG_0421" cannot be read as the
 #: counter "421".
 _BRACKETED_COUNTER = re.compile(r"[ _-]*[(\[]\d{1,3}[)\]]$")
 
@@ -110,9 +111,18 @@ _COPY_COUNTER = re.compile(r"(?:copy|kopie)[ _-]*\d{1,3}$")
 
 
 def _stem(member: GroupMember) -> str:
+    """The filename without its extension, the way `pathlib` defines it.
+
+    A leading dot is part of the name, not an extension: `.hidden` has stem
+    `.hidden` and no suffix. `rpartition` disagreed, collapsing every
+    dot-prefixed name to the empty string — so `_copy_marks` scored `.IMG copy`
+    as unmarked here while `reviewWorkbench.ts` scored it as marked, and the two
+    implementations chose different keepers for a group the golden vector never
+    covered.
+    """
     name = _filename(member)
-    head, dot, _ = name.rpartition(".")
-    return (head if dot else name).lower()
+    dot = name.rfind(".")
+    return (name[:dot] if dot > 0 else name).lower()
 
 
 def _copy_marks(member: GroupMember) -> int:

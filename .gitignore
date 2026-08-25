@@ -98,3 +98,5 @@ _corrupted/
 *.bak
 *.tmp
 *.temp
+
+.hypothesis/
