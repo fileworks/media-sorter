@@ -6,8 +6,9 @@ import { FiCheck, FiChevronLeft, FiChevronRight, FiInfo, FiMaximize } from "reac
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MediaImage } from "@/components/ui/media-image";
-import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
+import { Modal, ModalBody, ModalFooter, ModalHeader, ModalShortcuts } from "@/components/ui/modal";
 import { Segmented } from "@/components/ui/setting-row";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes, formatDuration } from "@/lib/formatters";
@@ -46,12 +47,34 @@ interface CompareModalProps {
   /** Move between comparable duplicate groups without leaving the dialog. */
   onPreviousSet?: (() => void) | null;
   onNextSet?: (() => void) | null;
-  /** Cycle every other member of this set against side A. */
+  /**
+   * What each side is called *within its set* — A, B, C — not which side of the
+   * screen it is on.
+   *
+   * A pair is two of possibly many, so "A" has to name a copy rather than a
+   * position; otherwise stepping to the next pair renames both sides under the
+   * reader. Two copies degenerate to the familiar A and B.
+   */
+  letterA?: string;
+  letterB?: string;
+  /**
+   * Step through every unordered pair of the set's copies.
+   *
+   * Not "every other member against side A": in a set of three that never puts
+   * the second copy beside the third, which is the comparison a person reaches
+   * for the moment they have ruled the first one out.
+   *
+   * `pairs` is the whole matrix, so past two copies the reader can go straight
+   * to the comparison they want instead of stepping around a ring guessing
+   * which two are coming next.
+   */
   comparisonPosition?: {
     index: number;
     total: number;
+    pairs: readonly { index: number; a: string; b: string; nameA: string; nameB: string }[];
     onPrevious: () => void;
     onNext: () => void;
+    onSelect: (index: number) => void;
   } | null;
 }
 
@@ -82,10 +105,13 @@ function FactRow({
 }) {
   // A neutral difference is evidence, not a winner.
   const differs = winner === null && left !== right;
+  // `py-1` and no negative margin, matching the label beside it: the cells
+  // used to pull themselves 4px upward while the label pushed itself 4px down,
+  // so the value and the thing it was labelled by sat on different lines.
   const cell = (value: string, side: "a" | "b") => (
     <span
       className={cn(
-        "-my-1 min-w-0 break-words rounded-[5px] px-1.5 py-1",
+        "min-w-0 break-words rounded-control px-2 py-1",
         winner === side
           ? "bg-tint-success font-semibold text-success"
           : differs
@@ -105,8 +131,8 @@ function FactRow({
     </span>
   );
   return (
-    <div className="grid grid-cols-[5rem_1fr_1fr] items-start gap-2.5 border-b border-border px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
-      <span data-testid="fact-row-label" className="pt-1 text-faint">
+    <div className="grid grid-cols-[5rem_1fr_1fr] items-start gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[7rem_1fr_1fr]">
+      <span data-testid="fact-row-label" className="px-0 py-1 text-faint">
         {label}
       </span>
       {cell(left, "a")}
@@ -180,6 +206,8 @@ export function CompareModal({
   onEnlarge,
   onPreviousSet,
   onNextSet,
+  letterA = "A",
+  letterB = "B",
   comparisonPosition = null,
 }: CompareModalProps) {
   const { t, locale } = useI18n();
@@ -188,11 +216,12 @@ export function CompareModal({
   const [zoom, setZoom] = useState(100);
   const [draftId, setDraftId] = useState<string | null>(keeperId);
 
+  // Only the draft keeper is about *these two files*. How you are looking at
+  // them — side by side, difference, the slider position, the zoom — is a way
+  // of working, and resetting it on every pair meant a reader comparing four
+  // copies in difference mode re-picked difference mode five times.
   useEffect(() => {
     setDraftId(keeperId === a.id || keeperId === b.id ? keeperId : null);
-    setMode("side");
-    setSplit(50);
-    setZoom(100);
   }, [a.id, b.id, keeperId]);
 
   const nameA = getBasename(a.label);
@@ -282,14 +311,70 @@ export function CompareModal({
       size="xl"
       className="h-[min(52rem,calc(100dvh-2rem))]"
     >
+      {/* The same two keys every other dialog here answers, and only while
+          this one is on top: enlarging a side opens the viewer above it. */}
+      <ModalShortcuts
+        onKey={(event) => {
+          if (comparisonPosition === null) return;
+          if (event.key === "ArrowLeft") comparisonPosition.onPrevious();
+          else if (event.key === "ArrowRight") comparisonPosition.onNext();
+        }}
+      />
       <ModalHeader>
         <span className="min-w-0 truncate text-xs text-faint">
-          {nameA} · {nameB}
+          {letterA} {nameA} · {letterB} {nameB}
         </span>
       </ModalHeader>
 
+      {/* Every pairing, laid out, with the one on screen marked.
+          A set of four copies is six comparisons, and a ring you step around
+          shows you a position — "4 of 6" — while hiding the only thing worth
+          knowing, which is which two you are looking at and which two you have
+          not reached. Each chip names its pair by the letters the copies keep
+          for as long as the set is open. */}
+      {comparisonPosition !== null && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+          <span
+            id="review-compare-pairs"
+            className="shrink-0 text-3xs font-semibold uppercase tracking-[0.07em] text-faint"
+          >
+            {t("review.compare.pairs")}
+          </span>
+          <div
+            role="group"
+            aria-labelledby="review-compare-pairs"
+            className="flex min-w-0 flex-wrap items-center gap-1"
+          >
+            {comparisonPosition.pairs.map((pair) => {
+              const current = pair.index === comparisonPosition.index;
+              return (
+                <button
+                  key={pair.index}
+                  type="button"
+                  aria-current={current ? "true" : undefined}
+                  aria-label={t("review.compare.selectPair", {
+                    a: getBasename(pair.nameA),
+                    b: getBasename(pair.nameB),
+                  })}
+                  onClick={() => comparisonPosition.onSelect(pair.index)}
+                  className={cn(
+                    "inline-flex min-h-6 items-center rounded-control border px-2 font-mono text-3xs font-semibold tabular-nums transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    current
+                      ? "border-primary bg-tint-primary text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {t("review.compare.pair", { a: pair.a, b: pair.b })}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/25 px-3 py-2">
-        <div className="w-full min-w-0 sm:w-auto sm:flex-none [&_label]:px-2 [&_label]:text-[0.7rem] sm:[&_label]:px-3.5 sm:[&_label]:text-2xs">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-none [&_label]:px-2 [&_label]:text-[0.7rem] sm:[&_label]:px-4 sm:[&_label]:text-2xs">
           <Segmented
             name="compare-mode"
             label={t("review.compare.mode")}
@@ -322,14 +407,14 @@ export function CompareModal({
       </div>
 
       <ModalBody className="px-0 py-0">
-        <div className="flex h-[clamp(13rem,38dvh,25rem)] items-center justify-center overflow-hidden bg-background px-2 py-2 sm:px-4">
+        <div className="flex h-[clamp(13rem,44dvh,30rem)] items-center justify-center overflow-hidden bg-background px-2 py-2 sm:px-4">
           <div
             className="relative max-h-full max-w-full overflow-hidden bg-background"
             data-testid="comparison-frame"
             data-aspect-ratio={frameAspect.toFixed(4)}
             style={{
               aspectRatio: frameAspect,
-              width: `min(100%, calc(clamp(13rem, 38dvh, 25rem) * ${frameAspect}))`,
+              width: `min(100%, calc(clamp(13rem, 44dvh, 30rem) * ${frameAspect}))`,
               transform: `scale(${zoom / 100})`,
               transition: "transform 160ms ease",
             }}
@@ -354,7 +439,7 @@ export function CompareModal({
                       "relative h-full w-full overflow-hidden",
                       // An inset ring preserves alignment between the two images.
                       recommendedId === file.id &&
-                        "shadow-[inset_0_0_0_2px_hsl(var(--color-success))]",
+                        "shadow-[inset_0_0_0_2px_hsl(var(--color-suggest))]",
                     )}
                   >
                     <Thumbnail path={file.path} maxPx={800} className="h-full w-full" />
@@ -411,135 +496,149 @@ export function CompareModal({
               </>
             )}
 
-            <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-foreground/80 px-2.5 py-0.5 text-3xs font-bold text-background">
-              {t("review.compare.sideA", { state: draftId === a.id ? "•" : "" })}
+            <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-foreground/80 px-3 py-0.5 text-3xs font-bold text-background">
+              {t("review.compare.sideBadge", {
+                letter: letterA,
+                state: draftId === a.id ? "•" : "",
+              })}
             </span>
-            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-foreground/80 px-2.5 py-0.5 text-3xs font-bold text-background">
-              {t("review.compare.sideB", { state: draftId === b.id ? "•" : "" })}
+            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-foreground/80 px-3 py-0.5 text-3xs font-bold text-background">
+              {t("review.compare.sideBadge", {
+                letter: letterB,
+                state: draftId === b.id ? "•" : "",
+              })}
             </span>
           </div>
         </div>
 
-        {/* Keep captions outside the zoomed media frame. */}
-        <div className="grid grid-cols-2 gap-2 bg-background px-2 pb-2 sm:px-4">
-          {([a, b] as const).map((file, index) => (
-            <div
-              key={file.id}
-              className={cn(
-                "flex min-w-0 items-center gap-2 rounded-panel border bg-card px-2.5 py-2",
-                recommendedId === file.id
-                  ? "border-success/60 shadow-[inset_0_0_0_1px_hsl(var(--color-success)/0.25)]"
-                  : "border-border",
-              )}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="truncate text-xs font-semibold text-foreground">
-                    {index === 0 ? nameA : nameB}
-                  </span>
-                  {recommendedId === file.id && (
-                    <Badge tone="success">{t("review.resolve.recommendation")}</Badge>
-                  )}
-                </span>
-                <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
-                  {file.facts ? formatBytes(file.facts.size_bytes, { locale }) : unknown} ·{" "}
-                  {resolution(file)}
-                </span>
-              </span>
-              {onEnlarge && (
-                <button
-                  type="button"
-                  onClick={() => onEnlarge(file.path)}
-                  aria-label={t("review.viewer.open", { name: getBasename(file.label) })}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[5px] text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <FiMaximize className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-2.5 border-y border-border bg-card px-3 py-3">
-          {/* Only an actual recommendation is styled as one: a green card whose
-              text says no recommendation exists reads as an endorsement of
-              nothing, and drains the colour of its meaning everywhere else. */}
-          <div
-            className={cn(
-              "flex min-w-0 gap-2 rounded-panel border px-2.5 py-2",
-              recommendedLabel === null
-                ? "border-border bg-muted/40"
-                : "border-success/35 bg-tint-success",
-            )}
-          >
+        {/* One block per side, and one block only.
+            The captions, the keeper radios and the recommendation card each
+            used to name both files, so a two-file comparison printed six
+            filenames and three states across three stacked rows before the
+            facts table began. They are one row now: the card is the caption,
+            the radio, the recommendation marker and the way to full screen. */}
+        <fieldset className="border-y border-border bg-card px-2 py-3 sm:px-4">
+          <legend className="sr-only">
+            {decisionEnabled ? t("review.compare.selectToKeep") : t("review.compare.title")}
+          </legend>
+          <div className="mb-2 flex min-w-0 items-start gap-2">
             {recommendedLabel === null ? (
-              <FiInfo className="mt-0.5 h-4 w-4 shrink-0 text-faint" aria-hidden />
+              <FiInfo className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
             ) : (
-              <FiCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+              <FiCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-suggest" aria-hidden />
             )}
-            <div className="min-w-0">
-              <strong className="block text-xs text-foreground">
-                {recommendedLabel === null
-                  ? t("review.compare.recommendation")
-                  : t("review.resolve.recommended", { name: recommendedLabel })}
+            <p className="min-w-0 text-3xs leading-relaxed text-muted-foreground">
+              <strong className="font-semibold text-foreground">
+                {decisionEnabled
+                  ? t("review.compare.selectToKeep")
+                  : recommendedLabel === null
+                    ? t("review.compare.recommendation")
+                    : t("review.resolve.recommended", { name: recommendedLabel })}
               </strong>
-              <p className="mt-0.5 text-3xs leading-relaxed text-muted-foreground">
-                {recommendedLabel === null
-                  ? t("review.compare.recommendationNone")
+              {" — "}
+              {recommendedLabel === null
+                ? t("review.compare.recommendationNone")
+                : decisionEnabled
+                  ? `${t("review.resolve.recommended", { name: recommendedLabel })}. ${
+                      recommendationReason ?? ""
+                    }`.trim()
                   : (recommendationReason ?? recommendedLabel)}
-              </p>
-            </div>
+            </p>
           </div>
-          {decisionEnabled && (
-            <fieldset>
-              <legend className="mb-1.5 text-3xs font-semibold text-muted-foreground">
-                {t("review.compare.selectToKeep")}
-              </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {/* Radios, not toggle buttons: exactly one copy is kept, and a
-                    pair of independent `aria-pressed` buttons neither says so
-                    nor answers the arrow keys a reader reaches for. */}
-                {([a, b] as const).map((file, index) => {
-                  const selected = draftId === file.id;
-                  const recommended = recommendedId === file.id;
-                  return (
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {/* Radios, not toggle buttons: exactly one copy is kept, and a
+                pair of independent `aria-pressed` buttons neither says so nor
+                answers the arrow keys a reader reaches for. */}
+            {([a, b] as const).map((file, index) => {
+              const selected = decisionEnabled && draftId === file.id;
+              const recommended = recommendedId === file.id;
+              const facts = `${
+                file.facts ? formatBytes(file.facts.size_bytes, { locale }) : unknown
+              } · ${resolution(file)}`;
+              const body = (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      {/* The side letter is part of the control's accessible
+                          name — "A · IMG_4382.jpg" — because the footer, the
+                          overlay badges and the keyboard hints all refer to
+                          the sides by letter. */}
+                      <span className="shrink-0 text-3xs font-bold text-faint">
+                        {index === 0 ? letterA : letterB} ·
+                      </span>
+                      <span className="truncate text-xs font-semibold text-foreground">
+                        {index === 0 ? nameA : nameB}
+                      </span>
+                      {recommended && (
+                        <Badge tone="suggest">{t("review.resolve.recommendation")}</Badge>
+                      )}
+                    </span>
+                    {/* State the selection in words, never by border colour alone. */}
+                    <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
+                      {facts}
+                      {decisionEnabled &&
+                        ` · ${
+                          selected
+                            ? t("review.compare.willBeKept")
+                            : t("review.compare.notSelected")
+                        }`}
+                    </span>
+                  </span>
+                  {decisionEnabled && (
+                    <input
+                      type="radio"
+                      name="review-compare-keeper"
+                      checked={selected}
+                      onChange={() => setDraftId(file.id)}
+                      className="h-4 w-4 shrink-0 border-border-strong text-primary focus-visible:outline-none"
+                    />
+                  )}
+                </>
+              );
+              const frame = cn(
+                "flex min-h-11 min-w-0 items-center gap-2 rounded-control border px-3 py-2 text-left",
+                "transition-[border-color,background-color,box-shadow]",
+                selected
+                  ? "border-primary bg-tint-primary shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
+                  : recommended
+                    ? "border-dashed border-suggest bg-tint-suggest"
+                    : "border-border",
+              );
+              return (
+                <div key={file.id} className="flex min-w-0 items-stretch gap-2">
+                  {decisionEnabled ? (
                     <label
-                      key={file.id}
                       className={cn(
-                        "flex min-h-10 min-w-0 cursor-pointer items-center justify-between gap-2 rounded-control border px-2.5 py-1.5 text-left",
-                        "transition-[border-color,background-color,box-shadow] focus-within:ring-2 focus-within:ring-ring",
-                        selected
-                          ? "border-primary bg-tint-primary shadow-[inset_0_0_0_1px_hsl(var(--primary))]"
-                          : recommended
-                            ? "border-dashed border-success bg-tint-success/40"
-                            : "border-border hover:border-border-strong hover:bg-muted/50",
+                        frame,
+                        "flex-1 cursor-pointer focus-within:ring-2 focus-within:ring-ring",
+                        !selected && !recommended && "hover:border-border-strong hover:bg-muted/50",
                       )}
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-semibold text-foreground">
-                          {index === 0 ? "A" : "B"} · {getBasename(file.label)}
-                        </span>
-                        {/* State the selection independently of border color. */}
-                        <span className="mt-0.5 block truncate text-3xs text-muted-foreground">
-                          {selected
-                            ? t("review.compare.willBeKept")
-                            : t("review.compare.notSelected")}
-                        </span>
-                      </span>
-                      <input
-                        type="radio"
-                        name="review-compare-keeper"
-                        checked={selected}
-                        onChange={() => setDraftId(file.id)}
-                        className="h-4 w-4 shrink-0 border-border-strong text-primary focus-visible:outline-none"
-                      />
+                      {body}
                     </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
-        </div>
+                  ) : (
+                    <div className={cn(frame, "flex-1")}>{body}</div>
+                  )}
+                  {/* Outside the label on purpose: a button inside one toggles
+                      the radio it sits in, so enlarging would pick a keeper. */}
+                  {onEnlarge && (
+                    <Tooltip label={t("review.viewer.open", { name: getBasename(file.label) })}>
+                      <button
+                        type="button"
+                        onClick={() => onEnlarge(file.path)}
+                        aria-label={t("review.viewer.open", { name: getBasename(file.label) })}
+                        className="grid w-9 shrink-0 place-items-center rounded-control border border-border text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <FiMaximize className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div className="border-b border-border bg-card px-3 py-2">
           <h3 className="text-xs font-semibold text-foreground">
@@ -547,21 +646,21 @@ export function CompareModal({
           </h3>
           <p className="mt-0.5 text-3xs text-muted-foreground">{t("review.compare.detailsHelp")}</p>
         </div>
-        <div className="grid grid-cols-[5rem_1fr_1fr] gap-2.5 border-b border-border bg-muted/40 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.07em] text-faint sm:grid-cols-[7rem_1fr_1fr]">
+        <div className="grid grid-cols-[5rem_1fr_1fr] gap-3 border-b border-border bg-muted/40 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.07em] text-faint sm:grid-cols-[7rem_1fr_1fr]">
           <span />
           {/* Column headings link to each file's full details. */}
           {(
             [
-              [t("review.compare.columnA", { name: nameA }), a],
-              [t("review.compare.columnB", { name: nameB }), b],
+              [t("review.compare.column", { letter: letterA, name: nameA }), a],
+              [t("review.compare.column", { letter: letterB, name: nameB }), b],
             ] as const
           ).map(([label, file]) => (
-            <span key={file.id} className="flex min-w-0 items-center gap-1.5">
+            <span key={file.id} className="flex min-w-0 items-center gap-2">
               {onOpenDetail ? (
                 <button
                   type="button"
                   onClick={() => onOpenDetail(file.path)}
-                  className="inline-flex min-h-6 min-w-0 items-center truncate rounded text-left uppercase tracking-[0.07em] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex min-h-6 min-w-0 items-center truncate rounded-control text-left uppercase tracking-[0.07em] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {label}
                 </button>
@@ -675,52 +774,60 @@ export function CompareModal({
         </span>
         {comparisonPosition && (
           <div className="flex items-center gap-1 border-r border-border pr-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={t("review.compare.previousCopy")}
-              onClick={comparisonPosition.onPrevious}
-            >
-              <FiChevronLeft className="h-4 w-4" aria-hidden />
-            </Button>
+            <Tooltip label={t("review.compare.previousCopy")}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t("review.compare.previousCopy")}
+                onClick={comparisonPosition.onPrevious}
+              >
+                <FiChevronLeft className="h-4 w-4" aria-hidden />
+              </Button>
+            </Tooltip>
             <span className="whitespace-nowrap text-3xs tabular-nums text-muted-foreground">
               {t("review.compare.copyPosition", {
                 index: comparisonPosition.index + 1,
                 total: comparisonPosition.total,
               })}
             </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={t("review.compare.nextCopy")}
-              onClick={comparisonPosition.onNext}
-            >
-              <FiChevronRight className="h-4 w-4" aria-hidden />
-            </Button>
+            <Tooltip label={t("review.compare.nextCopy")}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t("review.compare.nextCopy")}
+                onClick={comparisonPosition.onNext}
+              >
+                <FiChevronRight className="h-4 w-4" aria-hidden />
+              </Button>
+            </Tooltip>
           </div>
         )}
         {(onPreviousSet || onNextSet) && (
           <div className="flex items-center gap-1 sm:border-r sm:border-border sm:pr-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={t("review.compare.previousSet")}
-              onClick={onPreviousSet ?? undefined}
-              disabled={!onPreviousSet}
-            >
-              <FiChevronLeft className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">{t("review.compare.previousSet")}</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={t("review.compare.nextSet")}
-              onClick={onNextSet ?? undefined}
-              disabled={!onNextSet}
-            >
-              <span className="hidden sm:inline">{t("review.compare.nextSet")}</span>
-              <FiChevronRight className="h-4 w-4" aria-hidden />
-            </Button>
+            <Tooltip label={t("review.compare.previousSet")}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t("review.compare.previousSet")}
+                onClick={onPreviousSet ?? undefined}
+                disabled={!onPreviousSet}
+              >
+                <FiChevronLeft className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">{t("review.compare.previousSet")}</span>
+              </Button>
+            </Tooltip>
+            <Tooltip label={t("review.compare.nextSet")}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t("review.compare.nextSet")}
+                onClick={onNextSet ?? undefined}
+                disabled={!onNextSet}
+              >
+                <span className="hidden sm:inline">{t("review.compare.nextSet")}</span>
+                <FiChevronRight className="h-4 w-4" aria-hidden />
+              </Button>
+            </Tooltip>
           </div>
         )}
         <Button size="sm" variant="ghost" onClick={onClose}>

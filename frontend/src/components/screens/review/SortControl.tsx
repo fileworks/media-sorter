@@ -22,7 +22,7 @@ export function SortControl({
     <label
       htmlFor={id}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 whitespace-nowrap text-3xs text-muted-foreground",
+        "flex shrink-0 items-center gap-2 whitespace-nowrap text-3xs text-muted-foreground",
         className,
       )}
     >

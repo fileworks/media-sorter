@@ -42,6 +42,7 @@ export type {
   PreviewStatus,
   MediaInfo,
   AnalysisResult,
+  AnalysisRootTotals,
   AnalysisStatus,
   ScanStatus,
   ApiError,

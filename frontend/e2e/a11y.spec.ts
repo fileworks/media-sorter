@@ -65,6 +65,20 @@ async function goToReview(page: Page) {
   await expect(review).toHaveAttribute("aria-current", "step");
 }
 
+/**
+ * Review opens on Browse — the first question after Plan is "what would this
+ * run do", not "which of these copies do I keep". Reaching the decision queue
+ * is a deliberate act, here as in the app.
+ */
+async function goToResolve(page: Page) {
+  await goToReview(page);
+  await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+  await expect(page.getByRole("tab", { name: /decide the duplicates/i })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+}
+
 async function settleRendering(page: Page) {
   await page.evaluate(async () => {
     const finite = document.getAnimations().filter((animation) => {
@@ -74,6 +88,23 @@ async function settleRendering(page: Page) {
     await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
+}
+
+/**
+ * Whether the stage scroller is wider than the window it sits in.
+ *
+ * `layoutOverflow` below asks whether the *document* overflows, and the shell
+ * is `overflow-hidden`, so a stage whose content is too wide for the window is
+ * clipped rather than scrolled and never reaches the document at all. That is
+ * the worse failure — content nobody can scroll to — and it is invisible to
+ * that check. `<main>` is the only scroller, so measuring it is the question:
+ * did this stage need more width than it was given?
+ */
+async function stageOverflow(page: Page) {
+  return page.locator("main").evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
 }
 
 async function layoutOverflow(page: Page) {
@@ -284,8 +315,12 @@ test.describe("later stages", () => {
   }) => {
     test.slow();
     await goToPlan(page);
-    await expect(page.getByText(/media-unit evidence \(1\)/i)).toBeVisible();
-    await expect(page.getByText(/IMG_0001\.xmp.*edit sidecar.*attached/i)).toBeVisible();
+    // The unit evidence is not on Plan. Plan answers "what would this run do",
+    // in four numbers and a sequence; a per-file dump of every companion and
+    // its warning is a different question, and it is asked where a single file
+    // is being looked at — and once more in the preflight below, immediately
+    // before the run that acts on those units.
+    await expect(page.getByText(/media-unit evidence/i)).toHaveCount(0);
     await expectTargetsAndFocus(page, "Plan");
     await page
       .getByRole("button", { name: /to review|review/i })
@@ -346,6 +381,11 @@ test.describe("later stages", () => {
     await closeDetail(page);
 
     await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+    // The ranking is folded away: the recommendation sentence is what the
+    // reader needs, and six labelled fields above the copies were most of the
+    // panel. Everything it used to state is still one click away.
+    await expect(page.getByText(/primary rule/i)).toBeHidden();
+    await page.getByText(/how this was ranked/i).click();
     await expect(page.getByText(/primary rule/i)).toBeVisible();
     await expect(page.getByText(/deciding fact/i)).toBeVisible();
     await expect(page.getByText(/unknown facts/i)).toBeVisible();
@@ -360,7 +400,12 @@ test.describe("later stages", () => {
     await expectTargetsAndFocus(page, "Detail");
     await closeDetail(page);
 
-    await page.getByRole("button", { name: /^compare$/i }).click();
+    // Comparing is one press from the copy being compared, and its label names
+    // the copy it would put beside it.
+    await page
+      .getByRole("button", { name: /^compare .* with /i })
+      .first()
+      .click();
     await expect(page.getByRole("dialog", { name: /compare copies/i })).toBeVisible();
     await expect(page.getByText(/primary in unit unit-live-photo/i)).toBeVisible();
     expect(await page.getByText("unknown", { exact: true }).count()).toBeGreaterThan(0);
@@ -413,12 +458,42 @@ test.describe("later stages", () => {
   });
 
   test("360px and measured 200% Chromium page scale preserve reflow", async ({ page }) => {
-    await goToReview(page);
+    await goToResolve(page);
     await page.setViewportSize({ width: 360, height: 800 });
     const narrow = await layoutOverflow(page);
     expect(narrow, JSON.stringify(narrow, null, 2)).toMatchObject({ document: false, body: false });
 
-    await page.getByRole("button", { name: /^compare$/i }).click();
+    // Every stage, not only the one this test grew up around. A change to the
+    // shared spacing scale or to a control's padding lands on all of them at
+    // once, and the narrowest supported window is where that first shows.
+    //
+    // Navigation happens wide and measurement happens narrow: below `md` the
+    // stepper draws only the active step, so the rail cannot be used to reach a
+    // stage at the width the stage is being measured at.
+    for (const stage of ["sources", "recipe", "configure", "plan", "review"] as const) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const rail = page.locator(`[data-stage-id="${stage}"]`);
+      await expect(rail).toBeEnabled();
+      await rail.click();
+      await page.setViewportSize({ width: 360, height: 800 });
+      await settleRendering(page);
+      const overflow = await layoutOverflow(page);
+      expect(overflow, `${stage} at 360px\n${JSON.stringify(overflow, null, 2)}`).toMatchObject({
+        document: false,
+        body: false,
+      });
+      const stageBox = await stageOverflow(page);
+      expect(
+        stageBox.scrollWidth,
+        `${stage} needs ${stageBox.scrollWidth}px inside a ${stageBox.clientWidth}px window`,
+      ).toBeLessThanOrEqual(stageBox.clientWidth);
+    }
+    await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+
+    await page
+      .getByRole("button", { name: /^compare .* with /i })
+      .first()
+      .click();
     const comparison = page.getByRole("dialog", { name: /compare copies/i });
     await expect(comparison).toBeVisible();
     const comparisonBox = await comparison.evaluate((element) => ({

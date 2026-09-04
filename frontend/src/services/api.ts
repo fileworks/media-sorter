@@ -760,10 +760,28 @@ export interface ReviewOutcomeResponse {
   unavailable_paths: string[];
 }
 
+/** One input root's own share of a scan, as `AnalysisResult.by_root` reports it. */
+export interface AnalysisRootTotals {
+  root_id: string;
+  path: string;
+  total_files: number;
+  total_size_bytes: number;
+  by_type: Record<string, number>;
+}
+
 export interface AnalysisResult {
   total_files: number;
   total_size_bytes: number;
   by_type: Record<string, number>;
+  /**
+   * The same figures, split by the input folder they came from.
+   *
+   * Optional because a recovered result from an older backend has no split.
+   * Where it is absent the folder cards say what they know — that the folder is
+   * in the run — rather than repeating the whole run's totals as if they were
+   * one folder's.
+   */
+  by_root?: AnalysisRootTotals[];
   date_range: {
     earliest: string | null;
     latest: string | null;

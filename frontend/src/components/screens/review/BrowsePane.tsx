@@ -11,7 +11,6 @@ import {
 } from "react-icons/fi";
 
 import { StackVisual } from "@/components/screens/review/StackVisual";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -145,13 +144,17 @@ export function BrowsePane({
     maxHeight,
     overscan: 10,
     anchorKey: lines[0]?.key ?? null,
-    measurementKey: lines,
+    // Heights are stored against the line's own key. Expanding a set inserts a
+    // line and shifts every index below it; keyed by index that invalidated
+    // every measured height at once, so the list re-laid itself out on the
+    // estimate and snapped back a frame later — which is the jump.
+    keyForIndex: (index) => lines[index]?.key ?? String(index),
   });
 
   if (view === "grid") {
     return (
       <div
-        className={cn("overflow-y-auto", !embedded && "rounded-xl border border-border")}
+        className={cn("overflow-y-auto", !embedded && "rounded-window border border-border")}
         style={{ maxHeight }}
         role="group"
         aria-label={t("review.items")}
@@ -164,7 +167,7 @@ export function BrowsePane({
             style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
           >
             {group.direct ? (
-              <h3 className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-success/20 bg-tint-success/60 px-3 py-2 text-3xs font-semibold uppercase tracking-[0.08em] text-success">
+              <h3 className="sticky top-0 z-10 flex items-center gap-2 border-b border-success/40 bg-tint-success px-3 py-2 text-3xs font-semibold uppercase tracking-[0.08em] text-success">
                 <FiCornerDownRight className="h-3 w-3" aria-hidden />
                 {t("review.browse.landsHere")}
               </h3>
@@ -177,44 +180,48 @@ export function BrowsePane({
               />
             )}
 
-            {/* Draw only direct children of the current destination. */}
-            {group.direct && (
-              <ul className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {group.entries.map((entry) =>
-                  entry.kind === "file" ? (
-                    <li key={entry.key}>
-                      <GridTile
-                        row={entry.row}
-                        selected={selected.has(entry.row.source)}
-                        onToggle={(shiftKey) => onToggle(entry.row.source, shiftKey)}
-                        onOpenDetail={() => onOpenDetail(entry.row.source)}
-                        onEnlarge={() => onEnlarge(entry.row.source)}
-                      />
-                    </li>
-                  ) : (
-                    <li key={entry.key} className="col-span-full">
-                      <SetBlock
-                        entry={entry}
-                        expanded={expandedSets.has(entry.id)}
-                        selected={selected}
-                        sort={sort}
-                        setSelected={selectedSetIds.has(entry.id)}
-                        onToggleExpand={() => onToggleSet(entry.id)}
-                        onToggleSetSelection={() => onToggleSetSelection(entry.id)}
-                        onToggleSelect={onToggle}
-                        onOpenDetail={onOpenDetail}
-                        onEnlarge={onEnlarge}
-                        onResolve={() => onResolveSet(entry.id)}
-                        onKeep={onKeep}
-                        onKeepAll={onKeepAll}
-                        onCompare={onCompare}
-                        locale={locale}
-                      />
-                    </li>
-                  ),
-                )}
-              </ul>
-            )}
+            {/* Every group draws its contents, subfolders included.
+                Grid used to draw only the folder currently selected and reduce
+                each subfolder to a tile you had to click into, while List
+                showed all of them. That made the toggle change *what is in the
+                plan* rather than how it is drawn — a file visible in one view
+                and absent from the other, on the screen whose job is to show
+                everything the run would do. */}
+            <ul className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {group.entries.map((entry) =>
+                entry.kind === "file" ? (
+                  <li key={entry.key}>
+                    <GridTile
+                      row={entry.row}
+                      selected={selected.has(entry.row.source)}
+                      onToggle={(shiftKey) => onToggle(entry.row.source, shiftKey)}
+                      onOpenDetail={() => onOpenDetail(entry.row.source)}
+                      onEnlarge={() => onEnlarge(entry.row.source)}
+                    />
+                  </li>
+                ) : (
+                  <li key={entry.key} className="col-span-full">
+                    <SetBlock
+                      entry={entry}
+                      expanded={expandedSets.has(entry.id)}
+                      selected={selected}
+                      sort={sort}
+                      setSelected={selectedSetIds.has(entry.id)}
+                      onToggleExpand={() => onToggleSet(entry.id)}
+                      onToggleSetSelection={() => onToggleSetSelection(entry.id)}
+                      onToggleSelect={onToggle}
+                      onOpenDetail={onOpenDetail}
+                      onEnlarge={onEnlarge}
+                      onResolve={() => onResolveSet(entry.id)}
+                      onKeep={onKeep}
+                      onKeepAll={onKeepAll}
+                      onCompare={onCompare}
+                      locale={locale}
+                    />
+                  </li>
+                ),
+              )}
+            </ul>
           </section>
         ))}
       </div>
@@ -225,7 +232,7 @@ export function BrowsePane({
     <div
       ref={windowing.scrollRef}
       onScroll={windowing.onScroll}
-      className={cn("overflow-y-auto", !embedded && "rounded-xl border border-border")}
+      className={cn("overflow-y-auto", !embedded && "rounded-window border border-border")}
       style={{ maxHeight }}
       role="group"
       aria-label={t("review.items")}
@@ -327,7 +334,7 @@ function GroupHeader({
   const count = group.entries.length.toLocaleString(locale);
 
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card/95 px-3 py-1.5 backdrop-blur-sm">
+    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur-sm">
       {group.direct ? (
         <FiCornerDownRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
       ) : (
@@ -342,7 +349,7 @@ function GroupHeader({
         <button
           type="button"
           onClick={onOpen}
-          className="inline-flex min-h-6 shrink-0 items-center rounded-md px-2 py-0.5 text-3xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-6 shrink-0 items-center rounded-panel px-2 py-0.5 text-3xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("review.browse.openFolder")}
         </button>
@@ -378,9 +385,9 @@ function FolderTile({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
-      <span className="grid h-12 w-12 shrink-0 grid-cols-2 grid-rows-2 gap-px overflow-hidden rounded-lg bg-border">
+      <span className="grid h-12 w-12 shrink-0 grid-cols-2 grid-rows-2 gap-px overflow-hidden rounded-panel bg-border">
         {faces.map((source) => (
           <Thumbnail key={source} path={source} maxPx={80} className="h-full w-full" />
         ))}
@@ -433,12 +440,15 @@ function SetHeader({
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 border-b px-3 py-2 transition-colors",
+        // Wraps. The status and the action are `shrink-0`, so on a narrow
+        // window they took the row and squeezed the title — which is the flex
+        // child that *should* give — down to a 19px column of single letters.
+        "flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2 transition-colors",
         settled
-          ? "border-success/45 bg-tint-success/55"
+          ? "border-success/40 bg-tint-success"
           : proposed
-            ? "border-primary/45 bg-tint-primary/45"
-            : "border-primary/55 bg-tint-primary",
+            ? "border-suggest/40 bg-tint-suggest"
+            : "border-primary/40 bg-tint-primary",
       )}
     >
       {!entry.hasBaseline && (
@@ -450,7 +460,7 @@ function SetHeader({
               name: entry.keeper?.name ?? entry.id,
             })}
             onChange={onToggleSelection}
-            className="h-4 w-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-4 w-4 rounded-control border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       )}
@@ -458,7 +468,9 @@ function SetHeader({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex min-h-6 min-w-0 flex-1 items-center gap-2.5 rounded-panel py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        // `basis-full` below `sm`: the title takes its own line rather than
+        // competing with two controls that will not shrink.
+        className="flex min-h-6 min-w-0 flex-1 basis-full items-center gap-3 rounded-panel py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:basis-auto"
       >
         {expanded ? (
           <FiChevronDown className="h-3 w-3 shrink-0 text-faint" aria-hidden />
@@ -467,14 +479,14 @@ function SetHeader({
         )}
         <StackVisual paths={entry.rows.map((row) => row.source)} />
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 items-center gap-2">
             <FiLayers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate text-xs font-semibold text-foreground">{name}</span>
             <span className="shrink-0 text-xs text-muted-foreground">
               · {t("review.stack.copies", { count: entry.rows.length })}
             </span>
           </span>
-          <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-3xs text-muted-foreground">
+          <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-3xs text-muted-foreground">
             <span>
               {entry.setKind === "exact"
                 ? t("review.stack.match.exact")
@@ -522,26 +534,38 @@ function SetHeader({
         </span>
       </button>
 
-      {/* Lift the status badge above the tinted row. */}
-      <Badge
-        tone={settled ? "success" : "primary"}
-        className={cn("border bg-card", settled ? "border-success/30" : "border-primary/30")}
-      >
-        {t(settled ? "review.stack.state.decided" : "review.stack.state.open")}
-      </Badge>
-
-      {/* Offer sequential resolution without blocking inline decisions. */}
-      <button
-        type="button"
-        onClick={onResolve}
+      {/* The state, said as a state.
+          This was a bordered chip on a card fill, sitting immediately left of
+          a real control — the same box, the same radius, the same weight — so
+          "open" read as something to press. It is a dot and a word now: no
+          box, no edge, nothing that offers to be clicked. */}
+      <span
         className={cn(
-          "inline-flex min-h-6 shrink-0 items-center rounded-[5px] px-1.5 py-0.5 text-3xs font-bold transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          settled ? "text-success hover:bg-tint-success" : "text-primary hover:bg-tint-primary",
+          "flex shrink-0 items-center gap-2 whitespace-nowrap text-3xs font-bold uppercase tracking-[0.06em]",
+          settled ? "text-success" : proposed ? "text-suggest" : "text-primary",
         )}
       >
+        <span
+          aria-hidden
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            settled ? "bg-success" : proposed ? "bg-suggest" : "bg-primary",
+          )}
+        />
+        {t(
+          settled
+            ? "review.stack.state.decided"
+            : proposed
+              ? "review.stack.state.proposed"
+              : "review.stack.state.open",
+        )}
+      </span>
+
+      {/* Offer sequential resolution without blocking inline decisions. The
+          only control in this row now looks like the only control in this row. */}
+      <Button size="sm" variant="outline" className="shrink-0" onClick={onResolve}>
         {t(settled ? "review.browse.openResult" : "review.browse.openInResolve")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -575,7 +599,7 @@ function SetCopies({
 
   return (
     <div className="border-b border-border bg-muted/20 px-3 py-3">
-      <ul className="flex flex-wrap gap-2.5">
+      <ul className="flex flex-wrap gap-3">
         {copies.map((row) => {
           const locked = row.status === "baseline";
           const distinct = entry.decisionKind === "keep_all";
@@ -588,11 +612,11 @@ function SetCopies({
             <li
               key={row.source}
               className={cn(
-                "w-[10.5rem] overflow-hidden rounded-lg border bg-card",
+                "w-[10.5rem] overflow-hidden rounded-panel border bg-card",
                 kept || locked
                   ? "border-success"
                   : suggested
-                    ? "border-dashed border-primary"
+                    ? "border-dashed border-suggest"
                     : "border-border",
               )}
             >
@@ -622,15 +646,20 @@ function SetCopies({
                         (event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false,
                       )
                     }
-                    className="h-3.5 w-3.5 rounded border-border bg-card/90 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                    className="h-3.5 w-3.5 rounded-control border-border bg-card/90 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
                   />
                 </label>
                 {(kept || locked || suggested) && (
                   <span
                     className={cn(
-                      "absolute right-1 top-1 rounded-full px-1.5 py-0.5 text-3xs font-semibold",
+                      // A suggestion wears `suggest` and a settled outcome
+                      // wears `success`, here as everywhere else: this badge is
+                      // the one place a reader sees both words in the same
+                      // corner of the same card, so it is where one green would
+                      // be least forgivable.
+                      "absolute right-1 top-1 rounded-full px-2 py-0.5 text-3xs font-semibold",
                       suggested
-                        ? "border border-primary/40 bg-card text-primary"
+                        ? "border border-suggest/40 bg-tint-suggest text-suggest"
                         : "bg-success text-background",
                     )}
                   >
@@ -645,7 +674,7 @@ function SetCopies({
                 )}
               </div>
 
-              <div className="space-y-0.5 px-2 py-1.5 text-3xs">
+              <div className="space-y-0.5 px-2 py-2 text-3xs">
                 <button
                   type="button"
                   onClick={() => onOpenDetail(row.source)}
@@ -682,15 +711,25 @@ function SetCopies({
                     {t(locked ? "review.resolve.protected" : "review.resolve.baselineWins")}
                   </p>
                 ) : (
+                  // A set marked "not duplicates" keeps every copy, so every
+                  // copy is kept — but choosing one of them is still a decision
+                  // the reader may make, and disabling the control on all of
+                  // them made the only way out of that state a separate reset.
                   <Button
                     size="sm"
                     variant={kept ? "outline" : "default"}
                     className="w-full"
-                    disabled={kept}
-                    aria-description={kept ? t("review.resolve.alreadyKeeper") : undefined}
+                    disabled={confirmedKeeper}
+                    aria-description={
+                      confirmedKeeper ? t("review.resolve.alreadyKeeper") : undefined
+                    }
                     onClick={() => onKeep(entry.id, row.source)}
                   >
-                    {kept ? t("review.resolve.kept") : t("review.detail.makeKeeper")}
+                    {confirmedKeeper
+                      ? t("review.resolve.kept")
+                      : distinct
+                        ? t("review.keepOnlyThis")
+                        : t("review.detail.makeKeeper")}
                   </Button>
                 )}
               </div>
@@ -699,7 +738,7 @@ function SetCopies({
         })}
       </ul>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {!entry.hasBaseline && (
           <Button size="sm" variant="outline" onClick={() => onKeepAll(entry.id)}>
             {t("review.resolve.keepAll")}
@@ -751,7 +790,7 @@ function SetBlock({
   locale: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-hidden rounded-panel border border-border">
       <SetHeader
         entry={entry}
         expanded={expanded}
@@ -828,7 +867,7 @@ function FileLine({
           onChange={(event) =>
             onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
           }
-          className="h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+          className="h-3.5 w-3.5 rounded-control border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
         />
       </label>
 
@@ -836,7 +875,7 @@ function FileLine({
         <Thumbnail
           path={row.source}
           maxPx={80}
-          className="h-9 w-9 rounded"
+          className="h-9 w-9 rounded-panel"
           onOpen={onEnlarge}
           openLabel={t("review.viewer.open", { name: row.name })}
         />
@@ -851,7 +890,7 @@ function FileLine({
         title={t(row.reason.key, row.reason.params)}
         className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="flex items-center gap-1.5 truncate font-medium text-foreground">
+        <span className="flex items-center gap-2 truncate font-medium text-foreground">
           {locked && <FiLock className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />}
           {row.name}
         </span>
@@ -868,7 +907,7 @@ function FileLine({
 
       <span className="flex justify-end gap-1">
         {row.setAsideCategory !== null ? (
-          <span className="truncate rounded border border-warning/40 bg-tint-warning px-1.5 py-0.5 text-3xs font-semibold text-warning">
+          <span className="truncate rounded-control border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold text-warning">
             {t(`review.setAside.${row.setAsideCategory}`)}
           </span>
         ) : row.flags.length > 0 ? (
@@ -879,12 +918,12 @@ function FileLine({
                 : t(`review.flag.${row.flags[0]}.help`)
             }
           >
-            <span className="truncate rounded border border-border px-1.5 py-0.5 text-3xs font-semibold text-muted-foreground">
+            <span className="truncate rounded-control border border-border px-2 py-0.5 text-3xs font-semibold text-muted-foreground">
               {t(`review.flag.${row.flags[0]}`)}
             </span>
           </Tooltip>
         ) : (
-          <span className="rounded bg-tint-success px-1.5 py-0.5 text-3xs font-semibold text-success">
+          <span className="rounded-control bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success">
             {t("review.browse.statusReady")}
           </span>
         )}
@@ -950,7 +989,7 @@ function GridTile({
   return (
     <div
       className={cn(
-        "group/tile relative overflow-hidden rounded-lg border transition-colors",
+        "group/tile relative overflow-hidden rounded-panel border transition-colors",
         selected ? "border-primary" : "border-border hover:border-faint",
       )}
     >
@@ -981,7 +1020,7 @@ function GridTile({
       <label
         className={cn(
           MIN_TARGET_24,
-          "absolute left-1 top-1 h-6 w-6 items-center justify-center rounded bg-card/90 transition-opacity",
+          "absolute left-1 top-1 h-6 w-6 items-center justify-center rounded-control bg-card/90 transition-opacity",
           selected
             ? "opacity-100"
             : "review-grid-select opacity-0 focus-within:opacity-100 group-hover/tile:opacity-100",
@@ -996,17 +1035,17 @@ function GridTile({
           onChange={(event) =>
             onToggle((event.nativeEvent as MouseEvent | undefined)?.shiftKey ?? false)
           }
-          className="block h-3.5 w-3.5 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+          className="block h-3.5 w-3.5 rounded-control border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
         />
       </label>
 
       {locked && (
-        <span className="absolute right-1 top-1 rounded bg-card/90 p-1">
+        <span className="absolute right-1 top-1 rounded-control bg-card/90 p-1">
           <FiLock className="h-3 w-3 text-muted-foreground" aria-hidden />
         </span>
       )}
       {row.setAsideCategory !== null && (
-        <span className="absolute bottom-7 right-1 rounded bg-card/90 px-1.5 py-0.5 text-3xs font-semibold text-warning">
+        <span className="absolute bottom-7 right-1 rounded-control bg-card/90 px-2 py-0.5 text-3xs font-semibold text-warning">
           {t(`review.setAside.${row.setAsideCategory}`)}
         </span>
       )}

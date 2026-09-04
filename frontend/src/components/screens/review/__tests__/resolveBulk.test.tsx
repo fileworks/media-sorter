@@ -84,7 +84,6 @@ interface QueueOverrides {
   onClearSetSelection?: () => void;
   onKeep?: (setId: string, source: string) => void;
   onKeepAll?: (setId: string) => void;
-  onGo?: (index: number) => void;
   onOpenSet?: (setId: string) => void;
   keepSourceByRule?: (setId: string) => string | null;
 }
@@ -101,13 +100,12 @@ function queue(
         allSets={allSets}
         current={current}
         index={0}
-        onGo={overrides.onGo ?? (() => undefined)}
         onOpenSet={overrides.onOpenSet ?? (() => undefined)}
         onKeep={overrides.onKeep ?? (() => undefined)}
         onKeepAll={overrides.onKeepAll ?? (() => undefined)}
-        onAcceptProposal={() => undefined}
-        onCompare={() => undefined}
+        onComparePair={() => undefined}
         onOpenDetail={() => undefined}
+        onEnlarge={() => undefined}
         onBackToBrowse={() => undefined}
         rule="largest"
         onRule={() => undefined}
@@ -129,22 +127,54 @@ function queue(
 
 afterEach(cleanup);
 
+/** Open the bulk dialog for the current selection and return its panel. */
+function openBulk(): HTMLElement {
+  fireEvent.click(screen.getByRole("button", { name: "Decide these sets…" }));
+  return screen.getByRole("dialog", { name: "Decide the selected sets" });
+}
+
+/**
+ * What a bulk action says it is about to do.
+ *
+ * Read through `aria-describedby` rather than by DOM adjacency: the impact is
+ * a description of the button, and asserting on "the element next to it" made
+ * the test a hostage to where the dialog happened to put it.
+ */
+function impactOf(action: HTMLElement): string {
+  const ids = (action.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  return ids
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ")
+    .trim();
+}
+
 describe("selection-scoped duplicate decisions", () => {
-  it("gives the active set identity a full row at narrow widths", () => {
+  it("offers keeping, comparing and opening on each copy of the set", () => {
     render(queue([setEntry("one")]));
 
-    const heading = screen.getByRole("heading", { name: "one.jpg" });
-    expect(heading.parentElement?.className).toContain("basis-full");
-    expect(heading.parentElement?.className).toContain("sm:flex-1");
+    // The three things a person does with a copy, all on the copy: no separate
+    // command control acts on the set without naming which copy it chooses.
+    const copy = document.querySelector<HTMLElement>('[data-copy-row="/source-a/one.jpg"]');
+    expect(copy).not.toBeNull();
+    expect(
+      within(copy as HTMLElement).getByRole("button", { name: "Keep one.jpg — press 1" }),
+    ).toBeTruthy();
+    expect(
+      within(copy as HTMLElement).getByRole("button", { name: /^Compare one\.jpg with / }),
+    ).toBeTruthy();
   });
 
-  it("keeps the recommendation badge separate from responsive data columns", () => {
+  it("marks the rule's candidate as proposed rather than as a kept copy", () => {
     const proposed = setEntry("proposed");
     proposed.rows[0].stack!.isProposedKeeper = true;
 
     render(queue([proposed]));
 
-    expect(screen.getByText("Recommended").className).toContain("candidate-recommendation-badge");
+    const copy = document.querySelector<HTMLElement>('[data-copy-row="/source-a/proposed.jpg"]');
+    expect(copy?.getAttribute("data-copy-state")).toBe("proposed");
+    expect(within(copy as HTMLElement).getByText("Recommended")).toBeTruthy();
+    // A proposal binds nothing, so nothing here claims the copy is kept.
+    expect(within(copy as HTMLElement).queryByText("kept")).toBeNull();
   });
 
   it("decides two hundred unrankable sets of every origin and kind in three bulk actions", () => {
@@ -178,12 +208,10 @@ describe("selection-scoped duplicate decisions", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Select all 200" }));
     expect(screen.getByText("200 sets selected")).toBeTruthy();
-    const distinct = screen.getByRole("button", { name: "Mark as not duplicates" });
-    expect(
-      within(distinct.parentElement as HTMLElement).getByText(
-        "Decides 200 of the selected sets and leaves 0 of them unchanged.",
-      ),
-    ).toBeTruthy();
+    const distinct = within(openBulk()).getByRole("button", { name: "Mark as not duplicates" });
+    expect(impactOf(distinct)).toContain(
+      "Decides 200 of the selected sets and leaves 0 of them unchanged.",
+    );
     fireEvent.click(distinct);
 
     expect(onKeepAll).toHaveBeenCalledTimes(200);
@@ -203,13 +231,18 @@ describe("selection-scoped duplicate decisions", () => {
       }),
     );
 
-    const ruleAction = screen.getByRole("button", { name: "Apply rule to selection" });
-    expect(ruleAction.parentElement?.textContent).toContain(
+    const panel = openBulk();
+    const ruleAction = within(panel).getByRole("button", { name: "Apply rule to selection" });
+    expect(impactOf(ruleAction)).toContain(
       "Decides 1 of the selected sets and leaves 1 of them unchanged.",
     );
-    expect(ruleAction.parentElement?.textContent).toContain(
-      "The rule cannot rank the selected set because its comparable facts are missing.",
-    );
+    // Each action states its own shortfall beside its own count: three actions
+    // fall short of the same selection for three different reasons.
+    expect(
+      within(panel).getByText(
+        "The rule cannot rank the selected set because its comparable facts are missing.",
+      ),
+    ).toBeTruthy();
 
     rerender(
       queue(sets, {
@@ -218,8 +251,12 @@ describe("selection-scoped duplicate decisions", () => {
         keepSourceByRule,
       }),
     );
-    const recomputedRule = screen.getByRole("button", { name: "Apply rule to selection" });
-    expect(recomputedRule.parentElement?.textContent).toContain(
+    // The dialog stays open across the change, and restates its impact against
+    // the selection that is live now rather than the one it opened on.
+    const recomputedRule = within(
+      screen.getByRole("dialog", { name: "Decide the selected sets" }),
+    ).getByRole("button", { name: "Apply rule to selection" });
+    expect(impactOf(recomputedRule)).toContain(
       "Decides 1 of the selected sets and leaves 0 of them unchanged.",
     );
     fireEvent.click(recomputedRule);
@@ -241,16 +278,15 @@ describe("selection-scoped duplicate decisions", () => {
       }),
     );
 
-    const folders = screen.getByRole("combobox", { name: "Preferred folder" });
+    const panel = openBulk();
+    const folders = within(panel).getByRole("combobox", { name: "Preferred folder" });
     expect(within(folders).getByRole("option", { name: "/camera-a" })).toBeTruthy();
     expect(within(folders).queryByRole("option", { name: "/not-selected" })).toBeNull();
     fireEvent.change(folders, { target: { value: "/camera-a" } });
-    const keepFromFolder = screen.getByRole("button", { name: "Keep from folder" });
-    expect(
-      within(keepFromFolder.parentElement as HTMLElement).getByText(
-        "Decides 2 of the selected sets and leaves 0 of them unchanged.",
-      ),
-    ).toBeTruthy();
+    const keepFromFolder = within(panel).getByRole("button", { name: "Keep from folder" });
+    expect(impactOf(keepFromFolder)).toContain(
+      "Decides 2 of the selected sets and leaves 0 of them unchanged.",
+    );
     fireEvent.click(keepFromFolder);
 
     expect(onKeep.mock.calls).toEqual([
@@ -262,8 +298,8 @@ describe("selection-scoped duplicate decisions", () => {
   it("ignores out-of-range shortcuts, queue boundaries, and text controls", () => {
     const set = setEntry("one");
     const onKeep = vi.fn();
-    const onGo = vi.fn();
-    render(queue([set], { selectedSetIds: new Set([set.id]), onKeep, onGo }));
+    const onOpenSet = vi.fn();
+    render(queue([set], { onKeep, onOpenSet }));
 
     fireEvent.keyDown(window, { key: "9" });
     fireEvent.keyDown(window, { key: "ArrowLeft" });
@@ -271,6 +307,6 @@ describe("selection-scoped duplicate decisions", () => {
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Keep rule" }), { key: "1" });
 
     expect(onKeep).not.toHaveBeenCalled();
-    expect(onGo).not.toHaveBeenCalled();
+    expect(onOpenSet).not.toHaveBeenCalled();
   });
 });

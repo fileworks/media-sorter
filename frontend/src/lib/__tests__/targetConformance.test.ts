@@ -151,22 +151,24 @@ describe("the focus trap only offers real tab stops", () => {
   });
 });
 
-describe("the selection bar announces without swallowing its controls", () => {
+describe("the selection count announces without swallowing its controls", () => {
   it("keeps the live region a sibling of the buttons", () => {
-    const bar = source("SelectionBar.tsx");
-    const start = bar.indexOf("fixed inset-x-3");
-    // Only the container's own opening tag, which ends at the first `>`.
-    const openingTag = bar.slice(start, bar.indexOf(">", start));
+    // The bar moved into the toolbar, but the shape of the announcement did
+    // not: a region *around* the controls re-reads every label — each button,
+    // each disabled reason — on every selection change.
+    const toolbar = source("ReviewToolbar.tsx");
 
-    expect(openingTag).not.toMatch(/aria-live/);
-    expect(openingTag).not.toMatch(/role="status"/);
-    expect(bar).toMatch(/<span role="status" aria-live="polite"/);
+    expect(toolbar).toMatch(/<span\s+role="status"\s+aria-live="polite"/);
+    expect(toolbar).not.toMatch(/<div[^>]*aria-live/);
   });
 
-  it("mounts that region empty so the first selection is an update", () => {
-    const bar = source("SelectionBar.tsx");
-
-    expect(bar).toMatch(/selected\.length > 0\s*\?/);
+  it("mounts that region in both states so the first selection is an update", () => {
+    const toolbar = source("ReviewToolbar.tsx");
+    // Rendered once and referenced from both branches, holding "" until there
+    // is something to say: a region that appears together with its content is
+    // frequently not announced at all.
+    expect(toolbar).toMatch(/selectedCount > 0 \? t\("review\.selected"/);
+    expect((toolbar.match(/\{announcement\}/g) ?? []).length).toBe(2);
   });
 });
 

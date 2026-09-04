@@ -13,6 +13,7 @@ from app.services.destination import (
     QUARANTINE_FOLDERS,
     build_dest_dir,
     copy_destination,
+    normalized_suffix,
     predicted_filename,
     rename_stem,
 )
@@ -93,6 +94,29 @@ def test_predicted_filename_reflects_rename_and_conversion() -> None:
 def test_predicted_filename_conversion_noop_for_target_format() -> None:
     cfg = _cfg(convert_images=True, image_format="jpeg")
     assert predicted_filename(Path("/src/photo.JPG"), date(2022, 8, 1), cfg) == "photo.JPG"
+
+
+def test_renaming_lowercases_the_extension_with_the_stem() -> None:
+    """Renaming claims the whole filename, so `.HEIC` follows the stem down."""
+    cfg = _cfg(rename=True, rename_pattern="YYYY-MM-DD_NAME")
+    assert (
+        predicted_filename(Path("/src/IMG_4382.HEIC"), date(2025, 7, 14), cfg)
+        == "2025-07-14_IMG_4382.heic"
+    )
+
+
+def test_an_untouched_name_keeps_the_extension_exactly_as_it_is() -> None:
+    """With renaming off the name belongs to the user, case and all."""
+    assert (
+        predicted_filename(Path("/src/IMG_4382.HEIC"), date(2025, 7, 14), _cfg()) == "IMG_4382.HEIC"
+    )
+
+
+def test_normalized_suffix_is_a_no_op_on_a_converted_suffix() -> None:
+    """Conversion writes its own lower-case suffix; renaming does not re-decide it."""
+    cfg = _cfg(rename=True, rename_pattern="NAME", convert_images=True, image_format="jpeg")
+    assert predicted_filename(Path("/src/IMG.HEIC"), date(2025, 7, 14), cfg) == "IMG.jpg"
+    assert normalized_suffix(".jpg", cfg) == ".jpg"
 
 
 def test_predicted_filename_video_conversion() -> None:

@@ -96,7 +96,27 @@ describe("destination provenance ownership", () => {
 });
 
 describe("DestinationExplanation", () => {
-  it("attributes a fully composed destination and keeps all losing evidence", () => {
+  it("draws the whole destination, one control per part, each naming its reason", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation provenance={provenance} onOpenSetting={() => undefined} />
+      </I18nProvider>,
+    );
+
+    // Every recorded part is on the path line, and carries its decision and
+    // detail in its accessible name rather than in a card of its own.
+    for (const part of provenance.path) {
+      const control = screen.getByRole("button", {
+        name: `${en(`review.detail.decision.${part.decision}`)} — ${part.detail}`,
+      });
+      expect(control.textContent).toBe(part.segment);
+    }
+    expect(screen.getByText(en("review.detail.settingCost"))).toBeTruthy();
+    // Nothing is explained until something is asked.
+    expect(screen.getByText(en("review.detail.pickSegment"))).toBeTruthy();
+  });
+
+  it("explains the part being read, and offers the setting that decided it", () => {
     const onOpenSetting = vi.fn();
     render(
       <I18nProvider initialLocale="en">
@@ -104,25 +124,36 @@ describe("DestinationExplanation", () => {
       </I18nProvider>,
     );
 
-    for (const part of provenance.path) {
-      expect(screen.getByText(part.detail)).toBeTruthy();
-      expect(
-        screen.getAllByText(en(`review.detail.decision.${part.decision}`)).length,
-      ).toBeGreaterThan(0);
-    }
-    expect(screen.getByText(/Archive.*priority 9/i)).toBeTruthy();
-    expect(screen.getByText(/travel passed at 81%.*55%/i)).toBeTruthy();
-    expect(screen.getByText(/Camera JPEG/)).toBeTruthy();
-    expect(screen.getByText("/in/IMG_1.jpg")).toBeTruthy();
-
-    const dateSetting = screen.getAllByRole("button", {
-      name: en("review.detail.openSettingFor", {
-        decision: en("review.detail.decision.date"),
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `${en("review.detail.decision.date")} — year from filename`,
       }),
-    })[0];
-    fireEvent.click(dateSetting);
-    expect(onOpenSetting).toHaveBeenCalledWith("setting-structure");
+    );
+    expect(screen.getByText("year from filename")).toBeTruthy();
 
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.detail.openSettingFor", {
+          decision: en("review.detail.decision.date"),
+        }),
+      }),
+    );
+    expect(onOpenSetting).toHaveBeenCalledWith("setting-structure");
+  });
+
+  it("offers no setting for a part no setting decided", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation provenance={provenance} onOpenSetting={() => undefined} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `${en("review.detail.decision.collision")} — reserved after collision with 2024_IMG_1.png`,
+      }),
+    );
+    expect(screen.getByText(en("review.detail.noSetting"))).toBeTruthy();
     expect(
       screen.queryByRole("button", {
         name: en("review.detail.openSettingFor", {
@@ -130,7 +161,32 @@ describe("DestinationExplanation", () => {
         }),
       }),
     ).toBeNull();
-    expect(screen.getByText(en("review.detail.settingCost"))).toBeTruthy();
+  });
+
+  it("keeps every losing candidate in the folded evidence", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation provenance={provenance} onOpenSetting={() => undefined} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(/Archive.*priority 9/i)).toBeTruthy();
+    expect(screen.getByText(/travel passed at 81%.*55%/i)).toBeTruthy();
+    expect(screen.getByText(/Camera JPEG/)).toBeTruthy();
+    expect(screen.getByText("/in/IMG_1.jpg")).toBeTruthy();
+  });
+
+  it("says nothing about a media unit when the file belongs to none", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation
+          provenance={{ ...provenance, unit: null }}
+          onOpenSetting={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByText(en("review.detail.evidence.unit"))).toBeNull();
   });
 
   it("shows a below-threshold category without inventing a folder", () => {

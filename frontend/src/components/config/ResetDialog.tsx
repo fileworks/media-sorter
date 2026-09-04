@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
 import { useI18n } from "@/i18n/I18nContext";
@@ -70,9 +72,9 @@ export function SettingChangeTable({
           no horizontal scrolling surface. */}
       <div className="grid gap-2 sm:hidden">
         {orderedRows.map((row) => (
-          <article key={row.key} className="min-w-0 rounded-lg border border-border p-2.5 text-xs">
+          <article key={row.key} className="min-w-0 rounded-panel border border-border p-3 text-xs">
             <h3 className="break-words font-semibold text-foreground">{row.setting}</h3>
-            <dl className="mt-2 grid gap-1.5">
+            <dl className="mt-2 grid gap-2">
               <div className="grid min-w-0 grid-cols-[minmax(5rem,0.45fr)_minmax(0,1fr)] gap-2">
                 <dt className="text-muted-foreground">{t("config.reset.current")}</dt>
                 <dd className="min-w-0 break-words text-foreground">{row.current}</dd>
@@ -85,7 +87,7 @@ export function SettingChangeTable({
                     key={column.id}
                     aria-current={column.emphasized ? "true" : undefined}
                     className={cn(
-                      "grid min-w-0 grid-cols-[minmax(5rem,0.45fr)_minmax(0,1fr)] gap-2 rounded px-1 py-0.5",
+                      "grid min-w-0 grid-cols-[minmax(5rem,0.45fr)_minmax(0,1fr)] gap-2 rounded-control px-1 py-0.5",
                       column.emphasized && "bg-tint-primary",
                     )}
                   >
@@ -117,10 +119,10 @@ export function SettingChangeTable({
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-border text-muted-foreground">
-              <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
+              <th scope="col" className="whitespace-nowrap py-2 pr-3 font-medium">
                 {t("config.reset.setting")}
               </th>
-              <th scope="col" className="whitespace-nowrap py-1.5 pr-3 font-medium">
+              <th scope="col" className="whitespace-nowrap py-2 pr-3 font-medium">
                 {t("config.reset.current")}
               </th>
               {columns.map((column) => (
@@ -129,13 +131,13 @@ export function SettingChangeTable({
                   scope="col"
                   aria-current={column.emphasized ? "true" : undefined}
                   className={cn(
-                    "whitespace-nowrap px-2 py-1.5 font-medium",
+                    "whitespace-nowrap px-2 py-2 font-medium",
                     column.emphasized && "bg-tint-primary text-primary",
                   )}
                 >
                   {column.label}
                   {column.emphasized && (
-                    <span className="ml-1.5 rounded-full border border-current px-1.5 py-0.5 text-3xs">
+                    <span className="ml-2 rounded-full border border-current px-2 py-0.5 text-3xs">
                       {t("config.reset.selected")}
                     </span>
                   )}
@@ -146,13 +148,10 @@ export function SettingChangeTable({
           <tbody>
             {orderedRows.map((row) => (
               <tr key={row.key} className="border-b border-border last:border-0">
-                <th
-                  scope="row"
-                  className="whitespace-nowrap py-1.5 pr-3 font-medium text-foreground"
-                >
+                <th scope="row" className="whitespace-nowrap py-2 pr-3 font-medium text-foreground">
                   {row.setting}
                 </th>
-                <td className="py-1.5 pr-3 text-muted-foreground">{row.current}</td>
+                <td className="py-2 pr-3 text-muted-foreground">{row.current}</td>
                 {columns.map((column) => {
                   const result = byColumn.get(column.id)?.get(row.key);
                   const unchanged = result === undefined || result.unchanged === true;
@@ -160,7 +159,7 @@ export function SettingChangeTable({
                     <td
                       key={column.id}
                       className={cn(
-                        "px-2 py-1.5 font-medium text-foreground",
+                        "px-2 py-2 font-medium text-foreground",
                         column.emphasized && "bg-tint-primary",
                       )}
                     >
@@ -201,6 +200,16 @@ interface ResetDialogProps {
   onConfirm: (destination: ResetDestination) => void;
 }
 
+/** The first destination that would actually change something. */
+function firstUsable(destinations: readonly ResetDestination[]): string | null {
+  return (
+    destinations.find((destination) => !destination.unavailable && destination.rows.length > 0)
+      ?.id ??
+    destinations[0]?.id ??
+    null
+  );
+}
+
 /**
  * What a reset would change, before it changes it — and where "back" is.
  *
@@ -215,9 +224,22 @@ interface ResetDialogProps {
  * how a user ends up dismantling the recipe they just chose. A destination that
  * would change nothing is shown and disabled with the reason, rather than the
  * button doing nothing when pressed.
+ *
+ * The shape is the Recipe stage's, deliberately and down to the pill: one
+ * destination is *chosen*, the table marks that column as the one the button
+ * will write, and one primary action commits it. The two surfaces answer the
+ * same question — "these settings are about to change; here is to what" — and
+ * they used to answer it in two different shapes, one with an emphasised
+ * column and one with a row of competing buttons whose labels were the only
+ * clue as to which column each belonged to.
  */
 export function ResetDialog({ open, title, destinations, onClose, onConfirm }: ResetDialogProps) {
   const { t, tCount } = useI18n();
+  const [chosenId, setChosenId] = useState<string | null>(() => firstUsable(destinations));
+  const chosen =
+    destinations.find((destination) => destination.id === chosenId) ?? destinations[0] ?? null;
+  const blocked = chosen === null || Boolean(chosen.unavailable) || chosen.rows.length === 0;
+  const reasonId = "reset-destination-reason";
 
   return (
     <Modal
@@ -230,48 +252,86 @@ export function ResetDialog({ open, title, destinations, onClose, onConfirm }: R
     >
       <ModalHeader />
       <ModalBody>
-        <SettingChangeTable
-          columns={destinations.map((destination) => ({
-            id: destination.id,
-            label: destination.label,
-            rows: destination.rows,
-          }))}
-        />
+        <div className="space-y-3">
+          <SettingChangeTable
+            columns={destinations.map((destination) => ({
+              id: destination.id,
+              label: destination.label,
+              rows: destination.rows,
+              emphasized: destination.id === chosen?.id,
+            }))}
+          />
+
+          {/* With one destination there is nothing to choose, and a radio
+              group of one is a control that answers a question nobody asked. */}
+          {destinations.length > 1 && (
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold text-foreground">
+                {t("config.reset.chooseDestination")}
+              </legend>
+              <div className="grid gap-2">
+                {destinations.map((destination) => {
+                  const selected = destination.id === chosen?.id;
+                  const disabled =
+                    Boolean(destination.unavailable) || destination.rows.length === 0;
+                  return (
+                    <label
+                      key={destination.id}
+                      className={cn(
+                        "flex min-h-6 cursor-pointer items-start gap-2 rounded-control border px-3 py-2",
+                        "transition-colors focus-within:ring-2 focus-within:ring-ring",
+                        selected
+                          ? "border-primary bg-tint-primary"
+                          : "border-border hover:border-border-strong hover:bg-muted/50",
+                        disabled && "cursor-not-allowed border-border bg-muted text-faint",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="reset-destination"
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 border-border-strong text-primary focus-visible:outline-none"
+                        checked={selected}
+                        disabled={disabled}
+                        onChange={() => setChosenId(destination.id)}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium text-foreground">
+                          {destination.label}
+                        </span>
+                        <span className="block text-3xs text-muted-foreground">
+                          {destination.unavailable ??
+                            tCount("config.reset.willChange", destination.rows.length)}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+        </div>
       </ModalBody>
       <ModalFooter>
-        <div className="flex w-full flex-col gap-3">
-          <div className="flex flex-wrap justify-end gap-3">
-            {destinations.map((destination, index) => {
-              const reasonId = `reset-destination-reason-${index}`;
-              return (
-                <div key={destination.id} className="flex max-w-xs flex-col items-end gap-1">
-                  <Button
-                    disabled={Boolean(destination.unavailable) || destination.rows.length === 0}
-                    aria-describedby={destination.unavailable ? reasonId : undefined}
-                    onClick={() => onConfirm(destination)}
-                  >
-                    {destinations.length === 1
-                      ? tCount("config.reset.confirm", destination.rows.length)
-                      : t("config.reset.confirmDestination", {
-                          count: destination.rows.length,
-                          target: destination.label,
-                        })}
-                  </Button>
-                  {destination.unavailable && (
-                    <p id={reasonId} className="text-right text-3xs text-muted-foreground">
-                      {destination.unavailable}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end">
-            <Button variant="ghost" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-          </div>
-        </div>
+        {chosen?.unavailable && (
+          <p id={reasonId} className="mr-auto text-3xs text-muted-foreground">
+            {chosen.unavailable}
+          </p>
+        )}
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          disabled={blocked}
+          aria-describedby={chosen?.unavailable ? reasonId : undefined}
+          onClick={() => chosen && onConfirm(chosen)}
+        >
+          {destinations.length === 1
+            ? tCount("config.reset.confirm", chosen?.rows.length ?? 0)
+            : t("config.reset.confirmDestination", {
+                count: chosen?.rows.length ?? 0,
+                target: chosen?.label ?? "",
+              })}
+        </Button>
       </ModalFooter>
     </Modal>
   );

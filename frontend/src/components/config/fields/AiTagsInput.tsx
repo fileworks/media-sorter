@@ -19,19 +19,19 @@ export function AiTagsInput({
   const remove = (tag: string) => onCommit(labels.filter((l) => l !== tag));
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap gap-1.5">
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
         {labels.map((tag) => (
           <span
             key={tag}
-            className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground"
+            className="flex items-center gap-1 rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground"
           >
             {tag}
             <button
               type="button"
               disabled={disabled}
               onClick={() => remove(tag)}
-              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent"
               aria-label={t("common.removeValue", { value: tag })}
             >
               ×
@@ -42,7 +42,7 @@ export function AiTagsInput({
           type="text"
           disabled={disabled}
           placeholder={t("config.input.addLabel")}
-          className="h-7 min-w-[8rem] rounded-full border border-input bg-background px-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="h-7 min-w-[8rem] rounded-full border border-input bg-background px-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
               e.preventDefault();

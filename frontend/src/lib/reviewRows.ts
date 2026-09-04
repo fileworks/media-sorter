@@ -392,7 +392,7 @@ function planStacks(
   items: readonly PreviewItem[],
   claimed: ReadonlyMap<string, RowStack>,
   decisions: ReadonlyMap<string, DuplicateDecision>,
-  proposals: ReadonlyMap<string, KeeperProposal>,
+  recommendations: ReadonlyMap<string, KeeperProposal>,
 ): Map<string, RowStack> {
   const stacks = new Map<string, RowStack>();
   // One pass for the measured similarities, not one pass per set: this used to
@@ -414,8 +414,11 @@ function planStacks(
     const decision = decisions.get(set.id);
     const chosen = decision?.kind === "keeper" ? decision.memberId : undefined;
     const keeper = chosen !== undefined && members.includes(chosen) ? chosen : members[0];
-    const proposal = proposals.get(set.id);
-    const state = decisionState(set.id, decisions, proposals);
+    // The recommendation is carried whether or not the set is still open, so
+    // a decided set can still say which copy the rule had ranked first. The
+    // *state* is not affected: `decisionState` reads `decisions` first.
+    const proposal = recommendations.get(set.id);
+    const state = decisionState(set.id, decisions, recommendations);
     const measuredSimilarity = members
       .map((source) => similarityBySource.get(source))
       .filter((value): value is number => value !== undefined);
@@ -474,7 +477,7 @@ export function toReviewRows(
   result: PreviewResult,
   stacks: DuplicateGroup[] = [],
   decisionInput: DecisionInput = new Map(),
-  proposals: ReadonlyMap<string, KeeperProposal> = new Map(),
+  recommendations: ReadonlyMap<string, KeeperProposal> = new Map(),
 ): ReviewRow[] {
   const decisions = normalizeDecisions(decisionInput);
   const nameCounts = new Map<string, number>();
@@ -501,8 +504,10 @@ export function toReviewRows(
       group.members.find((member) => member.member_id === requestedKeeperId) ??
       group.members[0];
     const keeperId = keeper?.member_id ?? null;
-    const proposal = hasBaseline ? undefined : proposals.get(group.group_id);
-    const state = hasBaseline ? "decided" : decisionState(group.group_id, decisions, proposals);
+    const proposal = hasBaseline ? undefined : recommendations.get(group.group_id);
+    const state = hasBaseline
+      ? "decided"
+      : decisionState(group.group_id, decisions, recommendations);
     const similarity = catalogSimilarity(group);
     for (const member of group.members) {
       const isKeeper = member.member_id === keeperId;
@@ -529,7 +534,12 @@ export function toReviewRows(
   // Everything the run is setting aside that the catalog does not account for.
   // Without this the plan and the screen disagreed: files went under `_copies/`
   // while the summary said the run held no duplicate sets at all.
-  for (const [source, stack] of planStacks(result.items, stackBySource, decisions, proposals)) {
+  for (const [source, stack] of planStacks(
+    result.items,
+    stackBySource,
+    decisions,
+    recommendations,
+  )) {
     stackBySource.set(source, stack);
   }
 
@@ -669,6 +679,21 @@ export function folderLeaf(folder: string): string {
   const normalized = folder.replace(/\\/g, "/").replace(/\/+$/, "");
   const separator = normalized.lastIndexOf("/");
   return separator === -1 ? normalized : normalized.slice(separator + 1);
+}
+
+/**
+ * The last few segments of a source folder — enough to recognise it.
+ *
+ * Between byte-identical copies the folder is usually the *only* thing that
+ * differs, so it has to be readable rather than merely present. A leaf alone
+ * loses the two "2019" folders apart; the whole absolute path truncates from
+ * the wrong end and hides exactly the segments that distinguish them.
+ */
+export function folderTail(folder: string, segments = 2): string {
+  const normalized = folder.replace(/\\/g, "/").replace(/\/+$/, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= segments) return normalized;
+  return `…/${parts.slice(-segments).join("/")}`;
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────

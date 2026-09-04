@@ -116,7 +116,7 @@ export function FolderBrowserDialog({
           <button
             type="button"
             onClick={() => descend("")}
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-control px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {t("folderBrowser.roots")}
           </button>
@@ -132,7 +132,7 @@ export function FolderBrowserDialog({
                 <button
                   type="button"
                   onClick={() => descend(upto)}
-                  className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-control px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {crumb}
                 </button>
@@ -169,7 +169,7 @@ export function FolderBrowserDialog({
             aria-label={t("folderBrowser.folders")}
             tabIndex={0}
             onKeyDown={onKeyDown}
-            className="max-h-80 overflow-y-auto rounded-lg border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="max-h-80 overflow-y-auto rounded-panel border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {entries.map((entry, index) => (
               <li key={entry.path}>
@@ -186,7 +186,7 @@ export function FolderBrowserDialog({
                   className={cn(
                     "flex w-full items-center justify-between px-3 py-2 text-left text-sm",
                     index === cursor && "bg-accent",
-                    entry.readable ? "hover:bg-accent" : "cursor-not-allowed opacity-60",
+                    entry.readable ? "hover:bg-accent" : "cursor-not-allowed bg-muted text-faint",
                   )}
                 >
                   <span className="truncate">{entry.name}</span>

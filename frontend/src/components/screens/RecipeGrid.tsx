@@ -52,9 +52,9 @@ export function RecipeGrid({
               aria-pressed={active}
               onClick={() => onSelect(recipe)}
               className={cn(
-                "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-3 rounded-xl p-3.5 text-left transition-colors",
+                "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-2.5 rounded-window px-3.5 py-3 text-left transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "disabled:cursor-not-allowed disabled:opacity-60",
+                "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint",
                 recipe.outline
                   ? "border border-dashed border-border bg-transparent hover:border-faint"
                   : "bg-card hover:border-faint",
@@ -74,6 +74,11 @@ export function RecipeGrid({
                 aria-hidden
               />
               <span className="min-w-0">
+                {/* "Recommended" rides the title rather than sitting under the
+                    consequence line. As its own stacked row it cost a full
+                    line plus its margin on the one card that is meant to read
+                    as the easy answer, which pushed the rest of the list down
+                    the fold. */}
                 <span className="flex items-center gap-2">
                   <span
                     className={cn(
@@ -83,6 +88,11 @@ export function RecipeGrid({
                   >
                     {recipeName(recipe, t)}
                   </span>
+                  {recipe.recommended && (
+                    <span className="shrink-0 rounded-control bg-tint-success px-1.5 py-0.5 text-3xs font-semibold text-success">
+                      {t("recipes.recommended")}
+                    </span>
+                  )}
                   <span className="flex-1" />
                   {active && (
                     <span
@@ -95,13 +105,13 @@ export function RecipeGrid({
                 </span>
                 <span
                   className={cn(
-                    "mt-1 block text-xs leading-relaxed",
+                    "mt-0.5 block text-xs leading-snug",
                     recipe.outline ? "text-faint" : "text-muted-foreground",
                   )}
                 >
                   {t(recipe.descriptionKey)}
                 </span>
-                <span className="mt-2.5 flex items-center gap-2 text-3xs text-faint">
+                <span className="mt-2 flex items-center gap-2 text-3xs text-faint">
                   <span className="inline-flex gap-0.5" aria-hidden>
                     {[1, 2, 3].map((level) => (
                       <span
@@ -115,11 +125,6 @@ export function RecipeGrid({
                   </span>
                   <span className="sm:line-clamp-1">{t(recipe.consequenceKey)}</span>
                 </span>
-                {recipe.recommended && (
-                  <span className="mt-2 inline-block w-fit rounded-md bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success">
-                    {t("recipes.recommended")}
-                  </span>
-                )}
               </span>
             </button>
 
@@ -128,7 +133,7 @@ export function RecipeGrid({
                 <button
                   type="button"
                   onClick={() => onDelete(recipe.id)}
-                  className="absolute right-2 top-2 rounded-lg p-1.5 text-faint transition-colors hover:bg-muted hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="absolute right-2 top-2 rounded-panel p-2 text-faint transition-colors hover:bg-muted hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <FiTrash2 className="h-3.5 w-3.5" aria-hidden />
                 </button>

@@ -56,8 +56,8 @@ export function RunLog({ entries, running }: { entries: LogEntry[]; running: boo
   }, [collapsed]);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
+    <section className="overflow-hidden rounded-window border border-border bg-card">
+      <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
         <h2 className="text-xs font-bold text-foreground">{t("execute.log")}</h2>
         <span className="text-xs text-faint">{t("execute.logHelp")}</span>
         <span className="flex-1" />
@@ -66,7 +66,7 @@ export function RunLog({ entries, running }: { entries: LogEntry[]; running: boo
           onClick={() => setFollowing((value) => !value)}
           aria-pressed={following}
           className={cn(
-            "rounded-full px-2.5 py-1 text-3xs font-semibold transition-colors",
+            "rounded-full px-3 py-1 text-3xs font-semibold transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             following ? "bg-muted text-muted-foreground" : "text-faint hover:text-foreground",
           )}
@@ -77,7 +77,7 @@ export function RunLog({ entries, running }: { entries: LogEntry[]; running: boo
           type="button"
           onClick={() => setCollapsed((value) => !value)}
           aria-expanded={!collapsed}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-3xs text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1 rounded-panel px-2 py-1 text-3xs text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t(collapsed ? "execute.expand" : "execute.collapse")}
           {collapsed ? (

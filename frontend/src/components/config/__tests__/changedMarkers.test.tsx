@@ -122,7 +122,7 @@ describe("per-row changed markers", () => {
 
     renderConfigure();
     const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
-    const row = timestamp.closest("[class*='px-5']");
+    const row = timestamp.closest("[data-setting-row]");
     expect(row).not.toBeNull();
     expect(
       within(row as HTMLElement)
@@ -144,7 +144,7 @@ describe("per-row changed markers", () => {
 
     renderConfigure({ onSaveConfig });
     const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
-    const row = timestamp.closest("[class*='px-5']");
+    const row = timestamp.closest("[data-setting-row]");
     expect(row).not.toBeNull();
     fireEvent.click(within(row as HTMLElement).getByRole("button", { name: markerName("On") }));
 
@@ -169,7 +169,7 @@ describe("per-row changed markers", () => {
   });
 
   it("keeps the timestamp baseline stable when the configuration matches another recipe", async () => {
-    const duplicatesOnly = CONFIG_RECIPES.find((recipe) => recipe.id === "find_duplicates_only");
+    const duplicatesOnly = CONFIG_RECIPES.find((recipe) => recipe.id === "tidy_library");
     expect(duplicatesOnly).toBeDefined();
     const recipeConfig = {
       ...TEST_CONFIG,
@@ -185,11 +185,11 @@ describe("per-row changed markers", () => {
 
     renderConfigure();
     const timestamp = await screen.findByText(translate("en", "config.transfer.timestamps"));
-    const row = timestamp.closest("[class*='px-5']");
+    const row = timestamp.closest("[data-setting-row]");
     expect(row).not.toBeNull();
     expect(
       within(row as HTMLElement).getByRole("button", {
-        name: markerName("On", "recipe Find duplicates only"),
+        name: markerName("On", "recipe Clean up a library"),
       }),
     ).toBeTruthy();
   });
@@ -229,13 +229,13 @@ describe("per-row changed markers", () => {
 });
 
 describe("the baseline is the recipe in force", () => {
-  const safeSort = CONFIG_RECIPES.find((recipe) => recipe.id === "safe_sort");
+  const consolidate = CONFIG_RECIPES.find((recipe) => recipe.id === "consolidate");
 
   it("marks nothing at all immediately after a recipe is applied", async () => {
-    expect(safeSort).toBeDefined();
+    expect(consolidate).toBeDefined();
     const applied: Config = {
       ...TEST_CONFIG,
-      ...applyRecipe(TEST_CONFIG, safeSort as (typeof CONFIG_RECIPES)[number]),
+      ...applyRecipe(TEST_CONFIG, consolidate as (typeof CONFIG_RECIPES)[number]),
     };
     vi.spyOn(api, "getConfig").mockResolvedValue(applied);
 
@@ -251,10 +251,10 @@ describe("the baseline is the recipe in force", () => {
   });
 
   it("names the recipe in the heading and in every marker", async () => {
-    expect(safeSort).toBeDefined();
+    expect(consolidate).toBeDefined();
     const drifted: Config = {
       ...TEST_CONFIG,
-      ...applyRecipe(TEST_CONFIG, safeSort as (typeof CONFIG_RECIPES)[number]),
+      ...applyRecipe(TEST_CONFIG, consolidate as (typeof CONFIG_RECIPES)[number]),
       // One deliberate step away from the recipe, and nothing else.
       camera_subfolder_enabled: !TEST_CONFIG.camera_subfolder_enabled,
     };
@@ -262,7 +262,7 @@ describe("the baseline is the recipe in force", () => {
 
     renderConfigure();
 
-    const recipeLabel = translate("en", safeSort?.labelKey ?? "");
+    const recipeLabel = translate("en", consolidate?.labelKey ?? "");
     await screen.findByRole("heading", {
       name: translate("en", "config.title.recipe", { recipe: recipeLabel }),
     });
@@ -276,11 +276,11 @@ describe("the baseline is the recipe in force", () => {
   });
 
   it("shows recipe and application destinations together and confirms them separately", async () => {
-    expect(safeSort).toBeDefined();
+    expect(consolidate).toBeDefined();
     const applied: Config = {
       ...TEST_CONFIG,
-      ...applyRecipe(TEST_CONFIG, safeSort as (typeof CONFIG_RECIPES)[number]),
-      // Outside Safe sort's claimed fields, so the recipe remains identifiable.
+      ...applyRecipe(TEST_CONFIG, consolidate as (typeof CONFIG_RECIPES)[number]),
+      // Outside the recipe's claimed fields, so it remains identifiable.
       min_file_size_kb: (TEST_CONFIG.min_file_size_kb ?? 0) + 64,
     };
     vi.spyOn(api, "getConfig").mockResolvedValue(applied);
@@ -289,23 +289,30 @@ describe("the baseline is the recipe in force", () => {
 
     await screen.findByRole("heading", {
       name: translate("en", "config.title.recipe", {
-        recipe: translate("en", safeSort?.labelKey ?? ""),
+        recipe: translate("en", consolidate?.labelKey ?? ""),
       }),
     });
     fireEvent.click(screen.getByRole("button", { name: translate("en", "config.reset.all") }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("columnheader", { name: /safe sort/i })).toBeTruthy();
+    // Both destinations are columns in the same comparison, exactly as the
+    // Recipe stage draws them.
+    expect(
+      within(dialog).getByRole("columnheader", { name: /bring folders together/i }),
+    ).toBeTruthy();
     expect(
       within(dialog).getByRole("columnheader", {
-        name: translate("en", "config.baseline.defaults"),
+        name: new RegExp(translate("en", "config.baseline.defaults"), "i"),
       }),
     ).toBeTruthy();
 
-    const confirm = within(dialog).getAllByRole("button", { name: /reset .* to/i });
-    expect(confirm).toHaveLength(2);
+    // One destination is chosen and one action commits it — the Recipe stage's
+    // shape, rather than a row of competing buttons.
+    const destinations = within(dialog).getAllByRole("radio");
+    expect(destinations).toHaveLength(2);
+    const confirm = within(dialog).getByRole("button", { name: /reset .* to/i });
     expect(onSaveConfig).not.toHaveBeenCalled();
-    fireEvent.click(confirm[0]);
+    fireEvent.click(confirm);
     expect(onSaveConfig).toHaveBeenCalledTimes(1);
   });
 });

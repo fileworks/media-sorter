@@ -31,18 +31,18 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
 
   if (tooWeak) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+      <div className="flex items-start gap-2 rounded-panel border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
         <FiAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {t("config.ai.machineWeak")}
-          <span className="mt-0.5 block text-warning/80">{summary}</span>
+          <span className="mt-0.5 block text-warning">{summary}</span>
         </span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 rounded-panel border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <FiCpu className="h-3.5 w-3.5 shrink-0 text-primary" />
       <span>
         <span className="font-medium text-foreground">{summary}</span>
@@ -55,7 +55,7 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
         )}
       </span>
       {hardware.has_accelerator && (
-        <span className="ml-auto flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-success">
+        <span className="ml-auto flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-success">
           <FiZap className="h-3 w-3" /> GPU
         </span>
       )}

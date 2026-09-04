@@ -138,13 +138,36 @@ def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:
     return sanitize_filename_stem(stem) or f"{file_type}_{d:%Y-%m-%d}"
 
 
+def normalized_suffix(suffix: str, config: Config) -> str:
+    """The extension a renamed file lands with.
+
+    Renaming is the one setting that claims authority over the filename, and
+    the interface has always said so: a run that rewrites ``IMG_4382`` into a
+    dated stem and leaves ``.HEIC`` shouting beside it produced exactly the
+    inconsistency the feature exists to remove. So when renaming is on the
+    extension is lower-cased with the stem; when it is off the name is the
+    user's and nothing here touches it.
+
+    Conversion already writes a lower-case suffix of its own, so this is a
+    no-op on a converted file rather than a second opinion about it.
+
+    Scope is the media file. A companion keeps its own extension exactly as it
+    is: `companion_destination` lives in `core` without a configuration, and
+    three of its five call sites rewrite a *reviewed* plan where none is in
+    scope. Normalising it at some of them would put the preview and the run at
+    odds about a path, which is worse than a sidecar that still shouts.
+    """
+    return suffix.lower() if config.rename else suffix
+
+
 def predicted_filename(file_path: Path, extracted_date: date, config: Config) -> str:
     """Predict the final filename the sort will produce for *file_path*.
 
     Mirrors the sort pipeline's post-placement steps in order: format
     conversion changes the suffix (a no-op when already in the target format),
-    then the rename pattern rewrites the stem. Collision suffixes (``_001``)
-    depend on the destination disk state and are deliberately not predicted.
+    then the rename pattern rewrites the stem and normalises the extension.
+    Collision suffixes (``_001``) depend on the destination disk state and are
+    deliberately not predicted.
     """
     suffix = file_path.suffix
     if config.convert_images and is_image(file_path):
@@ -156,7 +179,7 @@ def predicted_filename(file_path: Path, extracted_date: date, config: Config) ->
     if config.rename:
         file_type = "VID" if is_video(file_path) else "IMG"
         stem = rename_stem(config.rename_pattern, extracted_date, stem, file_type)
-    return stem + suffix
+    return stem + normalized_suffix(suffix, config)
 
 
 # Re-exported so every existing import keeps working. The definitions moved to
@@ -168,6 +191,7 @@ __all__ = [
     "build_dest_dir",
     "companion_destination",
     "copy_destination",
+    "normalized_suffix",
     "predicted_filename",
     "quarantine_dir",
     "rename_stem",

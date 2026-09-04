@@ -82,11 +82,11 @@ describe("choosing a recipe moves nothing", () => {
   });
 
   it("says a recipe already in force would change nothing, and cannot be applied", () => {
-    const safeSort = CONFIG_RECIPES.find((recipe) => recipe.id === "safe_sort");
-    expect(safeSort).toBeDefined();
+    const consolidate = CONFIG_RECIPES.find((recipe) => recipe.id === "consolidate");
+    expect(consolidate).toBeDefined();
     const applied: Config = {
       ...TEST_CONFIG,
-      ...applyRecipe(TEST_CONFIG, safeSort as (typeof CONFIG_RECIPES)[number]),
+      ...applyRecipe(TEST_CONFIG, consolidate as (typeof CONFIG_RECIPES)[number]),
     };
 
     renderRecipes(applied);
@@ -104,7 +104,7 @@ describe("choosing a recipe moves nothing", () => {
 
     // Chosen because its patch is deterministic: the two profile builders that
     // stamp `new Date()` would never compare equal across two calls.
-    const target = CONFIG_RECIPES.find((recipe) => recipe.id === "clean_sweep");
+    const target = CONFIG_RECIPES.find((recipe) => recipe.id === "import_dump");
     expect(target).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", { name: new RegExp(translate("en", target?.labelKey ?? "")) }),
@@ -153,13 +153,14 @@ describe("choosing a recipe moves nothing", () => {
   });
 
   it("enables the wider action when the recipe itself is already in force", () => {
-    const safeSort = CONFIG_RECIPES.find((recipe) => recipe.id === "safe_sort");
-    expect(safeSort).toBeDefined();
+    const consolidate = CONFIG_RECIPES.find((recipe) => recipe.id === "consolidate");
+    expect(consolidate).toBeDefined();
     const applied = {
       ...TEST_CONFIG,
-      ...applyRecipe(TEST_CONFIG, safeSort as (typeof CONFIG_RECIPES)[number]),
-      rename: true,
-      rename_pattern: "{name}-custom",
+      ...applyRecipe(TEST_CONFIG, consolidate as (typeof CONFIG_RECIPES)[number]),
+      // A recipe-scoped setting no card claims, so the card stays identifiable
+      // while there is still something for the wider scope to put back.
+      duplicate_keeper_policy: "oldest" as const,
     };
     const onApply = vi.fn();
     renderRecipes(applied, onApply, TEST_CONFIG);
@@ -176,8 +177,7 @@ describe("choosing a recipe moves nothing", () => {
     fireEvent.click(apply);
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({
-        rename: TEST_CONFIG.rename,
-        rename_pattern: TEST_CONFIG.rename_pattern,
+        duplicate_keeper_policy: TEST_CONFIG.duplicate_keeper_policy,
       }),
     );
   });

@@ -11,11 +11,11 @@ export function ExcludePatternTags({
 }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {patterns.map((pattern) => (
         <span
           key={pattern}
-          className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground"
+          className="flex items-center gap-1 rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground"
         >
           <code>{pattern}</code>
           <button

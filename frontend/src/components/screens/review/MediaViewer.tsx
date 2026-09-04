@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FiArrowLeft, FiArrowRight, FiMaximize, FiMinus, FiPlus } from "react-icons/fi";
 
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal";
+import { Modal, ModalFooter, ModalHeader, ModalShortcuts } from "@/components/ui/modal";
+import { Tooltip } from "@/components/ui/tooltip";
 import { MediaVideo } from "@/components/ui/media-video";
 import { useMediaInfo } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
@@ -55,27 +56,19 @@ export function MediaViewer({
   );
   const zoomOut = useCallback(() => setZoomStep((step) => Math.max(step - 1, 0)), []);
 
-  // The modal owns Escape; typing controls retain their navigation keys.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest(
-          "input, textarea, select, button, a, video, audio, [contenteditable='true'], [role='slider']",
-        )
-      )
-        return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+  // The modal owns Escape; `ModalShortcuts` owns the rest, and only while this
+  // viewer is the dialog on top — opening it *from* the comparison dialog used
+  // to leave both listening on `window`, so one arrow key moved two things.
+  const onKey = useCallback(
+    (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft") onPrevious?.();
       else if (event.key === "ArrowRight") onNext?.();
       else if (canZoom && (event.key === "+" || event.key === "=")) zoomIn();
       else if (canZoom && event.key === "-") zoomOut();
       else if (canZoom && event.key === "0") setZoomStep(0);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [canZoom, onNext, onPrevious, zoomIn, zoomOut]);
+    },
+    [canZoom, onNext, onPrevious, zoomIn, zoomOut],
+  );
 
   // Center the scrollable image after each zoom change.
   useEffect(() => {
@@ -87,6 +80,7 @@ export function MediaViewer({
 
   return (
     <Modal open onClose={onClose} title={name} size="full">
+      <ModalShortcuts onKey={onKey} />
       <ModalHeader
         actions={
           canZoom ? (
@@ -145,7 +139,7 @@ export function MediaViewer({
             <p role="alert">{t("review.detail.infoFailed")}</p>
             <button
               type="button"
-              className="mt-3 rounded-lg border border-current px-3 py-1.5 font-medium"
+              className="mt-3 rounded-panel border border-current px-3 py-2 font-medium"
               onClick={() => void info.refetch()}
             >
               {t("state.retry")}
@@ -161,7 +155,7 @@ export function MediaViewer({
       </div>
 
       <ModalFooter>
-        <div className="mr-auto flex items-center gap-1.5">
+        <div className="mr-auto flex items-center gap-2">
           <ViewerButton
             label={t("review.detail.previous")}
             onClick={() => onPrevious?.()}
@@ -204,16 +198,20 @@ function ViewerButton({
   disabledReason?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      aria-description={disabled ? disabledReason : undefined}
-      className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35"
-    >
-      <Icon className="h-4 w-4" aria-hidden />
-    </button>
+    // Every one of these is icon-only, so the hint is the only place the name
+    // is legible to a sighted pointer user. A disabled control says why.
+    <Tooltip label={disabled && disabledReason ? `${label} — ${disabledReason}` : label}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        aria-description={disabled ? disabledReason : undefined}
+        className="shrink-0 rounded-panel p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent"
+      >
+        <Icon className="h-4 w-4" aria-hidden />
+      </button>
+    </Tooltip>
   );
 }
 

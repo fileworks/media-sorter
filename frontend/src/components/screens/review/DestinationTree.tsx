@@ -88,7 +88,7 @@ function Row({
           // Square left edge: an accent border on a rounded box curves away at
           // both corners and draws a parenthesis beside the row rather than a
           // rule down it.
-          "flex items-center gap-1 rounded-r-lg border-l-2 pr-1 text-xs",
+          "flex items-center gap-1 rounded-r-panel border-l-2 pr-1 text-xs",
           selected ? "bg-tint-primary" : "hover:bg-muted",
           selected ? "border-primary" : stays ? "border-faint bg-muted/35" : "border-transparent",
         )}
@@ -101,7 +101,7 @@ function Row({
             onClick={() => onToggle(node.path)}
             aria-expanded={isOpen}
             aria-label={t("review.browse.expand", { folder: name })}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-control text-faint transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {isOpen ? (
               <FiChevronDown className="h-3 w-3" aria-hidden />
@@ -118,7 +118,7 @@ function Row({
           aria-pressed={selected}
           aria-label={t("review.browse.showContents", { folder: name })}
           onClick={() => onSelect(selected ? null : node.path)}
-          className="flex min-h-6 min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-6 min-w-0 flex-1 items-center gap-2 rounded-panel py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span
             className={cn(
@@ -258,7 +258,7 @@ export function DestinationTree({
   return (
     <section
       aria-label={t("review.tree.title")}
-      className={cn("bg-card", embedded ? "" : "rounded-xl border border-border p-3.5")}
+      className={cn("bg-card", embedded ? "" : "rounded-window border border-border p-4")}
     >
       <div
         className={cn(
@@ -289,7 +289,7 @@ export function DestinationTree({
       </div>
 
       <div className={cn(embedded && "p-2")}>
-        <label className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1">
+        <label className="mb-2 flex items-center gap-2 rounded-panel border border-border bg-background px-3 py-1">
           <FiSearch className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
           <span className="sr-only">{t("review.tree.filter")}</span>
           <input
@@ -352,12 +352,12 @@ export function DestinationTree({
 
         {/* Keep excluded duplicate sets visible but collapsed. */}
         {outOfScopeSets > 0 && (
-          <div className="mt-3 border-t border-border pt-2.5">
+          <div className="mt-3 border-t border-border pt-3">
             <button
               type="button"
               aria-expanded={alsoOpen}
               onClick={() => setAlsoOpen((open) => !open)}
-              className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex w-full items-center gap-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {alsoOpen ? (
                 <FiChevronDown className="h-3 w-3 shrink-0" aria-hidden />
@@ -367,7 +367,7 @@ export function DestinationTree({
               {tCount("review.browse.alsoInLibrary", outOfScopeSets)}
             </button>
             {alsoOpen && (
-              <div className="mt-1.5 space-y-2 pl-4">
+              <div className="mt-2 space-y-2 pl-4">
                 <p className="text-xs leading-relaxed text-faint">
                   {t("review.browse.alsoInLibrary.rule")}
                 </p>
@@ -375,7 +375,7 @@ export function DestinationTree({
                   <button
                     type="button"
                     onClick={onOpenSources}
-                    className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-panel border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {t("review.browse.openSources")}
                   </button>
@@ -385,7 +385,7 @@ export function DestinationTree({
           </div>
         )}
 
-        <p className="mt-3 border-t border-border pt-2.5 text-3xs leading-relaxed text-faint">
+        <p className="mt-3 border-t border-border pt-3 text-3xs leading-relaxed text-faint">
           {t("review.tree.note")}
         </p>
       </div>

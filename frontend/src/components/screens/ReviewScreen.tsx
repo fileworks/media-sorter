@@ -6,14 +6,15 @@ import { FiAlertTriangle, FiChevronRight } from "react-icons/fi";
 import { MediaViewer } from "@/components/screens/review/MediaViewer";
 import { DestinationTree } from "@/components/screens/review/DestinationTree";
 import { CompareModal } from "@/components/screens/review/CompareModal";
+import { BrowseDecisionBar } from "@/components/screens/review/BrowseDecisionBar";
 import { BrowsePane } from "@/components/screens/review/BrowsePane";
 import { DetailView } from "@/components/screens/review/DetailView";
 import { ResolveQueue } from "@/components/screens/review/ResolveQueue";
 import { ReviewToolbar } from "@/components/screens/review/ReviewToolbar";
-import { SelectionBar } from "@/components/screens/review/SelectionBar";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
+import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useReviewSurface, type ReviewMode } from "@/hooks/useReviewSurface";
 import { useI18n } from "@/i18n/I18nContext";
@@ -25,6 +26,7 @@ import {
   browseTree,
   duplicateSetEntries,
   entriesIn,
+  isOpenSet,
   folderGroups,
   folderTrail,
   reviewStats,
@@ -51,6 +53,8 @@ import {
   comparableFromMember,
   comparableFromRow,
   keeperByPolicy as applyKeeperPolicy,
+  memberLetter,
+  pairsOf,
   type ComparableFile,
   type DuplicateGroup,
 } from "@/lib/reviewWorkbench";
@@ -81,10 +85,10 @@ interface ReviewScreenProps {
 }
 
 interface Comparison {
-  a: ComparableFile;
-  b: ComparableFile;
-  alternatives: ComparableFile[];
-  alternativeIndex: number;
+  /** Every copy the comparison can draw from, in the set's own order. */
+  members: ComparableFile[];
+  /** Which of `pairsOf(members)` is on screen. */
+  pairIndex: number;
   keeperId: string | null;
   setId: string | null;
   recommendedId: string | null;
@@ -133,6 +137,10 @@ export function ReviewScreen({
   );
 
   useEffect(() => setDecidedSetIds(surface.decidedSetIds), [surface.decidedSetIds]);
+
+  const slowSave = useDelayedFlag(
+    planPersistenceState === "saving" || surface.persistenceState === "saving",
+  );
 
   // Strip the machine-specific destination root from the planned tree.
   const entries = useMemo(
@@ -198,34 +206,39 @@ export function ReviewScreen({
     );
   }, [entries, needle, surface.treePath]);
 
-  /** Visible order for range selection and folder-scoped detail navigation. */
-  const paneOrder = useMemo(() => {
-    const groups = folderGroups(paneEntries, surface.treePath);
-    return groups.flatMap((group) => {
-      // Grid shows subfolders as tiles. List shows their aggregated rows.
-      if (surface.view === "grid" && !group.direct) return [];
-      return sortEntries(group.entries, surface.sort, locale).flatMap((entry) => {
-        if (entry.kind === "file") return [entry.row.source];
-        // A collapsed set exposes only its set-level checkbox, never an
-        // individual file checkbox. Ctrl/Cmd+A must follow that exact UI.
-        return expandedSets.has(entry.id)
-          ? sortRows(entry.rows, surface.sort, locale).map((row) => row.source)
-          : [];
-      });
-    });
-  }, [expandedSets, locale, paneEntries, surface.sort, surface.treePath, surface.view]);
+  /**
+   * Visible order for range selection and folder-scoped detail navigation.
+   *
+   * Both views draw the same entries in the same order — Grid tiles them and
+   * List lines them up — so this no longer branches on which one is showing.
+   * It used to, because Grid reduced every subfolder to a tile you had to
+   * click into; a Ctrl/Cmd+A therefore selected a different set of files
+   * depending on a toggle that was supposed to be about appearance.
+   */
+  const paneOrder = useMemo(
+    () =>
+      folderGroups(paneEntries, surface.treePath).flatMap((group) =>
+        sortEntries(group.entries, surface.sort, locale).flatMap((entry) => {
+          if (entry.kind === "file") return [entry.row.source];
+          // A collapsed set exposes only its set-level checkbox, never an
+          // individual file checkbox. Ctrl/Cmd+A must follow that exact UI.
+          return expandedSets.has(entry.id)
+            ? sortRows(entry.rows, surface.sort, locale).map((row) => row.source)
+            : [];
+        }),
+      ),
+    [expandedSets, locale, paneEntries, surface.sort, surface.treePath],
+  );
 
   /** Top-level duplicate sets whose selection controls are actually visible. */
   const paneSetOrder = useMemo(
     () =>
-      folderGroups(paneEntries, surface.treePath).flatMap((group) => {
-        // Grid replaces non-direct children with one folder tile.
-        if (surface.view === "grid" && !group.direct) return [];
-        return sortEntries(group.entries, surface.sort, locale).flatMap((entry) =>
+      folderGroups(paneEntries, surface.treePath).flatMap((group) =>
+        sortEntries(group.entries, surface.sort, locale).flatMap((entry) =>
           entry.kind === "set" && !entry.hasBaseline ? [entry.id] : [],
-        );
-      }),
-    [locale, paneEntries, surface.sort, surface.treePath, surface.view],
+        ),
+      ),
+    [locale, paneEntries, surface.sort, surface.treePath],
   );
 
   const memberIdBySetSource = useMemo(
@@ -246,6 +259,18 @@ export function ReviewScreen({
     [memberIdBySetSource, surface],
   );
 
+  /** The bulk form of the same choice, resolved through one member lookup. */
+  const keepManyBySource = useCallback(
+    (choices: readonly { setId: string; source: string }[]) =>
+      surface.chooseKeepers(
+        choices.flatMap((choice) => {
+          const memberId = memberIdBySetSource.get(`${choice.setId}\0${choice.source}`);
+          return memberId ? [{ groupId: choice.setId, memberId }] : [];
+        }),
+      ),
+    [memberIdBySetSource, surface],
+  );
+
   const groupFor = useCallback(
     (setId: string): DuplicateGroup | undefined =>
       scopedGroups.find((candidate) => candidate.group_id === setId),
@@ -261,6 +286,15 @@ export function ReviewScreen({
       return group.members.find((member) => member.member_id === memberId)?.observed_path ?? null;
     },
     [groupFor],
+  );
+
+  /** The sets still waiting on somebody, shared by both surfaces. */
+  const openSets = useMemo(() => allSets.filter(isOpenSet), [allSets]);
+
+  /** The set selection, resolved to entries — one derivation for both surfaces. */
+  const selectedSets = useMemo(
+    () => allSets.filter((entry) => surface.selectedSetIds.has(entry.id) && !entry.hasBaseline),
+    [allSets, surface.selectedSetIds],
   );
 
   /** Sets the rule cannot decide, split by the reason it cannot. */
@@ -295,7 +329,24 @@ export function ReviewScreen({
     [groupFor],
   );
 
-  /** Any two files. Only a shared set unlocks choosing a keeper from here. */
+  /**
+   * Every unordered pair of a set's copies, in a stable order.
+   *
+   * The comparison used to hold one fixed left-hand file and cycle the right,
+   * so in a set of three the second and third copies could never be put beside
+   * each other — the one comparison a person reaches for once they have ruled
+   * the first copy out. Walking pairs instead reaches all of them, and the
+   * position says how many are left rather than implying the first copy is
+   * special.
+   *
+   * The members are put in the screen's sort order first, because that order is
+   * what the letters name. Taking them in the catalogue's own member order
+   * instead let the two disagree: the queue lists a set's copies through
+   * `sortRows`, so in a set whose third row on screen was the catalogue's first,
+   * comparing it opened on "A" while walking to it with Next pair called the
+   * same file "C". A letter has to mean the same copy in every surface that
+   * shows one.
+   */
   const openCompare = useCallback(
     (rows: [ReviewRow, ReviewRow] | null) => {
       if (rows === null) return;
@@ -306,16 +357,17 @@ export function ReviewScreen({
         sharedSet === null ? undefined : allSets.find((entry) => entry.id === sharedSet);
       const proposedRow = sharedEntry?.proposedKeeper ?? null;
       const proposedFile = proposedRow === null ? null : comparableFor(proposedRow);
-      const leftFile = comparableFor(left);
-      const rightFile = comparableFor(right);
-      const alternatives = sharedEntry
-        ? sharedEntry.rows
-            .filter((row) => row.source !== left.source)
-            .map((row) => comparableFor(row))
-        : [rightFile];
-      const alternativeIndex = Math.max(
+      const members = sharedEntry
+        ? sortRows(sharedEntry.rows, surface.sort, locale).map((row) => comparableFor(row))
+        : [comparableFor(left), comparableFor(right)];
+      const pairs = pairsOf(members.length);
+      const pairIndex = Math.max(
         0,
-        alternatives.findIndex((file) => file.path === right.source),
+        pairs.findIndex(
+          ([first, second]) =>
+            (members[first].path === left.source && members[second].path === right.source) ||
+            (members[first].path === right.source && members[second].path === left.source),
+        ),
       );
       const confirmedRow =
         sharedEntry?.hasBaseline === true || sharedEntry?.decisionKind === "keeper"
@@ -323,10 +375,8 @@ export function ReviewScreen({
           : null;
       setCompareRefusal(null);
       setComparing({
-        a: leftFile,
-        b: rightFile,
-        alternatives,
-        alternativeIndex,
+        members,
+        pairIndex,
         keeperId: confirmedRow ? comparableFor(confirmedRow).id : null,
         setId: sharedSet,
         recommendedId: proposedFile?.id ?? null,
@@ -340,20 +390,15 @@ export function ReviewScreen({
         decisionLocked: sharedEntry?.hasBaseline === true,
       });
     },
-    [allSets, comparableFor, t],
+    [allSets, comparableFor, locale, surface.sort, t],
   );
 
   const moveComparison = useCallback((delta: number) => {
     setComparing((current) => {
-      if (current === null || current.alternatives.length < 2) return current;
-      const alternativeIndex =
-        (current.alternativeIndex + delta + current.alternatives.length) %
-        current.alternatives.length;
-      return {
-        ...current,
-        b: current.alternatives[alternativeIndex],
-        alternativeIndex,
-      };
+      if (current === null) return current;
+      const total = pairsOf(current.members.length).length;
+      if (total < 2) return current;
+      return { ...current, pairIndex: (current.pairIndex + delta + total) % total };
     });
   }, []);
 
@@ -371,6 +416,34 @@ export function ReviewScreen({
     },
     [openCompare, t],
   );
+
+  /**
+   * The two copies currently on screen, and every pair they came from.
+   *
+   * The letters are carried out with them: a comparison of four copies is six
+   * comparisons, and "pair 4 of 6" says nothing about *which* four you have
+   * already looked at. `A ↔ C` does.
+   */
+  const comparedPair = useMemo(() => {
+    if (comparing === null) return null;
+    const pairs = pairsOf(comparing.members.length);
+    const index = Math.min(comparing.pairIndex, pairs.length - 1);
+    const [first, second] = pairs[index] ?? [0, 1];
+    return {
+      a: comparing.members[first],
+      b: comparing.members[second] ?? comparing.members[first],
+      letterA: memberLetter(first),
+      letterB: memberLetter(second),
+      total: pairs.length,
+      pairs: pairs.map(([left, right], position) => ({
+        index: position,
+        a: memberLetter(left),
+        b: memberLetter(right),
+        nameA: comparing.members[left]?.label ?? "",
+        nameB: comparing.members[right]?.label ?? "",
+      })),
+    };
+  }, [comparing]);
 
   const comparisonNavigation = useMemo(() => {
     if (comparing?.setId === null || comparing?.setId === undefined) {
@@ -390,14 +463,6 @@ export function ReviewScreen({
     return found === -1 ? 0 : found;
   }, [queue, surface.queueSetId]);
   const currentSet = queue[queueIndex] ?? null;
-
-  const goToQueue = useCallback(
-    (index: number) => {
-      const clamped = Math.max(0, Math.min(index, queue.length - 1));
-      surface.setQueueSetId(queue[clamped]?.id ?? null);
-    },
-    [queue, surface],
-  );
 
   const openResolveAt = useCallback(
     (setId: string | null) => {
@@ -419,10 +484,19 @@ export function ReviewScreen({
         : null,
     [detailRow, entries],
   );
-  /** Navigate within the duplicate set, or within the visible folder otherwise. */
+  /**
+   * Navigate within the duplicate set, or within the visible folder otherwise.
+   *
+   * Sorted, like every other list of a set's copies: "copy 2 of 3" has to count
+   * the same order the reader just clicked in, and `paneOrder` on the other
+   * branch is already sorted.
+   */
   const detailScope = useMemo(
-    () => (detailSet ? detailSet.rows.map((row) => row.source) : paneOrder),
-    [detailSet, paneOrder],
+    () =>
+      detailSet
+        ? sortRows(detailSet.rows, surface.sort, locale).map((row) => row.source)
+        : paneOrder,
+    [detailSet, locale, paneOrder, surface.sort],
   );
   const detailIndex = detailRow === null ? -1 : detailScope.indexOf(detailRow.source);
   const goToDetail = useCallback(
@@ -601,7 +675,15 @@ export function ReviewScreen({
         />
       )}
 
-      {(planPersistenceState === "saving" || surface.persistenceState === "saving") && (
+      {/* A save that is genuinely taking time, and only that one.
+          Every durable change writes to the backend, and "which dialog is open"
+          is one of them — so opening a detail or compare dialog started a save
+          that finished within a frame or two, and this line appeared and
+          vanished in that time, shoving the whole workbench down and back up
+          and briefly giving the page a scrollbar. `useDelayedFlag` waits for
+          the save to be worth mentioning; the row is reserved either way, so
+          saying it never moves anything. */}
+      {slowSave && (
         <p role="status" className="text-xs text-muted-foreground">
           {t("review.persistence.saving")}
         </p>
@@ -620,7 +702,7 @@ export function ReviewScreen({
         />
       )}
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <section className="overflow-hidden rounded-window border border-border bg-card">
         <div
           className="flex h-12 items-end gap-1 border-b border-border px-3"
           role="tablist"
@@ -666,7 +748,7 @@ export function ReviewScreen({
                 {mode === "resolve" && (
                   <span
                     className={cn(
-                      "min-w-5 rounded-md px-1.5 py-0.5 text-center text-3xs tabular-nums",
+                      "min-w-5 rounded-panel px-2 py-0.5 text-center text-3xs tabular-nums",
                       stats.outstanding > 0
                         ? "bg-tint-primary text-primary"
                         : "bg-tint-success text-success",
@@ -697,7 +779,7 @@ export function ReviewScreen({
           {groups.truncated && (
             <p
               role="status"
-              className="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+              className="flex items-start gap-2 border-b border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
             >
               <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span>
@@ -725,21 +807,9 @@ export function ReviewScreen({
               allSets={allSets}
               current={currentSet}
               index={queueIndex}
-              onGo={goToQueue}
               onOpenSet={(setId) => surface.setQueueSetId(setId)}
               onKeep={chooseKeeperBySource}
-              onKeepMany={(choices) =>
-                surface.chooseKeepers(
-                  choices
-                    .map((choice) => {
-                      const memberId = memberIdBySetSource.get(`${choice.setId}\0${choice.source}`);
-                      return memberId ? { groupId: choice.setId, memberId } : null;
-                    })
-                    .filter(
-                      (choice): choice is { groupId: string; memberId: string } => choice !== null,
-                    ),
-                )
-              }
+              onKeepMany={keepManyBySource}
               onKeepAll={keepAll}
               onKeepAllMany={surface.markManyNotDuplicates}
               onReset={surface.clearDecision}
@@ -748,9 +818,9 @@ export function ReviewScreen({
                   allSets.filter((entry) => !entry.hasBaseline).map((entry) => entry.id),
                 )
               }
-              onAcceptProposal={surface.acceptProposal}
-              onCompare={compareSet}
+              onComparePair={(a, b) => openCompare([a, b])}
               onOpenDetail={surface.setDetailPath}
+              onEnlarge={surface.setViewerPath}
               onBackToBrowse={() => surface.setMode("browse")}
               rule={surface.keepPolicy}
               onRule={surface.setKeepPolicy}
@@ -789,14 +859,19 @@ export function ReviewScreen({
               <div className="min-w-0">
                 {/* Breadcrumbs and tree selection share one path. */}
                 <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+                  {/* Its own line below `sm`. The trail asked for 12rem and
+                      the toolbar beside it for a search field and two selects
+                      that will not shrink; on a 360px window the two claims
+                      exceeded the row and the sort control came down on top
+                      of the trail's first crumb. */}
                   <nav
                     aria-label={t("review.browse.trail")}
-                    className="flex min-w-[12rem] flex-1 items-center gap-1 overflow-hidden font-mono text-3xs"
+                    className="flex min-w-0 basis-full items-center gap-1 overflow-hidden font-mono text-3xs sm:min-w-[12rem] sm:flex-1 sm:basis-auto"
                   >
                     <button
                       type="button"
                       onClick={() => surface.setTreePath(null)}
-                      className="inline-flex min-h-6 shrink-0 items-center rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="inline-flex min-h-6 shrink-0 items-center rounded-control px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {t("review.tree.root")}
                     </button>
@@ -816,7 +891,7 @@ export function ReviewScreen({
                             <button
                               type="button"
                               onClick={() => surface.setTreePath(step.path)}
-                              className="inline-flex min-h-6 items-center truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              className="inline-flex min-h-6 items-center truncate rounded-control px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               {folderNameFor(step.path, step.name)}
                             </button>
@@ -832,41 +907,48 @@ export function ReviewScreen({
                     sort={surface.sort}
                     onSort={surface.setSort}
                     scopeLabel={scopeLabel}
+                    selectedCount={surface.selectedRows.length}
+                    onClearSelection={surface.clearSelection}
+                    selectionActions={[
+                      {
+                        label: t("review.keepOnlyThis"),
+                        enabled: actions.canKeepOnlyThis,
+                        reason: actions.reasons.keepOnlyThis
+                          ? t(`review.selection.reason.${actions.reasons.keepOnlyThis}`)
+                          : undefined,
+                        onClick: () => {
+                          const row = surface.selectedRows[0];
+                          if (row?.stack) chooseKeeperBySource(row.stack.id, row.source);
+                        },
+                      },
+                      {
+                        label: t("review.compare"),
+                        enabled: actions.canCompare,
+                        reason: actions.reasons.compare
+                          ? t(`review.selection.reason.${actions.reasons.compare}`)
+                          : undefined,
+                        onClick: () => openCompare(comparePair(surface.selectedRows)),
+                      },
+                    ]}
                   />
                 </div>
 
                 <div className="space-y-2 p-2">
-                  <SelectionBar
-                    selected={surface.selectedRows}
-                    actions={actions}
-                    onKeepOnlyThis={() => {
-                      const row = surface.selectedRows[0];
-                      if (row?.stack) chooseKeeperBySource(row.stack.id, row.source);
-                    }}
-                    onCompare={() => openCompare(comparePair(surface.selectedRows))}
-                    onClear={surface.clearSelection}
+                  <BrowseDecisionBar
+                    openSets={openSets}
+                    proposalCount={surface.proposals.size}
+                    undecidedCount={stats.undecided}
+                    rule={surface.keepPolicy}
+                    ruleLabel={t(`config.keeper.${surface.keepPolicy}`)}
+                    onRule={surface.setKeepPolicy}
+                    onAcceptAll={surface.acceptAllProposals}
+                    selectedSets={selectedSets}
+                    keepSourceByRule={keepSourceByRule}
+                    onKeepMany={keepManyBySource}
+                    onKeepAllMany={surface.markManyNotDuplicates}
+                    onReviewSelected={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
+                    onClearSelection={surface.clearSetSelection}
                   />
-
-                  {surface.selectedSetIds.size > 0 && (
-                    <div
-                      role="region"
-                      aria-label={tCount("review.setSelection.count", surface.selectedSetIds.size)}
-                      className="flex flex-wrap items-center gap-2 rounded-panel border border-primary/35 bg-tint-primary px-3 py-2"
-                    >
-                      <span className="mr-auto text-xs font-semibold text-foreground">
-                        {tCount("review.setSelection.count", surface.selectedSetIds.size)}
-                      </span>
-                      <Button
-                        size="sm"
-                        onClick={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
-                      >
-                        {t("review.setSelection.review")}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={surface.clearSetSelection}>
-                        {t("review.setSelection.clear")}
-                      </Button>
-                    </div>
-                  )}
 
                   {paneEntries.length === 0 ? (
                     <StateView
@@ -965,13 +1047,13 @@ export function ReviewScreen({
         />
       )}
 
-      {comparing && (
+      {comparing && comparedPair && (
         <CompareModal
-          a={comparing.a}
-          b={comparing.b}
+          a={comparedPair.a}
+          b={comparedPair.b}
           keeperId={comparing.keeperId}
           setId={comparing.setId}
-          setMemberCount={comparing.alternatives.length + 1}
+          setMemberCount={comparing.members.length}
           recommendedId={comparing.recommendedId}
           recommendedLabel={comparing.recommendedLabel}
           recommendationReason={comparing.recommendationReason}
@@ -996,13 +1078,20 @@ export function ReviewScreen({
           onNextSet={
             comparisonNavigation.next ? () => compareSet(comparisonNavigation.next!) : null
           }
+          letterA={comparedPair.letterA}
+          letterB={comparedPair.letterB}
           comparisonPosition={
-            comparing.alternatives.length > 1
+            comparedPair.total > 1
               ? {
-                  index: comparing.alternativeIndex,
-                  total: comparing.alternatives.length,
+                  index: Math.min(comparing.pairIndex, comparedPair.total - 1),
+                  total: comparedPair.total,
+                  pairs: comparedPair.pairs,
                   onPrevious: () => moveComparison(-1),
                   onNext: () => moveComparison(1),
+                  onSelect: (index: number) =>
+                    setComparing((current) =>
+                      current === null ? current : { ...current, pairIndex: index },
+                    ),
                 }
               : null
           }

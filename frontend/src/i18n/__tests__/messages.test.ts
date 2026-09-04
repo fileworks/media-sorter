@@ -266,7 +266,7 @@ describe("English/German resources", () => {
   });
 
   it("localizes singular counts and metadata-source labels", () => {
-    expect(translate("de", "sources.facts.indexed.one")).toBe("1 Datei indiziert");
+    expect(translate("de", "sources.facts.referenceIndexed.one")).toBe("1 Datei indiziert");
     expect(translate("en", "config.reset.confirm.one")).toBe("Reset 1 setting");
     expect(translate("de", "review.setSelection.count.one")).toBe("1 Satz ausgewählt");
     expect(formatMetadataSource("video_metadata", (key) => translate("de", key))).toBe(

@@ -20,12 +20,22 @@ fields, reports the exact keys it changed, and leaves every field editable. A re
 never reaches into a folder, a credential or a vocabulary, which is what makes it
 reusable across libraries.
 
-| Recipe | Fields it establishes | Consequence stated before applying |
-|---|---|---|
-| **Safe Sort** *(recommended)* | copy, year/month folders, exact + near duplicate review, no junk filter, no conversion | Nothing in the input folder moves and nothing anywhere is rewritten |
-| **Clean Sweep** | move, year/month folders, duplicates and junk parked in review folders | Originals leave the input folder — after each file has been verified |
-| **Archive & Convert** | copy, duplicates and junk, JPEG/MP4 conversion, repair | Rewrites image and video bytes; requires a reviewed mutation profile |
-| **Start from scratch** | everything off, including duplicate detection | A clean slate to build a recipe on |
+There is one card per job somebody actually has, not one per combination of
+settings. Every card states its consequences before it is applied, whether or
+not it takes originals away.
+
+| Recipe | The job | Fields it establishes | Consequence stated before applying |
+|---|---|---|---|
+| **Bring folders together** *(recommended)* | several messy folders or old drives into one library | copy, year/month folders, date rename, exact + near duplicate review, junk filter | Nothing in the input folders moves, is deleted, or is rewritten |
+| **Clean up a library** | the folders are already the right shape | `deduplicate_only`, exact + near duplicate review, junk filter, no rename | Only duplicate copies and junk leave where they were found; nothing is filed by date |
+| **Import a card or phone dump** | the recurring drop from an SD card or a phone | move, year/month folders, date rename, exact + near duplicate review, junk filter | Originals leave the input folder — each one after its copy has been verified |
+| **Archive and normalise** | odd formats and damaged files | copy, year/month folders, date rename, JPEG/MP4 conversion, repair | Rewrites image and video bytes; requires a reviewed mutation profile. Every original is retained until its replacement verifies |
+| **Start from scratch** | none of the above | copy, year folders, exact duplicates only — everything else off | The smallest coherent run, to build on |
+
+Local AI tagging and categorization are off in every card. They are the one
+capability a recipe cannot promise: the model has to be downloaded and the tier
+is decided by a hardware probe, so a card that switched them on would sometimes
+describe a run the machine cannot perform.
 
 ### Saved recipes
 
@@ -163,8 +173,8 @@ Every burst group waits for a person; nothing is acted on before review. See
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Rename files | `rename` | `false` | Rename each file using a pattern as it's sorted. |
-| Rename pattern | `rename_pattern` | `"TYPE_YYYY-MM-DD"` | Tokens: `TYPE`, `YYYY`, `MM`, `DD`, plus a numeric counter for collisions. |
+| Rename files | `rename` | `false` | Rename each file using a pattern as it's sorted. Renaming claims the whole filename, so the extension is lower-cased with the stem (`IMG_4382.HEIC` → `2025-07-14_IMG_4382.heic`); with renaming off the extension is left exactly as it is on disk. Companion files inherit the primary's stem and keep their own extension. |
+| Rename pattern | `rename_pattern` | `"TYPE_YYYY-MM-DD"` | Tokens: `TYPE`, `YYYY`, `MM`, `DD`, `NAME`, plus a numeric counter for collisions. |
 | Override existing metadata | `override_metadata` | `false` | Rewrite the embedded creation date. Changes media bytes, so it needs a reviewed mutation profile — see [Media mutation profiles](#media-mutation-profiles). |
 
 ## Conversion

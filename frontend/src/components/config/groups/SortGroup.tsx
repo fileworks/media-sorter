@@ -117,7 +117,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
           label={t("config.transfer.verify")}
           description={t("config.transfer.verifyHelp")}
         >
-          <span className="rounded-full bg-tint-success px-2.5 py-1 text-3xs font-semibold text-success">
+          <span className="rounded-full bg-tint-success px-3 py-1 text-3xs font-semibold text-success">
             {t("config.transfer.alwaysOn")}
           </span>
         </SettingRow>
@@ -246,7 +246,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
         </SettingRow>
 
         {config.rename && (
-          <div className="border-b border-border px-5 py-3.5">
+          <div className="border-b border-border px-4 py-3">
             <RenameBuilder
               config={config}
               samples={samples}

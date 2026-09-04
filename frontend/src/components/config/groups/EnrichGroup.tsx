@@ -174,14 +174,14 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
       {config.ai_tagging_enabled && (
         <>
           {hardware && !tooWeak && (
-            <div className="grid gap-2.5 border-b border-border px-5 py-3.5 sm:grid-cols-3">
+            <div className="grid gap-3 border-b border-border px-4 py-3 sm:grid-cols-3">
               {AI_TIERS.map((tier) => {
                 const active = config.ai_model_tier === tier;
                 const recommended = hardware.recommended_tier === tier;
                 return (
                   <label
                     key={tier}
-                    className={`flex cursor-pointer flex-col gap-1 rounded-lg border px-3.5 py-2.5 transition-colors ${
+                    className={`flex cursor-pointer flex-col gap-1 rounded-panel border px-4 py-3 transition-colors ${
                       active
                         ? "border-[1.5px] border-brand bg-tint-primary"
                         : "border-border hover:border-faint"
@@ -254,7 +254,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                   <button
                     type="button"
                     onClick={() => updateConfig({ ai_tagging_labels_provenance: "bundled" })}
-                    className="mt-1.5 text-xs text-primary underline underline-offset-2"
+                    className="mt-2 text-xs text-primary underline underline-offset-2"
                   >
                     {t("config.vocabulary.restore")}
                   </button>
@@ -262,7 +262,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
               </SettingRow>
             )}
 
-            <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <SettingRow
                 field="ai_tagging_max_tags"
                 label={t("config.ai.maxTags")}
@@ -356,7 +356,7 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
               <button
                 type="button"
                 onClick={() => updateConfig({ categorize_categories_provenance: "bundled" })}
-                className="mt-1.5 text-xs text-primary underline underline-offset-2"
+                className="mt-2 text-xs text-primary underline underline-offset-2"
               >
                 {t("config.vocabulary.restore")}
               </button>

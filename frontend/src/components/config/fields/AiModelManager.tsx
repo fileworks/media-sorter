@@ -36,7 +36,7 @@ export function AiModelManager() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 rounded-panel border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
         <FiLoader className="h-4 w-4 animate-spin" />
         {t("config.ai.modelChecking")}
       </div>
@@ -45,7 +45,7 @@ export function AiModelManager() {
 
   if (inventoryError || !inventory) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+      <div className="flex items-start gap-2 rounded-panel border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
         <FiAlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
         {t("config.ai.modelStatusUnavailable")}
       </div>
@@ -69,11 +69,11 @@ export function AiModelManager() {
   return (
     <section
       className={cn(
-        "rounded-xl border p-3",
+        "rounded-window border p-3",
         pack.state === "ready"
-          ? "border-success/30 bg-success/5"
+          ? "border-success/40 bg-success/10"
           : failed
-            ? "border-destructive/30 bg-destructive/5"
+            ? "border-destructive/40 bg-destructive/10"
             : "border-border bg-card",
       )}
       aria-label={t("config.ai.modelFiles")}
@@ -81,11 +81,11 @@ export function AiModelManager() {
       <div className="flex items-start gap-3">
         <div
           className={cn(
-            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-panel",
             pack.state === "ready"
-              ? "bg-success/15 text-success"
+              ? "bg-success/10 text-success"
               : failed
-                ? "bg-destructive/15 text-destructive"
+                ? "bg-destructive/10 text-destructive"
                 : "bg-primary/10 text-primary",
           )}
         >
@@ -123,11 +123,11 @@ export function AiModelManager() {
               className={cn(
                 "rounded-full px-2 py-1 text-2xs font-medium",
                 pack.state === "ready"
-                  ? "bg-success/15 text-success"
+                  ? "bg-success/10 text-success"
                   : failed
-                    ? "bg-destructive/15 text-destructive"
+                    ? "bg-destructive/10 text-destructive"
                     : downloading
-                      ? "bg-primary/15 text-primary"
+                      ? "bg-primary/10 text-primary"
                       : "bg-muted text-muted-foreground",
               )}
             >
@@ -144,7 +144,7 @@ export function AiModelManager() {
           </div>
 
           {downloading && (
-            <div className="mt-3 space-y-1.5">
+            <div className="mt-3 space-y-2">
               <ProgressBar value={percentage} label={t("config.ai.modelDownloading")} />
               <div className="flex justify-between gap-2 text-xs text-muted-foreground">
                 <span>

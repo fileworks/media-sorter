@@ -14,7 +14,7 @@
  * would have passed before the fix and proved nothing.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { ResolveQueue } from "@/components/screens/review/ResolveQueue";
@@ -84,7 +84,7 @@ function entry(id = "set-1"): SetEntry {
   };
 }
 
-function renderQueue() {
+function renderQueue(onKeep: (setId: string, source: string) => void = () => undefined) {
   const set = entry();
   return render(
     <I18nProvider initialLocale="en">
@@ -94,13 +94,12 @@ function renderQueue() {
         allSets={[set]}
         current={set}
         index={0}
-        onGo={() => undefined}
         onOpenSet={() => undefined}
-        onKeep={() => undefined}
+        onKeep={onKeep}
         onKeepAll={() => undefined}
-        onAcceptProposal={() => undefined}
-        onCompare={() => undefined}
+        onComparePair={() => undefined}
         onOpenDetail={() => undefined}
+        onEnlarge={() => undefined}
         onBackToBrowse={() => undefined}
         rule="largest"
         onRule={() => undefined}
@@ -120,55 +119,44 @@ function renderQueue() {
   );
 }
 
-/**
- * The visible draft state: with no draft the confirm control is disabled and
- * the summary says nothing is selected. Both flip the moment a digit lands.
- *
- * This is the assertion the criterion needs. `chooseByNumber` only sets draft
- * state — it never calls `onKeep` — so a test that asserted `onKeep` was not
- * invoked would have passed before the fix and proved nothing.
- */
-function draftState(): { confirmDisabled: boolean; clearDisabled: boolean } {
-  const confirm = screen.getByRole("button", { name: /confirm selection/i });
-  const clear = screen.getByRole("button", { name: /clear selection/i });
-  return {
-    confirmDisabled: (confirm as HTMLButtonElement).disabled,
-    clearDisabled: (clear as HTMLButtonElement).disabled,
-  };
-}
-
 afterEach(cleanup);
 
+/**
+ * Both sides of the scope, read off the decision the digit takes.
+ *
+ * A digit now *keeps* the copy it names rather than drafting it, so `onKeep`
+ * is the whole observable effect: silence with focus outside the queue, and a
+ * decision with focus inside it. Asserting on both is what makes the silence
+ * evidence rather than a shortcut that happened to do nothing.
+ */
 describe("the queue's digit shortcuts are scoped to its own focus", () => {
   it("ignores a digit typed while focus is outside the queue", () => {
-    renderQueue();
+    const onKeep = vi.fn();
+    renderQueue(onKeep);
     const outside = screen.getByRole("button", { name: "outside the queue" });
     outside.focus();
     expect(document.activeElement).toBe(outside);
-
-    const before = draftState();
-    expect(before.confirmDisabled).toBe(true);
 
     // `1` indexes a real row of this set — a digit past the end would be a
     // no-op with or without the fix, and would pass vacuously.
     fireEvent.keyDown(outside, { key: "1" });
     fireEvent.keyDown(window, { key: "1" });
 
-    expect(draftState()).toEqual(before);
+    expect(onKeep).not.toHaveBeenCalled();
   });
 
   it("still responds to a digit from a focused descendant of the queue", () => {
-    const { container } = renderQueue();
+    const onKeep = vi.fn();
+    const { container } = renderQueue(onKeep);
     const queueRoot = container.querySelector<HTMLElement>("div[tabindex='-1']");
     expect(queueRoot).not.toBeNull();
-    expect(draftState().confirmDisabled).toBe(true);
 
     queueRoot?.focus();
     expect(queueRoot?.contains(document.activeElement)).toBe(true);
 
     fireEvent.keyDown(window, { key: "1" });
 
-    expect(draftState().confirmDisabled).toBe(false);
+    expect(onKeep).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -182,14 +170,14 @@ describe("the queue's digit shortcuts are scoped to its own focus", () => {
  */
 const REVIEWED_WINDOW_KEYDOWN_LISTENERS: Record<string, string> = {
   "src/components/ui/modal.tsx":
-    "Escape only. Escape is not a character key, so WCAG 2.1.4 does not apply; " +
-    "the modal also owns a focus trap, so nothing outside it can be focused.",
+    "Two listeners, both owned by a dialog. Escape is not a character key, so " +
+    "WCAG 2.1.4 does not apply to it. `ModalShortcuts` carries the character " +
+    "keys a dialog binds (the viewer's + / = / - / 0): it renders only inside " +
+    "<Modal>, which traps focus, and it is inert unless its own dialog is the " +
+    "topmost one — so those keys are active only while that dialog holds " +
+    "focus, which is the 2.1.4 remedy this codebase uses.",
   "src/components/screens/ReviewScreen.tsx":
     "Escape (not a character key) and Cmd/Ctrl-A (modified). 2.1.4 exempts both.",
-  "src/components/screens/review/MediaViewer.tsx":
-    "+ / = / - / 0 are unmodified character keys, but the viewer only ever " +
-    "renders inside <Modal>, which traps focus — so they are already active " +
-    "only while it holds focus, which is the 2.1.4 remedy this codebase uses.",
 };
 
 /** The guard that makes a listener focus-scoped rather than global. */
@@ -231,6 +219,16 @@ describe("no global unmodified character shortcuts", () => {
     expect(
       REVIEWED_WINDOW_KEYDOWN_LISTENERS["src/components/screens/review/ResolveQueue.tsx"],
     ).toBeUndefined();
+  });
+
+  it("the media viewer delegates its character keys to the dialog stack", () => {
+    const viewer = sources["/src/components/screens/review/MediaViewer.tsx"];
+
+    expect(viewer).toBeDefined();
+    // Its own global listener is gone: a viewer opened from the comparison
+    // dialog used to leave both listening, and one arrow key moved two things.
+    expect(viewer).not.toContain('window.addEventListener("keydown"');
+    expect(viewer).toContain("<ModalShortcuts");
   });
 
   it("the allowlist names every file it claims to, and no stale ones", () => {

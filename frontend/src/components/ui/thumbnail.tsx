@@ -61,7 +61,7 @@ export function Thumbnail({
   ) : errored ? (
     <Tooltip label={t("preview.thumbnailFailed")}>
       <div className="flex h-full w-full items-center justify-center bg-muted">
-        <FiAlertTriangle className="h-6 w-6 text-warning/70" aria-hidden />
+        <FiAlertTriangle className="h-6 w-6 text-warning" aria-hidden />
         <span className="sr-only">{t("preview.thumbnailFailed")}</span>
       </div>
     </Tooltip>

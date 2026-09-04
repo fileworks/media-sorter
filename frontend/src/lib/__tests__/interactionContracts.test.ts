@@ -9,6 +9,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+// The radius scale is declared in the Tailwind config; read it as text, the
+// same way every other rule here is read, rather than importing an untyped JS
+// module into a typechecked suite.
+import tailwindConfigSource from "../../../tailwind.config.js?raw";
 
 const SOURCES = import.meta.glob("../../**/*.{ts,tsx}", {
   query: "?raw",
@@ -35,10 +39,29 @@ function sourceOf(path: string): string {
 }
 
 describe("stable workflow chrome", () => {
-  it("keeps selection actions out of document flow", () => {
-    expect(sourceOf("src/components/screens/review/SelectionBar.tsx")).toMatch(
-      /className="[^"]*fixed[^"]*bottom-/,
-    );
+  /**
+   * The contract this replaces asked that the selection actions be `fixed`
+   * out of document flow, so ticking a checkbox could not push the list the
+   * checkbox was in. That solved the layout shift by floating a bar over the
+   * page: centred on the window rather than on the pane it acted on, and on a
+   * short window covering the rows it described.
+   *
+   * They live in the toolbar now — the row that already says what can be done
+   * here — and swap in place. The shift is prevented by the strip reserving
+   * its height, not by leaving the page.
+   */
+  it("keeps selection actions in the toolbar rather than floating over the page", () => {
+    const toolbar = sourceOf("src/components/screens/review/ReviewToolbar.tsx");
+
+    expect(toolbar).toContain("selectedCount > 0");
+    expect(toolbar).not.toMatch(/className="[^"]*fixed[^"]*bottom-/);
+    // And nothing in Review floats a bar over the action bar any more.
+    for (const file of [
+      "src/components/screens/review/ReviewToolbar.tsx",
+      "src/components/screens/review/ResolveToolbar.tsx",
+    ]) {
+      expect(sourceOf(file), file).not.toContain("fixed inset-x-");
+    }
   });
 
   it("uses the stage controls without a second progress indicator", () => {
@@ -56,7 +79,7 @@ describe("stable workflow chrome", () => {
 
 describe("the confirmation policy", () => {
   /**
-   * The six permitted cases, and where each one lives. Four are dialogs; the
+   * The seven permitted cases, and where each one lives. Five are dialogs; the
    * other two are confirmations in a lighter form, which the policy allows —
    * what it forbids is confirming something a second press would undo.
    */
@@ -64,6 +87,8 @@ describe("the confirmation policy", () => {
     expect(filesMatching(/<ConfirmDialog\b/)).toEqual([
       // 1 · discarding a computed plan by moving back a stage
       "src/components/StageShell.tsx",
+      // 7 · clearing every duplicate decision at once
+      "src/components/screens/review/ResolveQueue.tsx",
       // 3 · a configuration reset · 4 · cancelling a running operation
       "src/pages/MainPage.tsx",
     ]);
@@ -80,11 +105,23 @@ describe("the confirmation policy", () => {
 
   it("never confirms an action the interface can visibly undo", () => {
     // Exclude, include, dissolve, change a keeper, switch a filter or a view.
-    // If any of these ever grows a dialog it will show up as a new file above.
+    // If any of these ever grows a dialog it will show up as a new file here.
+    //
+    // The decision queue is the one review surface allowed a dialog, and only
+    // for "clear all decisions": every other act in Review states itself where
+    // it was taken and is undone by repeating it, but clearing all of them is
+    // undone only by finding and re-deciding every set by hand. That is the
+    // policy's own test — not "is this in Review", but "would a second press
+    // undo it" — so the exception is named rather than the rule loosened.
     const reviewSurfaces = filesMatching(/<ConfirmDialog\b/).filter((path) =>
       path.includes("/review"),
     );
-    expect(reviewSurfaces).toEqual([]);
+    expect(reviewSurfaces).toEqual(["src/components/screens/review/ResolveQueue.tsx"]);
+
+    const queue = sourceOf("src/components/screens/review/ResolveQueue.tsx");
+    // One dialog, and it is that one. A keeper choice must never grow one.
+    expect(queue.match(/<ConfirmDialog\b/g)).toHaveLength(1);
+    expect(queue).toContain('t("review.resolve.resetAll.title")');
   });
 });
 
@@ -181,5 +218,46 @@ describe("button variants", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("one radius scale", () => {
+  /**
+   * `index.css` states the rule — "three steps, one job each, and no fourth" —
+   * and `tailwind.config.js` maps every `rounded-*` utility onto one of them.
+   * Neither could stop the two ways this drifted anyway.
+   *
+   * The first was spelling. Ten pixels could be written `rounded-md`,
+   * `rounded-lg` or `rounded-panel`, and all three were in use, so reading a
+   * className told you nothing about whether a row and a card were meant to
+   * match. The semantic names win: they say which of the three jobs the
+   * element is doing, which is the thing worth knowing.
+   *
+   * The second was the gap in the scale. `DEFAULT` was never mapped, so a bare
+   * `rounded` was Tailwind's own 4px — the forbidden fourth radius, on 29
+   * elements, most of them checkboxes.
+   */
+  const SPELLINGS = /\brounded-(?:[trblse]{1,2}-)?(sm|md|lg|xl|2xl)\b/g;
+
+  it("writes each radius one way — control, panel, window", () => {
+    const offenders: string[] = [];
+    for (const [path, source] of PRODUCT) {
+      for (const match of source.matchAll(SPELLINGS)) offenders.push(`${path}: ${match[0]}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("leaves no utility resolving to a fourth value", () => {
+    const block = /borderRadius:\s*\{([^}]*)\}/.exec(tailwindConfigSource)?.[1] ?? "";
+    const entries = [...block.matchAll(/^\s*"?([\w"-]+?)"?:\s*"([^"]+)",/gm)].map(
+      ([, key, value]) => [key, value] as const,
+    );
+
+    expect(entries.length).toBeGreaterThan(0);
+    // Every key, `DEFAULT` included, resolves to one of the three tokens.
+    expect(new Set(entries.map(([, value]) => value))).toEqual(
+      new Set(["var(--radius-control)", "var(--radius-panel)", "var(--radius-window)"]),
+    );
+    expect(Object.fromEntries(entries).DEFAULT).toBe("var(--radius-control)");
   });
 });

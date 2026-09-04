@@ -68,10 +68,7 @@ export function RecipeScreen({
 
   // The same list Configure resolves its baseline from — two lists is how a
   // heading and a marker come to disagree about which recipe is in force.
-  const recipes = useMemo<ConfigRecipe[]>(
-    () => allRecipes(savedRecipes, defaults),
-    [defaults, savedRecipes],
-  );
+  const recipes = useMemo<ConfigRecipe[]>(() => allRecipes(savedRecipes), [savedRecipes]);
 
   const selectedId = activeRecipeId(config, recipes);
 
@@ -156,7 +153,7 @@ export function RecipeScreen({
 
         <section
           aria-labelledby="recipe-difference"
-          className="min-h-[9rem] min-w-0 rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+          className="min-h-[9rem] min-w-0 rounded-window border border-border bg-card p-4 lg:sticky lg:top-4"
           aria-live="polite"
         >
           <h2 id="recipe-difference" className="text-xs font-bold text-foreground">
@@ -164,20 +161,27 @@ export function RecipeScreen({
           </h2>
 
           {!pending ? (
-            <p className="mt-1.5 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
           ) : (
             <>
-              {pending.irreversible && (
-                <p
-                  className={cn(
-                    "mt-1.5 rounded-lg border border-warning/40 bg-tint-warning px-3 py-2 text-xs text-foreground",
-                  )}
-                >
-                  {t(pending.consequenceKey)}
-                </p>
-              )}
+              {/* Every card states its consequences, not only the ones that
+                  take files away. A recipe the reader was told nothing about
+                  is a recipe they have to reconstruct from the table below,
+                  and the table is a list of field names. The tone is what
+                  `irreversible` decides — a warning where originals leave or
+                  bytes are rewritten, a quiet note otherwise. */}
+              <p
+                className={cn(
+                  "mt-2 rounded-panel border px-3 py-2 text-xs leading-relaxed",
+                  pending.irreversible
+                    ? "border-warning/40 bg-tint-warning text-foreground"
+                    : "border-border bg-muted/40 text-muted-foreground",
+                )}
+              >
+                {t(pending.consequenceKey)}
+              </p>
               {planExists && activeRows.length > 0 && (
-                <p className="mt-1.5 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
+                <p className="mt-2 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
               )}
 
               {unauthorized.length > 0 && (
@@ -186,7 +190,7 @@ export function RecipeScreen({
                  * the click, naming the settings responsible — rather than after,
                  * as a dead primary action listing fields nobody touched.
                  */
-                <p className="mt-1.5 text-xs font-medium text-error" role="alert">
+                <p className="mt-2 text-xs font-medium text-error" role="alert">
                   {t("recipes.wouldNotValidate", {
                     settings: unauthorized.map(configFieldLabel).join(", "),
                   })}
@@ -194,13 +198,13 @@ export function RecipeScreen({
               )}
 
               {activeRows.length === 0 && (
-                <p className="mt-2.5 text-xs text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                   {selectedId === pending.id ? t("recipes.inForce") : t("recipes.noChanges")}
                 </p>
               )}
 
               {rowUniverse.length > 0 && (
-                <div className="mt-2.5">
+                <div className="mt-3">
                   <SettingChangeTable
                     rowUniverse={rowUniverse}
                     columns={[
@@ -237,7 +241,7 @@ export function RecipeScreen({
                   checked={resetOthers}
                   disabled={disabled || defaults === undefined}
                   onChange={(event) => setResetOthers(event.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-control border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
                 />
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-foreground">

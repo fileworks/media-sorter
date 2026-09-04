@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
-import { keeperProposals, type DuplicateDecision } from "@/lib/duplicateDecisions";
+import {
+  keeperProposals,
+  keeperRecommendations,
+  type DuplicateDecision,
+} from "@/lib/duplicateDecisions";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import { REVIEW_SORTS, type ReviewSort } from "@/lib/reviewSort";
 import { dropScopedExcept, readStored, removeStored, writeStored } from "@/lib/storage";
@@ -71,8 +75,18 @@ export function useReviewSurface(
   const [initialState] = useState<PlanReviewState | null>(() =>
     recoveredState?.config_fingerprint === result.config_fingerprint ? recoveredState : null,
   );
-  const newPlanEntryRef = useRef(initialState === null);
-  const [mode, setModeState] = useState<ReviewMode>(() => initialState?.mode ?? "resolve");
+  /**
+   * A new plan opens on Browse.
+   *
+   * Arriving from Plan, the first question is "what would this run do", and
+   * Browse is the screen that answers it: the whole plan, in its folders.
+   * Resolve answers a narrower one — "which of these copies do I keep" — and
+   * opening straight onto a decision queue asked for judgements about files
+   * before the reader had seen any of them. A *recovered* plan still reopens
+   * wherever it was left, because that is a session being resumed rather than
+   * a plan being met.
+   */
+  const [mode, setModeState] = useState<ReviewMode>(() => initialState?.mode ?? "browse");
   /** Which set the queue is on. Null means "the first one still undecided". */
   const [queueSetId, setQueueSetId] = useState<string | null>(initialState?.queue_set_id ?? null);
   /** The file the detail view is open on, by source path. */
@@ -206,6 +220,19 @@ export function useReviewSurface(
     flushPersistence();
   }, [flushPersistence]);
 
+  /**
+   * Two readings of the same ranking.
+   *
+   * `recommendations` is what the rule says about every set, decided or not,
+   * and is what the rows carry — so a set keeps showing which copy was
+   * recommended after somebody accepts it. `proposals` is the subset nobody
+   * has answered yet: it is what "accept all" writes and what the outstanding
+   * count is measured against, so taking a recommendation still closes it.
+   */
+  const recommendations = useMemo(
+    () => keeperRecommendations(stacks, keepPolicy),
+    [keepPolicy, stacks],
+  );
   const proposals = useMemo(
     () => keeperProposals(stacks, keepPolicy, decisions),
     [decisions, keepPolicy, stacks],
@@ -240,8 +267,8 @@ export function useReviewSurface(
   }, []);
 
   const rows = useMemo(
-    () => toReviewRows(result, stacks, decisions, proposals),
-    [decisions, proposals, result, stacks],
+    () => toReviewRows(result, stacks, decisions, recommendations),
+    [decisions, recommendations, result, stacks],
   );
 
   const selectedRows = useMemo(
@@ -328,16 +355,6 @@ export function useReviewSurface(
     }
     return members;
   }, [result.items, stacks]);
-
-  // Review is decision-first when there is work to decide. When the completed
-  // catalog proves there are no duplicate sets, an empty "auto-keep 0" queue
-  // is not a useful landing page, so a new plan opens its result browser. A
-  // recovered plan keeps the exact view the user deliberately left behind.
-  useEffect(() => {
-    if (!newPlanEntryRef.current || !catalogReady) return;
-    newPlanEntryRef.current = false;
-    if (liveMembersBySet.size === 0) setModeState("browse");
-  }, [catalogReady, liveMembersBySet]);
 
   const protectedSetIds = useMemo(
     () =>
@@ -443,14 +460,6 @@ export function useReviewSurface(
     });
   }, []);
 
-  const acceptProposal = useCallback(
-    (groupId: string) => {
-      const proposal = proposals.get(groupId);
-      if (proposal) chooseKeeper(groupId, proposal.memberId);
-    },
-    [chooseKeeper, proposals],
-  );
-
   const acceptAllProposals = useCallback(() => {
     setDecisions((current) => {
       const next = new Map(current);
@@ -502,7 +511,6 @@ export function useReviewSurface(
     markManyNotDuplicates,
     clearDecision,
     clearDecisions,
-    acceptProposal,
     acceptAllProposals,
     reviewedSets,
     selectedSetIds,

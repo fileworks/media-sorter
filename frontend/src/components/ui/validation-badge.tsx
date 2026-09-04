@@ -9,10 +9,10 @@ interface ValidationBadgeProps {
 }
 
 const styles: Record<Severity, string> = {
-  error: "bg-error/10 text-error border-error/20",
-  warning: "bg-warning/10 text-warning border-warning/20",
-  info: "bg-info/10 text-info border-info/20",
-  success: "bg-success/10 text-success border-success/20",
+  error: "bg-error/10 text-error border-error/40",
+  warning: "bg-warning/10 text-warning border-warning/40",
+  info: "bg-info/10 text-info border-info/40",
+  success: "bg-success/10 text-success border-success/40",
 };
 
 const icons: Record<Severity, string> = {
@@ -27,7 +27,7 @@ export function ValidationBadge({ message, severity = "error", className }: Vali
     <p
       role="alert"
       className={cn(
-        "flex items-start gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium",
+        "flex items-start gap-2 rounded-panel border px-3 py-2 text-xs font-medium",
         styles[severity],
         className,
       )}

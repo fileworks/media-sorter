@@ -104,7 +104,7 @@ export function ExecuteScreen({
           eyebrow={t("stage.position", { current: 6, total: 6 })}
           title={t(settled ? "execute.titleDone" : "execute.title")}
           subtitle={
-            <span className="inline-flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex flex-wrap items-center gap-2">
               <FiCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
               {t(config.copy_instead_of_move ? "execute.confirmedCopy" : "execute.confirmedMove", {
                 files: n(progress?.total),
@@ -115,7 +115,7 @@ export function ExecuteScreen({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <section className="rounded-2xl border border-border bg-card p-6">
+        <section className="rounded-window border border-border bg-card p-6">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span
               className={cn(
@@ -167,7 +167,7 @@ export function ExecuteScreen({
             />
           </div>
 
-          <p className="mt-2.5 text-xs text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-foreground">
             {t("execute.counts", {
               done: n(progress?.current),
               total: n(progress?.total),
@@ -185,7 +185,7 @@ export function ExecuteScreen({
                   {index > 0 && <span className="h-px w-4 bg-border" aria-hidden />}
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1.5 text-xs",
+                      "inline-flex items-center gap-2 text-xs",
                       active && "font-semibold text-primary",
                       complete && !active && "text-muted-foreground",
                       !complete && !active && "text-faint",
@@ -219,14 +219,14 @@ export function ExecuteScreen({
 
           {error && (
             <p
-              className="mt-4 rounded-lg border border-error/40 bg-tint-error px-3.5 py-2.5 text-xs text-error"
+              className="mt-4 rounded-panel border border-error/40 bg-tint-error px-4 py-3 text-xs text-error"
               role="alert"
             >
               {error}
             </p>
           )}
 
-          <div className="mt-5 flex flex-wrap items-center gap-2.5">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             {!settled && (
               <Button
                 variant="outline"
@@ -264,11 +264,11 @@ export function ExecuteScreen({
           </div>
         </section>
 
-        <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
+        <section className="flex flex-col gap-3 rounded-window border border-border bg-card p-5">
           <h2 className="text-3xs font-semibold uppercase tracking-[0.08em] text-faint">
             {t("execute.soFar")}
           </h2>
-          <dl className="space-y-2.5 text-xs">
+          <dl className="space-y-3 text-xs">
             {(
               [
                 ["execute.stat.verified", n(outcomes.sorted)],

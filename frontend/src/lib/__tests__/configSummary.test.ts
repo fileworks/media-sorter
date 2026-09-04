@@ -201,11 +201,17 @@ describe("example filenames", () => {
         { ...BASE, rename: true, rename_pattern: "YYYY-MM-DD_NAME" },
         INVENTED_SAMPLES[0],
       ),
-    ).toBe("2025-07-14_IMG_4382.JPG");
+    ).toBe("2025-07-14_IMG_4382.jpg");
   });
 
-  it("keeps an extension exactly as it is when nothing converts it", () => {
+  it("keeps an extension exactly as it is when nothing renames or converts it", () => {
     expect(predictedExtension(BASE, INVENTED_SAMPLES[0])).toBe(".JPG");
+  });
+
+  it("lowercases the extension whenever renaming takes over the filename", () => {
+    expect(predictedExtension({ ...BASE, rename: true }, INVENTED_SAMPLES[0])).toBe(".jpg");
+    // Already-lowercase suffixes are unaffected, converted or not.
+    expect(predictedExtension({ ...BASE, rename: true }, INVENTED_SAMPLES[1])).toBe(".mp4");
   });
 
   it("rewrites the extension only where conversion actually changes the format", () => {

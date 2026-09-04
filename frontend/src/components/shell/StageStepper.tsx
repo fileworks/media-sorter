@@ -80,9 +80,9 @@ export function StageStepper({
   return (
     <nav
       aria-label={t("stage.navigation")}
-      className="relative h-16 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
+      className="relative h-14 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
     >
-      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-1 px-3 py-1.5 md:min-w-[48rem] md:grid-cols-6 md:px-4">
+      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-0.5 px-3 py-1 md:min-w-[48rem] md:grid-cols-6 md:px-4">
         {VISUAL_STEPS.map((entry, index) => {
           const active =
             entry.id === "plan"
@@ -118,9 +118,9 @@ export function StageStepper({
                     )
                   }
                   className={cn(
-                    "relative z-[1] flex h-full w-full items-center gap-2.5 rounded-lg border border-transparent px-2.5 text-left transition-colors",
+                    "relative z-[1] flex h-full w-full items-center gap-2 rounded-panel border border-transparent px-2 text-left transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active && "border-primary/30 bg-tint-primary text-foreground",
+                    active && "border-primary/40 bg-tint-primary text-foreground",
                     !active &&
                       reachable &&
                       "hover:border-border hover:bg-muted hover:text-foreground",
@@ -130,9 +130,9 @@ export function StageStepper({
                 >
                   <span
                     className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-3xs font-bold tabular-nums",
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-3xs font-bold tabular-nums",
                       active &&
-                        "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]",
+                        "border-primary bg-primary text-primary-foreground shadow-[0_0_0_2px_hsl(var(--primary)/0.12)]",
                       isComplete && !active && "border-success/40 bg-tint-success text-success",
                       !active && !isComplete && "border border-border text-faint",
                     )}

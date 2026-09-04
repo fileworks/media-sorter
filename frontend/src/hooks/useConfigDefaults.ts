@@ -56,7 +56,7 @@ export function useSettingsBaseline(
   return useMemo<SettingsBaseline>(() => {
     if (!defaults || !config) return { values: defaults, origin: null };
 
-    const recipes = allRecipes(savedRecipes, defaults);
+    const recipes = allRecipes(savedRecipes);
     const selectedId = activeRecipeId(config, recipes);
     const selected = recipes.find((recipe) => recipe.id === selectedId);
     if (!selected) return { values: defaults, origin: null };

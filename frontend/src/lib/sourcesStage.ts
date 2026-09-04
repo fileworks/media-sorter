@@ -7,7 +7,7 @@
  * conflict, and blocks rather than warns when the combination is unsafe.
  */
 
-import type { Config } from "@/types/api";
+import type { AnalysisRootTotals, Config } from "@/types/api";
 
 export type RootRole = "input" | "reference" | "destination";
 /**
@@ -44,12 +44,20 @@ export interface RootCard {
   issueCount: number;
 }
 
-/** Present the persisted library profile as the cards owned by Sources. */
+/**
+ * Present the persisted library profile as the cards owned by Sources.
+ *
+ * `byRoot` is the scan's per-input-root split. Every input card used to be
+ * handed the run's *total* instead, so three folders each claimed to hold all
+ * of the files. A root the scan has no figure for keeps `null`, which the card
+ * reads as "no per-folder count", not as zero.
+ */
 export function rootCards(
   config: Config | undefined,
   scanned: boolean,
-  indexedFiles: number,
+  byRoot: readonly AnalysisRootTotals[] = [],
 ): RootCard[] {
+  const indexedByRoot = new Map(byRoot.map((entry) => [entry.root_id, entry.total_files]));
   if (!config) return [];
   const profileRoots =
     config.library_profile.roots.length > 0
@@ -92,7 +100,8 @@ export function rootCards(
     state: scanned ? "ready" : "unknown",
     volume: root.identity?.volume_id ?? null,
     freshness: scanned ? "fresh" : "unknown",
-    indexedFiles: scanned && root.role === "input" ? indexedFiles : null,
+    indexedFiles:
+      scanned && root.role === "input" ? (indexedByRoot.get(root.root_id) ?? null) : null,
     issueCount: 0,
   }));
 }

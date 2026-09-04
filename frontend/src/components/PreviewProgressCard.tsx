@@ -55,7 +55,7 @@ export function PreviewProgressCard({
         title={t("stage.review.computing")}
         subtitle={t("stage.review.computingHelp")}
       />
-      <div className="space-y-3 rounded-xl border border-border bg-card px-4 py-3" aria-busy>
+      <div className="space-y-3 rounded-window border border-border bg-card px-4 py-3" aria-busy>
         <div className="flex items-baseline justify-between gap-2" aria-live="polite">
           <p className="text-sm font-medium text-foreground">{label}</p>
           {determinate && progress ? (

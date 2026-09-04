@@ -67,14 +67,14 @@ export function OperationCenter({
   const { view, message } = useOperationLiveness(progress, { activePath });
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+    <section className="overflow-hidden rounded-window border border-border/80 bg-card shadow-sm">
       <button
         type="button"
         onClick={() => setExpanded((open) => !open)}
         aria-expanded={expanded}
-        className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted"
+        className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-panel bg-muted text-muted-foreground">
           <FiActivity className="h-3.5 w-3.5" aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
@@ -103,7 +103,7 @@ export function OperationCenter({
           </p>
           {message && <p className="text-xs text-muted-foreground">{message.message}</p>}
           {view?.determinate && view.percentage !== null && (
-            <div className="mt-1 h-1.5 overflow-hidden rounded bg-muted">
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className="h-full bg-primary" style={{ width: `${view.percentage}%` }} />
             </div>
           )}
@@ -148,7 +148,7 @@ export function OperationCenter({
                           key={`${link.kind}:${link.id}`}
                           type="button"
                           onClick={() => onOpen(link.kind, link.id)}
-                          className="rounded border border-border px-2 py-0.5 text-2xs hover:border-primary"
+                          className="rounded-control border border-border px-2 py-0.5 text-2xs hover:border-primary"
                         >
                           {link.kind}
                         </button>
@@ -210,7 +210,7 @@ export function ExecutePreflight({
       aria-label={t("preflight.title")}
     >
       <section
-        className="overflow-hidden rounded-xl border border-border bg-card"
+        className="overflow-hidden rounded-window border border-border bg-card"
         aria-labelledby="rerunnable-effects"
       >
         <header className="border-b border-border px-4 py-3">
@@ -234,7 +234,7 @@ export function ExecutePreflight({
       </section>
 
       <aside
-        className="rounded-xl border border-warning/35 bg-tint-warning p-4"
+        className="rounded-window border border-warning/40 bg-tint-warning p-4"
         aria-labelledby="irreversible-effects"
         aria-live="assertive"
         aria-atomic="true"
@@ -245,7 +245,7 @@ export function ExecutePreflight({
         <h2 id="irreversible-effects" className="mt-1 text-sm font-semibold text-warning">
           {t("preflight.irreversible.title")}
         </h2>
-        <ul className="mt-2 space-y-1.5">
+        <ul className="mt-2 space-y-2">
           {result.irreversible.map((line) => (
             <li
               key={line.text}
@@ -271,8 +271,13 @@ export function ExecutePreflight({
             type="checkbox"
             checked={input.acknowledgedSourceMutations}
             disabled={input.impactState !== "ready"}
+            // Why it cannot be ticked yet, read out with the control rather
+            // than inferred from a paler box.
+            aria-describedby={
+              input.impactState === "ready" ? undefined : "preflight-acknowledge-blocked"
+            }
             onChange={(event) => onAcknowledge(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded-control border-input text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted"
           />
           {result.acknowledgement
             ? input.sourceMutations > 0
@@ -280,6 +285,15 @@ export function ExecutePreflight({
               : t("preflight.acknowledge")
             : t("preflight.acknowledge")}
         </label>
+        {input.impactState !== "ready" && (
+          <p id="preflight-acknowledge-blocked" className="mt-2 text-xs text-muted-foreground">
+            {t(
+              input.impactState === "loading"
+                ? "preflight.blocking.impactLoading"
+                : "preflight.blocking.impactError",
+            )}
+          </p>
+        )}
 
         {/* Every disabled control states its reason. This is a footer action, so
           the reason is written beside it rather than hidden in a hover: a

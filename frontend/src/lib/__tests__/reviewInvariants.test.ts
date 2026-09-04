@@ -468,6 +468,7 @@ function assertPlanInvariants(seed: number): void {
     plannedReason: null,
     duplicateReviewReady: stats.outstanding === 0,
     duplicateReviewReason: `${stats.outstanding} outstanding`,
+    reviewStateDurable: true,
     executionActive: false,
     blocked: false,
     blockedReason: null,

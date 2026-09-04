@@ -214,6 +214,34 @@ function switchTo(mode: "browse" | "resolve") {
   fireEvent.click(screen.getByRole("tab", { name: en(`review.mode.${mode}`) }));
 }
 
+/** Compare a copy against the other copy of its pair, from the copy's own row. */
+function compareCopy(name: string, other: string) {
+  fireEvent.click(
+    screen.getByRole("button", { name: en("review.compare.withCopy", { name, other }) }),
+  );
+}
+
+/**
+ * Take the keep rule's offer over every open set.
+ *
+ * A decision covering more than one set states its impact before it acts, so
+ * the entry control opens the dialog and the dialog's own action commits — the
+ * same two steps on Browse and on Resolve.
+ */
+function acceptAllRecommendations(count: number) {
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: en(count === 1 ? "review.keepRule.applyToOpen.one" : "review.keepRule.applyToOpen", {
+        count,
+      }),
+    }),
+  );
+  const dialog = screen.getByRole("dialog", { name: en("review.bulk.recommendTitle") });
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: en("review.bulk.acceptRecommendations") }),
+  );
+}
+
 async function waitForReview() {
   await screen.findByRole("tab", { name: en("review.mode.resolve") });
 }
@@ -282,7 +310,11 @@ describe("review entry", () => {
     expect(localStorage.getItem("mediasort_review_mode")).toBeNull();
   });
 
-  it("opens duplicate decisions first when a new plan has an actionable set", async () => {
+  it("opens on the result browser even when a new plan has duplicates to decide", async () => {
+    // Arriving from Plan, the first question is "what would this run do".
+    // Landing on the decision queue asked for judgements about files before
+    // the reader had seen a single one of them; the outstanding count on the
+    // Resolve tab is what says there is work waiting there.
     renderReview(
       previewResult(
         item({ source: "/in/a.jpg" }),
@@ -298,7 +330,7 @@ describe("review entry", () => {
     await waitForReview();
 
     expect(
-      screen.getByRole("tab", { name: en("review.mode.resolve") }).getAttribute("aria-selected"),
+      screen.getByRole("tab", { name: en("review.mode.browse") }).getAttribute("aria-selected"),
     ).toBe("true");
   });
 
@@ -496,7 +528,7 @@ describe("the stays branch", () => {
     await waitForReview();
 
     expect(
-      screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 1, total: 1 })}`)),
+      screen.getByText(new RegExp(`${en("review.resolve.position", { index: 1, total: 1 })}`)),
     ).toBeTruthy();
   });
 });
@@ -537,7 +569,7 @@ describe("resolve", () => {
     switchTo("resolve");
 
     const positionIs = (index: number) =>
-      screen.getByText(new RegExp(`^${en("review.resolve.position", { index, total: 2 })}`));
+      screen.getByText(new RegExp(`${en("review.resolve.position", { index, total: 2 })}`));
     expect(positionIs(1)).toBeTruthy();
 
     fireEvent.click(
@@ -545,7 +577,6 @@ describe("resolve", () => {
         name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
 
     // The decision stands, and the queue has moved on by itself.
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]);
@@ -570,7 +601,6 @@ describe("resolve", () => {
           name: en("review.resolve.keepThis", { name, number: 2 }),
         }),
       );
-      fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
     }
 
     expect(save).toHaveBeenCalledTimes(1);
@@ -593,7 +623,6 @@ describe("resolve", () => {
           name: en("review.resolve.keepThis", { name, number: 2 }),
         }),
       );
-      fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
     }
 
     expect(screen.getByText(en("review.resolve.doneTitle"))).toBeTruthy();
@@ -616,7 +645,7 @@ describe("resolve", () => {
     // first, and the position, the arrows and the list must all agree — a
     // counter that names a row twelve places down the list is worse than none.
     const positionIs = (index: number) =>
-      screen.getByText(new RegExp(`^${en("review.resolve.position", { index, total: 2 })}`));
+      screen.getByText(new RegExp(`${en("review.resolve.position", { index, total: 2 })}`));
 
     expect(positionIs(1)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "a.jpg" })).toBeTruthy();
@@ -645,9 +674,6 @@ describe("resolve", () => {
       }),
     );
 
-    expect(decisions.reviewedSets).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
-
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]);
   });
 
@@ -656,11 +682,10 @@ describe("resolve", () => {
     await waitForReview();
     switchTo("resolve");
 
-    // Number keys create a draft; confirmation makes the binding decision.
+    // A number key keeps that copy outright: the queue's contract is that a
+    // keeper is chosen by activating a copy, with no second command control.
     fireEvent.keyDown(window, { key: "1" });
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
     fireEvent.keyDown(window, { key: "2" });
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
 
     expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
       "/in/a.jpg",
@@ -685,9 +710,6 @@ describe("resolve", () => {
     fireEvent.click(screen.getByRole("tab", { name: en("review.mode.resolve") }));
     fireEvent.keyDown(window, { key: "1" });
 
-    expect(decisions.reviewedSets).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.confirmSelection") }));
-
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/a.jpg", demote: ["/in/b.jpg"] }]);
   });
 
@@ -703,12 +725,16 @@ describe("resolve", () => {
     resolveMode.focus();
     fireEvent.keyDown(resolveMode, { key: "1" });
 
-    // Nothing was drafted, so there is nothing to confirm.
-    const confirm = screen.getByRole("button", {
-      name: en("review.resolve.confirmSelection"),
-    }) as HTMLButtonElement;
-    expect(confirm.disabled).toBe(true);
+    // The shortcut decides outright now, so a key that reaches this listener
+    // would be visible as a decision rather than as a pending draft.
     expect(decisions.reviewedSets).toEqual([]);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: en("review.resolve.keepThis", { name: "a.jpg", number: 1 }),
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("records 'not duplicates' as a binding decision instead of clearing the set", async () => {
@@ -731,7 +757,7 @@ describe("resolve", () => {
     renderReview(result);
     await waitForReview();
     switchTo("resolve");
-    fireEvent.click(screen.getByRole("button", { name: en("review.compare") }));
+    compareCopy("a.jpg", "b.jpg");
 
     fireEvent.keyDown(window, { key: "2" });
 
@@ -748,9 +774,7 @@ describe("resolve", () => {
 
     // A rule has ranked both sets, but a proposal binds nothing.
     expect(decisions.reviewedSets).toEqual([]);
-    fireEvent.click(
-      screen.getByRole("button", { name: en("review.proposal.acceptAll", { count: 2 }) }),
-    );
+    acceptAllRecommendations(2);
     // "Keep the largest" is the fixture's default rule.
     expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
       "/in/b.jpg",
@@ -793,7 +817,13 @@ describe("resolve", () => {
     await waitForReview();
     switchTo("resolve");
 
-    fireEvent.click(screen.getByRole("button", { name: en("review.proposal.acceptOne") }));
+    // Accepting one proposal is keeping the copy it names — one press, on the
+    // copy, exactly as any other keeper choice.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+      }),
+    );
     expect(decisions.reviewedSets.map((set) => set.keep)).toEqual(["/in/b.jpg"]);
     expect(decisions).toMatchObject({ outstandingSets: 1, proposedSets: 1, undecidedSets: 0 });
 
@@ -801,7 +831,7 @@ describe("resolve", () => {
       target: { value: "smallest" },
     });
     expect(decisions.reviewedSets.map((set) => set.keep)).toEqual(["/in/b.jpg"]);
-    fireEvent.click(screen.getByRole("button", { name: en("review.proposal.acceptAll.one") }));
+    acceptAllRecommendations(1);
 
     expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
       "/in/b.jpg",
@@ -814,9 +844,7 @@ describe("resolve", () => {
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();
     switchTo("resolve");
-    fireEvent.click(
-      screen.getByRole("button", { name: en("review.proposal.acceptAll", { count: 2 }) }),
-    );
+    acceptAllRecommendations(2);
     expect(decisions.reviewedSets).toHaveLength(2);
 
     switchTo("browse");
@@ -826,16 +854,38 @@ describe("resolve", () => {
     await waitFor(() => expect(decisions.reviewedSets).toHaveLength(1));
     expect(decisions).toMatchObject({ outstandingSets: 1, proposedSets: 1, undecidedSets: 0 });
 
+    // Clearing every decision at once is the one act in Review that a second
+    // press does not undo, so it asks first.
     fireEvent.click(screen.getByRole("button", { name: en("review.resolve.resetAll") }));
+    expect(decisions.reviewedSets).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.resetAll.confirm") }));
+
     await waitFor(() => expect(decisions.reviewedSets).toEqual([]));
     expect(decisions).toMatchObject({ outstandingSets: 2, proposedSets: 2, undecidedSets: 0 });
+  });
+
+  it("keeps every decision when the clear-all confirmation is dismissed", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
+    await waitForReview();
+    switchTo("resolve");
+    acceptAllRecommendations(2);
+    expect(decisions.reviewedSets).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.resetAll") }));
+    fireEvent.click(screen.getByRole("button", { name: en("common.cancel") }));
+
+    expect(decisions.reviewedSets).toHaveLength(2);
   });
 
   it("rehydrates explicit choices and view state for the same plan, never a different plan", async () => {
     const first = renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();
     switchTo("resolve");
-    fireEvent.click(screen.getByRole("button", { name: en("review.proposal.acceptOne") }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+      }),
+    );
     switchTo("browse");
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "a.jpg" } });
 
@@ -914,7 +964,7 @@ describe("resolve", () => {
     switchTo("resolve");
     fireEvent.click(screen.getByRole("button", { name: en("review.resolve.next") }));
     expect(
-      screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 2, total: 2 })}`)),
+      screen.getByText(new RegExp(`${en("review.resolve.position", { index: 2, total: 2 })}`)),
     ).toBeTruthy();
 
     let persisted: PlanReviewState | undefined;
@@ -930,7 +980,7 @@ describe("resolve", () => {
     renderReview(result, undefined, { recoveredState: persisted });
     await waitForReview();
     expect(
-      screen.getByText(new RegExp(`^${en("review.resolve.position", { index: 2, total: 2 })}`)),
+      screen.getByText(new RegExp(`${en("review.resolve.position", { index: 2, total: 2 })}`)),
     ).toBeTruthy();
   });
 
@@ -954,7 +1004,9 @@ describe("resolve", () => {
     fireEvent.click(screen.getByRole("button", { name: en("review.setSelection.review") }));
     expect(screen.getByText(en("review.setSelection.count", { count: 2 }))).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: en("review.bulk.notDuplicates") }));
+    fireEvent.click(screen.getAllByRole("button", { name: en("review.bulk.open") })[0]);
+    const bulk = screen.getByRole("dialog", { name: en("review.bulk.selectionTitle") });
+    fireEvent.click(within(bulk).getByRole("button", { name: en("review.bulk.notDuplicates") }));
     expect(decisions.reviewedSets).toEqual([
       { keep: "/in/a.jpg", demote: ["/in/b.jpg"], keep_all: true },
       { keep: "/in/c.jpg", demote: ["/in/d.jpg"], keep_all: true },
@@ -998,15 +1050,162 @@ describe("resolve", () => {
     renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();
     switchTo("resolve");
-    fireEvent.click(
-      screen.getByRole("button", { name: en("review.proposal.acceptAll", { count: 2 }) }),
-    );
+    acceptAllRecommendations(2);
 
     expect(
-      screen.getByText(en("review.resolve.decidedCount", { decided: 2, total: 2 })),
+      screen.getByText(new RegExp(en("review.resolve.decidedCount", { decided: 2, total: 2 }))),
     ).toBeTruthy();
     switchTo("browse");
     expect(screen.getByRole("searchbox")).toBeTruthy();
+  });
+
+  it("says the work is finished across the top, above the panes", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
+    await waitForReview();
+    switchTo("resolve");
+    acceptAllRecommendations(2);
+
+    // "Am I done?" is answered at the top of the surface, not inside the
+    // right-hand pane above whichever set happens to be open — where it was
+    // narrower than the thing it reported on and the first thing to scroll
+    // away. `compareDocumentPosition` is the assertion because "at the top"
+    // is a claim about order, and a class name is not.
+    const done = screen.getByText(en("review.resolve.doneTitle"));
+    const list = screen.getByText(en("review.resolve.allSets"));
+    expect(done.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+/**
+ * Browse has to be enough on its own.
+ *
+ * Every duplicate set must become an explicit decision before Execute unlocks,
+ * and the only bulk way to do that used to live on the other tab — so a reader
+ * who did not care which copy survived still had to open a decision queue to
+ * finish a run they had already understood.
+ */
+describe("browsing alone is enough to finish a run", () => {
+  const result = previewResult(
+    item({ source: "/in/a.jpg", destination: "/out/2025/07/a.jpg" }),
+    item({ source: "/in/b.jpg", destination: "/out/_duplicates/b.jpg" }),
+    item({ source: "/in/c.jpg", destination: "/out/2025/07/c.jpg" }),
+    item({ source: "/in/d.jpg", destination: "/out/_duplicates/d.jpg" }),
+  );
+
+  beforeEach(() => {
+    vi.spyOn(api, "listReviewGroups").mockImplementation(async (kind) => ({
+      groups:
+        kind === "exact"
+          ? [
+              // Distinct sizes, so "keep the largest" names one copy rather
+              // than falling through to the stable-identity tie-break.
+              group("set-1", [
+                { path: "/in/a.jpg", size: 1000 },
+                { path: "/in/b.jpg", size: 4000 },
+              ]),
+              group("set-2", [
+                { path: "/in/c.jpg", size: 9000 },
+                { path: "/in/d.jpg", size: 2000 },
+              ]),
+            ]
+          : [],
+      next_cursor: null,
+      truncated: false,
+      partial_index: false,
+      kind: kind ?? "exact",
+    }));
+  });
+
+  it("states what is open, and clears it without opening the queue", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
+    await waitForReview();
+
+    // Browse is the landing tab, and it says what is left rather than only
+    // marking a badge on the tab beside it.
+    expect(
+      screen.getByRole("tab", { name: en("review.mode.browse") }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.getByText(en("review.browse.openSets", { count: 2 }))).toBeTruthy();
+    expect(decisions.outstandingSets).toBe(2);
+
+    acceptAllRecommendations(2);
+
+    expect(decisions.outstandingSets).toBe(0);
+    expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
+      "/in/b.jpg",
+      "/in/c.jpg",
+    ]);
+    // Never left the tab it started on.
+    expect(
+      screen.getByRole("tab", { name: en("review.mode.browse") }).getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("takes the selection-scoped decisions from Browse too", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "manual" });
+    await waitForReview();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: en("review.setSelection.toggle", { name: "a.jpg" }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: en("review.bulk.open") }));
+    const bulk = screen.getByRole("dialog", { name: en("review.bulk.selectionTitle") });
+    fireEvent.click(within(bulk).getByRole("button", { name: en("review.bulk.notDuplicates") }));
+
+    expect(decisions.reviewedSets).toEqual([
+      { keep: "/in/a.jpg", demote: ["/in/b.jpg"], keep_all: true },
+    ]);
+  });
+
+  it("narrows a not-duplicates set back to one keeper without a reset first", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "manual" });
+    await waitForReview();
+    switchTo("resolve");
+
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.keepAll") }));
+    expect(decisions.reviewedSets).toEqual([
+      { keep: "/in/a.jpg", demote: ["/in/b.jpg"], keep_all: true },
+    ]);
+
+    // Deciding an open set advances to the next one still open; walk back to
+    // the set just decided, which is what the arrow is for.
+    fireEvent.click(screen.getByRole("button", { name: en("review.resolve.previous") }));
+
+    // Every copy is kept, so every copy shows as kept — but choosing one is
+    // still a decision the reader may make, and it must not require clearing
+    // the set first.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+      }),
+    );
+
+    expect(decisions.reviewedSets).toEqual([{ keep: "/in/b.jpg", demote: ["/in/a.jpg"] }]);
+  });
+
+  it("never overwrites a decision the reader made by hand", async () => {
+    renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
+    await waitForReview();
+
+    // Decide one set against the rule: "largest" ranks b.jpg first here.
+    switchTo("resolve");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "a.jpg", number: 1 }),
+      }),
+    );
+    expect(decisions.reviewedSets.map((set) => set.keep)).toEqual(["/in/a.jpg"]);
+
+    switchTo("browse");
+    // One set is decided, so only the other is still an offer.
+    acceptAllRecommendations(1);
+
+    expect(decisions.reviewedSets.map((set) => set.keep).sort()).toEqual([
+      "/in/a.jpg",
+      "/in/c.jpg",
+    ]);
   });
 });
 
@@ -1111,6 +1310,80 @@ describe("comparing never fails silently", () => {
     expect(within(dialog).queryByRole("button", { name: en("review.compare.keepA") })).toBeNull();
   });
 
+  it("reaches every pair of a three-copy set, including the one without the first", async () => {
+    const three = previewResult(
+      item({ source: "/in/a.jpg", destination: "/out/2025/07/a.jpg" }),
+      item({ source: "/in/b.jpg", destination: "/out/_duplicates/b.jpg" }),
+      item({ source: "/in/c.jpg", destination: "/out/_duplicates/c.jpg" }),
+    );
+    vi.spyOn(api, "listReviewGroups").mockImplementation(async (kind) => ({
+      groups:
+        kind === "exact"
+          ? [group("set-1", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }, { path: "/in/c.jpg" }])]
+          : [],
+      next_cursor: null,
+      truncated: false,
+      partial_index: false,
+      kind: kind ?? "exact",
+    }));
+    renderReview(three);
+    await waitForReview();
+    switchTo("resolve");
+
+    // Opening from a.jpg lands on the pair it names.
+    compareCopy("a.jpg", "b.jpg");
+    const dialog = screen.getByRole("dialog", { name: en("review.compare.title") });
+    expect(within(dialog).getByText(en("review.compare.copyPosition", { index: 1, total: 3 })));
+
+    // Three copies make three pairs, and walking them reaches b against c —
+    // the comparison a fixed left-hand side could never produce. The pair is
+    // read off the fact table's own column headings, which name each copy by
+    // the letter it keeps for the whole set rather than by which half of the
+    // screen it landed on.
+    const pairOnScreen = () =>
+      within(dialog)
+        .getAllByRole("button", { name: /^[A-Z] — / })
+        .map((heading) => heading.textContent)
+        .join(" | ");
+
+    const pairs: string[] = [];
+    for (let step = 0; step < 3; step += 1) {
+      pairs.push(pairOnScreen());
+      fireEvent.click(within(dialog).getByRole("button", { name: en("review.compare.nextCopy") }));
+    }
+
+    expect(new Set(pairs).size).toBe(3);
+    // b is B in every pair it appears in, including the one where it is on the
+    // left. A letter that meant "the left-hand side" silently renamed both
+    // copies each time the pair changed.
+    expect(pairs).toContain("A — a.jpg | B — b.jpg");
+    expect(pairs).toContain("A — a.jpg | C — c.jpg");
+    expect(pairs).toContain("B — b.jpg | C — c.jpg");
+    // And walking all the way round returns to where it started.
+    expect(pairOnScreen()).toBe(pairs[0]);
+
+    // Every pairing is also one press away, rather than only reachable by
+    // stepping around the ring.
+    for (const [first, second] of [
+      ["a.jpg", "b.jpg"],
+      ["a.jpg", "c.jpg"],
+      ["b.jpg", "c.jpg"],
+    ]) {
+      expect(
+        within(dialog).getByRole("button", {
+          name: en("review.compare.selectPair", { a: first, b: second }),
+        }),
+      ).toBeTruthy();
+    }
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: en("review.compare.selectPair", { a: "b.jpg", b: "c.jpg" }),
+      }),
+    );
+    expect(pairOnScreen()).toBe("B — b.jpg | C — c.jpg");
+  });
+
   it("compares a set against its own members even when the pane hides one", async () => {
     renderReview(result);
     await screen.findByRole("checkbox", { name: "unrelated.jpg" });
@@ -1118,7 +1391,7 @@ describe("comparing never fails silently", () => {
     // Narrow the pane so only one member of the set could possibly be visible.
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "a.jpg" } });
     switchTo("resolve");
-    fireEvent.click(screen.getByRole("button", { name: en("review.compare") }));
+    compareCopy("a.jpg", "b.jpg");
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(en("review.compare.scopeNote"))).toBeTruthy();
@@ -1338,6 +1611,13 @@ describe("selecting a file and opening a file are different gestures", () => {
 
     fireEvent.click(screen.getByText("one.jpg"));
     const dialog = await screen.findByRole("dialog");
+    // The path line explains a part on request; the setting belongs to the
+    // part being read, not to a card per segment.
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: `${en("review.detail.decision.date")} — year from exif`,
+      }),
+    );
     fireEvent.click(
       await within(dialog).findByRole("button", {
         name: en("review.detail.openSettingFor", {

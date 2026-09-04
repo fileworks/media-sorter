@@ -15,11 +15,12 @@ export function Input({ className = "", ...props }: InputProps) {
   return (
     <input
       className={cn(
-        "block h-10 w-full rounded-control border border-input bg-card px-2.5 py-1.5",
+        // 36px, the shared form height — see `Select`.
+        "block h-9 w-full rounded-control border border-input bg-card px-3 py-1",
         "text-xs text-foreground transition-colors placeholder:text-faint",
         "hover:border-border-strong",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "disabled:cursor-not-allowed disabled:opacity-50",
+        "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint disabled:hover:border-border",
         className,
       )}
       {...props}

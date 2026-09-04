@@ -1,7 +1,7 @@
 import { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "default" | "destructive" | "ghost" | "outline";
+type Variant = "default" | "destructive" | "ghost" | "outline" | "suggest";
 type Size = "sm" | "default" | "icon";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,14 +26,24 @@ const variantClasses: Record<Variant, string> = {
   // alone left it indistinguishable from a hovered row behind it.
   outline:
     "border-border bg-card text-foreground hover:border-border-strong hover:bg-muted focus-visible:ring-ring",
+  // "Take the recommendation", wearing the recommendation's own colours.
+  // Accepting a proposal used to be a neutral outline button sitting under a
+  // card that had just recommended something, so the one control that acts on
+  // the recommendation was the one thing on screen not connected to it. It
+  // wears `suggest` rather than `success`: this control takes an offer, and
+  // the green that means "settled" belongs to what it produces, not to the
+  // offer itself. Tinted rather than filled — the primary action is still the
+  // choice the user made themselves.
+  suggest:
+    "border-suggest/40 bg-tint-suggest text-suggest hover:border-suggest hover:bg-suggest/10 focus-visible:ring-[hsl(var(--color-suggest))]",
 };
 
 // One weight and one type size across all three, from `--text-ui` in the
 // mockup: a control label is not body copy, and letting the default button
 // carry 14px made every toolbar taller than the rails around it.
 const sizeClasses: Record<Size, string> = {
-  default: "min-h-[2.375rem] gap-1.5 px-2.5 py-1.5 text-2xs",
-  sm: "min-h-8 gap-1.5 px-2.5 py-1 text-2xs",
+  default: "min-h-9 gap-2 px-3 py-2 text-2xs",
+  sm: "min-h-8 gap-2 px-3 py-1 text-2xs",
   icon: "h-9 w-9 p-0 text-2xs",
 };
 

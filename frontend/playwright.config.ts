@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { E2E_ORIGIN } from "./e2e/server";
+
 /**
  * `P2-TEST-001` — browser-level accessibility verification.
  *
@@ -24,7 +26,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:1420",
+    baseURL: E2E_ORIGIN,
     trace: "retain-on-failure",
   },
   projects: [
@@ -49,11 +51,18 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // `--host 127.0.0.1` rather than `npm run dev`: Vite defaults to binding
-    // `localhost`, which on a CI image can resolve to ::1 only, while the readiness
-    // poll below is IPv4. The server was up and the run still timed out.
-    command: "npx vite --host 127.0.0.1 --port 1420 --strictPort",
-    url: "http://127.0.0.1:1420",
+    // The suite brings its own server, on its own port, with its own optimizer
+    // cache — see `e2e/server.ts`. It used to start a plain `vite` on 1420,
+    // which is the dev server's port and, worse, the dev server's dependency
+    // cache: a run here would either hijack a developer's running app or tear
+    // a Vite down mid-optimization and leave `npm run dev` hanging with no
+    // cache to start from.
+    //
+    // `--host 127.0.0.1` rather than the default: Vite binds `localhost`, which
+    // on a CI image can resolve to ::1 only, while the readiness poll below is
+    // IPv4. The server was up and the run still timed out.
+    command: "npx vite --config vite.e2e.config.ts --host 127.0.0.1",
+    url: E2E_ORIGIN,
     reuseExistingServer: !process.env.CI,
     // A cold runner pre-bundles dependencies on first start, which 2 minutes
     // does not reliably cover.

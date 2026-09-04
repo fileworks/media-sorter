@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             {translate(storedLocale(), "app.errorRecovery")}
           </p>
           {error.message && (
-            <p className="break-words rounded-lg bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+            <p className="break-words rounded-panel bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
               {error.message}
             </p>
           )}

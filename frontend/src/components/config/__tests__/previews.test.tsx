@@ -106,8 +106,9 @@ describe("folder tree preview", () => {
     );
 
     expect(screen.getByText("Pixel 9 Pro/")).toBeTruthy();
-    // TYPE_YYYY-MM-DD, the shipped pattern, applied to the sample.
-    expect(screen.getByText("IMG_2025-07-14.JPG")).toBeTruthy();
+    // TYPE_YYYY-MM-DD, the shipped pattern, applied to the sample. Renaming
+    // owns the whole filename, so the extension is lowercased with the stem.
+    expect(screen.getByText("IMG_2025-07-14.jpg")).toBeTruthy();
   });
 
   it("shows only the review folders in deduplicate-only, and says why", () => {
@@ -149,13 +150,21 @@ describe("rename preview", () => {
 
     const row = screen.getByText("IMG_4382.JPG").closest("tr");
     expect(row).not.toBeNull();
-    expect((row as HTMLElement).textContent).toContain("2025-07-14_IMG_4382.JPG");
+    expect((row as HTMLElement).textContent).toContain("2025-07-14_IMG_4382.jpg");
+  });
+
+  it("lowercases the extension with the stem, and does not call that a conversion", () => {
+    renderRename({ rename_pattern: "NAME" });
+
+    const row = screen.getByText("IMG_4382.JPG").closest("tr");
+    expect((row as HTMLElement).textContent).toContain("IMG_4382.jpg");
+    expect(screen.queryByText("converted")).toBeNull();
   });
 
   it("demonstrates the collision suffix when the pattern drops the original name", () => {
     renderRename({ rename_pattern: "TYPE_YYYY-MM-DD" });
 
-    expect(screen.getByText("IMG_2025-07-14_001.JPG")).toBeTruthy();
+    expect(screen.getByText("IMG_2025-07-14_001.jpg")).toBeTruthy();
     expect(screen.getByText("name already taken")).toBeTruthy();
   });
 
@@ -184,7 +193,7 @@ describe("rename preview", () => {
 
     expect(onCommit).toHaveBeenCalledWith("YYYY_NAME");
     const row = screen.getByText("IMG_4382.JPG").closest("tr");
-    expect((row as HTMLElement).textContent).toContain("2025_IMG_4382.JPG");
+    expect((row as HTMLElement).textContent).toContain("2025_IMG_4382.jpg");
   });
 
   it("labels the pattern and links invalid guidance to the input", () => {

@@ -194,11 +194,44 @@ export function isOutstandingState(state: DuplicateDecisionState): boolean {
 }
 
 /**
- * Propose for every catalog set the current rule can rank.
+ * Which copy the current rule ranks first, for every set it can rank.
  *
- * Decisions are deliberately excluded: changing the rule replaces outstanding
- * proposals but cannot rewrite an answer somebody already gave. Protected
- * references are answers supplied by the library contract, not proposals.
+ * A recommendation is a *reading of the files*, so it does not stop existing
+ * because the reader answered. Accepting one used to remove it — the map was
+ * built only for undecided sets — and the compare dialog then said "there is
+ * no recommendation for this set" about the very recommendation the user had
+ * just taken. It survives the decision it produced, and every surface that
+ * shows one shows it beside whatever was chosen.
+ *
+ * Protected references are answers supplied by the library contract rather
+ * than anything a rule ranked, so they are excluded outright.
+ */
+export function keeperRecommendations(
+  groups: readonly DuplicateGroup[],
+  policy: KeeperPolicyId,
+): Map<string, KeeperProposal> {
+  const recommendations = new Map<string, KeeperProposal>();
+  for (const group of groups) {
+    if (group.members.some((member) => member.role === "reference")) continue;
+    const memberId = keeperByPolicy(group, policy);
+    if (memberId !== null) {
+      recommendations.set(group.group_id, {
+        memberId,
+        policy,
+        rationale: keeperRationale(group, policy, memberId),
+      });
+    }
+  }
+  return recommendations;
+}
+
+/**
+ * The recommendations that are still *offers* — the ones nobody has answered.
+ *
+ * This is what "accept all recommendations" acts on and what the outstanding
+ * count is measured against: a recommendation the user already took is not an
+ * outstanding proposal, and reopening it would let one click overwrite a
+ * decision that had been made deliberately.
  */
 export function keeperProposals(
   groups: readonly DuplicateGroup[],
@@ -206,17 +239,8 @@ export function keeperProposals(
   decisions: ReadonlyMap<string, DuplicateDecision>,
 ): Map<string, KeeperProposal> {
   const proposals = new Map<string, KeeperProposal>();
-  for (const group of groups) {
-    if (decisions.has(group.group_id)) continue;
-    if (group.members.some((member) => member.role === "reference")) continue;
-    const memberId = keeperByPolicy(group, policy);
-    if (memberId !== null) {
-      proposals.set(group.group_id, {
-        memberId,
-        policy,
-        rationale: keeperRationale(group, policy, memberId),
-      });
-    }
+  for (const [groupId, recommendation] of keeperRecommendations(groups, policy)) {
+    if (!decisions.has(groupId)) proposals.set(groupId, recommendation);
   }
   return proposals;
 }

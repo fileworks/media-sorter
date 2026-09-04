@@ -48,6 +48,8 @@ export default {
         // Soft status washes for badges and callouts.
         tint: {
           primary: "hsl(var(--tint-primary))",
+          // Advice, not confirmation — see `--color-suggest` in index.css.
+          suggest: "hsl(var(--tint-suggest))",
           success: "hsl(var(--tint-success))",
           warning: "hsl(var(--tint-warning))",
           error: "hsl(var(--tint-error))",
@@ -59,6 +61,8 @@ export default {
           muted: "hsl(var(--surface-muted))",
         },
         // Semantic status colours (theme-aware via CSS vars in index.css).
+        // `suggest` is what a rule proposes; `success` is what has been settled.
+        suggest: "hsl(var(--color-suggest))",
         success: "hsl(var(--color-success))",
         warning: "hsl(var(--color-warning))",
         error: "hsl(var(--color-error))",
@@ -79,23 +83,41 @@ export default {
         "2xs": ["0.6875rem", { lineHeight: "1rem" }],
         "3xs": ["0.625rem", { lineHeight: "0.875rem" }],
       },
+      // Every radius resolves to one of three steps — see `--radius-*` in
+      // index.css. The Tailwind names are kept so 130 existing usages keep
+      // working; they simply stop resolving to six different values.
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-        // Named control and nested-panel radii.
-        control: "7px",
-        panel: "8px",
+        // `DEFAULT` is the one that used to leak. Tailwind's own default is
+        // 4px, so a bare `rounded` — which is what a checkbox, a chip or a
+        // small overlay reaches for by habit — quietly introduced a fourth
+        // radius that the three tokens below exist to forbid. It was on 29
+        // elements. Mapping it onto the control step closes the scale: there
+        // is now no `rounded-*` utility that resolves to anything else.
+        DEFAULT: "var(--radius-control)",
+        sm: "var(--radius-control)",
+        control: "var(--radius-control)",
+        md: "var(--radius-panel)",
+        lg: "var(--radius-panel)",
+        panel: "var(--radius-panel)",
+        xl: "var(--radius-window)",
+        "2xl": "var(--radius-window)",
+        window: "var(--radius-window)",
       },
       fontFamily: {
         sans: ["Geist Sans", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
         mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
-      // Shell geometry from mediasorter-final.html.
+      // Shell geometry.
+      //
+      // Trimmed from 54/68/76. The two bands above the workspace were costing
+      // 130 vertical pixels before a screen said anything, which on a laptop is
+      // most of a settings row — and the stepper in particular was reading as
+      // the heaviest thing in the window rather than the quietest. The values
+      // still clear the 24px target floor for every control they hold.
       height: {
-        titlebar: "3.375rem", // 54px
-        stepper: "4.25rem", // 68px at tablet widths
-        "stepper-wide": "4.75rem", // 76px on a full desktop
+        titlebar: "3rem", // 48px
+        stepper: "3.5rem", // 56px at tablet widths
+        "stepper-wide": "3.875rem", // 62px on a full desktop
       },
       minHeight: {
         actionbar: "3.75rem", // 60px

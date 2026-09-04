@@ -161,6 +161,7 @@ function renderShell(locale: Locale, planExists = false) {
         plannedReason: null,
         duplicateReviewReady: true,
         duplicateReviewReason: null,
+        reviewStateDurable: true,
         executionActive: false,
         blocked: false,
         blockedReason: null,

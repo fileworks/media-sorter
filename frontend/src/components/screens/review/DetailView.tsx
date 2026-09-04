@@ -6,8 +6,9 @@ import { DestinationExplanation } from "@/components/screens/review/DestinationE
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
 import { MediaVideo } from "@/components/ui/media-video";
-import { Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui/modal";
+import { Modal, ModalBody, ModalFooter, ModalHeader, ModalShortcuts } from "@/components/ui/modal";
 import { Thumbnail } from "@/components/ui/thumbnail";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMediaInfo, useReviewOutcome } from "@/hooks/useMediaInfo";
 import { useI18n } from "@/i18n/I18nContext";
 import { extractErrorMessage } from "@/lib/errorUtils";
@@ -46,17 +47,31 @@ interface DetailFact {
   id: ReviewFactId;
   value: string;
   unknown?: boolean;
+  path?: boolean;
 }
 
-function Fact({ label, value, unknown }: { label: string; value: string; unknown?: boolean }) {
+function Fact({
+  label,
+  value,
+  unknown,
+  path,
+}: {
+  label: string;
+  value: string;
+  unknown?: boolean;
+  /** A filesystem path: set in monospace and allowed to break anywhere. */
+  path?: boolean;
+}) {
   return (
     <>
       <dt className="text-3xs text-faint">{label}</dt>
       <dd
         className={cn(
-          "m-0 min-w-0 break-words text-3xs",
+          "m-0 min-w-0 text-3xs",
+          path ? "break-all font-mono leading-relaxed" : "break-words",
           unknown ? "text-faint" : "text-foreground",
         )}
+        title={path ? value : undefined}
       >
         {value}
       </dd>
@@ -111,7 +126,15 @@ export function DetailView({
       : null;
 
   return (
-    <Modal open onClose={onClose} title={row.name} size="xl">
+    <Modal open onClose={onClose} title={row.name} size="2xl">
+      {/* ← and → walk the scope, the same two keys the full-screen viewer
+          answers — and only while this dialog is the one on top. */}
+      <ModalShortcuts
+        onKey={(event) => {
+          if (event.key === "ArrowLeft") onPrevious?.();
+          else if (event.key === "ArrowRight") onNext?.();
+        }}
+      />
       <ModalHeader>
         <span className="min-w-0 truncate text-xs text-faint" title={row.source}>
           {row.source}
@@ -120,10 +143,14 @@ export function DetailView({
 
       <ModalBody className="p-0">
         {/* Keep the preview and its facts visible together on wide screens. */}
-        <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="min-h-[16rem] overflow-hidden rounded-panel bg-muted sm:min-h-[22rem] lg:min-h-[27rem]">
+        <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          {/* A height, not a floor. `min-h` let a tall dialog grow past the
+              viewport, so on a laptop the picture filled the screen and every
+              fact beside it was below the fold. It now takes at most half the
+              viewport and stops there, on any screen tall enough to have one. */}
+          <div className="h-[clamp(12rem,46dvh,32rem)] overflow-hidden rounded-panel bg-muted">
             {info.data?.media_type === "video" ? (
-              <div className="flex h-full min-h-[16rem] items-center justify-center p-3 sm:min-h-[22rem] lg:min-h-[27rem]">
+              <div className="flex h-full items-center justify-center p-3">
                 <MediaVideo path={row.source} name={row.name} className="h-full w-full" />
               </div>
             ) : (
@@ -138,7 +165,7 @@ export function DetailView({
           </div>
 
           <aside className="self-start overflow-hidden rounded-panel border border-border">
-            <h3 className="border-b border-border px-2.5 py-2 text-xs font-semibold text-foreground">
+            <h3 className="border-b border-border px-3 py-2 text-xs font-semibold text-foreground">
               {t("review.detail.plannedState")}
             </h3>
             {info.isLoading ? (
@@ -146,7 +173,7 @@ export function DetailView({
                 compact
                 variant="loading"
                 title={t("review.detail.infoLoading")}
-                className="m-2.5"
+                className="m-3"
               />
             ) : infoFailure !== null ? (
               <StateView
@@ -155,10 +182,10 @@ export function DetailView({
                 title={infoFailure.message}
                 code={infoFailure.code}
                 onRetry={() => void info.refetch()}
-                className="m-2.5"
+                className="m-3"
               />
             ) : null}
-            <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2.5 gap-y-2 px-2.5 py-2.5">
+            <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 px-3 py-3">
               {orderFacts<DetailFact>([
                 type === null ? null : { id: "fileType", value: type },
                 info.isLoading || infoFailure !== null
@@ -197,11 +224,13 @@ export function DetailView({
                   id: "source",
                   value: row.folder === "" ? unknown : row.folder,
                   unknown: row.folder === "",
+                  path: row.folder !== "",
                 },
                 {
                   id: "destination",
                   value: row.destination ?? t("review.destination.none"),
                   unknown: row.destination === null,
+                  path: row.destination !== null,
                 },
                 { id: "result", value: plannedStatusLabel(row.status, t) },
                 { id: "reason", value: t(row.reason.key, row.reason.params) },
@@ -264,13 +293,14 @@ export function DetailView({
                   label={t(REVIEW_FACT_LABELS[fact.id])}
                   value={fact.value}
                   unknown={fact.unknown}
+                  path={fact.path}
                 />
               ))}
             </dl>
             {row.unitWarnings && row.unitWarnings.length > 0 && (
               <p
                 role="alert"
-                className="border-t border-warning/30 bg-tint-warning px-2.5 py-2 text-3xs text-warning"
+                className="border-t border-warning/40 bg-tint-warning px-3 py-2 text-3xs text-warning"
               >
                 {row.unitWarnings.join(" ")}
               </p>
@@ -309,7 +339,7 @@ export function DetailView({
               className="mt-2"
             />
           ) : provenance === null ? (
-            <p className="mt-1.5 text-xs text-faint">{t("review.detail.provenanceUnavailable")}</p>
+            <p className="mt-2 text-xs text-faint">{t("review.detail.provenanceUnavailable")}</p>
           ) : (
             <DestinationExplanation provenance={provenance} onOpenSetting={onOpenSetting} />
           )}
@@ -318,27 +348,43 @@ export function DetailView({
 
       <ModalFooter>
         {/* Navigation stays within the current set or folder. */}
-        <div className="mr-auto flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={onPrevious === null}
-            onClick={() => onPrevious?.()}
-            aria-label={t("review.detail.previous")}
-            aria-description={onPrevious === null ? t("review.detail.noPrevious") : undefined}
+        <div className="mr-auto flex items-center gap-2">
+          <Tooltip
+            label={
+              onPrevious === null
+                ? `${t("review.detail.previous")} — ${t("review.detail.noPrevious")}`
+                : t("review.detail.previous")
+            }
           >
-            <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={onNext === null}
-            onClick={() => onNext?.()}
-            aria-label={t("review.detail.next")}
-            aria-description={onNext === null ? t("review.detail.noNext") : undefined}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={onPrevious === null}
+              onClick={() => onPrevious?.()}
+              aria-label={t("review.detail.previous")}
+              aria-description={onPrevious === null ? t("review.detail.noPrevious") : undefined}
+            >
+              <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </Tooltip>
+          <Tooltip
+            label={
+              onNext === null
+                ? `${t("review.detail.next")} — ${t("review.detail.noNext")}`
+                : t("review.detail.next")
+            }
           >
-            <FiArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={onNext === null}
+              onClick={() => onNext?.()}
+              aria-label={t("review.detail.next")}
+              aria-description={onNext === null ? t("review.detail.noNext") : undefined}
+            >
+              <FiArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </Tooltip>
           <span className="text-3xs text-faint">
             {scope.total <= 1
               ? t("review.detail.onlyOne")
