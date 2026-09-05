@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiSearch } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { useVirtualWindow } from "@/hooks/useVirtualWindow";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
@@ -372,13 +373,9 @@ export function DestinationTree({
                   {t("review.browse.alsoInLibrary.rule")}
                 </p>
                 {onOpenSources && (
-                  <button
-                    type="button"
-                    onClick={onOpenSources}
-                    className="rounded-panel border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
+                  <Button variant="outline" onClick={onOpenSources}>
                     {t("review.browse.openSources")}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}

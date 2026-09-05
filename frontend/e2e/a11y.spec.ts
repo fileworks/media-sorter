@@ -90,6 +90,28 @@ async function settleRendering(page: Page) {
   });
 }
 
+async function expectReducedMotion(page: Page) {
+  const animated = await page.evaluate(() => {
+    const offenders: string[] = [];
+    for (const element of document.querySelectorAll("*")) {
+      for (const pseudo of [null, "::before", "::after"]) {
+        const style = getComputedStyle(element, pseudo);
+        if (
+          style.animationName !== "none" ||
+          style.transitionDuration.split(",").some((value) => parseFloat(value) !== 0) ||
+          style.scrollBehavior !== "auto"
+        ) {
+          offenders.push(
+            `${element.tagName}${pseudo ?? ""}: ${style.animationName}, ${style.transitionDuration}, ${style.scrollBehavior}`,
+          );
+        }
+      }
+    }
+    return offenders;
+  });
+  expect(animated).toEqual([]);
+}
+
 /**
  * Whether the stage scroller is wider than the window it sits in.
  *
@@ -203,6 +225,31 @@ test("the page under test is actually populated", async ({ page }) => {
 
 test.describe("1.4.3 contrast", () => {
   for (const theme of ["light", "dark"] as const) {
+    test(`a failed review save keeps Retry legible on hover in ${theme}`, async ({ page }) => {
+      await page.evaluate((value) => localStorage.setItem("mediasort_theme", value), theme);
+      await page.reload();
+      await goToReview(page);
+      await page.route("**/api/sorting/plans/e2e-plan/review-state", (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Save failed", code: "INTERNAL_ERROR" }),
+        }),
+      );
+      await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+      const retry = page.getByRole("button", { name: "Try again", exact: true });
+      await expect(retry).toBeVisible();
+      await retry.hover();
+      await settleRendering(page);
+      await expect(retry).toHaveCSS("opacity", "1");
+      expect(await contrastViolations(page)).toEqual([]);
+      await page.unroute("**/api/sorting/plans/e2e-plan/review-state");
+      await retry.click();
+      await expect(retry).toBeHidden();
+    });
+  }
+
+  for (const theme of ["light", "dark"] as const) {
     test(`text meets contrast in the ${theme} theme`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: theme });
       await page.evaluate((mode) => {
@@ -310,6 +357,63 @@ test.describe("2.4.11 focus not obscured", () => {
 });
 
 test.describe("later stages", () => {
+  test("every stage removes motion, including pseudo-elements and late-mounted progress", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await goToReview(page);
+    for (const stage of ["sources", "recipe", "configure", "plan", "review"]) {
+      await page.locator(`[data-stage-id="${stage}"]`).click();
+      await expectReducedMotion(page);
+    }
+    await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+    await expectReducedMotion(page);
+    await page
+      .getByRole("button", { name: /^compare .* with /i })
+      .first()
+      .click();
+    await expect(page.getByRole("dialog", { name: /compare copies/i })).toBeVisible();
+    await expectReducedMotion(page);
+    await page.getByRole("button", { name: /close/i }).last().click();
+    await page.getByRole("button", { name: /these are not duplicates/i }).click();
+    await page.getByRole("button", { name: /to execute/i }).click();
+    await expectReducedMotion(page);
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /execute the reviewed plan/i }).click();
+    await expect(page.getByRole("heading", { name: /finished|done/i }).first()).toBeVisible();
+    await expectReducedMotion(page);
+  });
+
+  test("reflow at 200% covers every stage including execute", async ({ page }) => {
+    await goToResolve(page);
+    await page.getByRole("button", { name: /these are not duplicates/i }).click();
+    await page.getByRole("button", { name: /to execute/i }).click();
+    for (const stage of ["sources", "recipe", "configure", "plan", "review", "execute"]) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      if (stage === "execute") await page.getByRole("button", { name: /to execute/i }).click();
+      else await page.locator(`[data-stage-id="${stage}"]`).click();
+      // CSS zoom relays out text and controls; the existing CDP test separately
+      // proves Chromium's visual-viewport page scale.
+      await page.evaluate(() => {
+        document.documentElement.style.zoom = "2";
+      });
+      await settleRendering(page);
+      expect(await layoutOverflow(page), `${stage} at 200%`).toMatchObject({
+        document: false,
+        body: false,
+      });
+      await page.evaluate(() => {
+        document.documentElement.style.zoom = "1";
+      });
+      await page.setViewportSize({ width: 360, height: 800 });
+      await settleRendering(page);
+      expect(await layoutOverflow(page), `${stage} at 360px`).toMatchObject({
+        document: false,
+        body: false,
+      });
+    }
+  });
+
   test("the media fixture reaches every screen, survives restart, and preserves evidence", async ({
     page,
   }) => {
@@ -454,6 +558,28 @@ test.describe("later stages", () => {
     await expect(page.getByRole("cell", { name: "IMG_0001.xmp", exact: true })).toBeVisible();
     await expect(page.getByText(/edit sidecar/i).first()).toBeVisible();
     await expect(page.getByText(/motion metadata remained unknown/i)).toBeVisible();
+    for (const { width, zoom } of [
+      { width: 360, zoom: 1 },
+      { width: 1280, zoom: 2 },
+    ]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((value) => {
+        document.documentElement.style.zoom = String(value);
+      }, zoom);
+      await settleRendering(page);
+      expect(await layoutOverflow(page), `Finished at ${width}px, zoom ${zoom}`).toMatchObject({
+        document: false,
+        body: false,
+      });
+      await expect(page.getByRole("button", { name: /^All \(/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await page.evaluate(() => {
+      document.documentElement.style.zoom = "1";
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
     await expectTargetsAndFocus(page, "Finished run");
   });
 

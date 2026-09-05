@@ -1,6 +1,7 @@
 import { FiAlertTriangle, FiCheck } from "react-icons/fi";
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -69,13 +70,9 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
         title={t("plan.title")}
         subtitle={t("plan.subtitle")}
         actions={
-          <button
-            type="button"
-            onClick={onRecalculate}
-            className="min-h-9 rounded-panel border border-border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button variant="outline" onClick={onRecalculate}>
             {t("plan.recalculate")}
-          </button>
+          </Button>
         }
       />
 

@@ -9,10 +9,14 @@
  */
 
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
+// @ts-expect-error Vitest supplies the Node runtime used by this test.
+import { readFileSync } from "node:fs";
 // The radius scale is declared in the Tailwind config; read it as text, the
 // same way every other rule here is read, rather than importing an untyped JS
 // module into a typechecked suite.
 import tailwindConfigSource from "../../../tailwind.config.js?raw";
+const cssSource = readFileSync(new URL("../../index.css", import.meta.url), "utf8");
 
 const SOURCES = import.meta.glob("../../**/*.{ts,tsx}", {
   query: "?raw",
@@ -37,6 +41,27 @@ function filesMatching(pattern: RegExp): string[] {
 function sourceOf(path: string): string {
   return PRODUCT.find(([candidate]) => candidate === path)?.[1] ?? "";
 }
+
+function buttonAttributes(source: string): string[] {
+  const tree = ts.createSourceFile(
+    "surface.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const attributes: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(tree) === "button") {
+      attributes.push(node.attributes.getText(tree));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return attributes;
+}
+
+const RAW_BUTTONS = PRODUCT.map(([path, source]) => [path, buttonAttributes(source)] as const);
 
 describe("stable workflow chrome", () => {
   /**
@@ -190,19 +215,37 @@ describe("native title", () => {
 });
 
 describe("button variants", () => {
+  it("inspects attributes after arrow handlers instead of stopping at their greater-than sign", () => {
+    expect(
+      buttonAttributes(
+        '<button onClick={() => save()} className="bg-primary" type="button">Save</button>',
+      )[0],
+    ).toContain('className="bg-primary"');
+  });
+
+  it("never dims text-bearing controls to communicate hover or disabled state", () => {
+    expect(filesMatching(/\b(?:hover|disabled):opacity-(?!100\b)\d+/)).toEqual([]);
+  });
+
   it("re-types no variant by hand", () => {
     // The four variants are declared once. A raw `<button>` painting itself
     // with a variant's own colours is a fifth definition that will drift.
     const offenders: string[] = [];
-    for (const [path, source] of PRODUCT) {
+    for (const [path, buttons] of RAW_BUTTONS) {
       if (path === "src/components/ui/button.tsx") continue;
-      for (const match of source.matchAll(/<button\b([^>]*?)>/gs)) {
-        const attributes = match[1];
+      for (const attributes of buttons) {
         if (/bg-primary\b[^"]*text-primary-foreground/.test(attributes)) {
           offenders.push(`${path}: a hand-painted primary`);
         }
         if (/bg-destructive\b/.test(attributes)) {
           offenders.push(`${path}: a hand-painted destructive`);
+        }
+        if (
+          /\bborder-border\b/.test(attributes) &&
+          /\bpx-3\b/.test(attributes) &&
+          /\bpy-2\b/.test(attributes)
+        ) {
+          offenders.push(`${path}: a hand-painted outline`);
         }
       }
     }
@@ -212,12 +255,67 @@ describe("button variants", () => {
   it("gives every raw button an explicit type", () => {
     // A `<button>` inside a form defaults to `submit`, which navigates.
     const offenders: string[] = [];
-    for (const [path, source] of PRODUCT) {
-      for (const match of source.matchAll(/<button\b([^>]*?)>/gs)) {
-        if (!/\btype=/.test(match[1])) offenders.push(path);
+    for (const [path, buttons] of RAW_BUTTONS) {
+      for (const attributes of buttons) {
+        if (!/\btype=/.test(attributes)) offenders.push(path);
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("spacing and semantic advice", () => {
+  it("keeps padding, margins and gaps on whole steps, with only the 2px optical sub-step", () => {
+    expect(filesMatching(/\b(?:[pm][trblxyse]?|gap(?:-[xy])?|space-[xy])-[1-9]\d*\.5\b/)).toEqual(
+      [],
+    );
+  });
+
+  it("presents a recommended recipe as advice", () => {
+    const recipe = sourceOf("src/components/screens/RecipeGrid.tsx");
+    const badge = /<span\s+data-recipe-recommendation\b[^>]*>/.exec(recipe)?.[0];
+    expect(badge).toContain("bg-tint-suggest");
+    expect(badge).toContain("text-suggest");
+    expect(badge).not.toContain("success");
+  });
+});
+
+describe("motion has one scale and respects the system preference", () => {
+  it("uses explicit transitions rather than animating arbitrary property changes", () => {
+    expect(filesMatching(/\btransition-all\b/)).toEqual([]);
+  });
+
+  it("keeps entry, control, media and progress durations on the agreed scale", () => {
+    expect(cssSource).toContain("animation: stage-enter 160ms ease both");
+    expect(cssSource).toContain("transform: translateY(3px)");
+    expect(sourceOf("src/components/ui/button.tsx")).toContain("duration-150");
+    for (const component of ["toggle", "thumbnail", "media-image"]) {
+      expect(sourceOf(`src/components/ui/${component}.tsx`)).toContain("duration-200");
+    }
+    expect(sourceOf("src/components/ui/progress.tsx")).toContain("duration-300");
+    expect(sourceOf("src/components/screens/ExecuteScreen.tsx")).toContain("duration-500");
+  });
+
+  it("moves the indeterminate bar without laying out each animation frame", () => {
+    const frames = cssSource.slice(
+      cssSource.indexOf("@keyframes progress-indeterminate"),
+      cssSource.indexOf(".progress-indeterminate"),
+    );
+    expect(frames).toContain("transform: translateX(");
+    expect(frames).not.toMatch(/\b(?:left|right|width|height):/);
+  });
+
+  it("removes motion and smooth scrolling on elements and pseudo-elements", () => {
+    const reduced = cssSource.slice(cssSource.indexOf("@media (prefers-reduced-motion: reduce)"));
+    for (const rule of [
+      "*::before",
+      "*::after",
+      "animation: none !important",
+      "transition: none !important",
+      "scroll-behavior: auto !important",
+    ]) {
+      expect(reduced).toContain(rule);
+    }
   });
 });
 

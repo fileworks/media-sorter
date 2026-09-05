@@ -355,16 +355,13 @@
 
 @keyframes progress-indeterminate {
   0% {
-    left: -40%;
-    width: 40%;
+    transform: translateX(-100%);
   }
   50% {
-    left: 60%;
-    width: 40%;
+    transform: translateX(150%);
   }
   100% {
-    left: 100%;
-    width: 40%;
+    transform: translateX(250%);
   }
 }
 
@@ -555,6 +552,7 @@ input[type="range"]::-moz-range-track {
 
 @media (prefers-reduced-motion: no-preference) {
   .progress-indeterminate::after {
+    width: 40%;
     animation: progress-indeterminate 1.5s ease-in-out infinite;
   }
 }
@@ -565,9 +563,8 @@ input[type="range"]::-moz-range-track {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
   }
 }
 

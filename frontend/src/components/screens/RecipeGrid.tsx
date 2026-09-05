@@ -46,13 +46,14 @@ export function RecipeGrid({
         const reading = pendingId === recipe.id;
         return (
           <li key={recipe.id} className="relative">
+            {/* A selectable recipe card owns a multi-line layout, not action-button chrome. */}
             <button
               type="button"
               disabled={disabled}
               aria-pressed={active}
               onClick={() => onSelect(recipe)}
               className={cn(
-                "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-2.5 rounded-window px-3.5 py-3 text-left transition-colors",
+                "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-2 rounded-window px-4 py-3 text-left transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint",
                 recipe.outline
@@ -89,7 +90,10 @@ export function RecipeGrid({
                     {recipeName(recipe, t)}
                   </span>
                   {recipe.recommended && (
-                    <span className="shrink-0 rounded-control bg-tint-success px-1.5 py-0.5 text-3xs font-semibold text-success">
+                    <span
+                      data-recipe-recommendation
+                      className="shrink-0 rounded-control bg-tint-suggest px-2 py-0.5 text-3xs font-semibold text-suggest"
+                    >
                       {t("recipes.recommended")}
                     </span>
                   )}

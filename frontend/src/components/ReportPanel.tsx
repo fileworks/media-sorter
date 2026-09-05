@@ -413,25 +413,21 @@ function FileTableSection({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex flex-wrap gap-1">
           {FILTER_TABS.map((tabOption) => (
-            <button
+            <Button
               key={tabOption.id}
-              type="button"
+              size="sm"
+              variant={tab === tabOption.id ? "default" : "ghost"}
+              aria-pressed={tab === tabOption.id}
               onClick={() => {
                 setTab(tabOption.id);
                 setPage(0);
               }}
-              className={cn(
-                "rounded-panel px-3 py-1 text-xs font-medium transition-colors",
-                tab === tabOption.id
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
             >
               {t(`report.filter.${tabOption.id}`)}{" "}
               <span className="tabular-nums">
                 ({tabCounts[tabOption.id].toLocaleString(locale)})
               </span>
-            </button>
+            </Button>
           ))}
         </div>
         <div className="relative">

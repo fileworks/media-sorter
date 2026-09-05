@@ -470,9 +470,9 @@ export function ConfigureScreen({
             {CONFIG_GROUPS.map((group) => (
               <div
                 key={group.id}
-                className="border-t border-border/70 py-1.5 first:border-t-0 first:pt-0.5"
+                className="border-t border-border/70 py-2 first:border-t-0 first:pt-0.5"
               >
-                <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2">
+                <div className="flex items-baseline gap-2 px-3 pb-2 pt-2">
                   <span
                     id={`config-rail-group-${group.id}`}
                     className={cn(
@@ -578,26 +578,26 @@ export function ConfigureScreen({
                   </div>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
                   onClick={() => setNaming(true)}
                   disabled={readOnly}
-                  className="flex w-full items-center justify-center gap-2 rounded-panel border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
+                  className="w-full"
                 >
                   <FiSave className="h-3.5 w-3.5" aria-hidden />
                   {t("recipes.saveAs")}
-                </button>
+                </Button>
               )}
 
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={resetAll}
                 disabled={readOnly}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-panel px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
+                className="mt-2 w-full"
               >
                 <FiRotateCcw className="h-3.5 w-3.5" aria-hidden />
                 {t("config.reset.all")}
-              </button>
+              </Button>
             </div>
           </div>
         </nav>

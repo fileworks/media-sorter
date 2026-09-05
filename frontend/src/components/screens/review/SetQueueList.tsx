@@ -138,8 +138,8 @@ export function SetQueueList({
         {/* Stacked, not a row: at 18.5rem a sentence and a link beside it break
             into a three-line stagger. */}
         {scopedCount > 0 && (
-          <div className="mt-2 rounded-panel border border-primary/40 bg-tint-primary px-2 py-1.5">
-            <p className="flex items-start gap-1.5 text-3xs text-foreground">
+          <div className="mt-2 rounded-panel border border-primary/40 bg-tint-primary px-2 py-2">
+            <p className="flex items-start gap-2 text-3xs text-foreground">
               <FiFilter className="mt-px h-3 w-3 shrink-0 text-primary" aria-hidden />
               <span className="min-w-0">{tCount("review.resolve.scopeChip", scopedCount)}</span>
             </p>

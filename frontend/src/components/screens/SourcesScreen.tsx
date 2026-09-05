@@ -25,6 +25,7 @@ import {
 } from "react-icons/fi";
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -302,23 +303,13 @@ function FolderCard({
               {t("sources.baseline")}
             </label>
           )}
-          <button
-            type="button"
-            onClick={onChangeFolder}
-            disabled={disabled}
-            className="rounded-panel border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
-          >
+          <Button variant="outline" onClick={onChangeFolder} disabled={disabled}>
             {t("sources.change")}
-          </button>
+          </Button>
           {onRemove && (
-            <button
-              type="button"
-              onClick={onRemove}
-              disabled={disabled}
-              className="rounded-panel border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
-            >
+            <Button variant="outline" onClick={onRemove} disabled={disabled}>
               {t("sources.remove")}
-            </button>
+            </Button>
           )}
           <IconButton
             label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
@@ -457,23 +448,18 @@ export function SourcesScreen({
           ))}
         </ul>
         <div className="mt-3 flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={() => {
               onChange(preview.cards);
               setPendingRole(null);
             }}
-            className="rounded-panel border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-muted"
           >
             {t("sources.roleChangeAnyway")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingRole(null)}
-            className="rounded-panel px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => setPendingRole(null)}>
             {t("common.cancel")}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -542,24 +528,22 @@ export function SourcesScreen({
               <span className="flex-1" />
               {sourceCards.length > 0 && (
                 <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
                     onClick={() => onAddFolder("input")}
                     disabled={disabled}
-                    className="inline-flex items-center gap-2 rounded-panel border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
                     <FiPlus className="h-3.5 w-3.5" aria-hidden />
                     {t("sources.addFolder")}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => onAddFolder("reference")}
                     disabled={disabled}
-                    className="inline-flex items-center gap-2 rounded-panel border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
                     <FiPlus className="h-3.5 w-3.5" aria-hidden />
                     {t("sources.addBaseline")}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

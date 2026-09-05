@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 import { useI18n } from "@/i18n/I18nContext";
 import { userFacingError } from "@/lib/errorUtils";
@@ -145,13 +146,9 @@ export function StateView({
       {(retry || action) && (
         <div className={cn("mt-3 flex flex-wrap gap-2", centred && "justify-center")}>
           {retry && (
-            <button
-              type="button"
-              onClick={retry}
-              className="rounded-panel border border-current px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="outline" size="sm" onClick={retry}>
               {t("state.retry")}
-            </button>
+            </Button>
           )}
           {action}
         </div>

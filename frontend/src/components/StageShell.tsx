@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { FiAlertTriangle, FiEdit2, FiLock } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 import { StageStepper } from "@/components/shell/StageStepper";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/I18nContext";
@@ -259,14 +260,10 @@ export function StageShell({
                     assumes otherwise never tries. */}
                 <p className="mt-0.5 text-3xs text-faint">{t("stage.locked.selectable")}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setUnlockAsked(true)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-panel border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <Button variant="outline" onClick={() => setUnlockAsked(true)}>
                 <FiEdit2 className="h-3.5 w-3.5" aria-hidden />
                 {t("stage.locked.action")}
-              </button>
+              </Button>
             </div>
           )}
 
