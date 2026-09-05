@@ -1,4 +1,5 @@
 import { useI18n } from "@/i18n/I18nContext";
+import { Input } from "@/components/ui/input";
 
 export function AiTagsInput({
   labels,
@@ -27,6 +28,7 @@ export function AiTagsInput({
             className="flex items-center gap-1 rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground"
           >
             {tag}
+            {/* A chip's inline remove target, not a standalone form action. */}
             <button
               type="button"
               disabled={disabled}
@@ -38,15 +40,16 @@ export function AiTagsInput({
             </button>
           </span>
         ))}
-        <input
+        <Input
           type="text"
           disabled={disabled}
           placeholder={t("config.input.addLabel")}
-          className="h-7 min-w-[8rem] rounded-full border border-input bg-background px-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent"
+          aria-label={t("config.input.addLabel")}
+          className="min-w-[8rem] flex-1"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
               e.preventDefault();
-              const input = e.target as HTMLInputElement;
+              const input = e.currentTarget;
               add(input.value);
               input.value = "";
             }

@@ -199,7 +199,10 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                         {t(`config.ai.tierName.${tier}`, undefined, TIER_LABEL[tier])}
                       </span>
                       {recommended && (
-                        <span className="text-3xs font-medium text-success">
+                        <span
+                          data-tier-recommendation
+                          className="text-3xs font-medium text-suggest"
+                        >
                           {t("config.ai.tierRecommended")}
                         </span>
                       )}

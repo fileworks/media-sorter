@@ -1,10 +1,8 @@
-import type { InputHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  className?: string;
-}
+type InputProps = ComponentProps<"input">;
 
 /**
  * The text field, deliberately the same object as `Select`: same height, same

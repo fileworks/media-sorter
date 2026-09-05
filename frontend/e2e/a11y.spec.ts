@@ -558,6 +558,10 @@ test.describe("later stages", () => {
     await expect(page.getByRole("cell", { name: "IMG_0001.xmp", exact: true })).toBeVisible();
     await expect(page.getByText(/edit sidecar/i).first()).toBeVisible();
     await expect(page.getByText(/motion metadata remained unknown/i)).toBeVisible();
+    const reportSearch = page.getByRole("searchbox");
+    expect(await reportSearch.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+      32,
+    );
     for (const { width, zoom } of [
       { width: 360, zoom: 1 },
       { width: 1280, zoom: 2 },

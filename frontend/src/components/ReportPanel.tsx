@@ -3,6 +3,7 @@ import { FiLoader, FiSearch } from "react-icons/fi";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { companionRoleLabel } from "@/lib/evidenceLabels";
 import { ValidationBadge } from "@/components/ui/validation-badge";
@@ -432,7 +433,7 @@ function FileTableSection({
         </div>
         <div className="relative">
           <FiSearch className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <input
+          <Input
             type="search"
             placeholder={t("report.searchPlaceholder")}
             aria-label={t("report.searchLabel")}
@@ -441,7 +442,7 @@ function FileTableSection({
               setSearch(e.target.value);
               setPage(0);
             }}
-            className="h-7 w-48 rounded-panel border border-input bg-background pl-6 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 w-48 pl-6"
           />
         </div>
       </div>

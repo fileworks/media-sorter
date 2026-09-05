@@ -12,6 +12,7 @@ import { useState, useEffect, useId, useRef } from "react";
 import { FiCamera, FiCopy, FiFilm } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import {
   RENAME_TOKENS,
@@ -21,7 +22,6 @@ import {
 } from "@/lib/renamePattern";
 import { exampleFilename, predictedExtension, type SampleFile } from "@/lib/configSummary";
 import { useI18n } from "@/i18n/I18nContext";
-import { cn } from "@/lib/utils";
 import type { Config } from "@/types/api";
 
 /**
@@ -128,7 +128,7 @@ export function RenameBuilder({
       <label htmlFor="rename-pattern" className="block text-xs font-medium text-foreground">
         {t("config.rename.patternLabel")}
       </label>
-      <input
+      <Input
         ref={inputRef}
         id="rename-pattern"
         value={local}
@@ -136,11 +136,7 @@ export function RenameBuilder({
         placeholder="TYPE_YYYY-MM-DD"
         aria-invalid={val.error ? true : undefined}
         aria-describedby={val.error || val.warning ? feedbackId : undefined}
-        className={cn(
-          "block w-full rounded-panel border border-input bg-background px-3 py-2",
-          "font-mono text-sm text-foreground placeholder:text-muted-foreground",
-          "focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring",
-        )}
+        className="font-mono"
       />
 
       <div className="flex flex-wrap gap-1">

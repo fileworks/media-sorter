@@ -265,6 +265,20 @@ describe("button variants", () => {
 });
 
 describe("spacing and semantic advice", () => {
+  it("uses the shared form input for tag entry rather than a third control height", () => {
+    for (const field of [
+      "AiTagsInput",
+      "CategoryTagsInput",
+      "ExcludePatternTags",
+      "RenameBuilder",
+    ]) {
+      const source = sourceOf(`src/components/config/fields/${field}.tsx`);
+      expect(source).toContain("<Input");
+      expect(source).not.toContain("<input");
+      expect(source).not.toMatch(/\bh-(?:7|10)\b/);
+    }
+  });
+
   it("keeps padding, margins and gaps on whole steps, with only the 2px optical sub-step", () => {
     expect(filesMatching(/\b(?:[pm][trblxyse]?|gap(?:-[xy])?|space-[xy])-[1-9]\d*\.5\b/)).toEqual(
       [],
@@ -275,6 +289,13 @@ describe("spacing and semantic advice", () => {
     const recipe = sourceOf("src/components/screens/RecipeGrid.tsx");
     const badge = /<span\s+data-recipe-recommendation\b[^>]*>/.exec(recipe)?.[0];
     expect(badge).toContain("bg-tint-suggest");
+    expect(badge).toContain("text-suggest");
+    expect(badge).not.toContain("success");
+  });
+
+  it("presents a recommended model tier as advice, not a completed choice", () => {
+    const source = sourceOf("src/components/config/groups/EnrichGroup.tsx");
+    const badge = /<span\s+data-tier-recommendation\b[^>]*>/.exec(source)?.[0];
     expect(badge).toContain("text-suggest");
     expect(badge).not.toContain("success");
   });

@@ -206,4 +206,18 @@ describe("rename preview", () => {
     const feedback = document.getElementById(input.getAttribute("aria-describedby") ?? "");
     expect(feedback?.textContent).toMatch(/slashes/i);
   });
+
+  it("replaces the selected pattern through the shared input ref instead of appending", () => {
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    try {
+      const onCommit = renderRename({ rename_pattern: "NAME" });
+      const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Filename pattern" });
+      input.focus();
+      input.setSelectionRange(0, 4);
+      fireEvent.click(screen.getByRole("button", { name: /Year \(4 digits\)/ }));
+      expect(onCommit).toHaveBeenCalledWith("YYYY");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
