@@ -322,14 +322,19 @@ export function ResolveQueue({
     [current, decideAndAdvance, onKeep],
   );
 
+  const candidates = useMemo(
+    () => (current === null ? [] : sortRows(current.rows, sort, locale)),
+    [current, sort, locale],
+  );
+
   const chooseByNumber = useCallback(
     (position: number): boolean => {
-      const row = current?.rows[position];
+      const row = candidates[position];
       if (row === undefined || row.status === "baseline") return false;
       keepCopy(row.source);
       return true;
     },
-    [current, keepCopy],
+    [candidates, keepCopy],
   );
 
   // Activating Resolve moves focus into the queue, the standard tab-to-panel
@@ -385,7 +390,6 @@ export function ResolveQueue({
   }, [chooseByNumber, navNext, navPrevious, onOpenSet]);
 
   const proposedRow = current?.rows.find((row) => row.stack?.isProposedKeeper === true) ?? null;
-  const candidates = current === null ? [] : sortRows(current.rows, sort, locale);
 
   return (
     // `tabIndex={-1}` so the queue is a focus target in its own right: the

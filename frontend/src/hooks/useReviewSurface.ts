@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 import {
@@ -62,8 +63,8 @@ function stored<T extends string>(key: string, fallback: T, allowed: readonly T[
  * The Review screen's run state: what keeper was overridden, what is selected,
  * and what is being looked at.
  *
- * Keeper overrides are run state, sent to `sorting/start` and forgotten. The
- * view and filter are preferences and do persist.
+ * Decisions and browsing state persist with their plan. Global view and sort
+ * preferences also seed a new plan.
  */
 export function useReviewSurface(
   result: PreviewResult,
@@ -71,6 +72,7 @@ export function useReviewSurface(
   defaultKeepPolicy: KeeperPolicyId,
   catalogReady = true,
   recoveredState: PlanReviewState | null = null,
+  recoveredStateSaved = true,
 ) {
   const [initialState] = useState<PlanReviewState | null>(() =>
     recoveredState?.config_fingerprint === result.config_fingerprint ? recoveredState : null,
@@ -93,10 +95,7 @@ export function useReviewSurface(
   const [detailPath, setDetailPath] = useState<string | null>(initialState?.detail_path ?? null);
   /** The file being examined full screen, which may be opened over the detail view. */
   const [viewerPath, setViewerPath] = useState<string | null>(initialState?.viewer_path ?? null);
-  // Keeper choices, held here and sent with the run — never round-tripped.
-  // They used to POST to `/api/review/decide`, which wrote a server-side plan
-  // nothing read back: the refetch that followed returned identical data, so
-  // the screen showed the same thing before and after every decision.
+  // Explicit keeper choices are persisted with the plan and sent with the run.
   const [decisions, setDecisions] = useState<Map<string, DuplicateDecision>>(
     () => new Map(decisionEntries(initialState)),
   );
@@ -122,10 +121,14 @@ export function useReviewSurface(
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const desiredStateRef = useRef<{ fingerprint: string; state: PlanReviewState } | null>(null);
   const savedFingerprintRef = useRef<string | null>(
-    initialState === null ? null : JSON.stringify(initialState),
+    initialState === null || !recoveredStateSaved ? null : JSON.stringify(initialState),
   );
   const savingRef = useRef(false);
   const mountedRef = useRef(true);
+  const { mutateAsync: saveState } = useMutation({
+    scope: { id: `review-state:${result.plan_id}` },
+    mutationFn: (state: PlanReviewState) => api.savePlanReviewState(result.plan_id, state),
+  });
 
   useEffect(() => {
     // React StrictMode intentionally runs mount cleanup/setup twice in
@@ -134,8 +137,15 @@ export function useReviewSurface(
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Finish the latest draft even if navigation unmounts its screen during
+      // a save. The per-plan mutation scope orders it before a remounted
+      // screen's writes; a late old response cannot overwrite a new choice.
+      const desired = desiredStateRef.current;
+      if (desired !== null && desired.fingerprint !== savedFingerprintRef.current) {
+        void saveState(desired.state).catch(() => undefined);
+      }
     };
-  }, []);
+  }, [saveState]);
 
   // Delete the superseded browser-authoritative snapshot for this plan. The
   // backend envelope now owns decisions and view state; browser storage keeps
@@ -190,7 +200,7 @@ export function useReviewSurface(
         setPersistenceState("saving");
         setPersistenceError(null);
         try {
-          await api.savePlanReviewState(result.plan_id, desired.state);
+          await saveState(desired.state);
         } catch (cause) {
           if (mountedRef.current) {
             setPersistenceState("error");
@@ -204,7 +214,7 @@ export function useReviewSurface(
       savingRef.current = false;
       if (mountedRef.current) setPersistenceState("saved");
     })();
-  }, [result.plan_id]);
+  }, [saveState]);
 
   useEffect(() => {
     desiredStateRef.current = {
@@ -492,6 +502,7 @@ export function useReviewSurface(
   const decidedSetIds = useMemo(() => new Set(decisions.keys()), [decisions]);
 
   return {
+    durableState,
     mode,
     setMode,
     queueSetId,

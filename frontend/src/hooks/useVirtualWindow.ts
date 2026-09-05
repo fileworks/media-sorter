@@ -30,7 +30,8 @@ export function fixedWindow(
   overscan = 5,
 ): FixedWindow {
   const safeRow = Math.max(rowHeight, 1);
-  const start = Math.max(0, Math.floor(scrollTop / safeRow) - overscan);
+  const boundedScroll = Math.min(scrollTop, Math.max(0, total * safeRow - viewportHeight));
+  const start = Math.max(0, Math.floor(boundedScroll / safeRow) - overscan);
   const end = Math.min(total, start + Math.ceil(viewportHeight / safeRow) + overscan * 2);
   return {
     start,

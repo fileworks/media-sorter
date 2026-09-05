@@ -21,6 +21,7 @@ import { ResolveQueue } from "@/components/screens/review/ResolveQueue";
 import { I18nProvider } from "@/i18n/I18nContext";
 import type { SetEntry } from "@/lib/reviewBrowse";
 import type { ReviewRow } from "@/lib/reviewRows";
+import type { ReviewSort } from "@/lib/reviewSort";
 
 function row(id: string, source: string, index: number, size: number): ReviewRow {
   const name = source.split("/").pop() ?? source;
@@ -84,7 +85,10 @@ function entry(id = "set-1"): SetEntry {
   };
 }
 
-function renderQueue(onKeep: (setId: string, source: string) => void = () => undefined) {
+function renderQueue(
+  onKeep: (setId: string, source: string) => void = () => undefined,
+  sort: ReviewSort = "name",
+) {
   const set = entry();
   return render(
     <I18nProvider initialLocale="en">
@@ -112,7 +116,7 @@ function renderQueue(onKeep: (setId: string, source: string) => void = () => und
         keepSourceByRule={() => null}
         individualOnly={{ perceptual: 0, unmeasured: 0 }}
         destinationRoot="/out"
-        sort="name"
+        sort={sort}
         onSort={() => undefined}
       />
     </I18nProvider>,
@@ -130,6 +134,15 @@ afterEach(cleanup);
  * evidence rather than a shortcut that happened to do nothing.
  */
 describe("the queue's digit shortcuts are scoped to its own focus", () => {
+  it("keeps the visibly first copy when size order reverses catalog order", () => {
+    const onKeep = vi.fn();
+    renderQueue(onKeep, "size");
+    const copies = document.querySelectorAll("[data-copy-row]");
+    expect(copies[0]?.getAttribute("data-copy-row")).toBe("/b/set-1.jpg");
+    fireEvent.keyDown(window, { key: "1" });
+    expect(onKeep).toHaveBeenCalledWith("set-1", "/b/set-1.jpg");
+  });
+
   it("ignores a digit typed while focus is outside the queue", () => {
     const onKeep = vi.fn();
     renderQueue(onKeep);

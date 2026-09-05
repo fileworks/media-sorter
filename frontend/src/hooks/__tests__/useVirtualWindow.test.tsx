@@ -18,7 +18,7 @@ import { act, useEffect } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 
-import { useVirtualWindow } from "@/hooks/useVirtualWindow";
+import { fixedWindow, useVirtualWindow } from "@/hooks/useVirtualWindow";
 
 interface HarnessProps {
   keys: string[];
@@ -68,6 +68,19 @@ const sizes = () => latest().virtualItems.map((virtual) => virtual.size);
 afterEach(cleanup);
 
 describe("measured row heights", () => {
+  it("keeps the last page visible when filtering leaves the old scroll offset past the end", () => {
+    const range = fixedWindow(3, 56_000, 400, 56);
+    expect(range.start).toBe(0);
+    expect(range.end).toBe(3);
+    expect(range.offsetTop).toBe(0);
+    expect(fixedWindow(0, 56_000, 400, 56)).toEqual({
+      start: 0,
+      end: 0,
+      offsetTop: 0,
+      totalHeight: 0,
+    });
+  });
+
   it("keeps a row's height when a new row is inserted above it", () => {
     const keys = ["a", "b", "c"];
     const { rerender } = render(<Harness keys={keys} keyed />);

@@ -36,11 +36,11 @@ export function useLogs(): UseLogsReturn {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      if (!unmountedRef.current) setIsConnected(true);
+      if (!unmountedRef.current && wsRef.current === ws) setIsConnected(true);
     };
 
     ws.onmessage = (event: MessageEvent) => {
-      if (unmountedRef.current) return;
+      if (unmountedRef.current || wsRef.current !== ws) return;
       try {
         const entry = JSON.parse(event.data as string) as LogEntry;
         // Filter ping/heartbeat messages — never displayed
@@ -55,7 +55,8 @@ export function useLogs(): UseLogsReturn {
     };
 
     ws.onclose = () => {
-      if (unmountedRef.current) return;
+      if (unmountedRef.current || wsRef.current !== ws) return;
+      wsRef.current = null;
       setIsConnected(false);
       // Re-connect after delay
       reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
@@ -69,6 +70,7 @@ export function useLogs(): UseLogsReturn {
 
   useEffect(() => {
     unmountedRef.current = false;
+    let active = true;
 
     // Await the resolved session rather than racing it. The old code waited
     // 200 ms and hoped; a hope is not a happens-before edge, and on a slow
@@ -78,16 +80,18 @@ export function useLogs(): UseLogsReturn {
     void api
       .whenReady()
       .then(() => {
-        if (!unmountedRef.current) connect();
+        if (active) connect();
       })
       .catch(() => {
-        if (!unmountedRef.current) setIsConnected(false);
+        if (active) setIsConnected(false);
       });
 
     return () => {
+      active = false;
       unmountedRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 

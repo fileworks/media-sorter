@@ -142,6 +142,7 @@ let decisions: {
   undecidedSets: number;
   persistenceState: "saving" | "saved" | "error";
   persistenceError: string | null;
+  reviewState?: PlanReviewState;
 } = {
   reviewedSets: [],
   outstandingSets: 0,
@@ -158,6 +159,8 @@ function renderReview(
     onOpenSetting?: (anchor: string) => void;
     onRerunPreview?: () => void;
     recoveredState?: PlanReviewState | null;
+    recoveredStateSaved?: boolean;
+    client?: QueryClient;
     strict?: boolean;
   } = {},
 ) {
@@ -169,13 +172,16 @@ function renderReview(
     persistenceState: "saving",
     persistenceError: null,
   };
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client =
+    callbacks.client ??
+    new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const review = (
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="en">
         <ReviewScreen
           result={result}
           config={config}
+          recoveredStateSaved={callbacks.recoveredStateSaved}
           recoveredState={
             callbacks.recoveredState === undefined
               ? durableReviewState({
@@ -603,13 +609,52 @@ describe("resolve", () => {
       );
     }
 
-    expect(save).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0][1].decisions).toHaveLength(1);
     await act(async () => firstSave.resolve(save.mock.calls[0][1]));
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1][1].decisions).toHaveLength(2);
     await waitFor(() => expect(decisions.persistenceState).toBe("saved"));
+  });
+
+  it("finishes pending drafts in order across navigation without claiming an unsaved draft is durable", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstSave = deferred<PlanReviewState>();
+    const save = vi
+      .mocked(api.savePlanReviewState)
+      .mockImplementationOnce(() => firstSave.promise)
+      .mockImplementation(async (_planId, state) => state);
+    const first = renderReview(result, undefined, {
+      client,
+      recoveredState: durableReviewState({ mode: "resolve", keep_policy: "manual" }),
+    });
+    await waitForReview();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+      }),
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en("review.resolve.keepThis", { name: "d.jpg", number: 2 }),
+      }),
+    );
+    const draft = decisions.reviewState;
+    expect(draft?.decisions).toHaveLength(2);
+    first.unmount();
+    renderReview(result, undefined, { client, recoveredState: draft, recoveredStateSaved: false });
+    await waitForReview();
+    switchTo("browse");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "b.jpg" } });
+    expect(decisions.persistenceState).toBe("saving");
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(async () => firstSave.resolve(save.mock.calls[0][1]));
+    await waitFor(() => expect(decisions.persistenceState).toBe("saved"));
+    const final = save.mock.calls[save.mock.calls.length - 1]?.[1];
+    expect(final?.decisions).toHaveLength(2);
+    expect(final?.search).toBe("b.jpg");
   });
 
   it("stays put when the set just decided was the last one open", async () => {

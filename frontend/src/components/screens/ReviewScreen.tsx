@@ -70,6 +70,7 @@ interface ReviewScreenProps {
   onRerunPreview: () => void;
   onOpenSources?: () => void;
   recoveredState?: PlanReviewState | null;
+  recoveredStateSaved?: boolean;
   planPersistenceState?: PlanPersistenceState;
   planPersistenceError?: string | null;
   onRetryPlanPersistence?: () => void;
@@ -81,6 +82,7 @@ interface ReviewScreenProps {
     undecidedSets: number;
     persistenceState: "saving" | "saved" | "error";
     persistenceError: string | null;
+    reviewState: PlanReviewState;
   }) => void;
 }
 
@@ -104,6 +106,7 @@ export function ReviewScreen({
   onRerunPreview,
   onOpenSources,
   recoveredState = null,
+  recoveredStateSaved = true,
   planPersistenceState = "saved",
   planPersistenceError = null,
   onRetryPlanPersistence,
@@ -134,6 +137,7 @@ export function ReviewScreen({
     config.duplicate_keeper_policy,
     !groups.isLoading && !groups.isError,
     recoveredState,
+    recoveredStateSaved,
   );
 
   useEffect(() => setDecidedSetIds(surface.decidedSetIds), [surface.decidedSetIds]);
@@ -177,6 +181,7 @@ export function ReviewScreen({
       undecidedSets: stats.undecided,
       persistenceState: surface.persistenceState,
       persistenceError: surface.persistenceError,
+      reviewState: surface.durableState,
     });
   }, [
     groups.isError,
@@ -188,6 +193,7 @@ export function ReviewScreen({
     surface.persistenceError,
     surface.persistenceState,
     surface.reviewedSets,
+    surface.durableState,
   ]);
   // Every set the panel lists, in the order it lists them: "Set 3 of 15" names
   // the third row, and the total stops shrinking under the reader as decisions

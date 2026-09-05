@@ -569,10 +569,8 @@ export default function MainPage() {
     toast(extractErrorMessage(impactError, t("review.impactRefused")).message, "warning");
   }, [impactError, t, toast]);
 
-  // Review publishes its derived decision wire from an effect. Keep this
-  // boundary stable and ignore a byte-identical publication; an inline
-  // callback made the effect publish, rerender MainPage, receive a new callback
-  // and publish forever in a real run.
+  // A stable publication boundary prevents an effect/render feedback loop.
+  // Keep the draft with its plan when navigation unmounts Review.
   const publishRunDecisions = useCallback(
     (decisions: ReviewDecisionUpdate) => {
       const planId = preview.result?.plan_id ?? null;
@@ -583,6 +581,7 @@ export default function MainPage() {
         current.undecidedSets === decisions.undecidedSets &&
         current.persistenceState === decisions.persistenceState &&
         current.persistenceError === decisions.persistenceError &&
+        current.reviewState === decisions.reviewState &&
         sameReviewedSets(current.reviewedSets, decisions.reviewedSets)
           ? current
           : { ...decisions, planId },
@@ -912,7 +911,15 @@ export default function MainPage() {
                         key={preview.result.plan_id}
                         result={preview.result}
                         config={config}
-                        recoveredState={preview.recoveryEvidence?.review_state ?? null}
+                        recoveredState={
+                          runDecisions.planId === preview.result.plan_id
+                            ? (runDecisions.reviewState ?? preview.recoveryEvidence?.review_state)
+                            : preview.recoveryEvidence?.review_state
+                        }
+                        recoveredStateSaved={
+                          runDecisions.planId !== preview.result.plan_id ||
+                          runDecisions.persistenceState === "saved"
+                        }
                         planPersistenceState={preview.persistenceState}
                         planPersistenceError={preview.persistenceError}
                         onRetryPlanPersistence={preview.retryPersistence}
