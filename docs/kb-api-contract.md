@@ -5,7 +5,7 @@
 - **`snake_case` JSON everywhere** (fields mirror the Python names); the TypeScript client (`frontend/src/services/api.ts`) declares the same shapes — no camelCase aliasing layer
 - OpenAPI served at `/api/openapi.json`, interactive docs at `/api/docs`
 - Localhost-only, single-user desktop backend — but **not unauthenticated**. Loopback binding is not a boundary: any local process can reach the port. Every HTTP and WebSocket request carries a per-launch capability secret (`X-MediaSorter-Capability`; WebSockets pass it in the subprotocol, having no headers), compared in constant time. A request with an `Origin` must also match the exact allowlist. The one exemption is a genuine CORS preflight — an `OPTIONS` carrying both an allowed `Origin` and an `Access-Control-Request-Method` — because a browser cannot attach the header to one; the request that follows it is authenticated normally. See `backend/app/core/api_security.py` and `SECURITY.md`
-- Reading arbitrary local paths (thumbnails, media info) is intentional for an authenticated local caller
+- Media reads require authentication and are restricted to configured library roots and the application's data directory; resolved paths outside those roots return 403.
 
 ## Error Envelope
 Every error goes through the global `MediaSortException` handler:
