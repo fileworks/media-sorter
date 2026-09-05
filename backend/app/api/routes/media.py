@@ -253,7 +253,8 @@ async def media_content(
     source = await asyncio.to_thread(assert_media_readable, path, config)
     if source.suffix.lower() not in VIDEO_EXTENSIONS or not await asyncio.to_thread(source.is_file):
         raise UnsupportedMediaError("No playable video is available for this file", file_path=path)
-    media_type = mimetypes.guess_type(source.name)[0] or "video/mp4"
+    # The first lookup initializes the MIME table from system files.
+    media_type = (await asyncio.to_thread(mimetypes.guess_type, source.name))[0] or "video/mp4"
     return FileResponse(source, media_type=media_type, headers={"Cache-Control": "private"})
 
 
