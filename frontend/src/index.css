@@ -10,6 +10,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Split the preview only when its own settings column has room, including
+   under page zoom. Viewport breakpoints can leave this column zero-width. */
+.settings-content {
+  container: settings / inline-size;
+}
+
+.sort-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container settings (max-width: 36rem) {
+  .settings-content .settings-row-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .settings-content .settings-control-group {
+    flex-shrink: 1;
+    max-width: 100%;
+  }
+
+  .settings-content [data-segmented] > label {
+    flex: 1 1 0%;
+    white-space: normal;
+  }
+}
+
+@container settings (min-width: 48rem) {
+  .sort-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 26rem);
+  }
+}
+
 /* Near-neutral themes with WCAG AA text contrast. */
 @layer base {
   :root {

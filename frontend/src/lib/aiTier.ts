@@ -4,14 +4,13 @@
  * Mirrors the backend's `HardwareProfile.effective_tier`: "auto" resolves to the
  * probe's recommendation; an explicit tier is honoured. When the effective tier
  * is "off" the machine can't run local AI at all, so the UI disables the
- * local-only features (Smart Categorization) and steers tagging to a cloud
- * provider.
+ * local-only features (Smart Categorization). There is no cloud fallback.
  */
 import type { AiModelTier, Config, HardwareInfo } from "@/types/api";
 
 export type ResolvedTier = Exclude<AiModelTier, "auto">;
 
-export const TIER_RANK: Record<ResolvedTier, number> = { off: 0, lite: 1, standard: 2, max: 3 };
+export const TIER_RANK: Record<ResolvedTier, number> = { off: 0, lite: 1, standard: 2, max: 2 };
 
 export const TIER_LABEL: Record<AiModelTier, string> = {
   auto: "Auto",

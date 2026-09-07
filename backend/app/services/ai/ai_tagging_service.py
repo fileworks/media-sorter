@@ -5,8 +5,8 @@ independent sources:
 
 1. **Deterministic EXIF metadata** — GPS coordinates reverse-geocoded offline to
    a city name, and the camera's ``SceneCaptureType`` flag (Landscape / Portrait /
-   Night).  These run for every image regardless of the configured ML provider;
-   they are always accurate and require no inference time.
+   Night). These are metadata-derived hints, not proof of image content or an
+   exact location. They require no model inference.
 
 2. **CLIP zero-shot ML** — the configured :class:`~app.services.ai.base_tagger.AITagger`
    scores the user-supplied label vocabulary against the image (or a sample of
@@ -75,9 +75,8 @@ def _geocode_tags(lat: float, lon: float) -> list[tuple[str, float]]:
     needed at runtime).  Returns an empty list if the package is not installed
     or geocoding fails for any reason.
 
-    Tags returned: lowercased city name and, when distinct, the 2-letter
-    ISO country code.  Both carry score 1.0 — they are exact facts, not
-    probabilities.
+    Tags returned: nearest dataset city and its 2-letter country code. Score 1.0
+    gives metadata priority; it is not a calibrated location probability.
     """
     try:
         import reverse_geocoder
@@ -132,7 +131,7 @@ class AITaggingService:
         Merges deterministic EXIF/GPS tags (always attempted for images) with
         CLIP zero-shot tags (when a provider is available).  Never raises.
         """
-        if self._max_tags <= 0:
+        if not self._config.ai_tagging_enabled or self._max_tags <= 0:
             return []
 
         # Step 1: deterministic EXIF metadata tags (GPS + scene mode).
@@ -191,16 +190,18 @@ class AITaggingService:
                 exif = img.getexif()
 
                 # GPS → city name (offline, no network)
-                gps_ifd = exif.get_ifd(34853)  # 34853 = GPSInfo IFD tag
+                gps_ifd = exif.get_ifd(34853) if 34853 in exif else {}
                 if gps_ifd:
                     lat = _gps_to_decimal(gps_ifd.get(2), gps_ifd.get(1, "N"))
                     lon = _gps_to_decimal(gps_ifd.get(4), gps_ifd.get(3, "E"))
                     if lat is not None and lon is not None:
                         tags.extend(_geocode_tags(lat, lon))
 
-                # Camera scene capture mode (set by the camera, not user-editable)
+                # Camera scene mode lives in the Exif sub-IFD, not IFD0.
+                # This is a recorded camera setting, not proof of image content.
                 _SCENE_TAGS = {1: "landscape", 2: "portrait", 3: "night"}
-                scene_key = exif.get(41990)  # 41990 = SceneCaptureType
+                scene_ifd = exif.get_ifd(34665) if 34665 in exif else {}
+                scene_key = scene_ifd.get(41990)  # SceneCaptureType
                 scene = _SCENE_TAGS.get(scene_key) if isinstance(scene_key, int) else None
                 if scene:
                     tags.append(

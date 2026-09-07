@@ -225,7 +225,7 @@ function firstUsable(destinations: readonly ResetDestination[]): string | null {
  * would change nothing is shown and disabled with the reason, rather than the
  * button doing nothing when pressed.
  *
- * The shape is the Recipe stage's, deliberately and down to the pill: one
+ * The shape is the recipe preview's, deliberately and down to the pill: one
  * destination is *chosen*, the table marks that column as the one the button
  * will write, and one primary action commits it. The two surfaces answer the
  * same question — "these settings are about to change; here is to what" — and

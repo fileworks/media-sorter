@@ -240,7 +240,7 @@ export function ExecutePreflight({
         aria-atomic="true"
       >
         <p className="text-3xs font-bold uppercase tracking-[0.09em] text-warning">
-          {t("stage.position", { current: 6, total: 6 })}
+          {t("stage.position", { current: 4, total: 4 })}
         </p>
         <h2 id="irreversible-effects" className="mt-1 text-sm font-semibold text-warning">
           {t("preflight.irreversible.title")}

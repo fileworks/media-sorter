@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_ANALYSIS, E2E_PREVIEW_RESULT, stubBackend } from "./support";
+import { E2E_ANALYSIS, E2E_PREVIEW_RESULT, stubBackend, openSurface } from "./support";
 
 /**
  * A locked stage can be read — which means its text can be selected and copied.
@@ -34,9 +34,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector("main, button");
   // A calculated plan is what locks the stages that fed it.
-  await page.locator('[data-stage-id="configure"]').click();
-  await page.locator('[data-stage-id="plan"]').click();
-  await page.locator('[data-stage-id="configure"]').click();
+  await openSurface(page, "configure");
+  await openSurface(page, "plan");
+  await openSurface(page, "configure");
   await expect(page.getByRole("button", { name: /edit settings/i })).toBeVisible();
 });
 

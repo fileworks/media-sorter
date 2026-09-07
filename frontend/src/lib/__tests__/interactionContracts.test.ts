@@ -294,10 +294,17 @@ describe("spacing and semantic advice", () => {
   });
 
   it("presents a recommended model tier as advice, not a completed choice", () => {
-    const source = sourceOf("src/components/config/groups/EnrichGroup.tsx");
+    const source = sourceOf("src/components/config/fields/AiEngine.tsx");
     const badge = /<span\s+data-tier-recommendation\b[^>]*>/.exec(source)?.[0];
     expect(badge).toContain("text-suggest");
     expect(badge).not.toContain("success");
+  });
+
+  it("uses one model selector for tagging and categorization", () => {
+    const source = sourceOf("src/components/config/groups/EnrichGroup.tsx");
+    expect(source).toContain("<ModelTierSelect");
+    expect(source).not.toContain('name="ai-model-tier"');
+    expect(source).not.toContain("tierCost");
   });
 });
 
@@ -336,6 +343,42 @@ describe("motion has one scale and respects the system preference", () => {
       "scroll-behavior: auto !important",
     ]) {
       expect(reduced).toContain(rule);
+    }
+  });
+});
+
+describe("one four-step workflow", () => {
+  it("uses the same step scale outside the screen components too", () => {
+    for (const [path, source] of PRODUCT) {
+      for (const match of source.matchAll(/current:\s*(\d+),\s*total:\s*(\d+)/g)) {
+        expect(Number(match[1]), path).toBeLessThanOrEqual(4);
+        expect(Number(match[2]), path).toBe(4);
+      }
+    }
+  });
+
+  it("never directs readers to a retired fifth or sixth step", () => {
+    const messages = readFileSync(new URL("../../i18n/messages.ts", import.meta.url), "utf8");
+    expect(messages).not.toMatch(/(?:step|Schritt) [56]\b/);
+  });
+
+  it("keeps every surface header on the same four-step scale", () => {
+    const screens: Record<string, number> = {
+      SourcesScreen: 1,
+      RecipeScreen: 2,
+      ConfigureScreen: 2,
+      ReviewScreen: 3,
+      ReviewPlanLifecycle: 3,
+      PlanScreen: 3,
+      ExecuteScreen: 4,
+    };
+    for (const [screen, step] of Object.entries(screens)) {
+      const source = sourceOf(`src/components/screens/${screen}.tsx`);
+      const headers = [...source.matchAll(/<ScreenHeader\b[\s\S]*?\/>/g)];
+      expect(headers.length, screen).toBeGreaterThan(0);
+      for (const [header] of headers) {
+        expect(header, screen).toContain(`current: ${step}, total: 4`);
+      }
     }
   });
 });

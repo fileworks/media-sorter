@@ -69,6 +69,7 @@ interface ReviewScreenProps {
   onOpenSetting: (anchorId: string) => void;
   onRerunPreview: () => void;
   onOpenSources?: () => void;
+  onOpenPlan?: () => void;
   recoveredState?: PlanReviewState | null;
   recoveredStateSaved?: boolean;
   planPersistenceState?: PlanPersistenceState;
@@ -105,6 +106,7 @@ export function ReviewScreen({
   onOpenSetting,
   onRerunPreview,
   onOpenSources,
+  onOpenPlan,
   recoveredState = null,
   recoveredStateSaved = true,
   planPersistenceState = "saved",
@@ -626,7 +628,7 @@ export function ReviewScreen({
     return (
       <div className="space-y-5">
         <ScreenHeader
-          eyebrow={t("stage.position", { current: 5, total: 6 })}
+          eyebrow={t("stage.position", { current: 3, total: 4 })}
           title={t("review.title")}
           subtitle={t("review.subtitle")}
         />
@@ -644,7 +646,7 @@ export function ReviewScreen({
     return (
       <div className="space-y-5">
         <ScreenHeader
-          eyebrow={t("stage.position", { current: 5, total: 6 })}
+          eyebrow={t("stage.position", { current: 3, total: 4 })}
           title={t("review.title")}
           subtitle={t("review.subtitle")}
         />
@@ -662,9 +664,16 @@ export function ReviewScreen({
   return (
     <div className="space-y-4">
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 5, total: 6 })}
+        eyebrow={t("stage.position", { current: 3, total: 4 })}
         title={t("review.title")}
         subtitle={t("review.subtitle")}
+        actions={
+          onOpenPlan && (
+            <Button data-open-plan variant="outline" size="sm" onClick={onOpenPlan}>
+              {t("review.showPlanSummary")}
+            </Button>
+          )
+        }
       />
 
       {(planPersistenceState === "error" || surface.persistenceState === "error") && (

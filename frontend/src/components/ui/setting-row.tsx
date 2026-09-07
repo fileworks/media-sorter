@@ -213,7 +213,10 @@ export function SettingRow({
       )}
     >
       <div
-        className={cn("flex flex-col gap-2", !stacked && "sm:flex-row sm:items-center sm:gap-4")}
+        className={cn(
+          "settings-row-layout flex flex-col gap-2",
+          !stacked && "sm:flex-row sm:items-center sm:gap-4",
+        )}
       >
         <div className="min-w-0 flex-1">
           <div className="flex min-h-6 flex-wrap items-center gap-2">
@@ -235,7 +238,7 @@ export function SettingRow({
         </div>
         <div
           className={cn(
-            "flex min-w-0 flex-wrap items-center gap-3",
+            "settings-control-group flex min-w-0 flex-wrap items-center gap-3",
             stacked ? "w-full" : "sm:shrink-0",
           )}
         >
@@ -287,7 +290,7 @@ export function SubSetting({
 }) {
   const Label = htmlFor ? "label" : "div";
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+    <div className="settings-row-layout flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex min-h-6 items-center gap-2">
           <Label
@@ -300,7 +303,9 @@ export function SubSetting({
         </div>
         {description && <p className="mt-0.5 text-xs leading-relaxed text-faint">{description}</p>}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-3 sm:shrink-0">{children}</div>
+      <div className="settings-control-group flex min-w-0 flex-wrap items-center gap-3 sm:shrink-0">
+        {children}
+      </div>
     </div>
   );
 }
@@ -416,8 +421,9 @@ export function Segmented<T extends string>({
     // control drawn exactly like a live one — a solid brand-coloured segment
     // that nothing on screen said had stopped answering.
     <fieldset
+      data-segmented
       className={cn(
-        "flex max-w-full overflow-hidden rounded-control border border-border bg-card",
+        "flex min-w-0 max-w-full overflow-hidden rounded-control border border-border bg-card",
         "disabled:bg-muted",
         disabled && "bg-muted",
       )}

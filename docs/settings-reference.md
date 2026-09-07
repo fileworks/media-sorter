@@ -1,7 +1,7 @@
 # MediaSorter — Settings Reference
 
 Every option MediaSorter exposes, what it does, and its default. Settings are edited on
-the **Sources** stage (grouped into the sections below), or directly in `config.json` in
+**Setup → Adjust settings (optional)** (folders on **Sources**), or directly in `config.json` in
 your config directory. Any field can also be overridden by an environment variable named
 `MEDIASORT_<FIELD>` (e.g. `MEDIASORT_COPY_INSTEAD_OF_MOVE=true`).
 
@@ -26,9 +26,8 @@ not it takes originals away.
 
 | Recipe | The job | Fields it establishes | Consequence stated before applying |
 |---|---|---|---|
-| **Bring folders together** *(recommended)* | several messy folders or old drives into one library | copy, year/month folders, date rename, exact + near duplicate review, junk filter | Nothing in the input folders moves, is deleted, or is rewritten |
-| **Clean up a library** | the folders are already the right shape | `deduplicate_only`, exact + near duplicate review, junk filter, no rename | Only duplicate copies and junk leave where they were found; nothing is filed by date |
-| **Import a card or phone dump** | the recurring drop from an SD card or a phone | move, year/month folders, date rename, exact + near duplicate review, junk filter | Originals leave the input folder — each one after its copy has been verified |
+| **Organize or import media** *(recommended)* | combine scattered folders, then regularly add new media | copy, year/month folders, original names, exact + near duplicate review, junk filter | Source and reference folders stay unchanged; renaming and preserved event folders are optional |
+| **Clean up a library** | the folders are already the right shape | `deduplicate_only`, move, exact + near duplicate review, junk filter, no rename | Only unwanted copies and junk leave where they were found; nothing is filed by date |
 | **Archive and normalise** | odd formats and damaged files | copy, year/month folders, date rename, JPEG/MP4 conversion, repair | Rewrites image and video bytes; requires a reviewed mutation profile. Every original is retained until its replacement verifies |
 | **Start from scratch** | none of the above | copy, year folders, exact duplicates only — everything else off | The smallest coherent run, to build on |
 
@@ -38,6 +37,10 @@ is decided by a hardware probe, so a card that switched them on would sometimes
 describe a run the machine cannot perform.
 
 ### Saved recipes
+
+Consolidating and importing now share one starting point. The retired
+`import_dump` id stays reserved; saved settings are not rewritten. Move and
+custom naming remain explicit choices.
 
 A user can name the current run behaviour and reuse it later.
 
@@ -55,7 +58,7 @@ names are whitespace-collapsed, at most 60 characters, and may not shadow a buil
 
 ### Where settings appear
 
-The Configure screen groups every setting into three numbered cards in the order the
+The optional settings screen within Setup groups every setting into three numbered cards in the order the
 work happens: **01 Sort** (how files travel and land) → **02 Clean** (duplicates and
 junk) → **03 Enrich** (convert and tag). The rail beside them carries the *current
 value* of each entry, so reading it top to bottom answers "what is this run going to
@@ -74,7 +77,7 @@ is normally decided for each run or library.
 | Language | `language` | `"en"` | Interface language and language for application-generated labels in future operations: `en` or `de`. Switching is immediate and prospective; existing files, reports, user-entered names, and an operation already in progress are not translated. |
 | Source folder | `source_directory` | *(required)* | The messy folder to scan. Never modified except for a `move`. |
 | Destination folder | `target_directory` | *(required)* | Where the organised library is written. |
-| Copy instead of move | `copy_instead_of_move` | `false` | `true` leaves your originals untouched and writes copies; `false` moves files. Copy needs enough free disk space (checked in **Analyse**). |
+| Copy instead of move | `copy_instead_of_move` | `true` | New configurations and profiles copy by default. `false` explicitly moves files. Copy needs enough free disk space. Existing explicit choices and legacy migration semantics are preserved. |
 | Companion media | `companion_handling` | `"keep_with_primary"` | `keep_with_primary` binds recognized sidecars, Live Photo motion, RAW siblings, video thumbnails, and audio notes into one unit. `leave_in_place` reports the split and transfers only the primary. `ignore` reproduces media-only behavior. Override with `MEDIASORT_COMPANION_HANDLING`. |
 | Date folder levels | `sort_criteria` | `["year"]` | Folder depth of the date hierarchy: `["year"]` → `2024/`, `["year","month"]` → `2024/03/`, `["year","month","day"]` → `2024/03/15/`. |
 
@@ -299,10 +302,10 @@ Use either, both, or neither.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Local AI model tier | `ai_model_tier` | `"auto"` | Which local encoder to run. `auto` lets the hardware probe pick; explicit values are `lite` (CLIP ViT-B/32 — fast, runs anywhere), `standard` / `max` (SigLIP 2 — more accurate), or `off`. The selected model pack is installed explicitly, verified before publication, and loaded into memory only when first used. |
+| Local AI model tier | `ai_model_tier` | `"auto"` | Auto follows the hardware probe. Lite uses CLIP ViT-B/32; Standard and the legacy Max choice use the same SigLIP 2 base model and acceleration policy; Off disables inference. Max is not a quality upgrade. Packs are explicitly installed, verified and loaded lazily. |
 | Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML / CUDA / DirectML). Turn off to force CPU-only. Only shown when an accelerator is detected. |
 
-The Configure screen probes your machine (`GET /api/hardware`) and shows a **capability
+The local AI section in Setup probes your machine (`GET /api/hardware`) and shows a **capability
 chip**: your CPU/RAM/GPU summary and the recommended tier. If the machine is below the
 minimum for local AI (needs ≥4 CPU cores and ≥4 GB RAM), local features auto-disable and
 the UI explains that tagging/categorization are unavailable offline. Choosing a tier heavier than recommended
@@ -310,12 +313,18 @@ is allowed but flagged **"may be slow"**, so the choice is always informed.
 
 ### AI content tagging
 
+Model setup is shared with categorization and visible without enabling either
+feature. Sizes come from the model inventory, not estimated RAM figures. See
+[local AI evaluation](local-ai-evaluation.md) for research and the quality checks
+required before changing models. Confidence scores are not calibrated accuracy
+probabilities.
+
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | Tag media by content | `ai_tagging_enabled` | `false` | Master switch for content tagging. Runs during a real sort, not in preview. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
-| Save tags into files | `embed_tags_in_files` | `true` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
+| Save tags into files | `embed_tags_in_files` | `false` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
 Local SigLIP uses localized descriptions and templates. Local CLIP may use stable English

@@ -56,7 +56,7 @@ export function ReviewPlanLifecycle({
   return (
     <div>
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 4, total: 6 })}
+        eyebrow={t("stage.position", { current: 3, total: 4 })}
         title={t("stage.plan.label")}
         subtitle={t("stage.review.planHelp")}
       />

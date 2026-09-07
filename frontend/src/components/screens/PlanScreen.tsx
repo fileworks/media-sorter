@@ -66,7 +66,7 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
   return (
     <div className="space-y-4">
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 4, total: 6 })}
+        eyebrow={t("stage.position", { current: 3, total: 4 })}
         title={t("plan.title")}
         subtitle={t("plan.subtitle")}
         actions={

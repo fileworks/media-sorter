@@ -508,7 +508,7 @@ export function SourcesScreen({
     <div className="space-y-5">
       <div>
         <ScreenHeader
-          eyebrow={t("stage.position", { current: 1, total: 6 })}
+          eyebrow={t("stage.position", { current: 1, total: 4 })}
           title={t("sources.title")}
           subtitle={t("sources.description")}
         />

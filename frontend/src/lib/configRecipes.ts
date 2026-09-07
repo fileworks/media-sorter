@@ -14,9 +14,8 @@
  *
  * | Card | The job | The shape of it |
  * | --- | --- | --- |
- * | `consolidate` | several messy folders and old drives into one library | copy, dated, renamed, duplicates and junk parked |
+ * | `consolidate` | combine scattered folders or import new media | copy, dated, original names, duplicates reviewed |
  * | `tidy_library` | a library that is already organised | find duplicates and junk, place nothing |
- * | `import_dump` | a recurring card or phone drop | the same as consolidate, but the source empties |
  * | `archive_normalize` | odd formats and broken files | consolidate plus conversion and repair |
  * | `scratch` | none of the above | the smallest coherent run, to build on |
  *
@@ -25,9 +24,9 @@
  * those cards differed from each other by a single boolean while nothing named
  * the recurring import, which is the job people do most often.
  *
- * Renaming is on wherever the recipe places files under a date, because a
- * dated tree full of `IMG_4382.HEIC` is half an organisation. It is off in
- * `tidy_library`, which places nothing, and in `scratch`.
+ * Initial consolidation and recurring imports share the same safe starting
+ * point. Moving and renaming are explicit adjustments, not consequences of
+ * choosing an import card. The retired import_dump id stays reserved.
  *
  * Local AI tagging and categorisation are deliberately off in every card. They
  * are the one capability a recipe cannot promise: the model has to be
@@ -160,7 +159,7 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: true,
-      rename: true,
+      rename: false,
       rename_pattern: DATED_RENAME_PATTERN,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
@@ -182,43 +181,14 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     labelKey: "recipes.tidyLibrary.label",
     descriptionKey: "recipes.tidyLibrary.description",
     consequenceKey: "recipes.tidyLibrary.consequence",
-    irreversible: false,
+    irreversible: true,
     fields: (current) => ({
       run_mode: "deduplicate_only" as const,
       sort: true,
-      copy_instead_of_move: true,
+      copy_instead_of_move: false,
       // Nothing is placed by date in this mode, so a rename pattern would
       // describe a name no file receives.
       rename: false,
-      remove_duplicates: true,
-      duplicate_exact_enabled: true,
-      duplicate_perceptual_enabled: true,
-      junk_filter_enabled: true,
-      categorize_enabled: false,
-      ai_tagging_enabled: false,
-      convert_images: false,
-      convert_videos: false,
-      repair_enabled: false,
-      ...organizeOnly(current),
-      optimization_profile: disabledOptimization(current),
-    }),
-  },
-  {
-    // The recurring drop from a card or a phone folder. Identical to
-    // `consolidate` except that the source actually empties — which is the
-    // whole point of it, and the reason it asks first.
-    id: "import_dump",
-    labelKey: "recipes.importDump.label",
-    descriptionKey: "recipes.importDump.description",
-    consequenceKey: "recipes.importDump.consequence",
-    irreversible: true,
-    fields: (current) => ({
-      run_mode: "organize",
-      sort: true,
-      sort_criteria: ["year", "month"],
-      copy_instead_of_move: false,
-      rename: true,
-      rename_pattern: DATED_RENAME_PATTERN,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
       duplicate_perceptual_enabled: true,
@@ -362,7 +332,7 @@ export function recipeName(recipe: ConfigRecipe, t: (key: string) => string): st
 /**
  * Every recipe on offer, in the order they are shown.
  *
- * One list, built in one place: the Recipe stage draws cards from it and
+ * One list, built in one place: Setup draws recipe cards from it and
  * Configure resolves its baseline from it, and the two answering "which recipe
  * is this?" from different lists is how a heading and a marker come to disagree.
  */

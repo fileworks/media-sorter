@@ -131,12 +131,6 @@ describe("stage readiness", () => {
     expect(readiness("configure", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
   });
 
-  it("gates Recipe exactly as it gates Configure", () => {
-    expect(readiness("recipe", { ...READY, planned: false }).canEnter).toBe(true);
-    expect(readiness("recipe", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
-    expect(readiness("recipe", { ...READY, rootsReady: false }).canEnter).toBe(false);
-  });
-
   it("lets Review host a plan being computed, but still requires usable folders", () => {
     expect(readiness("review", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
     expect(readiness("review", { ...READY, planned: false }).canEnter).toBe(true);
@@ -179,10 +173,9 @@ describe("stage readiness", () => {
   });
 
   it("lists exactly the stages that can be entered", () => {
-    expect(availableStages(READY)).toEqual(["sources", "recipe", "configure", "review", "execute"]);
+    expect(availableStages(READY)).toEqual(["sources", "configure", "review", "execute"]);
     expect(availableStages({ ...READY, planned: false })).toEqual([
       "sources",
-      "recipe",
       "configure",
       "review",
     ]);
@@ -193,7 +186,6 @@ describe("stage readiness", () => {
 describe("stage completion", () => {
   it("keeps valid completion visible when navigating backward", () => {
     expect(stageComplete("sources", READY)).toBe(true);
-    expect(stageComplete("recipe", READY)).toBe(true);
     expect(stageComplete("configure", READY)).toBe(true);
     expect(stageComplete("review", READY)).toBe(true);
     expect(stageComplete("execute", READY, true)).toBe(true);
@@ -202,7 +194,6 @@ describe("stage completion", () => {
   it("removes only completion whose artifact was invalidated", () => {
     const previewInvalidated = { ...READY, planned: false, duplicateReviewReady: false };
     expect(stageComplete("sources", previewInvalidated)).toBe(true);
-    expect(stageComplete("recipe", previewInvalidated)).toBe(true);
     expect(stageComplete("configure", previewInvalidated)).toBe(false);
     expect(stageComplete("review", previewInvalidated)).toBe(false);
   });
@@ -227,21 +218,6 @@ describe("stage transitions", () => {
     expect(transition.invalidated.join(" ")).toMatch(/changing settings/i);
   });
 
-  it("reports the same loss for Recipe as for Configure", () => {
-    const fromReview = { ...planned, stage: "review" as const };
-
-    expect(goTo(fromReview, "recipe").invalidated).toEqual(
-      goTo(fromReview, "configure").invalidated,
-    );
-  });
-
-  it("counts Recipe as forward from Sources and backward from Configure", () => {
-    expect(goTo({ ...planned, stage: "sources" as const }, "recipe").invalidated).toEqual([]);
-    expect(goTo({ ...planned, stage: "configure" as const }, "recipe").invalidated).toEqual([
-      "Changing settings makes the current review stale.",
-    ]);
-  });
-
   it("invalidates nothing when no plan was ever computed", () => {
     // Standing in Review is not the same as having a plan. This is what made
     // the back-navigation dialog appear with nothing to discard.
@@ -255,16 +231,14 @@ describe("stage transitions", () => {
   });
 
   it("invalidates nothing when moving forward", () => {
-    expect(goTo(INITIAL_STATE, "recipe").invalidated).toEqual([]);
     expect(goTo(INITIAL_STATE, "configure").invalidated).toEqual([]);
     expect(goTo(INITIAL_STATE, "review").invalidated).toEqual([]);
   });
 
   it("gives every destination one story across the complete planned route matrix", () => {
-    const stages: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+    const stages: Stage[] = ["sources", "configure", "review", "execute"];
     const storyFor: Record<Stage, string[]> = {
       sources: ["Changing folders makes the current review stale."],
-      recipe: ["Changing settings makes the current review stale."],
       configure: ["Changing settings makes the current review stale."],
       review: [],
       execute: [],
@@ -282,7 +256,7 @@ describe("stage transitions", () => {
   });
 
   it("gives the complete unplanned route matrix no invented loss", () => {
-    const stages: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+    const stages: Stage[] = ["sources", "configure", "review", "execute"];
     for (const from of stages) {
       for (const destination of stages) {
         expect(

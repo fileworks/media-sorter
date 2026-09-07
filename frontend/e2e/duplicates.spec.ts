@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { E2E_ANALYSIS, duplicatePlan, stubBackend } from "./support";
+import { E2E_ANALYSIS, duplicatePlan, stubBackend, openSurface } from "./support";
 
 /**
  * The duplicate workflow, driven the way a person drives it.
@@ -14,8 +14,8 @@ import { E2E_ANALYSIS, duplicatePlan, stubBackend } from "./support";
 const { groups, result } = duplicatePlan(3);
 
 async function openResolve(page: Page) {
-  await page.locator('[data-stage-id="configure"]').click();
-  await page.locator('[data-stage-id="plan"]').click();
+  await openSurface(page, "configure");
+  await openSurface(page, "plan");
   await page.locator('[data-stage-id="review"]').click();
   // Review opens on Browse; the decision queue is reached deliberately.
   await page.getByRole("tab", { name: /decide the duplicates/i }).click();

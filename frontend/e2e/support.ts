@@ -1,10 +1,25 @@
 import { type Page, type Locator } from "@playwright/test";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import type { OperationReport, PreviewResult } from "../src/types/api";
+import type { HardwareInfo, OperationReport, PreviewResult } from "../src/types/api";
 import type { PlanRecoveryResponse, PlanReviewState } from "../src/services/api";
 
 const require = createRequire(import.meta.url);
+
+/** Optional adjustments and the plan summary remain covered inside four steps. */
+export async function openSurface(page: Page, surface: string) {
+  const stage = surface === "recipe" ? "configure" : surface === "plan" ? "review" : surface;
+  await page.locator(`[data-stage-id="${stage}"]`).click();
+  if (surface === "configure") {
+    const adjust = page.locator("[data-open-settings]");
+    if (await adjust.isVisible()) await adjust.click();
+  } else if (surface === "recipe") {
+    const recipes = page.locator("[data-open-recipes]");
+    if (await recipes.isVisible()) await recipes.click();
+  } else if (surface === "plan") {
+    await page.locator("[data-open-plan]").click();
+  }
+}
 const DEFAULT_CONFIG = (
   JSON.parse(
     readFileSync(new URL("../../contracts/config-defaults.json", import.meta.url), "utf-8"),
@@ -646,6 +661,14 @@ export async function stubBackend(
       return body(await getConfig());
     }
     if (url.includes("/api/health")) return body({ status: "ok", version: "e2e" });
+    if (url.includes("/api/hardware"))
+      return body({
+        logical_cpus: 8,
+        total_ram_gb: 16,
+        has_accelerator: true,
+        recommended_tier: "standard",
+        onnx_providers: ["CoreMLExecutionProvider"],
+      } satisfies HardwareInfo);
     if (url.includes("/api/ai/models")) return body({ packs: [] });
     if (url.includes("/api/diagnostics"))
       return body({ recovery_operations: [], active_task: null });

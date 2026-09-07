@@ -1,5 +1,5 @@
 /**
- * Sources → Recipe → Configure → Plan → Review → Execute, inside one window frame.
+ * Sources → Setup → Review → Execute, inside one window frame.
  *
  * The shell owns exactly one thing: which stage and view are current, and
  * whether the next one may be entered. Everything it renders around the content
@@ -61,8 +61,6 @@ interface StageShellProps {
   complete?: (stage: Stage) => boolean;
   /** An explicit lifecycle action such as “start a new run” may request a stage. */
   requestedStage?: Stage | null;
-  /** The two visual stops backed by the internal Review stage. */
-  reviewView?: "plan" | "review";
   onReviewViewChange?: (view: "plan" | "review") => void;
   /** Discard the plan, which is the one way out of the lock. */
   onUnlock?: () => void;
@@ -89,7 +87,6 @@ export function StageShell({
   planExists = false,
   complete = () => false,
   requestedStage = null,
-  reviewView = "plan",
   onReviewViewChange,
   onUnlock,
   children,
@@ -179,8 +176,6 @@ export function StageShell({
         current={state.stage}
         gate={(stage) => readiness(stage, inputs)}
         complete={complete}
-        planReady={inputs.planned}
-        reviewView={reviewView}
         onSelect={(stage, nextReviewView) => {
           if (nextReviewView) onReviewViewChange?.(nextReviewView);
           requestMove(stage);
@@ -242,7 +237,7 @@ export function StageShell({
           {/* One banner, always in the same place, with the way out inside it.
               A lock whose exit is not obvious is indistinguishable from a bug,
               so the action sits in the explanation rather than somewhere the
-              reader has to go and find. It is outside the inert region, which
+              reader has to go and find. It is outside the disabled region, which
               is the only reason it stays usable. */}
           {locked && (
             <div
@@ -279,7 +274,7 @@ export function StageShell({
               `stageDrawsOwnLock`. */}
           {/* A stage that cannot be edited has to *look* it. The boundary alone
               blocked every control and changed nothing on screen, so a locked
-              Sources or Recipe read as an ordinary screen whose buttons had
+              Sources or Setup read as an ordinary screen whose buttons had
               stopped working — which is the complaint this answers. Disabled
               controls now carry their own `:disabled` styling, which is the
               part a reader actually recognises. */}

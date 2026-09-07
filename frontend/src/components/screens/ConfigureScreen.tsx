@@ -50,7 +50,7 @@ interface ConfigureScreenProps {
   locked?: boolean;
   onSaveConfig: (patch: Partial<Config>) => void;
   onSaveRecipe: (name: string, settings: RecipeSettings) => Promise<void>;
-  /** Takes the reader back to the Recipe stage the settings started from. */
+  /** Returns to recipe choice within Setup. */
   onEditRecipe: () => void;
   /** Needed to resolve which recipe the current configuration corresponds to. */
   savedRecipes: SavedRecipe[];
@@ -399,7 +399,7 @@ export function ConfigureScreen({
   return (
     <div>
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 3, total: 6 })}
+        eyebrow={t("stage.position", { current: 2, total: 4 })}
         title={
           baseline.origin
             ? t("config.title.recipe", {
@@ -411,7 +411,7 @@ export function ConfigureScreen({
         }
         subtitle={baseline.origin ? t("config.subtitle") : t("config.subtitle.custom")}
         actions={
-          <Button variant="outline" size="sm" onClick={onEditRecipe}>
+          <Button data-open-recipes variant="outline" size="sm" onClick={onEditRecipe}>
             <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
             {t("config.changeRecipe")}
           </Button>
@@ -622,7 +622,7 @@ export function ConfigureScreen({
         <fieldset
           disabled={readOnly}
           className={cn(
-            "m-0 min-w-0 space-y-4 border-0 p-0 pb-[55dvh]",
+            "settings-content m-0 min-w-0 space-y-4 border-0 p-0 pb-[55dvh]",
             readOnly && "read-only-region",
           )}
         >

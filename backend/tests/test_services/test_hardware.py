@@ -200,7 +200,8 @@ def test_build_encoder_returns_none_when_model_unavailable() -> None:
     constructor.assert_not_called()
 
 
-def test_build_encoder_standard_uses_siglip_when_available() -> None:
+@pytest.mark.parametrize("tier", ["standard", "max"])
+def test_build_encoder_standard_and_max_use_identical_siglip_settings(tier: str) -> None:
     from app.core.config import Config
     from app.services.ai.encoder_factory import build_encoder
     from app.services.ai.siglip_encoder import SiglipOnnxEncoder
@@ -214,13 +215,16 @@ def test_build_encoder_standard_uses_siglip_when_available() -> None:
         "tokenizer": MagicMock(),
     }
 
-    config = Config(ai_model_tier="standard")
+    config = Config(ai_model_tier=tier)
     profile = _make_profile("standard")
 
-    with patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder", return_value=mock_siglip):
+    with patch(
+        "app.services.ai.siglip_encoder.SiglipOnnxEncoder", return_value=mock_siglip
+    ) as constructor:
         result = build_encoder(config, profile, model_store)
 
     assert result is mock_siglip
+    constructor.assert_called_once_with(allow_gpu=True, model_store=model_store)
 
 
 def test_build_encoder_standard_does_not_silently_fall_back_to_another_pack() -> None:

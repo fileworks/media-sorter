@@ -31,7 +31,7 @@ const CHANGED_CONFIG: Config = {
   ...TEST_CONFIG,
   // Three deliberate deviations, one per group, covering a boolean, a scalar
   // and a row that declares two fields as one decision.
-  copy_instead_of_move: true,
+  copy_instead_of_move: false,
   duplicate_perceptual_threshold: 80,
   min_file_size_kb: 64,
 };
@@ -87,9 +87,9 @@ describe("per-row changed markers", () => {
     renderConfigure();
     await screen.findByRole("heading", { name: translate("en", "config.group.sort.label") });
 
-    // Copy/Move defaults to move, so the marker states "Off" — the default of
+    // Copy/Move defaults to copy, so the marker states "On" — the default of
     // `copy_instead_of_move`, not the label of the option now selected.
-    expect(screen.getByRole("button", { name: markerName("Off") })).toBeTruthy();
+    expect(screen.getByRole("button", { name: markerName("On") })).toBeTruthy();
     expect(screen.getByRole("button", { name: markerName("95") })).toBeTruthy();
 
     // The size-range row declares two fields; only the one that moved is named.
@@ -298,7 +298,7 @@ describe("the baseline is the recipe in force", () => {
     // Both destinations are columns in the same comparison, exactly as the
     // Recipe stage draws them.
     expect(
-      within(dialog).getByRole("columnheader", { name: /bring folders together/i }),
+      within(dialog).getByRole("columnheader", { name: /organize or import media/i }),
     ).toBeTruthy();
     expect(
       within(dialog).getByRole("columnheader", {

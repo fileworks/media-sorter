@@ -1,11 +1,8 @@
 /**
  * Stage 2 — the starting point everything else adjusts.
  *
- * Picking a recipe writes fifteen settings in one click. That made it the
- * largest decision in the flow and, until it got its own stage, the first card
- * *inside* Configure — visually a peer of the smallest decisions and sitting
- * above the screen's own heading. It is now named in the stepper, named in
- * Configure's heading, and revisitable without hunting for it.
+ * Recipe choice is Setup's default surface; detailed adjustments are optional.
+ * Applying a recipe writes ordinary settings, whose consequences are shown here.
  *
  * The difference region below the grid is permanent. It reserves its space
  * whether or not a card is being read, so choosing one never shifts the grid
@@ -136,7 +133,7 @@ export function RecipeScreen({
   return (
     <div>
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 2, total: 6 })}
+        eyebrow={t("stage.position", { current: 2, total: 4 })}
         title={t("recipes.title")}
         subtitle={t("recipes.help")}
       />

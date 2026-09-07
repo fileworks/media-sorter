@@ -12,7 +12,7 @@ where that contract lives in production code.
 | Semantic color values and global control primitives | `frontend/src/index.css` |
 | Tailwind names for colors, type, radii, shell geometry, workspace, and elevation | `frontend/tailwind.config.js` |
 | Shared controls | `frontend/src/components/ui/` |
-| Fixed shell and six-step navigation | `frontend/src/components/shell/` and `StageShell.tsx` |
+| Fixed shell and four-step navigation | `frontend/src/components/shell/` and `StageShell.tsx` |
 | Product and repository identity | `branding/app-icon.svg`, `frontend/public/icon.svg`, and `.github/icon.svg` |
 | Generated platform artwork | `scripts/generate_branding.py` |
 
@@ -124,9 +124,10 @@ banner at the top of the screen scrolls away.
 
 ## Workflow and component rules
 
-The visible flow is Sources → Recipe → Configure → Plan → Review → Execute. Every screen
-has one `ScreenHeader`, one persistent primary action at the bottom right, and a quiet
-safety or estimate sentence in the footer. Plan is a read-only impact checkpoint. Review
+The visible flow is Sources → Setup → Review → Execute. Setup offers recipes and
+optional detailed adjustments without adding another required step. Review includes
+a read-only plan summary. Every screen has one `ScreenHeader`, one persistent primary
+action at the bottom right, and a quiet safety or estimate sentence in the footer. Review
 has destination-browse and duplicate-decision modes. A recommendation is `suggest`
 and dashed; a settled keeper is `success` and solid. Either mode can decide a set,
 in bulk as well as one at a time, so a run can be finished without opening the

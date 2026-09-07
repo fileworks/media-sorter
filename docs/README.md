@@ -18,6 +18,7 @@ per line, no prose. Everything else explains a subsystem to a person.
 |---|---|
 | [preservation-guarantees.md](preservation-guarantees.md) | the user-facing promise, its exact limits, and what to do when something goes wrong |
 | [settings-reference.md](settings-reference.md) | every configuration field, its default, and what it does |
+| [local-ai-evaluation.md](local-ai-evaluation.md) | local tagging research, setup fixes, and the representative-library evaluation still required |
 | [duplicate-review.md](duplicate-review.md) | duplicate groups, keeper policies, reference protection, quarantine |
 | [burst-review.md](burst-review.md) | burst detection, its three signals, and the calibration behind the defaults |
 | [content-identity.md](content-identity.md) | cache hints vs. cryptographic proof, and why they are never the same thing |

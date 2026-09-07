@@ -26,7 +26,7 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
             sort=True,
             sort_criteria=["year", "month"],
             copy_instead_of_move=True,
-            rename=True,
+            rename=False,
             rename_pattern="YYYY-MM-DD_NAME",
             remove_duplicates=True,
             duplicate_exact_enabled=True,
@@ -45,7 +45,7 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
             target_directory=str(destination),
             run_mode="deduplicate_only",
             sort=True,
-            copy_instead_of_move=True,
+            copy_instead_of_move=False,
             rename=False,
             remove_duplicates=True,
             duplicate_exact_enabled=True,
@@ -57,27 +57,6 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
             convert_videos=False,
             repair_enabled=False,
         )
-
-    if recipe == "import_dump":
-        return Config(
-            source_directory=str(source),
-            target_directory=str(destination),
-            sort=True,
-            sort_criteria=["year", "month"],
-            copy_instead_of_move=False,
-            rename=True,
-            rename_pattern="YYYY-MM-DD_NAME",
-            remove_duplicates=True,
-            duplicate_exact_enabled=True,
-            duplicate_perceptual_enabled=True,
-            junk_filter_enabled=True,
-            categorize_enabled=False,
-            ai_tagging_enabled=False,
-            convert_images=False,
-            convert_videos=False,
-            repair_enabled=False,
-        )
-
     if recipe == "scratch":
         return Config(
             source_directory=str(source),
@@ -142,7 +121,7 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
 
 
 def test_every_recipe_validates_and_previews_without_follow_up_edits(tmp_path: Path) -> None:
-    for recipe in ("consolidate", "tidy_library", "import_dump", "archive_normalize", "scratch"):
+    for recipe in ("consolidate", "tidy_library", "archive_normalize", "scratch"):
         source = tmp_path / recipe / "source"
         destination = tmp_path / recipe / "destination"
         source.mkdir(parents=True)

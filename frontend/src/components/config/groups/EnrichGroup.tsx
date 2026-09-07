@@ -2,12 +2,12 @@
 
 import { clampConfidence, clampMargin, clampMaxTags } from "@/components/config/constants";
 import type { SectionProps } from "@/components/config/constants";
-import { AiCapabilityChip } from "@/components/config/fields/AiEngine";
-import { AiModelManager } from "@/components/config/fields/AiModelManager";
+import { AiCapabilityChip, ModelTierSelect } from "@/components/config/fields/AiEngine";
 import { AiTagsInput } from "@/components/config/fields/AiTagsInput";
 import { CategorizeConfidenceSlider } from "@/components/config/fields/CategorizeConfidenceSlider";
 import { CategoryTagsInput } from "@/components/config/fields/CategoryTagsInput";
 import { RuleBuilderInline } from "@/components/RuleBuilder";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -16,19 +16,16 @@ import { Toggle } from "@/components/ui/toggle";
 import { useAiModels } from "@/hooks/useAiModels";
 import { useHardware } from "@/hooks/useHardware";
 import { useI18n } from "@/i18n/I18nContext";
-import { TIER_LABEL, effectiveTier, isLocalAiOff, machineTooWeak } from "@/lib/aiTier";
-import type { AiModelTier, Config } from "@/types/api";
-
-const AI_TIERS: Exclude<AiModelTier, "auto" | "off">[] = ["lite", "standard", "max"];
+import { isLocalAiOff, machineTooWeak } from "@/lib/aiTier";
+import type { Config } from "@/types/api";
 
 export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
   const { t } = useI18n();
-  const { hardware } = useHardware();
+  const { hardware, error: hardwareError, refetch: retryHardware } = useHardware();
   const { inventory } = useAiModels();
 
   const tooWeak = machineTooWeak(hardware);
   const localOff = hardware ? isLocalAiOff(config, hardware) : false;
-  const resolvedTier = hardware ? effectiveTier(config, hardware) : "off";
   const requiredModel = inventory?.packs.find(
     (pack) => pack.pack_id === inventory.required_pack_id,
   );
@@ -149,8 +146,27 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         </Select>
       </SettingRow>
 
+      <div id="setting-ai" data-local-ai-setup className="space-y-3 border-b border-border p-4">
+        {hardware ? (
+          <>
+            <AiCapabilityChip hardware={hardware} config={config} />
+            <ModelTierSelect hardware={hardware} config={config} updateConfig={updateConfig} />
+          </>
+        ) : hardwareError ? (
+          <div role="alert" className="space-y-2 text-xs text-error">
+            <p>{t("config.ai.hardwareUnavailable")}</p>
+            <Button variant="outline" size="sm" onClick={() => void retryHardware()}>
+              {t("state.retry")}
+            </Button>
+          </div>
+        ) : (
+          <p role="status" className="text-xs text-muted-foreground">
+            {t("config.ai.hardwareChecking")}
+          </p>
+        )}
+      </div>
+
       <SettingRow
-        id="setting-ai"
         field="ai_tagging_enabled"
         label={t("config.ai.enabled")}
         description={t("config.ai.explanation")}
@@ -173,49 +189,6 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
 
       {config.ai_tagging_enabled && (
         <>
-          {hardware && !tooWeak && (
-            <div className="grid gap-3 border-b border-border px-4 py-3 sm:grid-cols-3">
-              {AI_TIERS.map((tier) => {
-                const active = config.ai_model_tier === tier;
-                const recommended = hardware.recommended_tier === tier;
-                return (
-                  <label
-                    key={tier}
-                    className={`flex cursor-pointer flex-col gap-1 rounded-panel border px-4 py-3 transition-colors ${
-                      active
-                        ? "border-[1.5px] border-brand bg-tint-primary"
-                        : "border-border hover:border-faint"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 text-xs font-semibold">
-                      <input
-                        type="radio"
-                        name="ai-model-tier"
-                        checked={active}
-                        onChange={() => updateConfig({ ai_model_tier: tier })}
-                        className="h-3.5 w-3.5"
-                      />
-                      <span className={active ? "text-primary" : "text-foreground"}>
-                        {t(`config.ai.tierName.${tier}`, undefined, TIER_LABEL[tier])}
-                      </span>
-                      {recommended && (
-                        <span
-                          data-tier-recommendation
-                          className="text-3xs font-medium text-suggest"
-                        >
-                          {t("config.ai.tierRecommended")}
-                        </span>
-                      )}
-                    </span>
-                    <span className="pl-[1.4rem] text-xs text-faint">
-                      {t(`config.ai.tierCost.${tier}`)}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-
           <SettingRow
             field="embed_tags_in_files"
             label={t("config.ai.embed")}
@@ -234,8 +207,6 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
           </SettingRow>
 
           <Disclosure summary={t("config.ai.advanced")}>
-            {hardware && <AiCapabilityChip hardware={hardware} config={config} />}
-
             {!localOff && (
               <SettingRow
                 field={["ai_tagging_labels", "ai_tagging_labels_provenance"]}
@@ -314,8 +285,6 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                 />
               </SettingRow>
             </div>
-
-            {resolvedTier !== "off" && <AiModelManager />}
           </Disclosure>
         </>
       )}

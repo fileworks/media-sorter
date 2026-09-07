@@ -101,7 +101,7 @@ export function ExecuteScreen({
     <div className="space-y-5">
       <div>
         <ScreenHeader
-          eyebrow={t("stage.position", { current: 6, total: 6 })}
+          eyebrow={t("stage.position", { current: 4, total: 4 })}
           title={t(settled ? "execute.titleDone" : "execute.title")}
           subtitle={
             <span className="inline-flex flex-wrap items-center gap-2">

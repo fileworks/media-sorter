@@ -1,28 +1,6 @@
-/**
- * Five stages, several views, and one rule about going backwards.
- *
- * Sources → Recipe → Configure → Review → Execute. Each stage has an entry
- * condition, and moving back to an earlier one invalidates what depended on it —
- * which is the whole reason the model is typed rather than a string in a
- * component: "can I press Execute?" must have exactly one answer, and it must be
- * the same answer everywhere.
- *
- * Configure is its own stage rather than a panel inside Sources because the two
- * ask different questions. Sources asks *where*, and its answer decides whether
- * anything can run at all; Configure asks *how*, and every one of its answers
- * already has a safe default. Splitting them is what lets Sources stay a screen
- * somebody can finish in fifteen seconds.
- *
- * Recipe is its own stage for the mirror-image reason. Picking one writes
- * fifteen settings in a single click — the largest decision in the flow — and it
- * used to be the first card *inside* Configure, visually a peer of the smallest
- * decisions and below the screen's own heading. A stage names it in the stepper,
- * lets Configure say which recipe it is fine-tuning, and makes it revisitable
- * without hunting. It shares Configure's entry condition: both are about *how*,
- * and neither can be answered before there are folders.
- */
+/** Four workflow steps; recipe selection and optional adjustments share Setup. */
 
-export type Stage = "sources" | "recipe" | "configure" | "review" | "execute";
+export type Stage = "sources" | "configure" | "review" | "execute";
 
 /**
  * A stage's sub-view. Every stage now has exactly one.
@@ -38,7 +16,6 @@ export type View = "overview";
 
 export const VIEWS_BY_STAGE: Record<Stage, View[]> = {
   sources: ["overview"],
-  recipe: ["overview"],
   configure: ["overview"],
   review: ["overview"],
   execute: ["overview"],
@@ -127,7 +104,6 @@ export function stageComplete(
   executionComplete = false,
 ): boolean {
   if (stage === "sources") return inputs.rootsReady;
-  if (stage === "recipe") return inputs.scanned;
   if (stage === "configure") return inputs.planned;
   // Decisions only. A save in flight is not an unfinished review — see
   // `reviewStateDurable`.
@@ -160,9 +136,9 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
       reason: inputs.rootsReason ?? "Choose at least one input folder and a destination.",
     };
   }
-  // Recipe and Configure share the gate: usable folders and nothing else. Both
+  // Setup requires usable folders and nothing else. Its surfaces
   // ask how the run should behave, and neither needs a scan to be answerable.
-  if (stage === "recipe" || stage === "configure") {
+  if (stage === "configure") {
     return { canEnter: true, reason: null };
   }
   if (stage === "review") {
@@ -189,7 +165,7 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
 }
 
 /** The flow, in the order it is walked. The stepper and every index use it. */
-const ORDER: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+const ORDER: Stage[] = ["sources", "configure", "review", "execute"];
 
 export function availableStages(inputs: StageInputs): Stage[] {
   return ORDER.filter((stage) => readiness(stage, inputs).canEnter);
@@ -203,7 +179,7 @@ export function availableStages(inputs: StageInputs): Stage[] {
  * plan destroyed on the first answer while the remaining five asked about a plan
  * that no longer existed. The lock asks once, at the moment the intent appears.
  */
-const LOCKED_BY_PLAN: readonly Stage[] = ["sources", "recipe", "configure"];
+const LOCKED_BY_PLAN: readonly Stage[] = ["sources", "configure"];
 
 /** Whether standing on this stage with a plan means reading rather than editing. */
 export function isStageLocked(stage: Stage, planExists: boolean): boolean {
@@ -266,9 +242,9 @@ export function goTo(current: StageState, stage: Stage, view?: View): Transition
     if (stage === "sources") {
       invalidated.push("Changing folders makes the current review stale.");
     }
-    // Recipe reports what Configure reports: a recipe writes settings, so
+    // Setup changes settings, so
     // going back to it threatens the plan in exactly the same way.
-    if (stage === "recipe" || stage === "configure") {
+    if (stage === "configure") {
       invalidated.push("Changing settings makes the current review stale.");
     }
   }
@@ -392,13 +368,8 @@ export interface StageLabel {
 export const STAGE_LABELS: StageLabel[] = [
   { stage: "sources", label: "Sources", description: "Which folders, and what each one is for" },
   {
-    stage: "recipe",
-    label: "Recipe",
-    description: "The starting point everything else adjusts",
-  },
-  {
     stage: "configure",
-    label: "Configure",
+    label: "Setup",
     description: "How files travel, land, and get cleaned",
   },
   { stage: "review", label: "Review", description: "What would change, before anything does" },

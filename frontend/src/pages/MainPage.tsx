@@ -29,6 +29,7 @@ import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { PlanScreen } from "@/components/screens/PlanScreen";
+import { SetupScreen } from "@/components/screens/SetupScreen";
 import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { ReviewPlanLifecycle } from "@/components/screens/ReviewPlanLifecycle";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
@@ -117,6 +118,7 @@ export default function MainPage() {
   const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
   const [reviewView, setReviewView] = useState<"plan" | "review">("review");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
+  const [adjustingSettings, setAdjustingSettings] = useState(false);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
@@ -288,14 +290,6 @@ export default function MainPage() {
       updateConfig(patch);
     },
     [discardPlan, discardScan, updateConfig],
-  );
-
-  /** Applying a recipe rewrites the settings the plan was built from. */
-  const handleRecipeApply = useCallback(
-    (patch: Partial<Config>) => {
-      handleConfigSave(patch);
-    },
-    [handleConfigSave],
   );
 
   const onPickerFailed = useCallback(
@@ -613,6 +607,7 @@ export default function MainPage() {
 
   /** Open Configure and focus a named setting row once it has mounted. */
   const openSetting = useCallback((anchorId: string, nav: StageNav) => {
+    setAdjustingSettings(true);
     setPendingSettingAnchor(anchorId);
     nav.go("configure");
   }, []);
@@ -783,7 +778,6 @@ export default function MainPage() {
         inputs={stageInputs}
         stageKey={stageKey}
         requestedStage={requestedStage}
-        reviewView={reviewView}
         onReviewViewChange={changeReviewView}
         titleBar={titleBar}
         banners={banners}
@@ -847,38 +841,39 @@ export default function MainPage() {
             );
           }
 
-          if (state.stage === "recipe") {
+          if (state.stage === "configure") {
             return config ? (
-              <RecipeScreen
-                config={config}
-                savedRecipes={savedRecipes}
-                onApply={handleRecipeApply}
-                onDelete={(recipeId: string) => deleteRecipe.mutate(recipeId)}
-                disabled={isAnyRunning}
-                planExists={planExists}
-                defaults={configDefaults}
+              <SetupScreen
+                locked={locked}
+                adjusting={adjustingSettings}
+                onAdjustingChange={setAdjustingSettings}
+                recipe={
+                  <RecipeScreen
+                    config={config}
+                    savedRecipes={savedRecipes}
+                    onApply={handleConfigSave}
+                    onDelete={(id) => deleteRecipe.mutate(id)}
+                    disabled={isAnyRunning}
+                    planExists={planExists}
+                    defaults={configDefaults}
+                  />
+                }
+                settings={(onBack) => (
+                  <ConfigureScreen
+                    disabled={isAnyRunning}
+                    locked={locked}
+                    onSaveConfig={handleConfigSave}
+                    onSaveRecipe={async (name, settings) => {
+                      await saveRecipe.mutateAsync({ name, settings });
+                    }}
+                    savedRecipes={savedRecipes}
+                    onEditRecipe={onBack}
+                    samples={configureSamples}
+                  />
+                )}
               />
             ) : (
               <StateView variant="loading" layout="page" title={t("state.loading")} />
-            );
-          }
-
-          if (state.stage === "configure") {
-            return (
-              <ConfigureScreen
-                disabled={isAnyRunning}
-                // Configure draws its own read-only boundary so the rail stays
-                // navigable; the shell therefore hands it the lock rather than
-                // wrapping the whole screen. See `stageDrawsOwnLock`.
-                locked={locked}
-                onSaveConfig={handleConfigSave}
-                onSaveRecipe={async (name, settings) => {
-                  await saveRecipe.mutateAsync({ name, settings });
-                }}
-                savedRecipes={savedRecipes}
-                onEditRecipe={() => nav.go("recipe")}
-                samples={configureSamples}
-              />
             );
           }
 
@@ -925,6 +920,7 @@ export default function MainPage() {
                         onRetryPlanPersistence={preview.retryPersistence}
                         onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
                         onOpenSources={() => nav.go("sources")}
+                        onOpenPlan={() => changeReviewView("plan")}
                         onRerunPreview={() => {
                           setRunDecisions(EMPTY_RUN_DECISIONS);
                           void preview.generatePreview(excludedForRun);
@@ -961,7 +957,7 @@ export default function MainPage() {
             return (
               <div className="mx-auto max-w-5xl">
                 <ScreenHeader
-                  eyebrow={t("stage.position", { current: 6, total: 6 })}
+                  eyebrow={t("stage.position", { current: 4, total: 4 })}
                   title={t("preflight.title")}
                   subtitle={t("preflight.description")}
                 />

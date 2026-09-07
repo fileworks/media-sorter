@@ -7,11 +7,11 @@ import type { HardwareInfo } from "@/types/api";
  * never changes within a session — cached effectively forever client-side.
  */
 export function useHardware() {
-  const { data, isLoading } = useQuery<HardwareInfo>({
+  const { data, isLoading, error, refetch } = useQuery<HardwareInfo>({
     queryKey: ["hardware"],
     queryFn: () => api.getHardware(),
     staleTime: Infinity,
     gcTime: Infinity,
   });
-  return { hardware: data, isLoading };
+  return { hardware: data, isLoading, error, refetch };
 }

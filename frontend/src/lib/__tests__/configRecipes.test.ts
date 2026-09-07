@@ -29,14 +29,14 @@ const base = {
   repair_enabled: false,
 } as Config;
 
-const [CONSOLIDATE, TIDY_LIBRARY, IMPORT_DUMP, ARCHIVE_NORMALIZE, SCRATCH] = CONFIG_RECIPES;
+const [CONSOLIDATE, TIDY_LIBRARY, ARCHIVE_NORMALIZE, SCRATCH] = CONFIG_RECIPES;
 
 describe("built-in configuration recipes", () => {
   it("reads defaults from the backend-generated contract", () => {
     expect(TEST_CONFIG).toMatchObject({
       sort: true,
       sort_criteria: ["year"],
-      copy_instead_of_move: false,
+      copy_instead_of_move: true,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
       duplicate_perceptual_enabled: true,
@@ -52,7 +52,6 @@ describe("built-in configuration recipes", () => {
     expect(CONFIG_RECIPES.map((recipe) => recipe.id)).toEqual([
       "consolidate",
       "tidy_library",
-      "import_dump",
       "archive_normalize",
       "scratch",
     ]);
@@ -71,7 +70,8 @@ describe("built-in configuration recipes", () => {
     // Nothing is placed by date in this mode, so nothing is renamed either.
     expect(patch.rename).toBe(false);
     expect(patch.convert_images).toBe(false);
-    expect(TIDY_LIBRARY.irreversible).toBe(false);
+    expect(patch.copy_instead_of_move).toBe(false);
+    expect(TIDY_LIBRARY.irreversible).toBe(true);
   });
 
   it("shows as selected once its settings are in force", () => {
@@ -81,7 +81,7 @@ describe("built-in configuration recipes", () => {
   });
 
   it("keeps every other recipe organising", () => {
-    for (const recipe of [CONSOLIDATE, IMPORT_DUMP, ARCHIVE_NORMALIZE, SCRATCH]) {
+    for (const recipe of [CONSOLIDATE, ARCHIVE_NORMALIZE, SCRATCH]) {
       expect(applyRecipe(base, recipe).run_mode, recipe.id).toBe("organize");
     }
   });
@@ -100,13 +100,14 @@ describe("built-in configuration recipes", () => {
     expect(CONSOLIDATE.irreversible).toBe(false);
   });
 
-  it("marks the two recipes that take originals away or rewrite bytes", () => {
-    expect(IMPORT_DUMP.irreversible).toBe(true);
+  it("copies when organizing, with an explicit move-only cleanup exception", () => {
+    for (const recipe of [CONSOLIDATE, ARCHIVE_NORMALIZE, SCRATCH]) {
+      expect(applyRecipe(base, recipe).copy_instead_of_move, recipe.id).toBe(true);
+    }
     expect(ARCHIVE_NORMALIZE.irreversible).toBe(true);
-    expect(applyRecipe(base, IMPORT_DUMP).copy_instead_of_move).toBe(false);
     // And nothing else claims to be irreversible.
     expect(CONFIG_RECIPES.filter((recipe) => recipe.irreversible).map((r) => r.id)).toEqual([
-      "import_dump",
+      "tidy_library",
       "archive_normalize",
     ]);
   });
@@ -118,16 +119,17 @@ describe("built-in configuration recipes", () => {
     expect(applyRecipe(base, ARCHIVE_NORMALIZE).optimization_profile?.mode).toBe(
       "visually_lossless",
     );
-    for (const recipe of [CONSOLIDATE, TIDY_LIBRARY, IMPORT_DUMP, SCRATCH]) {
+    for (const recipe of [CONSOLIDATE, TIDY_LIBRARY, SCRATCH]) {
       expect(applyRecipe(base, recipe).preservation_profile?.mode, recipe.id).toBe("organize_only");
       expect(applyRecipe(base, recipe).optimization_profile?.mode, recipe.id).toBe("disabled");
     }
   });
 
-  it("names files by date wherever it places them by date, and nowhere else", () => {
-    for (const recipe of [CONSOLIDATE, IMPORT_DUMP, ARCHIVE_NORMALIZE]) {
+  it("organizes and imports by date with renaming left optional", () => {
+    expect(applyRecipe(base, CONSOLIDATE).rename).toBe(false);
+    expect(applyRecipe(base, ARCHIVE_NORMALIZE).rename).toBe(true);
+    for (const recipe of [CONSOLIDATE, ARCHIVE_NORMALIZE]) {
       const patch = applyRecipe(base, recipe);
-      expect(patch.rename, recipe.id).toBe(true);
       expect(patch.rename_pattern, recipe.id).toBe("YYYY-MM-DD_NAME");
       expect(patch.sort_criteria, recipe.id).toEqual(["year", "month"]);
     }

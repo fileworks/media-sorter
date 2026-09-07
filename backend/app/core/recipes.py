@@ -75,7 +75,7 @@ class RecipeSettings(BaseModel):
     max_recursion_depth: int | None = None
     preserve_subfolders: bool = False
     override_metadata: bool = False
-    copy_instead_of_move: bool = False
+    copy_instead_of_move: bool = True
     companion_handling: Literal["keep_with_primary", "leave_in_place", "ignore"] = (
         "keep_with_primary"
     )

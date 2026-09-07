@@ -100,7 +100,7 @@ class TestSchema:
 
     def test_future_main_schema_preflight_changes_no_file_metadata(self, tmp_path: Path) -> None:
         path = tmp_path / "future.db"
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
         before = self._snapshot((path,))
 
@@ -194,7 +194,7 @@ class TestSchema:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "future-wal.db"
-        with sqlite3.connect(path) as initial:
+        with closing(sqlite3.connect(path)) as initial, initial:
             initial.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION}")
             initial.execute("CREATE TABLE evidence(value TEXT)")
         writer = sqlite3.connect(path)
@@ -221,7 +221,7 @@ class TestSchema:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "future-journal.db"
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
             connection.execute("CREATE TABLE evidence(value TEXT)")
             connection.execute("INSERT INTO evidence VALUES ('before')")

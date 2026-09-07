@@ -104,7 +104,7 @@ describe("choosing a recipe moves nothing", () => {
 
     // Chosen because its patch is deterministic: the two profile builders that
     // stamp `new Date()` would never compare equal across two calls.
-    const target = CONFIG_RECIPES.find((recipe) => recipe.id === "import_dump");
+    const target = CONFIG_RECIPES.find((recipe) => recipe.id === "consolidate");
     expect(target).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", { name: new RegExp(translate("en", target?.labelKey ?? "")) }),

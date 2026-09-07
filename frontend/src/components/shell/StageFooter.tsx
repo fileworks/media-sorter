@@ -50,22 +50,7 @@ export function StageFooter({
       <ActionBar
         message={t("footer.sources")}
         primary={{
-          label: t("footer.toRecipe"),
-          onClick: () => nav.go("recipe"),
-          disabled: !nav.canEnter("recipe"),
-          disabledReason: nav.reasonFor("recipe"),
-        }}
-      />
-    );
-  }
-
-  if (stage === "recipe") {
-    return (
-      <ActionBar
-        message={t("footer.recipe")}
-        back={{ label: t("common.back"), onClick: () => nav.go("sources") }}
-        primary={{
-          label: t("footer.toConfigure"),
+          label: t("footer.toSetup"),
           onClick: () => nav.go("configure"),
           disabled: !nav.canEnter("configure"),
           disabledReason: nav.reasonFor("configure"),
@@ -89,7 +74,7 @@ export function StageFooter({
       <ActionBar
         tone="estimate"
         message={estimate}
-        back={{ label: t("common.back"), onClick: () => nav.go("recipe") }}
+        back={{ label: t("common.back"), onClick: () => nav.go("sources") }}
         primary={{
           label: t("footer.preview"),
           busy,

@@ -6,6 +6,7 @@ import {
   contrastViolations,
   focusObscuredBy,
   stubBackend,
+  openSurface,
   tabStops,
   undersizedTargets,
 } from "./support";
@@ -47,14 +48,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function goToPlan(page: Page) {
-  const configure = page.locator('[data-stage-id="configure"]');
-  await expect(configure).toBeEnabled();
-  await configure.click();
-  await expect(configure).toHaveAttribute("aria-current", "step");
-  const plan = page.locator('[data-stage-id="plan"]');
-  await expect(plan).toBeEnabled();
-  await plan.click();
-  await expect(plan).toHaveAttribute("aria-current", "step");
+  await openSurface(page, "plan");
 }
 
 async function goToReview(page: Page) {
@@ -363,7 +357,7 @@ test.describe("later stages", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await goToReview(page);
     for (const stage of ["sources", "recipe", "configure", "plan", "review"]) {
-      await page.locator(`[data-stage-id="${stage}"]`).click();
+      await openSurface(page, stage);
       await expectReducedMotion(page);
     }
     await page.getByRole("tab", { name: /decide the duplicates/i }).click();
@@ -391,7 +385,7 @@ test.describe("later stages", () => {
     for (const stage of ["sources", "recipe", "configure", "plan", "review", "execute"]) {
       await page.setViewportSize({ width: 1280, height: 900 });
       if (stage === "execute") await page.getByRole("button", { name: /to execute/i }).click();
-      else await page.locator(`[data-stage-id="${stage}"]`).click();
+      else await openSurface(page, stage);
       // CSS zoom relays out text and controls; the existing CDP test separately
       // proves Chromium's visual-viewport page scale.
       await page.evaluate(() => {
@@ -602,9 +596,7 @@ test.describe("later stages", () => {
     // stage at the width the stage is being measured at.
     for (const stage of ["sources", "recipe", "configure", "plan", "review"] as const) {
       await page.setViewportSize({ width: 1280, height: 900 });
-      const rail = page.locator(`[data-stage-id="${stage}"]`);
-      await expect(rail).toBeEnabled();
-      await rail.click();
+      await openSurface(page, stage);
       await page.setViewportSize({ width: 360, height: 800 });
       await settleRendering(page);
       const overflow = await layoutOverflow(page);
@@ -668,7 +660,7 @@ test.describe("later stages", () => {
       .toBeNull();
     // Planning remains available so the user can recompute against the new
     // destination. Only the stale reviewed result must lose authority.
-    await expect(page.locator('[data-stage-id="review"]')).toBeDisabled();
+    await expect(page.locator('[data-stage-id="execute"]')).toBeDisabled();
   });
 
   test("later screens pass target, keyboard, focus, locale, theme and width checks", async ({
@@ -719,6 +711,7 @@ test.describe("later stages", () => {
   }) => {
     const configure = page.locator('[data-stage-id="configure"]');
     await configure.click();
+    await page.locator("[data-open-settings]").click();
     await page.setViewportSize({ width: 360, height: 800 });
     await expectTargetsAndFocus(page, "Configure at 360px");
     await page.getByRole("button", { name: /edit settings/i }).click();

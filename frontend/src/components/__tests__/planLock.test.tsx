@@ -72,16 +72,15 @@ function goToStage(stage: string) {
 }
 
 describe("which stages a plan locks", () => {
-  it("locks the three that fed the plan and neither of the two that read it", () => {
+  it("locks the two that fed the plan and neither of the two that read it", () => {
     expect(isStageLocked("sources", true)).toBe(true);
-    expect(isStageLocked("recipe", true)).toBe(true);
     expect(isStageLocked("configure", true)).toBe(true);
     expect(isStageLocked("review", true)).toBe(false);
     expect(isStageLocked("execute", true)).toBe(false);
   });
 
   it("locks nothing at all without a plan", () => {
-    for (const stage of ["sources", "recipe", "configure", "review", "execute"] as const) {
+    for (const stage of ["sources", "configure", "review", "execute"] as const) {
       expect(isStageLocked(stage, false)).toBe(false);
     }
   });
@@ -165,7 +164,7 @@ describe("walking back through locked stages", () => {
   it("raises no dialog and keeps the plan", () => {
     const onUnlock = renderShell();
 
-    for (const stage of ["review", "configure", "recipe", "sources"]) {
+    for (const stage of ["review", "configure", "sources"]) {
       goToStage(stage);
       expect(screen.getByTestId("stage").textContent).toBe(stage);
       // No confirmation, no warning banner: nothing was lost by looking.
