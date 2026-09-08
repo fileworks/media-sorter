@@ -25,6 +25,7 @@ from app.core.destination_paths import (
     companion_destination,
     contextualize_copy,
     copy_destination,
+    initial_transfer_destination,
     reserve_destination,
 )
 from app.core.exceptions import ConflictError, PlanAuthorizationError
@@ -506,7 +507,7 @@ def _rewrite_reviewed_set(
             "destination_path": str(
                 keeper_destination
                 if keeper_is_set_aside
-                else keeper_destination.with_suffix(Path(selected.source_path).suffix)
+                else initial_transfer_destination(keeper_destination, Path(selected.source_path))
             ),
             "reviewed_destination_path": str(keeper_destination),
             "kind": (
@@ -574,6 +575,7 @@ def _rewrite_reviewed_set(
             destination = companion_destination(
                 Path(primary.reviewed_destination_path),
                 Path(companion.source_path),
+                Path(primary.source_path),
             )
             rewritten[index] = companion.model_copy(
                 update={
@@ -617,7 +619,9 @@ def _rewrite_distinct_set(
                 "destination_path": str(
                     reviewed_destination
                     if set_aside
-                    else reviewed_destination.with_suffix(Path(action.source_path).suffix)
+                    else initial_transfer_destination(
+                        reviewed_destination, Path(action.source_path)
+                    )
                 ),
                 "reviewed_destination_path": str(reviewed_destination),
                 "kind": "quarantine" if set_aside else ("copy" if copy_mode else "move"),
@@ -639,6 +643,7 @@ def _rewrite_distinct_set(
             destination = companion_destination(
                 Path(primary.reviewed_destination_path),
                 Path(companion.source_path),
+                Path(primary.source_path),
             )
             rewritten[index] = companion.model_copy(
                 update={
@@ -741,7 +746,7 @@ def build_frozen_sort_plan(
             # The transfer executor therefore authorizes the source-suffix
             # staging name while provenance continues to explain the final name.
             transfer_destination = (
-                reviewed_destination.with_suffix(source_path.suffix)
+                initial_transfer_destination(reviewed_destination, source_path)
                 if status == "sort"
                 else reviewed_destination
             )

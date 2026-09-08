@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
+from app.core.destination_paths import initial_transfer_destination
 from app.core.exceptions import IntegrityTransferError, PlanAuthorizationError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
@@ -732,6 +733,11 @@ class SortingService(SortingSupportMixin):
             unit_id=unit.unit_id,
             unit_primary_path=str(unit.primary),
             force_distinct=force_distinct,
+            preserve_tag_sidecar=config.companion_handling == "keep_with_primary"
+            and any(
+                path_identity_key(str(member.path)) == path_identity_key(str(unit.primary) + ".xmp")
+                for member in unit.companions
+            ),
         )
         primary.update(
             unit_id=unit.unit_id,
@@ -756,6 +762,9 @@ class SortingService(SortingSupportMixin):
                 source_root,
             )
             records.append(companion)
+            if primary["status"] in {"already_in_destination", "kept_in_place"}:
+                companion["status"] = "kept_in_place"
+                continue
             if config.companion_handling == "leave_in_place":
                 companion.update(
                     status="companion_left_in_place",
@@ -774,7 +783,9 @@ class SortingService(SortingSupportMixin):
                 can_place = False
                 continue
 
-            destination = companion_destination(Path(str(primary_destination)), member.path)
+            destination = companion_destination(
+                Path(str(primary_destination)), member.path, unit.primary
+            )
             companion["dest_path"] = str(destination)
             companion["would_be_destination"] = str(destination)
             if dry_run:
@@ -883,6 +894,7 @@ class SortingService(SortingSupportMixin):
         unit_id: str | None = None,
         unit_primary_path: str | None = None,
         force_distinct: bool = False,
+        preserve_tag_sidecar: bool = False,
     ) -> dict[str, Any]:
         """Process a single file through the full sort pipeline.
 
@@ -1333,7 +1345,7 @@ class SortingService(SortingSupportMixin):
                     reserved_destinations.add(
                         path_identity_key(str(planned_final.resolve(strict=False)))
                     )
-                initial_dest = planned_final.with_suffix(file_path.suffix)
+                initial_dest = initial_transfer_destination(planned_final, file_path)
             else:
                 initial_dest, planned_final = self._plan_dest(
                     file_path,
@@ -1481,6 +1493,7 @@ class SortingService(SortingSupportMixin):
                     config=config,
                     preservation=preservation,
                     authorization=authorization,
+                    preserve_tag_sidecar=preserve_tag_sidecar,
                 )
 
                 # Filesystem timestamps: Organize Only keeps the originals and

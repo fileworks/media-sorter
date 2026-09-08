@@ -449,7 +449,9 @@ class PreviewService:
                     stats["companion_split_warnings"] += 1
                 elif item.get("destination"):
                     destination = str(
-                        companion_destination(Path(str(item["destination"])), member.path)
+                        companion_destination(
+                            Path(str(item["destination"])), member.path, unit.primary
+                        )
                     )
                 member_date: str | None = None
                 with contextlib.suppress(Exception):

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.media_units import EDIT_SIDECAR_EXTENSIONS
 from app.core.paths import path_identity_key
 from app.core.provenance import OutcomeProvenance, PathSegmentProvenance
 from app.utils.path_utils import sanitize_path_segment
@@ -87,8 +88,32 @@ def _reservation_key(path: Path) -> str:
     return path_identity_key(str(path.resolve(strict=False)))
 
 
-def companion_destination(primary_destination: Path, companion: Path) -> Path:
+def initial_transfer_destination(reviewed_destination: Path, source: Path) -> Path:
+    """Use the reviewed spelling unless conversion needs a different input format."""
+    if reviewed_destination.suffix.casefold() == source.suffix.casefold():
+        return reviewed_destination
+    return reviewed_destination.with_suffix(source.suffix)
+
+
+def companion_destination(
+    primary_destination: Path, companion: Path, primary_source: Path | None = None
+) -> Path:
     """Place a member beside its primary, inheriting its final collision stem."""
+    anchor = companion.with_suffix("")
+    if (
+        companion.suffix.lower() in EDIT_SIDECAR_EXTENSIONS
+        and primary_source is not None
+        and path_identity_key(anchor.stem) == path_identity_key(primary_source.stem)
+        and anchor.suffix
+    ):
+        # Keep filename-qualified sidecars distinct from stem-only editor files.
+        # A primary's suffix can change on rename/conversion; siblings keep theirs.
+        suffix = (
+            primary_destination.suffix
+            if path_identity_key(str(anchor)) == path_identity_key(str(primary_source))
+            else anchor.suffix
+        )
+        return primary_destination.with_name(primary_destination.stem + suffix + companion.suffix)
     return primary_destination.with_name(primary_destination.stem + companion.suffix)
 
 

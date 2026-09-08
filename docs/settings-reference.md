@@ -88,11 +88,21 @@ used: RAW, HEIC/HEIF, JPEG, other image, then video. Recognized roles are edit s
 (`.xmp`, `.aae`, `.pp3`, `.dop`, `.on1`, `.reastore`), Live Photo `.mov`, RAW+JPEG/HEIC
 siblings, video `.thm`, and image `.wav` notes.
 
+Edit sidecars may also name a complete media filename (`photo.jpg.xmp`). They
+follow that exact media member, including a RAW/JPEG sibling, and remain distinct
+from stem-only editor files (`photo.xmp`). Renaming preserves this distinction;
+a primary's filename-qualified sidecar follows its final extension spelling.
+
 Only the primary drives date extraction, routing, renaming, and duplicate evaluation.
 Every companion inherits the primary's final folder and collision suffix but keeps its
 own extension. Preview lists the binding and warns before commit about unmatched files,
 `leave_in_place`, and conversion. Conversion does not rewrite an internal filename
 reference inside a companion.
+
+If a verified identical photo already exists in the destination or a protected
+reference folder, the incoming primary and its companions stay in the source.
+Companions are reported as kept in place, not as failed transfers. Their edits
+are not merged into an existing keeper's sidecars.
 
 ## Folders & routing
 
@@ -333,7 +343,8 @@ download failures remain best-effort and never fail the sort.
 
 Generated XMP sidecars never replace existing files or follow existing symlinks.
 If the sidecar name is occupied, existing edits are retained and new tags remain
-in the report instead.
+in the report instead. The same protection applies when an original sidecar is
+queued for transfer: generated tags cannot occupy its reviewed destination first.
 
 ### Smart Categorization
 

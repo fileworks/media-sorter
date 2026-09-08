@@ -178,10 +178,15 @@ class SortingSupportMixin:
         config: Config,
         preservation: PreservationProfile,
         authorization: MutationAuthorization,
+        preserve_tag_sidecar: bool = False,
     ) -> str:
         """Record derived tags without touching media bytes by default."""
         if not tags:
             return ""
+        if preserve_tag_sidecar:
+            # The original XMP is still queued for verified transfer. Generated
+            # predictions must not occupy its reviewed destination first.
+            return "report"
         if config.embed_tags_in_files:
             authorization.require("embedded_metadata")
             try:
