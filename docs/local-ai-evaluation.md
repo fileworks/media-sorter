@@ -133,3 +133,46 @@ conversion/repair controls have not been promoted as newly validated quality
 features. Before promoting AI, evaluate a representative read-only library and
 the low-end CPU/RAM tier, including RAW/HEIC, video, cancellation and concurrent
 thumbnail delivery.
+
+## Expanded public-media verification — 2026-09-07
+
+A second evaluation used 32 visually inspected Wikimedia Commons JPEGs (eight
+each of nature, landmarks, people and animals), two CC0 camera RAW files from
+raw.pixls.us, and a 25-second waterfall WebM. The collection, source credits,
+hashes and evaluation logs are kept outside the repository. It is a curated
+smoke set, not a held-out representative library or a precision/recall benchmark.
+
+The same pinned SigLIP encoder ran through the production file-tagging and
+categorization services in both languages, with CPU-only execution, fatal socket
+connection attempts and unchanged source hashes. All 70 file/language cases
+completed without a network attempt. RAW flower and food subjects and the
+waterfall video produced relevant tags, but unsupported tags remain: an English
+sleeping-cat image received `map`, a dog received `selfie`, and German castle
+output included `Haustier` and `Innenaufnahme`. These are demonstrated quality
+failures, not merely unverified quality. Categorization accepted only one of 35
+English cases (`pets` for the dog) and none of the 35 German cases at defaults.
+Do not promote this configuration as reliable automatic topical organization.
+
+On the same M3 Pro, model load was 1.79 seconds and peak process RSS was 2.71 GB
+(decimal). Excluding the first vocabulary-initializing JPEG in each language,
+per-file JPEG tagging p50/p95 were 130/302 ms in English and 130/283 ms in German,
+including file decoding. These are single-pass timings, not repeated warm-cache
+throughput. Video tagging took about 4.1–4.3 seconds per language. No low-end
+hardware performance or optimization claim follows from these numbers.
+
+Two real API preview → approved-plan → Copy → report runs each copied all 35
+files without failures or byte changes. Report-only storage produced no sidecars;
+explicit `sidecar_and_report` produced 32 parseable, nonempty XMP sidecars (three
+files had no tags). The UI previously called report-only storage “XMP sidecar
+files”; it now exposes all three actual storage policies and keeps embedded-edit
+permissions unchanged. A second UI fix preserves custom tag capitalization.
+English/German unit tests, browser storage-choice checks and a config API
+round-trip test hold these rules. AI setup now explicitly cautions that outputs
+can be wrong and scores are not accuracy guarantees. Model weights, prompts,
+thresholds, batching and off-by-default settings are unchanged.
+
+Follow-up safety verification found that the existing sidecar writer could
+overwrite an occupied XMP path, including through a symlink. It now stages a
+complete, flushed sidecar and uses shared no-clobber publication. Existing XMP
+is preserved; generated tags remain in the report on a conflict. Regression
+tests cover regular-file and symlink collisions and cleanup after interruption.

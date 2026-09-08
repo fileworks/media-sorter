@@ -61,8 +61,22 @@ for (const theme of ["light", "dark"] as const) {
         await install.scrollIntoViewIfNeeded();
         await expect(install).toBeVisible();
         await expect(page.locator("#ai-enabled")).not.toBeChecked();
+        const taggingRow = page
+          .locator("[data-setting-row]")
+          .filter({ has: page.locator("#ai-enabled") });
+        await expect(taggingRow).toContainText(
+          language === "en" ? "can be wrong" : "können falsch sein",
+        );
         await expect(setup.locator("#ai-allow-gpu")).toBeChecked();
         await expect(setup).not.toContainText("3.2 GB");
+        await page.locator("#ai-enabled").click();
+        await expect(page.locator("#ai-enabled")).toBeChecked();
+        const storage = page.locator("#ai-embed");
+        await expect(storage).toHaveValue("report");
+        await storage.selectOption("sidecar");
+        await expect(storage).toHaveValue("sidecar");
+        await storage.selectOption("report");
+        await expect(storage).toHaveValue("report");
         await expect(setup.locator("option[value=max]")).toContainText(
           language === "en" ? "same SigLIP 2" : "dasselbe SigLIP-2",
         );

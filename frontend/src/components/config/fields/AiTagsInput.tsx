@@ -12,9 +12,9 @@ export function AiTagsInput({
 }) {
   const { t, tCount, locale } = useI18n();
   const add = (raw: string) => {
-    const tag = raw.trim().toLowerCase();
+    const tag = raw.trim();
     if (!tag) return;
-    if (labels.some((l) => l.toLowerCase() === tag)) return;
+    if (labels.some((l) => l.toLowerCase() === tag.toLowerCase())) return;
     onCommit([...labels, tag]);
   };
   const remove = (tag: string) => onCommit(labels.filter((l) => l !== tag));

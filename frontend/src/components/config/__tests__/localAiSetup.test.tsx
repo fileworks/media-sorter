@@ -76,3 +76,37 @@ it("offers a retry when hardware detection fails instead of claiming it is still
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(probe.refetch).toHaveBeenCalledOnce();
 });
+
+it("shows the actual tag storage policy and explicitly enables sidecars without weakening preservation", () => {
+  const updateConfig = vi.fn();
+  render(
+    <I18nProvider initialLocale="en">
+      <EnrichGroup
+        config={{ ...TEST_CONFIG, ai_tagging_enabled: true }}
+        updateConfig={updateConfig}
+        fieldErrors={new Map()}
+        samples={INVENTED_SAMPLES}
+      />
+    </I18nProvider>,
+  );
+  const storage = screen.getByRole("combobox", { name: "Store generated tags" });
+  expect((storage as HTMLSelectElement).value).toBe("report");
+  fireEvent.change(storage, { target: { value: "sidecar" } });
+  expect(updateConfig).toHaveBeenCalledWith({
+    embed_tags_in_files: false,
+    preservation_profile: {
+      ...TEST_CONFIG.preservation_profile,
+      derived_metadata: "sidecar_and_report",
+    },
+  });
+  fireEvent.change(storage, { target: { value: "report" } });
+  expect(updateConfig).toHaveBeenLastCalledWith({
+    embed_tags_in_files: false,
+    preservation_profile: { ...TEST_CONFIG.preservation_profile, derived_metadata: "report_only" },
+  });
+  fireEvent.change(storage, { target: { value: "embedded" } });
+  expect(updateConfig).toHaveBeenLastCalledWith({
+    embed_tags_in_files: true,
+    preservation_profile: { ...TEST_CONFIG.preservation_profile, derived_metadata: "report_only" },
+  });
+});

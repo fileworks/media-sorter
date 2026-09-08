@@ -324,12 +324,16 @@ probabilities.
 | Tag media by content | `ai_tagging_enabled` | `false` | Master switch for content tagging. Runs during a real sort, not in preview. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
-| Save tags into files | `embed_tags_in_files` | `false` | Embed deterministic and AI tags into the media (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise). Embedding rewrites the file, so it needs a reviewed mutation profile. Off = tags go to the report, plus an `.xmp` sidecar when the preservation profile asks for one. The old `ai_tagging_embed_in_files` key is read for compatibility. |
+| Store generated tags | `embed_tags_in_files` + `preservation_profile.derived_metadata` | Report only | Report only leaves `embed_tags_in_files=false` and `derived_metadata=report_only`. XMP sidecar files explicitly selects `sidecar_and_report`, without rewriting media. Into the image files requests embedding (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise), which still needs a reviewed mutation profile. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
 Local SigLIP uses localized descriptions and templates. Local CLIP may use stable English
 semantic prompts for model quality, but still emits the selected localized label. Model
 download failures remain best-effort and never fail the sort.
+
+Generated XMP sidecars never replace existing files or follow existing symlinks.
+If the sidecar name is occupied, existing edits are retained and new tags remain
+in the report instead.
 
 ### Smart Categorization
 

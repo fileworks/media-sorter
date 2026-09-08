@@ -3,12 +3,14 @@
 import contextlib
 import os
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
 from app.core.logging_config import get_logger
+from app.services.conversion_publication import ConversionPublicationError, promote_no_clobber
 from app.utils.ffmpeg_utils import run_ffprobe_json
 from app.utils.media_utils import is_video
 
@@ -171,10 +173,19 @@ class MetadataService:
             "</x:xmpmeta>\n"
         )
         try:
-            sidecar.write_text(xml, encoding="utf-8")
+            # Existing XMP may contain irreplaceable edits or point into a
+            # reference folder. Publish a complete candidate without replacing
+            # either; callers retain the derived tags in the report on failure.
+            with tempfile.TemporaryDirectory(prefix=".mediasort-tags-", dir=path.parent) as stage:
+                candidate = Path(stage) / sidecar.name
+                with candidate.open("x", encoding="utf-8") as writer:
+                    writer.write(xml)
+                    writer.flush()
+                    os.fsync(writer.fileno())
+                promote_no_clobber(candidate, sidecar)
             logger.debug("Wrote XMP sidecar", path=str(sidecar), count=len(keywords))
             return True
-        except OSError as exc:
+        except (OSError, ConversionPublicationError) as exc:
             logger.warning("Failed to write XMP sidecar", path=str(sidecar), error=str(exc))
             return False
 

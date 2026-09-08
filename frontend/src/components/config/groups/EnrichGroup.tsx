@@ -190,17 +190,32 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
       {config.ai_tagging_enabled && (
         <>
           <SettingRow
-            field="embed_tags_in_files"
+            field={["embed_tags_in_files", "preservation_profile"]}
             label={t("config.ai.embed")}
             description={t("config.ai.embedHelp")}
             htmlFor="ai-embed"
           >
             <Select
               id="ai-embed"
-              value={config.embed_tags_in_files ? "embedded" : "sidecar"}
-              onValueChange={(value) => updateConfig({ embed_tags_in_files: value === "embedded" })}
+              value={
+                config.embed_tags_in_files
+                  ? "embedded"
+                  : config.preservation_profile.derived_metadata === "sidecar_and_report"
+                    ? "sidecar"
+                    : "report"
+              }
+              onValueChange={(value) =>
+                updateConfig({
+                  embed_tags_in_files: value === "embedded",
+                  preservation_profile: {
+                    ...config.preservation_profile,
+                    derived_metadata: value === "sidecar" ? "sidecar_and_report" : "report_only",
+                  },
+                })
+              }
               className="w-48"
             >
+              <SelectItem value="report">{t("config.ai.writeReport")}</SelectItem>
               <SelectItem value="sidecar">{t("config.ai.writeSidecar")}</SelectItem>
               <SelectItem value="embedded">{t("config.ai.writeEmbedded")}</SelectItem>
             </Select>
