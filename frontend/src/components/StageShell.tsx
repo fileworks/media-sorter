@@ -195,7 +195,7 @@ export function StageShell({
         // Without it a focused row lands underneath them, and the keyboard user
         // cannot see what they just focused.
         className="relative min-h-0 flex-1 overflow-y-auto scroll-pb-actionzone focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--border-strong))]"
-        style={{ scrollbarGutter: "stable" }}
+        style={{ scrollbarGutter: "stable both-edges" }}
         aria-labelledby="current-stage-heading"
       >
         {/* The 1480px source-of-truth workspace. The screens that need the width are two-column —
@@ -204,7 +204,7 @@ export function StageShell({
             display sat half empty. The bound stays: prose inside a settings row
             still has to be readable, and an unbounded column would set a line
             length nobody can track back to the next line. */}
-        <div className="mx-auto w-full max-w-workspace px-4 py-4 sm:px-6">
+        <div className="workspace-frame py-4">
           {(banners || invalidated.length > 0) && (
             <div className="mb-4 space-y-3">
               {banners}

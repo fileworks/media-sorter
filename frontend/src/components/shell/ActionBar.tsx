@@ -42,11 +42,11 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
   const reason = primary?.disabled ? (primary.disabledReason ?? null) : null;
 
   return (
-    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6">
+    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card py-3">
       {/* One row once there is room for one. On a narrow window the sentence
           takes its own line and the actions stay together on the next, rather
           than the primary action wrapping away from Back. */}
-      <div className="group/footer mx-auto flex min-h-10 max-w-workspace flex-col gap-2 md:flex-row md:items-center md:gap-3">
+      <div className="workspace-frame group/footer flex min-h-10 flex-col gap-2 md:flex-row md:items-center md:gap-3">
         {/* `basis-1/2` is the guarantee: at the one-row breakpoint the sentence
             starts at half the rail and may grow, so however long the German
             disabled-reason turns out to be it can never squeeze the message to

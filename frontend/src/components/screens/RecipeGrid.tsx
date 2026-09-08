@@ -50,7 +50,8 @@ export function RecipeGrid({
             <button
               type="button"
               disabled={disabled}
-              aria-pressed={active}
+              aria-pressed={reading}
+              aria-description={active ? t("recipes.inForce") : t("recipes.previewOnly")}
               onClick={() => onSelect(recipe)}
               className={cn(
                 "grid h-full w-full grid-cols-[1.125rem_minmax(0,1fr)] gap-2 rounded-window px-4 py-3 text-left transition-colors",
@@ -70,7 +71,7 @@ export function RecipeGrid({
               <span
                 className={cn(
                   "mt-0.5 h-4 w-4 rounded-full border-[1.5px] bg-card",
-                  active ? "border-[4px] border-primary" : "border-input",
+                  reading ? "border-[4px] border-primary" : "border-input",
                 )}
                 aria-hidden
               />

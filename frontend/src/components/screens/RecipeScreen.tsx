@@ -21,7 +21,7 @@ import { RecipeGrid } from "@/components/screens/RecipeGrid";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
-import { configFieldLabel, formatConfigValue } from "@/lib/configDiff";
+import { changedKeys, configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import {
   CONFIG_RECIPES,
   activeRecipeId,
@@ -68,6 +68,8 @@ export function RecipeScreen({
   const recipes = useMemo<ConfigRecipe[]>(() => allRecipes(savedRecipes), [savedRecipes]);
 
   const selectedId = activeRecipeId(config, recipes);
+  const active = recipes.find((recipe) => recipe.id === selectedId);
+  const isDefault = defaults !== undefined && changedKeys(config, defaults).size === 0;
 
   // On a first run nothing matches, so the region would open empty and the
   // recommended card would be a thing to notice rather than a thing already
@@ -138,6 +140,17 @@ export function RecipeScreen({
         subtitle={t("recipes.help")}
       />
 
+      <div data-current-settings className="mb-4 rounded-window border border-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground" role="status">
+          {t("recipes.current", {
+            name: active
+              ? recipeName(active, t)
+              : t(isDefault ? "config.baseline.defaults" : "recipes.custom"),
+          })}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("recipes.currentHelp")}</p>
+      </div>
+
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,.85fr)]">
         <RecipeGrid
           recipes={recipes}
@@ -154,7 +167,9 @@ export function RecipeScreen({
           aria-live="polite"
         >
           <h2 id="recipe-difference" className="text-xs font-bold text-foreground">
-            {pending ? recipeName(pending, t) : t("recipes.difference.none")}
+            {pending
+              ? t("recipes.previewing", { name: recipeName(pending, t) })
+              : t("recipes.difference.none")}
           </h2>
 
           {!pending ? (

@@ -439,6 +439,7 @@ function SetHeader({
 
   return (
     <div
+      data-browse-set={entry.id}
       className={cn(
         // Wraps. The status and the action are `shrink-0`, so on a narrow
         // window they took the row and squeezed the title — which is the flex
@@ -607,12 +608,13 @@ function SetCopies({
             (entry.hasBaseline || entry.decisionKind === "keeper") &&
             entry.keeper?.source === row.source;
           const kept = distinct || confirmedKeeper;
-          const suggested = !kept && !locked && entry.proposedKeeper?.source === row.source;
+          const suggested = !locked && entry.proposedKeeper?.source === row.source;
           return (
             <li
               key={row.source}
+              data-copy-card={row.source}
               className={cn(
-                "w-[10.5rem] overflow-hidden rounded-panel border bg-card",
+                "flex w-[10.5rem] flex-col overflow-hidden rounded-panel border bg-card",
                 kept || locked
                   ? "border-success"
                   : suggested
@@ -649,29 +651,30 @@ function SetCopies({
                     className="h-3.5 w-3.5 rounded-control border-border bg-card/90 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
                   />
                 </label>
-                {(kept || locked || suggested) && (
-                  <span
-                    className={cn(
-                      // A suggestion wears `suggest` and a settled outcome
-                      // wears `success`, here as everywhere else: this badge is
-                      // the one place a reader sees both words in the same
-                      // corner of the same card, so it is where one green would
-                      // be least forgivable.
-                      "absolute right-1 top-1 rounded-full px-2 py-0.5 text-3xs font-semibold",
-                      suggested
-                        ? "border border-suggest/40 bg-tint-suggest text-suggest"
-                        : "bg-success text-background",
-                    )}
-                  >
-                    {t(
-                      locked
-                        ? "review.resolve.protected"
-                        : suggested
-                          ? "review.resolve.suggested"
-                          : "review.resolve.kept",
-                    )}
-                  </span>
-                )}
+                <div className="absolute right-1 top-1 flex flex-col items-end gap-1">
+                  {suggested && (
+                    <span
+                      data-copy-recommended
+                      className="rounded-control border border-suggest/40 bg-tint-suggest px-2 py-0.5 text-3xs font-semibold text-suggest"
+                    >
+                      {t("recipes.recommended")}
+                    </span>
+                  )}
+                  {(kept || locked) && (
+                    <span
+                      className={cn(
+                        // A suggestion wears `suggest` and a settled outcome
+                        // wears `success`, here as everywhere else: this badge is
+                        // the one place a reader sees both words in the same
+                        // corner of the same card, so it is where one green would
+                        // be least forgivable.
+                        "rounded-control bg-tint-success px-2 py-0.5 text-3xs font-semibold text-success",
+                      )}
+                    >
+                      {t(locked ? "review.resolve.protected" : "review.resolve.kept")}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-0.5 px-2 py-2 text-3xs">
@@ -704,7 +707,7 @@ function SetCopies({
                 )}
               </div>
 
-              <div className="px-2 pb-2">
+              <div className="mt-auto px-2 pb-2" data-copy-actions>
                 {locked || entry.hasBaseline ? (
                   <p className="flex items-center gap-1 text-3xs font-semibold text-muted-foreground">
                     <FiLock className="h-3 w-3" aria-hidden />
@@ -852,6 +855,7 @@ function FileLine({
         selected && "bg-accent",
       )}
       data-selected={selected}
+      data-file-row={row.source}
     >
       <label
         className={cn(MIN_TARGET_24, "h-6 w-6 items-center justify-center")}
@@ -901,13 +905,18 @@ function FileLine({
         </span>
       </button>
 
-      <span className="truncate text-right text-3xs tabular-nums text-muted-foreground">
-        {row.date === null ? t("review.resolve.noDate") : formatDate(row.date, { locale })}
+      <span
+        data-file-date
+        className="whitespace-nowrap text-right text-3xs tabular-nums text-muted-foreground"
+      >
+        {row.date === null
+          ? t("review.resolve.noDate")
+          : formatDate(row.date, { locale, type: "date-only" })}
       </span>
 
-      <span className="flex justify-end gap-1">
+      <span data-file-status className="flex justify-end gap-1">
         {row.setAsideCategory !== null ? (
-          <span className="truncate rounded-control border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold text-warning">
+          <span className="whitespace-nowrap rounded-control border border-warning/40 bg-tint-warning px-2 py-0.5 text-3xs font-semibold text-warning">
             {t(`review.setAside.${row.setAsideCategory}`)}
           </span>
         ) : row.flags.length > 0 ? (
@@ -918,7 +927,10 @@ function FileLine({
                 : t(`review.flag.${row.flags[0]}.help`)
             }
           >
-            <span className="truncate rounded-control border border-border px-2 py-0.5 text-3xs font-semibold text-muted-foreground">
+            <span
+              tabIndex={0}
+              className="inline-flex min-h-6 items-center whitespace-nowrap rounded-control border border-border px-2 py-0.5 text-3xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {t(`review.flag.${row.flags[0]}`)}
             </span>
           </Tooltip>
@@ -929,11 +941,23 @@ function FileLine({
         )}
       </span>
 
-      <span className="truncate font-mono text-3xs text-faint" title={row.destination ?? undefined}>
-        {row.destination === null
-          ? ""
-          : (destinationFolder(relativeDestination(row.destination, destinationRoot)) ?? "")}
-      </span>
+      <Tooltip label={row.destination ?? t(row.reason.key, row.reason.params)}>
+        <button
+          type="button"
+          data-file-destination
+          aria-label={row.destination ?? t(row.reason.key, row.reason.params)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenDetail();
+          }}
+          className="block min-h-6 w-full truncate text-left font-mono text-3xs text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={row.destination ?? undefined}
+        >
+          {row.destination === null
+            ? ""
+            : (destinationFolder(relativeDestination(row.destination, destinationRoot)) ?? "")}
+        </button>
+      </Tooltip>
     </div>
   );
 }

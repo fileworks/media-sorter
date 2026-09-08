@@ -115,6 +115,10 @@ banner at the top of the screen scrolls away.
 - The workspace is capped at 1480px (`max-w-workspace`). The shell rails are 48px for
   the title bar, 62px on wide desktop / 56px on tablet for the stepper, and at least
   60px for the action bar.
+  Content, stepper and footer share `.workspace-frame` and its side padding.
+  The main scrollport reserves scrollbar space on both edges, keeping it centered.
+  Sticky setting-group headers meet that scrollport at `top: 0` so clipped row
+  text cannot show through a gap above the heading.
 - Controls come in two heights and no others: **32px** for a toolbar (`Button` `sm`,
   `Select` `sm`, `Segmented` `compact`, the search field) and **36px** for a form
   (`Button` default, `Select` `md`, `Input`, `Segmented` default). There used to be
@@ -133,6 +137,13 @@ and dashed; a settled keeper is `success` and solid. Either mode can decide a se
 in bulk as well as one at a time, so a run can be finished without opening the
 decision queue at all.
 
+Browse decisions update the plan immediately but keep the current cards in place
+until Refresh locations or browse-context navigation. Recommended and Kept are
+independent labels; copy-card actions align at the bottom of each row. Compare
+stays open after Apply, with Next available and saving/retry feedback in place.
+Recipe previews likewise never apply themselves: Setup names the current settings
+separately and places optional adjustments below the recipe workspace.
+
 Use the shared `Button`, `Select`, `Input`, `Toggle`, `Modal`, `Tooltip`, `SettingRow`,
 and `StateView` before adding local control chrome. A component owns its layout; global
 CSS owns tokens, native control normalization, motion accessibility, and the two review
@@ -147,10 +158,12 @@ have.
 
 | Class | Columns | Drops at 1280px | Drops again at 900px |
 |---|---|---|---|
-| `.asset-grid` | select · thumbnail · name · date · status · destination | destination | status |
+| `.asset-grid` | select · thumbnail · name · date · status · destination | destination | status moves below the name |
 
 Columns drop from the right, least-decisive first — a destination is recoverable from
-the row's detail view, a file's name is not.
+the row's detail view, a file's name is not. Dates show the calendar date without
+time-of-day. Status stays readable; destination cells offer pointer/keyboard
+tooltips and open the detail view for the full path.
 
 Resolve had a second grid of the same shape, with columns for size, date, date source and
 destination. It is gone. Members of an exact set are byte-identical, so four of those

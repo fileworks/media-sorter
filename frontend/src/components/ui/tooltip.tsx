@@ -114,6 +114,7 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
         createPortal(
           <div
             ref={bubbleRef}
+            data-tooltip
             aria-hidden
             style={{
               position: "fixed",

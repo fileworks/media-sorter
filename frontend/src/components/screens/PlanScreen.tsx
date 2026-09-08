@@ -13,9 +13,16 @@ interface PlanScreenProps {
   inputCount: number;
   referenceCount: number;
   onRecalculate: () => void;
+  onOpenReview: () => void;
 }
 
-export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }: PlanScreenProps) {
+export function PlanScreen({
+  result,
+  inputCount,
+  referenceCount,
+  onRecalculate,
+  onOpenReview,
+}: PlanScreenProps) {
   const { t, tCount, locale } = useI18n();
   const issueCount = Math.max(result.issues.length, result.stats.issue_count ?? 0);
   const duplicateCount = Math.max(result.impact.unresolved_count, result.stats.will_skip_duplicate);
@@ -70,9 +77,14 @@ export function PlanScreen({ result, inputCount, referenceCount, onRecalculate }
         title={t("plan.title")}
         subtitle={t("plan.subtitle")}
         actions={
-          <Button variant="outline" onClick={onRecalculate}>
-            {t("plan.recalculate")}
-          </Button>
+          <>
+            <Button variant="outline" onClick={onRecalculate}>
+              {t("plan.recalculate")}
+            </Button>
+            <Button variant="outline" onClick={onOpenReview}>
+              {t("footer.toReview")}
+            </Button>
+          </>
         }
       />
 

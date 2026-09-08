@@ -852,7 +852,7 @@ describe("resolve", () => {
     })[0];
     fireEvent.click(header);
 
-    expect(screen.getByText(en("review.resolve.suggested"))).toBeTruthy();
+    expect(screen.getByText(en("recipes.recommended"))).toBeTruthy();
     expect(screen.queryByText(en("review.resolve.kept"))).toBeNull();
     expect(screen.getAllByRole("button", { name: en("review.detail.makeKeeper") })).toHaveLength(2);
   });

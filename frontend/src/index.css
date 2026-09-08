@@ -254,6 +254,9 @@
 
 /* Shared responsive grids keep review headers aligned with rows. */
 @layer components {
+  .workspace-frame {
+    @apply mx-auto w-full max-w-workspace px-4 sm:px-6;
+  }
   /*
    * A region that can be read but not edited.
    *
@@ -307,29 +310,39 @@
      a table of facts, and a copy row lays itself out. */
   .asset-grid {
     display: grid;
-    grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.875rem 5.125rem 5.75rem;
+    grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem 9rem 8rem;
     align-items: center;
-    gap: 0.5625rem;
+    gap: 0.5rem;
   }
 
   /* One column short: the planned destination folds away first. */
   @media (max-width: 1280px) {
     .asset-grid {
-      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.25rem 4.75rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem 9rem;
     }
     .asset-grid > *:nth-child(6) {
       display: none;
     }
   }
 
-  /* Name and one figure. Everything else lives in the detail view. */
+  /* Keep dates visible; move status below the name instead of hiding it. */
   @media (max-width: 900px) {
     .asset-grid {
-      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem;
     }
     .asset-grid > *:nth-child(5),
     .asset-grid > *:nth-child(6) {
       display: none;
+    }
+    .asset-grid[data-file-row] {
+      height: auto;
+      min-height: 3.25rem;
+      padding-block: 0.5rem;
+    }
+    .asset-grid > [data-file-status] {
+      display: flex;
+      grid-column: 3 / -1;
+      justify-content: flex-start;
     }
   }
 }

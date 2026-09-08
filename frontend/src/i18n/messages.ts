@@ -165,9 +165,9 @@ export const en = {
   "review.folder.copies": "Copies",
   "review.flag.name_clash": "name clash",
   "review.flag.name_clash.help": "Another file wants this name. A suffix is added automatically.",
-  "review.flag.duplicate_pending": "check pending",
+  "review.flag.duplicate_pending": "Not checked yet",
   "review.flag.duplicate_pending.help":
-    "The duplicate check finishes during the run. Nothing to do.",
+    "This preview has not completed the duplicate check for this file. The run checks it again before deciding its destination. This is not an error.",
   "review.flag.unit_member": "moves together",
   "review.flag.unit_member.help": "This file moves together with its companions.",
   "config.runMode": "Run mode",
@@ -1144,7 +1144,7 @@ export const en = {
   "review.browse.columnDestination": "Destination",
   "review.browse.statusReady": "ready",
   "review.browse.openInResolve": "Decide this set",
-  "review.browse.openResult": "Open result",
+  "review.browse.openResult": "Review duplicates",
   "review.browse.decisions": "Duplicate decisions",
   "review.browse.openSets.one": "1 duplicate set is waiting for a decision",
   "review.browse.openSets": "{count} duplicate sets are waiting for a decision",
@@ -1205,7 +1205,6 @@ export const en = {
     "Sets to review have no accepted keep choice. A proposal waiting already has a rule-ranked suggestion, but it still changes nothing until accepted.",
   "review.resolve.keepThis": "Keep {name} — press {number}",
   "review.resolve.kept": "kept",
-  "review.resolve.suggested": "suggested",
   "review.resolve.protected": "protected",
   "review.resolve.keepShort": "Keep this",
   "review.resolve.noProposals": "The keep rule has nothing left to recommend in this plan.",
@@ -1449,7 +1448,19 @@ export const en = {
   // Scoped to the folder the tree has selected, which is why it does not repeat
   // the tree's own "jump to folder" wording — two fields both offering to find
   // folders is what made the pair read as duplicates of each other.
-  "review.search": "Search files here…",
+  "review.search": "Filter by filename…",
+  "review.browse.stablePlacement":
+    "Decisions update the plan. Groups stay here until you refresh locations or change folders.",
+  "review.browse.refreshPlacement": "Refresh locations",
+  "review.compare.applied": "Applied",
+  "setup.optionalHelp":
+    "Optional: fine-tune folder structure, filenames, duplicate rules and local tagging.",
+  "recipes.current": "Currently using: {name}",
+  "recipes.currentHelp":
+    "Continue with these settings, or preview a recipe below. Nothing changes until you apply it.",
+  "recipes.custom": "Custom settings",
+  "recipes.previewing": "Preview: {name}",
+  "recipes.previewOnly": "Preview these settings. Apply them separately to use them.",
   "review.keepRule": "Keep rule",
   "review.compare.withCopy": "Compare {name} with {other}",
   "review.compare": "Compare",
@@ -1730,9 +1741,9 @@ export const de: Record<MessageKey, string> = {
   "review.flag.name_clash": "Namenskonflikt",
   "review.flag.name_clash.help":
     "Eine andere Datei möchte diesen Namen. Ein Suffix wird automatisch angehängt.",
-  "review.flag.duplicate_pending": "Prüfung offen",
+  "review.flag.duplicate_pending": "Noch ungeprüft",
   "review.flag.duplicate_pending.help":
-    "Die Duplikatprüfung endet während des Durchlaufs. Nichts zu tun.",
+    "Diese Vorschau hat die Duplikatprüfung für diese Datei noch nicht abgeschlossen. Der Durchlauf prüft sie vor der Zielentscheidung erneut. Das ist kein Fehler.",
   "review.flag.unit_member": "gehört zusammen",
   "review.flag.unit_member.help": "Diese Datei wird zusammen mit ihren Begleitdateien verschoben.",
   "config.runMode": "Modus",
@@ -2739,7 +2750,7 @@ export const de: Record<MessageKey, string> = {
   "review.browse.columnDestination": "Ziel",
   "review.browse.statusReady": "bereit",
   "review.browse.openInResolve": "Im Duplikat-Tab prüfen",
-  "review.browse.openResult": "Ergebnis öffnen",
+  "review.browse.openResult": "Duplikate prüfen",
   "review.browse.decisions": "Duplikat-Entscheidungen",
   "review.browse.openSets.one": "1 Duplikatsatz wartet auf eine Entscheidung",
   "review.browse.openSets": "{count} Duplikats\u00e4tze warten auf eine Entscheidung",
@@ -2801,7 +2812,6 @@ export const de: Record<MessageKey, string> = {
     "Zu prüfende Sätze haben noch keine bestätigte Auswahl. Bei „Vorschlag wartet“ gibt es bereits eine regelbasierte Empfehlung, die bis zur Bestätigung nichts ändert.",
   "review.resolve.keepThis": "{name} behalten — Taste {number}",
   "review.resolve.kept": "behalten",
-  "review.resolve.suggested": "vorgeschlagen",
   "review.resolve.protected": "geschützt",
   "review.resolve.keepShort": "Diese behalten",
   "review.resolve.noProposals": "Die Behaltregel hat in diesem Plan nichts mehr zu empfehlen.",
@@ -3045,7 +3055,19 @@ export const de: Record<MessageKey, string> = {
   "review.tree.note": "Eine Vorschau — Ordner entstehen erst beim Ausführen in Schritt 4.",
   "review.view.cards": "Karten",
   "review.view.list": "Liste",
-  "review.search": "Dateien hier suchen…",
+  "review.search": "Nach Dateiname filtern…",
+  "review.browse.stablePlacement":
+    "Entscheidungen ändern den Plan. Gruppen bleiben hier, bis du die Zuordnung aktualisierst oder den Ordner wechselst.",
+  "review.browse.refreshPlacement": "Zuordnung aktualisieren",
+  "review.compare.applied": "Übernommen",
+  "setup.optionalHelp":
+    "Optional: Ordnerstruktur, Dateinamen, Duplikatregeln und lokale Tags anpassen.",
+  "recipes.current": "Aktuell verwendet: {name}",
+  "recipes.currentHelp":
+    "Mit diesen Einstellungen fortfahren oder unten ein Rezept ansehen. Erst das Übernehmen ändert die Einstellungen.",
+  "recipes.custom": "Eigene Einstellungen",
+  "recipes.previewing": "Vorschau: {name}",
+  "recipes.previewOnly": "Diese Einstellungen ansehen. Erst das Übernehmen aktiviert sie.",
   "review.keepRule": "Behaltregel",
   "review.compare.withCopy": "{name} mit {other} vergleichen",
   "review.compare": "Vergleichen",

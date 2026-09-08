@@ -46,12 +46,30 @@ function renderRecipes(
 /** The cards, in document order, as the shape the grid occupies. */
 function cardNames(): string[] {
   return screen
-    .getAllByRole("button", { pressed: false })
-    .concat(screen.queryAllByRole("button", { pressed: true }))
+    .getAllByRole("button")
+    .filter((button) => button.hasAttribute("aria-pressed"))
     .map((button) => button.textContent ?? "");
 }
 
 describe("choosing a recipe moves nothing", () => {
+  it("identifies unchanged defaults without applying the preview", () => {
+    const apply = renderRecipes(TEST_CONFIG, vi.fn(), TEST_CONFIG);
+    expect(document.querySelector("[data-current-settings]")?.textContent).toContain(
+      translate("en", "config.baseline.defaults"),
+    );
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("identifies custom settings, including settings outside recipe snapshots", () => {
+    renderRecipes(
+      { ...TEST_CONFIG, ai_allow_gpu: !TEST_CONFIG.ai_allow_gpu },
+      vi.fn(),
+      TEST_CONFIG,
+    );
+    expect(document.querySelector("[data-current-settings]")?.textContent).toContain(
+      translate("en", "recipes.custom"),
+    );
+  });
   it("keeps every card in the same place and the region in the same container", () => {
     renderRecipes();
 
@@ -77,7 +95,7 @@ describe("choosing a recipe moves nothing", () => {
     const recommended = CONFIG_RECIPES.find((recipe) => recipe.recommended);
     expect(recommended).toBeDefined();
     expect(document.getElementById("recipe-difference")?.textContent).toBe(
-      translate("en", recommended?.labelKey ?? ""),
+      translate("en", "recipes.previewing", { name: translate("en", recommended?.labelKey ?? "") }),
     );
   });
 

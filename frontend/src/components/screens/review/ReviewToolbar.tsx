@@ -73,9 +73,33 @@ export function ReviewToolbar({
     </span>
   );
 
+  const searchInput = (
+    <label className="relative min-w-[11rem] flex-1 sm:max-w-sm">
+      <span className="sr-only">{t("review.search")}</span>
+      <FiSearch
+        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
+        aria-hidden
+      />
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => onSearch(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || search === "") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onSearch("");
+        }}
+        placeholder={t("review.search")}
+        className="h-8 w-full rounded-control border border-input bg-card py-1 pl-8 pr-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+    </label>
+  );
+
   if (selectedCount > 0) {
     return (
       <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+        {searchInput}
         {announcement}
         {selectionActions.map((action) => (
           <Tooltip
@@ -109,26 +133,7 @@ export function ReviewToolbar({
         {scopeLabel}
       </p>
 
-      <label className="relative min-w-[11rem] flex-1 sm:max-w-sm">
-        <span className="sr-only">{t("review.search")}</span>
-        <FiSearch
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
-          aria-hidden
-        />
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape" || search === "") return;
-            event.preventDefault();
-            event.stopPropagation();
-            onSearch("");
-          }}
-          placeholder={t("review.search")}
-          className="h-8 w-full rounded-control border border-input bg-card py-1 pl-8 pr-3 text-xs text-foreground transition-colors placeholder:text-faint hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </label>
+      {searchInput}
 
       <SortControl id="review-browse-sort" value={sort} onChange={onSort} />
 

@@ -49,7 +49,7 @@ export function StageStepper({ current, gate, complete, onSelect }: StageStepper
       aria-label={t("stage.navigation")}
       className="relative h-14 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
     >
-      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-0.5 px-3 py-1 md:min-w-[48rem] md:grid-cols-4 md:px-4">
+      <ol className="workspace-frame relative grid h-full min-w-0 grid-cols-1 gap-1 py-1 md:grid-cols-4">
         {VISUAL_STEPS.map((entry, index) => {
           const active = entry.stage === current;
           const isComplete = complete(entry.stage);

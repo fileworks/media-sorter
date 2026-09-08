@@ -11,6 +11,7 @@ import { Segmented } from "@/components/ui/setting-row";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Thumbnail } from "@/components/ui/thumbnail";
 import { useI18n } from "@/i18n/I18nContext";
+import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { formatBytes, formatDuration } from "@/lib/formatters";
 import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
 import { orderFacts, REVIEW_FACT_LABELS, type ReviewFactId } from "@/lib/reviewFacts";
@@ -40,6 +41,9 @@ interface CompareModalProps {
   onKeep: (memberId: string) => void;
   onKeepBoth: () => void;
   onClose: () => void;
+  saving?: boolean;
+  saveError?: string | null;
+  onRetrySave?: () => void;
   /** Open the full detail view for one side, by its path. */
   onOpenDetail?: (path: string) => void;
   /** Examine one side full screen, by its path. */
@@ -202,6 +206,9 @@ export function CompareModal({
   onKeep,
   onKeepBoth,
   onClose,
+  saving = false,
+  saveError = null,
+  onRetrySave,
   onOpenDetail,
   onEnlarge,
   onPreviousSet,
@@ -211,6 +218,7 @@ export function CompareModal({
   comparisonPosition = null,
 }: CompareModalProps) {
   const { t, locale } = useI18n();
+  const slowSave = useDelayedFlag(saving);
   const [mode, setMode] = useState<Mode>("side");
   const [split, setSplit] = useState(50);
   const [zoom, setZoom] = useState(100);
@@ -767,6 +775,16 @@ export function CompareModal({
                     })}
               </span>
               <span className="block">{t("review.compare.scopeNote")}</span>
+              <span
+                className={cn("block min-h-4", saveError ? "text-error" : "text-muted-foreground")}
+                role="status"
+              >
+                {saveError
+                  ? t("review.persistence.saveFailed")
+                  : slowSave
+                    ? t("review.persistence.saving")
+                    : ""}
+              </span>
             </>
           ) : (
             t("review.compare.notOneSet")
@@ -835,15 +853,32 @@ export function CompareModal({
         </Button>
         {decisionEnabled && (
           <>
-            <Button size="sm" variant="outline" onClick={onKeepBoth}>
+            {saveError && onRetrySave && (
+              <Button size="sm" variant="outline" onClick={onRetrySave}>
+                {t("state.retry")}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDraftId(null);
+                onKeepBoth();
+              }}
+              disabled={saving}
+            >
               {t("review.compare.keepBoth", { count: setMemberCount })}
             </Button>
             <Button
               size="sm"
-              disabled={draftId === null}
+              disabled={saving || draftId === null || draftId === keeperId}
               onClick={() => draftId && onKeep(draftId)}
             >
-              {t("review.compare.confirmSelection")}
+              {t(
+                !saving && !saveError && draftId !== null && draftId === keeperId
+                  ? "review.compare.applied"
+                  : "review.compare.confirmSelection",
+              )}
             </Button>
           </>
         )}

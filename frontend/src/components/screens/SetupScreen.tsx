@@ -34,7 +34,19 @@ export function SetupScreen({
         settings(() => onAdjustingChange(false))
       ) : (
         <>
-          <div className="flex justify-end">
+          <fieldset
+            disabled={locked}
+            className={cn("m-0 min-w-0 border-0 p-0", locked && "read-only-region")}
+          >
+            {recipe}
+          </fieldset>
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-window border border-border bg-card p-4"
+            data-optional-settings
+          >
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {t("setup.optionalHelp")}
+            </p>
             <Button
               data-open-settings
               variant="outline"
@@ -44,12 +56,6 @@ export function SetupScreen({
               {t("setup.adjustSettings")}
             </Button>
           </div>
-          <fieldset
-            disabled={locked}
-            className={cn("m-0 min-w-0 border-0 p-0", locked && "read-only-region")}
-          >
-            {recipe}
-          </fieldset>
         </>
       )}
     </div>

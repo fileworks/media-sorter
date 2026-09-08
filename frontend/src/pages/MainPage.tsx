@@ -895,6 +895,7 @@ export default function MainPage() {
                         activeRootCards.filter((card) => card.role === "reference").length
                       }
                       onRecalculate={() => void buildPlan()}
+                      onOpenReview={() => changeReviewView("review")}
                     />
                   ) : (
                     <Suspense

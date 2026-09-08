@@ -340,13 +340,12 @@ export function SettingGroup({
           28px control rather than 12px around a 20px heading. It is a sticky
           band the reader passes under repeatedly, so its height is paid on
           every group.
-          `top-4`, not `top-0`, so it comes to rest on the same 16px inset the
-          rail beside it is pinned at. Pinned flush to the pane's edge it was
-          the one thing on the screen touching that edge, and it read as having
-          slipped out of its card. The rounded top corners stay: behind them is
-          the section's own `bg-card`, so nothing shows through them once the
-          card has scrolled under. */}
-      <header className="sticky top-4 z-10 rounded-t-window border-b border-border bg-card px-4 py-2">
+          Pin flush to the scrollport: a gap above the sticky band exposed
+          clipped text from the rows passing beneath it. */}
+      <header
+        data-setting-header
+        className="sticky top-0 z-10 rounded-t-window border-b border-border bg-card px-4 py-2"
+      >
         <div className="flex flex-wrap items-center gap-3">
           <h2 id={headingId} className="text-sm font-bold tracking-tight text-foreground">
             {title}

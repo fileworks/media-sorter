@@ -15,6 +15,7 @@ import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
+import { useBrowsePlacement } from "@/hooks/useBrowsePlacement";
 import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useReviewSurface, type ReviewMode } from "@/hooks/useReviewSurface";
 import { useI18n } from "@/i18n/I18nContext";
@@ -149,14 +150,24 @@ export function ReviewScreen({
   );
 
   // Strip the machine-specific destination root from the planned tree.
-  const entries = useMemo(
+  const liveEntries = useMemo(
     () => browseEntries(surface.rows, config.target_directory),
     [config.target_directory, surface.rows],
   );
-  const stats = useMemo(() => reviewStats(surface.rows, entries), [entries, surface.rows]);
-  // Only Browse draws the tree, and every decision invalidates it. Deciding is
-  // done in Resolve, so building it there is a folder tree nobody is looking
-  // at, rebuilt once per decision over the whole plan.
+  // One stable set order for Browse, the queue, and comparison navigation.
+  const allSets = useMemo(
+    () =>
+      sortSets(duplicateSetEntries(surface.rows, config.target_directory), surface.sort, locale),
+    [config.target_directory, locale, surface.rows, surface.sort],
+  );
+  const browsePlacement = useBrowsePlacement(
+    liveEntries,
+    allSets,
+    JSON.stringify([result.plan_id, surface.mode, surface.treePath, surface.sort, surface.search]),
+  );
+  const entries = browsePlacement.entries;
+  const stats = useMemo(() => reviewStats(surface.rows, liveEntries), [liveEntries, surface.rows]);
+  // Only Browse draws the tree; queue decisions need not rebuild a hidden tree.
   const tree = useMemo(
     () =>
       surface.mode === "browse"
@@ -164,15 +175,6 @@ export function ReviewScreen({
         : browseTree([], t("review.tree.root")),
     [entries, surface.mode, t],
   );
-  // One order for the panel. The list is sorted by the toolbar's control while
-  // the queue used entry order, so "Set 3 of 15" named a row 12 places down the
-  // list and the arrow keys walked an order nothing on screen showed.
-  const allSets = useMemo(
-    () =>
-      sortSets(duplicateSetEntries(surface.rows, config.target_directory), surface.sort, locale),
-    [config.target_directory, locale, surface.rows, surface.sort],
-  );
-
   // Do not expose a transient zero while catalog-backed decisions load.
   useEffect(() => {
     if (groups.isLoading || groups.isError) return;
@@ -262,21 +264,26 @@ export function ReviewScreen({
   const chooseKeeperBySource = useCallback(
     (setId: string, source: string) => {
       const memberId = memberIdBySetSource.get(`${setId}\0${source}`);
-      if (memberId) surface.chooseKeeper(setId, memberId);
+      if (memberId) {
+        if (surface.mode === "browse") browsePlacement.pin();
+        surface.chooseKeeper(setId, memberId);
+      }
     },
-    [memberIdBySetSource, surface],
+    [memberIdBySetSource, surface, browsePlacement],
   );
 
   /** The bulk form of the same choice, resolved through one member lookup. */
   const keepManyBySource = useCallback(
-    (choices: readonly { setId: string; source: string }[]) =>
+    (choices: readonly { setId: string; source: string }[]) => {
+      if (surface.mode === "browse") browsePlacement.pin();
       surface.chooseKeepers(
         choices.flatMap((choice) => {
           const memberId = memberIdBySetSource.get(`${choice.setId}\0${choice.source}`);
           return memberId ? [{ groupId: choice.setId, memberId }] : [];
         }),
-      ),
-    [memberIdBySetSource, surface],
+      );
+    },
+    [memberIdBySetSource, surface, browsePlacement],
   );
 
   const groupFor = useCallback(
@@ -315,7 +322,13 @@ export function ReviewScreen({
   }, [queue]);
 
   /** "These are not duplicates": every copy is kept and placed on its own. */
-  const keepAll = useCallback((setId: string) => surface.markNotDuplicates(setId), [surface]);
+  const keepAll = useCallback(
+    (setId: string) => {
+      if (surface.mode === "browse") browsePlacement.pin();
+      surface.markNotDuplicates(setId);
+    },
+    [surface, browsePlacement],
+  );
 
   const comparableFor = useCallback(
     (row: ReviewRow): ComparableFile => {
@@ -949,6 +962,22 @@ export function ReviewScreen({
                 </div>
 
                 <div className="space-y-2 p-2">
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 px-1"
+                    data-browse-placement
+                  >
+                    <p className="min-w-0 flex-1 text-3xs text-muted-foreground">
+                      {t("review.browse.stablePlacement")}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!browsePlacement.pinned}
+                      onClick={browsePlacement.refresh}
+                    >
+                      {t("review.browse.refreshPlacement")}
+                    </Button>
+                  </div>
                   <BrowseDecisionBar
                     openSets={openSets}
                     proposalCount={surface.proposals.size}
@@ -956,11 +985,17 @@ export function ReviewScreen({
                     rule={surface.keepPolicy}
                     ruleLabel={t(`config.keeper.${surface.keepPolicy}`)}
                     onRule={surface.setKeepPolicy}
-                    onAcceptAll={surface.acceptAllProposals}
+                    onAcceptAll={() => {
+                      browsePlacement.pin();
+                      surface.acceptAllProposals();
+                    }}
                     selectedSets={selectedSets}
                     keepSourceByRule={keepSourceByRule}
                     onKeepMany={keepManyBySource}
-                    onKeepAllMany={surface.markManyNotDuplicates}
+                    onKeepAllMany={(ids) => {
+                      browsePlacement.pin();
+                      surface.markManyNotDuplicates(ids);
+                    }}
                     onReviewSelected={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
                     onClearSelection={surface.clearSetSelection}
                   />
@@ -1074,13 +1109,17 @@ export function ReviewScreen({
           recommendationReason={comparing.recommendationReason}
           decisionLocked={comparing.decisionLocked}
           onClose={() => setComparing(null)}
+          saving={surface.persistenceState === "saving"}
+          saveError={surface.persistenceError}
+          onRetrySave={surface.retryPersistence}
           onKeep={(memberId) => {
+            if (surface.mode === "browse") browsePlacement.pin();
             if (comparing.setId) surface.chooseKeeper(comparing.setId, memberId);
-            setComparing(null);
+            setComparing((current) => (current ? { ...current, keeperId: memberId } : null));
           }}
           onKeepBoth={() => {
             if (comparing.setId) keepAll(comparing.setId);
-            setComparing(null);
+            setComparing((current) => (current ? { ...current, keeperId: null } : null));
           }}
           onOpenDetail={(path) => {
             setComparing(null);

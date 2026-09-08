@@ -42,7 +42,8 @@ export function rowSortModel(row: ReviewRow): SortModel {
 
 export function setSortModel(entry: SetEntry): SortModel {
   const rows = entry.rows;
-  const lead = entry.keeper ?? rows[0] ?? null;
+  // A keeper decision must not reorder the set being operated on.
+  const lead = rows[0] ?? null;
   return {
     name: lead?.name ?? entry.id,
     size: rows.reduce<number | null>(

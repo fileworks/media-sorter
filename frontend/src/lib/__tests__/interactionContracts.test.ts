@@ -64,6 +64,22 @@ function buttonAttributes(source: string): string[] {
 const RAW_BUTTONS = PRODUCT.map(([path, source]) => [path, buttonAttributes(source)] as const);
 
 describe("stable workflow chrome", () => {
+  it("shares one centered workspace frame across the content and both rails", () => {
+    for (const path of [
+      "src/components/StageShell.tsx",
+      "src/components/shell/StageStepper.tsx",
+      "src/components/shell/ActionBar.tsx",
+    ]) {
+      expect(sourceOf(path), path).toContain("workspace-frame");
+      expect(sourceOf(path), path).not.toContain("max-w-workspace");
+    }
+    expect(cssSource).toMatch(
+      /\.workspace-frame\s*\{\s*@apply mx-auto w-full max-w-workspace px-4 sm:px-6;/,
+    );
+    expect(sourceOf("src/components/StageShell.tsx")).toContain(
+      'scrollbarGutter: "stable both-edges"',
+    );
+  });
   /**
    * The contract this replaces asked that the selection actions be `fixed`
    * out of document flow, so ticking a checkbox could not push the list the
