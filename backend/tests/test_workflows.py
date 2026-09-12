@@ -429,3 +429,66 @@ def test_the_docs_refuse_to_call_attestations_signing() -> None:
     assert "not code signing" in signing or "are not signing" in signing
     assert "gh attestation verify" in signing
     assert "notariz" in signing
+
+
+# Two installs deliberately resolve outside the backend lock, and both are the
+# point of the job they sit in. Naming them exactly — rather than pattern-
+# matching them away — means a *new* unlocked install still fails the check.
+DELIBERATELY_UNLOCKED_INSTALLS = frozenset(
+    {
+        # `archive-security` proves `scripts/fetch_ffmpeg.py` survives malicious
+        # archives with nothing but pytest present. Installing the backend's
+        # dependencies here would destroy the very condition it tests.
+        "python -m pip install pytest",
+        # The frontend `build` job validates generated JSON against a schema. It
+        # never imports the backend, so the backend lock does not describe it.
+        "pip install jsonschema --quiet --disable-pip-version-check",
+    }
+)
+
+
+def test_every_python_install_resolves_through_the_lock() -> None:
+    """No workflow may resolve Python dependencies fresh.
+
+    `pip install -e ".[dev]"` ignored `backend/uv.lock` and re-resolved on every
+    run, so a dependency release could turn `main` red without a commit. That is
+    not hypothetical: `pillow-heif` 1.6.0 began shipping `py.typed` with no
+    `__all__` on 2026-08-31 and broke `mypy --strict` on `main` and both open
+    pull requests at once, six days before anyone looked.
+
+    The rule is that the versions CI tests are the versions the lock names, so
+    the only permitted installer is an export of that lock. `--no-deps` on the
+    project itself is what keeps it honest: the dependency set comes from the
+    export or from nowhere.
+    """
+    offenders: list[str] = []
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        document = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        assert isinstance(document, dict)
+        jobs = document.get("jobs")
+        assert isinstance(jobs, dict)
+        for job_id, job in jobs.items():
+            assert isinstance(job, dict)
+            for step in job.get("steps") or []:
+                if not isinstance(step, dict):
+                    continue
+                run = str(step.get("run") or "")
+                for line in run.splitlines():
+                    stripped = line.strip()
+                    if "pip install" not in stripped:
+                        continue
+                    # An export of the lock, or the project with its
+                    # dependencies deliberately withheld, are the two allowed
+                    # shapes. `--upgrade pip` bootstraps pip itself.
+                    if (
+                        "-r requirements.ci.txt" in stripped
+                        or "-r backend/requirements.ci.txt" in stripped
+                        or "--no-deps" in stripped
+                        or "--upgrade pip" in stripped
+                    ):
+                        continue
+                    if stripped in DELIBERATELY_UNLOCKED_INSTALLS:
+                        continue
+                    offenders.append(f"{workflow.name}:{job_id}: {stripped}")
+
+    assert not offenders, "unlocked Python installs:\n" + "\n".join(offenders)
