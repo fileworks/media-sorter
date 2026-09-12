@@ -29,16 +29,30 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libjpeg-dev libpng-dev
 
-      - name: Install Python dependencies
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
         working-directory: backend
-        run: pip install -e ".[dev]"
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
 
       - name: Verify deterministic branding
         run: make branding-check
@@ -104,11 +118,25 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/uv.lock
 
-      - name: Install Python dependencies
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
         working-directory: backend
-        run: pip install -e ".[dev]"
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
 
       # `test_root_identity.py` was absent from this list while three of its
       # contracts are `skipif(os.name != "nt")` — so they were skipped on every
@@ -145,11 +173,25 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/uv.lock
 
-      - name: Install Python dependencies
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
         working-directory: backend
-        run: pip install -e ".[dev]"
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
 
       # APFS is case-insensitive and stores filenames decomposed, and the
       # transfer engine's cross-volume and identity rules behave differently
@@ -175,9 +217,9 @@ jobs:
       matrix:
         include:
           - profile: core
-            extras: dev
+            extras: --extra dev
           - profile: shipped-local-ai
-            extras: dev,local-ai
+            extras: --extra dev --extra local-ai
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python 3.11
@@ -185,10 +227,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
-      - name: Install profile
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+      - name: Install the locked profile
         working-directory: backend
-        run: pip install -e ".[${{ matrix.extras }}]"
+        shell: bash
+        run: |
+          uv export --locked ${{ matrix.extras }} --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
       - name: Type-check the shipped import graph
         working-directory: backend
         run: python -m mypy
@@ -374,10 +423,20 @@ jobs:
         with:
           workspaces: frontend/src-tauri
 
-      - name: Install dependencies
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # The bundle this job smoke-tests must be frozen from the same versions
+      # the backend jobs type-check and test, or it is proving a different
+      # artifact. `pyinstaller` is already in the `dev` extra, so the lock
+      # pins it too.
+      - name: Install the locked dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -e "backend[dev]" pyinstaller
+          (cd backend && uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt)
+          uv pip install --system -r backend/requirements.ci.txt
+          uv pip install --system -e backend --no-deps
           npm --prefix frontend ci
 
       - name: Freeze the backend and stage it into the bundle

@@ -73,9 +73,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libjpeg-dev libpng-dev
 
-      - name: Install Python dependencies
+      # The published installer must be frozen from the locked versions, not
+      # from whatever resolved on release day. See the equivalent note in ci.yml.
+      - name: Install the locked dependencies
         working-directory: backend
-        run: pip install -e ".[dev]"
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
 
       - name: Verify deterministic branding
         run: make branding-check

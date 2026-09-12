@@ -100,3 +100,6 @@ _corrupted/
 *.temp
 
 .hypothesis/
+
+# Exported from uv.lock by CI; never committed.
+requirements.ci.txt
