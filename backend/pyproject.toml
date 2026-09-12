@@ -131,6 +131,17 @@ ignore_missing_imports = true
 # quietly returns the wrong shape is a test that proves nothing.
 files = ["app", "tests"]
 
+# `pillow-heif` 1.6.0 began shipping a `py.typed` marker while still declaring
+# no `__all__`, so every name its `__init__` re-exports — `register_heif_opener`
+# among them — became invisible to `strict`'s `no_implicit_reexport`. The import
+# is correct and works at runtime; only the package's export declaration is
+# missing. Scoping `implicit_reexport` to this one module keeps the rule on
+# everywhere else, and it quietly becomes a no-op once upstream declares its
+# exports — unlike a `type: ignore`, which would then fail as `unused-ignore`.
+[[tool.mypy.overrides]]
+module = "pillow_heif"
+implicit_reexport = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
