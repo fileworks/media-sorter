@@ -631,7 +631,9 @@ class DestinationReconciliationService:
                 if not is_primary and config.companion_handling == "leave_in_place":
                     continue
                 member_destination = (
-                    destination if is_primary else companion_destination(destination, member)
+                    destination
+                    if is_primary
+                    else companion_destination(destination, member, source)
                 )
                 if member_destination.is_file():
                     source_digest = stream_sha256(member)[0]

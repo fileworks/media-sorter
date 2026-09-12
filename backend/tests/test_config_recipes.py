@@ -19,49 +19,57 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
     that a recipe is usable *as applied* — validation passes and a preview runs
     without the user having to fix anything the recipe left inconsistent.
     """
-    if recipe == "safe_sort":
+    if recipe == "consolidate":
         return Config(
             source_directory=str(source),
             target_directory=str(destination),
             sort=True,
             sort_criteria=["year", "month"],
             copy_instead_of_move=True,
-            remove_duplicates=True,
-            duplicate_exact_enabled=True,
-            duplicate_perceptual_enabled=True,
-            junk_filter_enabled=False,
-            convert_images=False,
-            convert_videos=False,
-            repair_enabled=False,
-        )
-
-    if recipe == "clean_sweep":
-        return Config(
-            source_directory=str(source),
-            target_directory=str(destination),
-            sort=True,
-            sort_criteria=["year", "month"],
-            copy_instead_of_move=False,
+            rename=False,
+            rename_pattern="YYYY-MM-DD_NAME",
             remove_duplicates=True,
             duplicate_exact_enabled=True,
             duplicate_perceptual_enabled=True,
             junk_filter_enabled=True,
+            categorize_enabled=False,
+            ai_tagging_enabled=False,
             convert_images=False,
             convert_videos=False,
             repair_enabled=False,
         )
 
+    if recipe == "tidy_library":
+        return Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            run_mode="deduplicate_only",
+            sort=True,
+            copy_instead_of_move=False,
+            rename=False,
+            remove_duplicates=True,
+            duplicate_exact_enabled=True,
+            duplicate_perceptual_enabled=True,
+            junk_filter_enabled=True,
+            categorize_enabled=False,
+            ai_tagging_enabled=False,
+            convert_images=False,
+            convert_videos=False,
+            repair_enabled=False,
+        )
     if recipe == "scratch":
         return Config(
             source_directory=str(source),
             target_directory=str(destination),
-            sort=False,
+            sort=True,
+            sort_criteria=["year"],
             copy_instead_of_move=True,
-            remove_duplicates=False,
-            duplicate_exact_enabled=False,
+            rename=False,
+            remove_duplicates=True,
+            duplicate_exact_enabled=True,
             duplicate_perceptual_enabled=False,
             junk_filter_enabled=False,
-            rename=False,
+            preserve_subfolders=False,
             categorize_enabled=False,
             convert_images=False,
             convert_videos=False,
@@ -70,6 +78,7 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
             ai_tagging_enabled=False,
         )
 
+    # `archive_normalize` — the only card that rewrites file contents.
     acknowledged = datetime.now(timezone.utc)
     return Config(
         source_directory=str(source),
@@ -77,6 +86,8 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
         sort=True,
         sort_criteria=["year", "month"],
         copy_instead_of_move=True,
+        rename=True,
+        rename_pattern="YYYY-MM-DD_NAME",
         remove_duplicates=True,
         duplicate_exact_enabled=True,
         duplicate_perceptual_enabled=True,
@@ -110,7 +121,7 @@ def _recipe_config(recipe: str, source: Path, destination: Path) -> Config:
 
 
 def test_every_recipe_validates_and_previews_without_follow_up_edits(tmp_path: Path) -> None:
-    for recipe in ("safe_sort", "clean_sweep", "archive_convert", "scratch"):
+    for recipe in ("consolidate", "tidy_library", "archive_normalize", "scratch"):
         source = tmp_path / recipe / "source"
         destination = tmp_path / recipe / "destination"
         source.mkdir(parents=True)
@@ -137,7 +148,7 @@ def test_saved_recipes_round_trip_through_their_own_endpoints(tmp_path: Path) ->
     destination = tmp_path / "destination"
     source.mkdir()
     destination.mkdir()
-    config = _recipe_config("safe_sort", source, destination)
+    config = _recipe_config("consolidate", source, destination)
 
     with TestClient(AppFactory.create(config=config)) as client:
         assert client.get("/api/config/recipes").json() == []
@@ -191,7 +202,7 @@ def test_saved_recipe_preserves_every_recent_behavior_setting(tmp_path: Path) ->
     destination.mkdir()
 
     with TestClient(
-        AppFactory.create(config=_recipe_config("safe_sort", source, destination))
+        AppFactory.create(config=_recipe_config("consolidate", source, destination))
     ) as client:
         response = client.post(
             "/api/config/recipes",
@@ -247,7 +258,7 @@ def test_a_saved_recipe_refuses_a_blank_name_or_a_built_in_id(tmp_path: Path) ->
     destination = tmp_path / "destination"
     source.mkdir()
     destination.mkdir()
-    config = _recipe_config("safe_sort", source, destination)
+    config = _recipe_config("consolidate", source, destination)
 
     with TestClient(AppFactory.create(config=config)) as client:
         blank = client.post("/api/config/recipes", json={"name": "   ", "settings": {}})
@@ -312,7 +323,7 @@ def test_leaving_metadata_overwriting_on_under_organize_only_is_refused(tmp_path
     destination = tmp_path / "refused" / "destination"
     source.mkdir(parents=True)
     destination.mkdir()
-    config = replace(_recipe_config("safe_sort", source, destination), override_metadata=True)
+    config = replace(_recipe_config("consolidate", source, destination), override_metadata=True)
 
     with TestClient(AppFactory.create(config=config)) as client:
         validation = client.post("/api/config/validate")

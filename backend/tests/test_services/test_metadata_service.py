@@ -149,6 +149,48 @@ def test_write_keywords_sidecars_do_not_collide_across_extensions(
     assert "heic-tag" in (tmp_path / "IMG_1.heic.xmp").read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("symlink", [False, True])
+def test_generated_sidecar_never_replaces_existing_evidence(
+    svc: MetadataService, tmp_path: Path, symlink: bool
+) -> None:
+    media = tmp_path / "photo.jpg"
+    media.write_bytes(b"media stays unchanged")
+    sidecar = tmp_path / "photo.jpg.xmp"
+    original = b"existing editing instructions and manually curated tags"
+    if symlink:
+        protected = tmp_path / "reference.xmp"
+        protected.write_bytes(original)
+        sidecar.symlink_to(protected)
+    else:
+        sidecar.write_bytes(original)
+
+    assert svc.write_sidecar(media, ["new prediction"]) is False
+    assert sidecar.read_bytes() == original
+    assert sidecar.is_symlink() is symlink
+    assert media.read_bytes() == b"media stays unchanged"
+    assert not list(tmp_path.glob(".mediasort-tags-*"))
+
+
+def test_interrupted_sidecar_publication_cleans_only_its_private_stage(
+    svc: MetadataService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import metadata_service as module
+
+    media = tmp_path / "photo.jpg"
+    media.write_bytes(b"original media")
+
+    def interrupt(candidate: Path, target: Path) -> Path:
+        assert candidate.read_text(encoding="utf-8").endswith("</x:xmpmeta>\n")
+        assert not target.exists()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(module, "promote_no_clobber", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        svc.write_sidecar(media, ["tag"])
+    assert list(tmp_path.iterdir()) == [media]
+    assert media.read_bytes() == b"original media"
+
+
 def test_write_keywords_video_invokes_ffmpeg(
     svc: MetadataService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

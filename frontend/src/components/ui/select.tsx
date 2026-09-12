@@ -20,15 +20,21 @@ import { cn } from "@/lib/utils";
 
 export type SelectSize = "sm" | "md";
 
+// Two control heights, shared with `Button` and `Segmented`: 32px for a
+// toolbar and 36px for a form. There used to be four across the three
+// components — 32, 36, 38 and 40 — so a select beside a button in the same
+// row stood 6px taller than it for no reason anybody could name.
 const SIZE_CLASS: Record<SelectSize, string> = {
-  // Both sit at 12px/13px — never smaller, or the native popup misaligns.
-  sm: "h-[2.375rem] py-1 pl-2.5 pr-8 text-[0.75rem]",
-  md: "h-10 py-1.5 pl-2.5 pr-9 text-xs",
+  // The *type* never drops below 12px, whatever the height: a select styled
+  // smaller still opens its popup at the platform's own size and anchors it to
+  // the control's text box, so the list lands visibly off the trigger.
+  sm: "h-8 py-1 pl-3 pr-8 text-[0.75rem]",
+  md: "h-9 py-1 pl-3 pr-9 text-xs",
 };
 
 const CHEVRON_CLASS: Record<SelectSize, string> = {
   sm: "right-2 h-3.5 w-3.5",
-  md: "right-2.5 h-4 w-4",
+  md: "right-3 h-4 w-4",
 };
 
 interface SelectItemProps {
@@ -69,7 +75,10 @@ export function Select({
           "font-medium text-foreground transition-colors",
           "hover:border-border-strong",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          // A disabled control changes its fill, its edge and its ink. Opacity
+          // would fade the option text along with everything else, and a
+          // value nobody can read is worse than one nobody can change.
+          "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint disabled:hover:border-border",
           SIZE_CLASS[size],
         )}
         {...rest}
@@ -82,7 +91,7 @@ export function Select({
           "pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted-foreground transition-colors",
           "group-hover:text-foreground",
           CHEVRON_CLASS[size],
-          disabled && "opacity-50",
+          disabled && "text-faint group-hover:text-faint",
         )}
       />
     </div>

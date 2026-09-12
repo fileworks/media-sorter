@@ -1,4 +1,4 @@
-import type { ReviewedSet } from "@/services/api";
+import type { PlanReviewState, ReviewedSet } from "@/services/api";
 
 export interface RunDecisions {
   planId: string | null;
@@ -8,6 +8,7 @@ export interface RunDecisions {
   undecidedSets: number;
   persistenceState: "saving" | "saved" | "error";
   persistenceError: string | null;
+  reviewState?: PlanReviewState;
 }
 
 export type ReviewDecisionUpdate = Omit<RunDecisions, "planId">;

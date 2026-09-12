@@ -68,7 +68,7 @@ export function TitleBar({
       {busy && (
         <div className="progress-indeterminate absolute inset-x-0 top-0 h-0.5" aria-hidden />
       )}
-      <div className="flex h-titlebar items-center gap-2.5 px-3 sm:px-5">
+      <div className="flex h-titlebar items-center gap-3 px-3 sm:px-5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-tint-primary">
           <AppMark className="h-6 w-6" />
         </span>
@@ -99,7 +99,7 @@ export function TitleBar({
             tabIndex={0}
             role="status"
             aria-label={backendLabel}
-            className="hidden shrink-0 items-center gap-2 rounded-full border border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+            className="hidden shrink-0 items-center gap-2 rounded-full border border-border px-3 py-1 text-2xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
           >
             <span className={cn("h-2 w-2 rounded-full", BACKEND_DOT[backend])} aria-hidden />
             {backendLabel}
@@ -122,7 +122,7 @@ export function TitleBar({
             type="button"
             onClick={onOpenHistory}
             aria-label={t("app.history")}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <FiClock className="h-3.5 w-3.5" aria-hidden />
             <span className="hidden sm:inline">{t("app.history")}</span>

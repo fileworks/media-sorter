@@ -29,17 +29,17 @@ export function CompanionEvidencePanel({
   const visible = units.slice(0, DISPLAY_LIMIT);
 
   return (
-    <details className="overflow-hidden rounded-xl border border-border bg-card" open={!compact}>
-      <summary className="cursor-pointer px-3 py-2.5 text-xs font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+    <details
+      className="overflow-hidden rounded-window border border-border bg-card"
+      open={!compact}
+    >
+      <summary className="cursor-pointer px-3 py-3 text-xs font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         {t("companionEvidence.summary", { count: units.length.toLocaleString(locale) })}
       </summary>
       <div className="border-t border-border">
         <ul className="divide-y divide-border">
           {visible.map((item) => (
-            <li
-              key={`${item.unit_id ?? "unknown"}:${item.source}`}
-              className="space-y-1 px-3 py-2.5"
-            >
+            <li key={`${item.unit_id ?? "unknown"}:${item.source}`} className="space-y-1 px-3 py-3">
               <p className="break-all text-xs font-semibold text-foreground">{item.source}</p>
               <p className="text-3xs text-muted-foreground">
                 {item.unit_id == null

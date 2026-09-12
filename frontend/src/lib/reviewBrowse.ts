@@ -424,6 +424,35 @@ export function isOpenSet(entry: SetEntry): boolean {
 }
 
 /**
+ * What keeping one named copy in each set does to every other copy.
+ *
+ * `keeperFor` returns the copy that would survive, or null where the action
+ * cannot decide that set — so the same pass yields how many sets are decided
+ * and what happens to the files inside them.
+ */
+export function decisionImpact(
+  sets: readonly SetEntry[],
+  keeperFor: (entry: SetEntry) => string | null,
+): { decided: number; setAside: number; bytes: number | null } {
+  let decided = 0;
+  let setAside = 0;
+  let bytes = 0;
+  let measured = true;
+  for (const entry of sets) {
+    const keeper = keeperFor(entry);
+    if (keeper === null) continue;
+    decided += 1;
+    for (const row of entry.rows) {
+      if (row.source === keeper) continue;
+      setAside += 1;
+      if (row.sizeBytes === null) measured = false;
+      else bytes += row.sizeBytes;
+    }
+  }
+  return { decided, setAside, bytes: measured ? bytes : null };
+}
+
+/**
  * Every figure the screen quotes, from one pass over the same entries.
  *
  * The band, Browse and Resolve all read this. Three surfaces doing their own

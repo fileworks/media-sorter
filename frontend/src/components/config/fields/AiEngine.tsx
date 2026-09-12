@@ -31,23 +31,23 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
 
   if (tooWeak) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+      <div className="flex items-start gap-2 rounded-panel border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
         <FiAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {t("config.ai.machineWeak")}
-          <span className="mt-0.5 block text-warning/80">{summary}</span>
+          <span className="mt-0.5 block text-warning">{summary}</span>
         </span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 rounded-panel border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <FiCpu className="h-3.5 w-3.5 shrink-0 text-primary" />
       <span>
         <span className="font-medium text-foreground">{summary}</span>
         {" · "}
-        <span className="font-medium text-foreground">
+        <span data-tier-recommendation className="font-medium text-suggest">
           {t("config.ai.recommended", { tier: TIER_LABEL[hardware.recommended_tier] })}
         </span>
         {eff !== "off" && eff !== hardware.recommended_tier && (
@@ -55,7 +55,7 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
         )}
       </span>
       {hardware.has_accelerator && (
-        <span className="ml-auto flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-success">
+        <span className="ml-auto flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-success">
           <FiZap className="h-3 w-3" /> GPU
         </span>
       )}
@@ -105,6 +105,7 @@ export function ModelTierSelect({
   return (
     <div className="space-y-3">
       <SettingRow
+        field="ai_model_tier"
         label={t("config.ai.model")}
         description={t("help.aiModelTier")}
         htmlFor="ai-model-tier"
@@ -113,7 +114,7 @@ export function ModelTierSelect({
           id="ai-model-tier"
           value={tier}
           onValueChange={(v) => updateConfig({ ai_model_tier: v as AiModelTier })}
-          className="max-w-sm"
+          className="w-full max-w-sm"
         >
           {options.map((o) => (
             <SelectItem key={o.value} value={o.value}>
@@ -126,6 +127,7 @@ export function ModelTierSelect({
       {/* GPU toggle only matters when an accelerator EP is actually present. */}
       {hardware.has_accelerator && eff !== "off" && (
         <SettingRow
+          field="ai_allow_gpu"
           label={t("config.ai.gpu")}
           description={t("help.aiAllowGpu")}
           htmlFor="ai-allow-gpu"
@@ -133,6 +135,7 @@ export function ModelTierSelect({
         >
           <Toggle
             id="ai-allow-gpu"
+            label={t("config.ai.gpu")}
             checked={config.ai_allow_gpu}
             onChange={(v) => updateConfig({ ai_allow_gpu: v })}
           />

@@ -61,9 +61,11 @@ _THUMB_LIMIT_PX = 2048
 def _encode_thumbnail(img: Image.Image, s: int) -> bytes | None:
     """Encode *img* as a JPEG thumbnail with longest edge *s* pixels. Never raises."""
     try:
+        # Let lazy decoders downsample before transpose/convert force a full
+        # bitmap. The square bound is unchanged by EXIF rotation.
+        img.thumbnail((s, s), resample=Image.Resampling.LANCZOS)
         img = ImageOps.exif_transpose(img) or img
         rgb = img.convert("RGB")
-        rgb.thumbnail((s, s), resample=Image.Resampling.LANCZOS)
         buf = io.BytesIO()
         rgb.save(buf, format="JPEG", quality=85)
         return buf.getvalue()
@@ -103,7 +105,7 @@ def _render_thumbnail(path_str: str, size: int = _THUMB_MAX_PX) -> bytes | None:
     return None
 
 
-@router.get("/thumbnail")
+@router.get("/thumbnail", response_model=None)
 async def thumbnail(
     container: ContainerDep,
     config: ConfigDep,
@@ -122,7 +124,7 @@ async def thumbnail(
     configured root yields 403 and is never opened.
     """
     requested_size = max(_THUMB_MIN_PX, min(size, _THUMB_LIMIT_PX))
-    source = assert_media_readable(path, config)
+    source = await asyncio.to_thread(assert_media_readable, path, config)
     path = str(source)
     try:
         key = await asyncio.to_thread(container.thumbnail_cache.key_for, source, requested_size)
@@ -235,7 +237,7 @@ def _media_info(path_str: str, extraction_service: Any) -> dict[str, Any]:
     return info
 
 
-@router.get("/media/content")
+@router.get("/media/content", response_model=None)
 async def media_content(
     container: ContainerDep, config: ConfigDep, path: str = Query(...)
 ) -> FileResponse:
@@ -248,10 +250,11 @@ async def media_content(
     fallback as the thumbnail endpoint.
     """
     del container  # Dependency execution authenticates the request.
-    source = assert_media_readable(path, config)
-    if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
+    source = await asyncio.to_thread(assert_media_readable, path, config)
+    if source.suffix.lower() not in VIDEO_EXTENSIONS or not await asyncio.to_thread(source.is_file):
         raise UnsupportedMediaError("No playable video is available for this file", file_path=path)
-    media_type = mimetypes.guess_type(source.name)[0] or "video/mp4"
+    # The first lookup initializes the MIME table from system files.
+    media_type = (await asyncio.to_thread(mimetypes.guess_type, source.name))[0] or "video/mp4"
     return FileResponse(source, media_type=media_type, headers={"Cache-Control": "private"})
 
 
@@ -265,7 +268,7 @@ async def media_info(
     panes of the duplicate comparison (the "original" side has no preview item,
     so its details are fetched here).
     """
-    source = assert_media_readable(path, config)
+    source = await asyncio.to_thread(assert_media_readable, path, config)
     info = await asyncio.to_thread(_media_info, str(source), container.extraction_service)
     return MediaInfoResponse(**info)
 
@@ -319,7 +322,7 @@ def _render_diff(a_str: str, b_str: str, size: int = _DIFF_MAX_PX) -> bytes | No
             return None
 
 
-@router.get("/media/diff")
+@router.get("/media/diff", response_model=None)
 async def media_diff(
     config: ConfigDep,
     a: str = Query(...),
@@ -331,8 +334,8 @@ async def media_diff(
     Backs the duplicate comparison's "view diff" toggle. 415 when either path is
     not a readable image (e.g. a video), so the client can hide the affordance.
     """
-    left = assert_media_readable(a, config)
-    right = assert_media_readable(b, config)
+    left = await asyncio.to_thread(assert_media_readable, a, config)
+    right = await asyncio.to_thread(assert_media_readable, b, config)
     data = await asyncio.to_thread(_render_diff, str(left), str(right), size)
     if data is None:
         raise UnsupportedMediaError("Cannot diff these files")

@@ -10,6 +10,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Split the preview only when its own settings column has room, including
+   under page zoom. Viewport breakpoints can leave this column zero-width. */
+.settings-content {
+  container: settings / inline-size;
+}
+
+.sort-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container settings (max-width: 36rem) {
+  .settings-content .settings-row-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .settings-content .settings-control-group {
+    flex-shrink: 1;
+    max-width: 100%;
+  }
+
+  .settings-content [data-segmented] > label {
+    flex: 1 1 0%;
+    white-space: normal;
+  }
+}
+
+@container settings (min-width: 48rem) {
+  .sort-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 26rem);
+  }
+}
+
 /* Near-neutral themes with WCAG AA text contrast. */
 @layer base {
   :root {
@@ -37,7 +71,12 @@
 
     --accent: 30 10% 94%;
 
-    --destructive: 2 72% 44%;
+    /* One red, two jobs. `--destructive` is the *filled action* pairing (it
+       carries a foreground); `--color-error` is the status hue for text,
+       borders and washes. They were separate declarations holding the same
+       value in light and drifting 3% apart in dark — two names for one role is
+       how a palette starts lying. The pairing stays; the value does not fork. */
+    --destructive: var(--color-error);
     --destructive-foreground: 0 0% 100%;
 
     --border: 28 10% 89%;
@@ -46,7 +85,27 @@
     --input: 28 10% 89%;
     --ring: 19 88% 37%;
 
-    --radius: 0.75rem;
+    /* Shape: three steps, one job each — and no fourth.
+       There used to be six structural radii (5, 7, 8, 10, 12, 16px), two of
+       which — `rounded-lg` and `rounded-xl` — resolved to the *same* 12px
+       while 98 usages treated them as a hierarchy. Nobody can see 2px, so the
+       hierarchy existed only in the class names. These three are far enough
+       apart to read as deliberate nesting: a control inside a panel inside a
+       window. Every Tailwind radius maps onto one of them — `DEFAULT`
+       included, which it was not: a bare `rounded` was Tailwind's own 4px, the
+       fourth radius this comment forbids, on 29 elements.
+
+       Components spell these `rounded-control` / `-panel` / `-window` and
+       never `sm`/`md`/`lg`/`xl`/`2xl`. Those aliases resolve to the same three
+       values, so ten pixels could be written three ways and a className said
+       nothing about whether a row and a card were meant to match. The
+       semantic name says which of the three jobs the element is doing.
+       `interactionContracts.test.ts` holds both halves of this. */
+    --radius-control: 6px; /* buttons, inputs, chips, anything you press */
+    --radius-panel: 10px; /* rows, nested surfaces, media frames */
+    --radius-window: 14px; /* top-level cards, sections, dialogs */
+    /* Kept as the alias Tailwind's `lg`/`md` resolve through. */
+    --radius: var(--radius-panel);
 
     /* AA-compliant tertiary text. */
     --faint: 25 6% 39%;
@@ -58,13 +117,24 @@
 
     /* Soft status tints — badge and callout backgrounds. */
     --tint-primary: 24 88% 95%;
+    --tint-suggest: 188 60% 94%;
     --tint-success: 152 45% 94%;
     --tint-warning: 38 88% 94%;
     --tint-error: 6 80% 95%;
     --tint-info: 214 75% 95%;
     --surface-muted: 30 10% 96%;
 
-    /* Semantic status colors for light surfaces. */
+    /* Semantic status colors for light surfaces.
+
+       Two greens, because advice and fact are not the same claim. `suggest`
+       is what the keep rule *offers* — a recommendation panel, a "Recommended"
+       badge, the dashed edge on a proposed copy, the control that accepts one.
+       `success` is what has been *settled* — a decided set, a kept copy, a
+       finished run, a passing safety check. They wore one colour, so a screen
+       full of proposals looked like a screen full of confirmations, which is
+       the one thing a person about to move ten thousand photographs must not
+       misread. Teal is far enough from emerald to survive a 10px badge. */
+    --color-suggest: 188 92% 26%;
     --color-success: 158 80% 26%;
     --color-warning: 33 92% 31%;
     --color-error: 2 72% 44%;
@@ -105,7 +175,7 @@
 
     --accent: 220 9% 17%;
 
-    --destructive: 4 82% 63%;
+    --destructive: var(--color-error);
     --destructive-foreground: 220 12% 8%;
 
     --border: 220 9% 22%;
@@ -121,6 +191,7 @@
     --decor-warning: 36 92% 60%;
 
     --tint-primary: 20 38% 15%;
+    --tint-suggest: 188 36% 15%;
     --tint-success: 158 30% 14%;
     --tint-warning: 35 38% 15%;
     --tint-error: 4 34% 16%;
@@ -128,6 +199,7 @@
     --surface-muted: 220 9% 17%;
 
     /* Semantic status colours — brighter so they read on a dark surface. */
+    --color-suggest: 186 72% 58%;
     --color-success: 156 62% 50%;
     --color-warning: 36 92% 60%;
     --color-error: 4 82% 66%;
@@ -182,17 +254,63 @@
 
 /* Shared responsive grids keep review headers aligned with rows. */
 @layer components {
-  /* Select · thumbnail · name · date · status · destination. */
-  .asset-grid {
-    display: grid;
-    grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.875rem 5.125rem 5.75rem;
-    align-items: center;
-    gap: 0.5625rem;
+  .workspace-frame {
+    @apply mx-auto w-full max-w-workspace px-4 sm:px-6;
+  }
+  /*
+   * A region that can be read but not edited.
+   *
+   * Never `opacity`: dimming takes AA-tuned body text below AA at the very
+   * moment the reader is being asked to read it. Every control inside already
+   * carries its own disabled styling, which is the honest per-control signal;
+   * draining the colour is what makes a screenful of them read as *one* locked
+   * surface rather than as a run of coincidences. It pairs with a disabled
+   * `fieldset`, which is the thing that actually blocks pointer and keyboard
+   * input — this only makes the block visible.
+   *
+   * There is deliberately **no `user-select: none` here, and deliberately no
+   * `inert` on the region**. Read-only is not the same claim as untouchable: a
+   * locked screen is one you were sent to *read*, and its folder paths, planned
+   * destinations and values are exactly the strings people select and copy.
+   * `inert` — the obvious way to block a whole subtree — also makes everything
+   * inside it unselectable, which is why the boundary is a `fieldset[disabled]`
+   * instead: it disables every native control inside and leaves the words
+   * alone.
+   *
+   * `saturate(0.5)` rather than `0.15`. At 0.15 a thumbnail or a status tint
+   * inside the region read as broken rendering rather than as a locked control;
+   * half saturation is still unmistakably one flat surface beside a live one.
+   *
+   * `filter` establishes a containing block for fixed descendants. Every
+   * overlay in this application (dialogs, tooltips, toasts) is portalled to
+   * `body`, so none of them is inside a region this can be applied to.
+   */
+  .read-only-region {
+    filter: saturate(0.5);
   }
 
-  .candidate-grid {
+  /* The pointer says it before anything is clicked. `:disabled` covers the
+     native controls; the label wrapping one is not itself disabled, so it keeps
+     offering a text cursor over a checkbox that cannot be ticked. */
+  .read-only-region label,
+  .read-only-region [data-setting-row] :disabled {
+    cursor: not-allowed;
+  }
+
+  /* Selecting text is the one interaction that stays. Make it look like it:
+     without this the highlight over a desaturated region is barely visible. */
+  .read-only-region ::selection {
+    background: hsl(var(--primary) / 0.28);
+  }
+
+  /* Select · thumbnail · name · date · status · destination.
+     The one review grid. Resolve used to have a second, with six columns of its
+     own; it is gone, because between byte-identical copies four of those columns
+     print the same value once per row. A duplicate set is a list of copies, not
+     a table of facts, and a copy row lays itself out. */
+  .asset-grid {
     display: grid;
-    grid-template-columns: 3.625rem minmax(10rem, 1.2fr) 5rem 5.75rem 7.5rem minmax(10rem, 1fr);
+    grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem 9rem 8rem;
     align-items: center;
     gap: 0.5rem;
   }
@@ -200,35 +318,31 @@
   /* One column short: the planned destination folds away first. */
   @media (max-width: 1280px) {
     .asset-grid {
-      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5.25rem 4.75rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem 9rem;
     }
     .asset-grid > *:nth-child(6) {
       display: none;
     }
-    .candidate-grid {
-      grid-template-columns: 3.625rem minmax(8.75rem, 1fr) 4.5rem 5.5rem minmax(8rem, 1fr);
-    }
-    .candidate-destination {
-      display: none;
-    }
   }
 
-  /* Name and one figure. Everything else lives in the detail view. */
+  /* Keep dates visible; move status below the name instead of hiding it. */
   @media (max-width: 900px) {
     .asset-grid {
-      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 5rem;
+      grid-template-columns: 1.5rem 2.375rem minmax(0, 1fr) 7rem;
     }
     .asset-grid > *:nth-child(5),
     .asset-grid > *:nth-child(6) {
       display: none;
     }
-    .candidate-grid {
-      grid-template-columns: 3.625rem minmax(0, 1fr) 5rem;
+    .asset-grid[data-file-row] {
+      height: auto;
+      min-height: 3.25rem;
+      padding-block: 0.5rem;
     }
-    .candidate-date,
-    .candidate-date-source,
-    .candidate-destination {
-      display: none;
+    .asset-grid > [data-file-status] {
+      display: flex;
+      grid-column: 3 / -1;
+      justify-content: flex-start;
     }
   }
 }
@@ -288,16 +402,13 @@
 
 @keyframes progress-indeterminate {
   0% {
-    left: -40%;
-    width: 40%;
+    transform: translateX(-100%);
   }
   50% {
-    left: 60%;
-    width: 40%;
+    transform: translateX(150%);
   }
   100% {
-    left: 100%;
-    width: 40%;
+    transform: translateX(250%);
   }
 }
 
@@ -341,7 +452,11 @@ input[type="checkbox"]:not(.sr-only) {
   width: 1rem;
   height: 1rem;
   border: 1.5px solid hsl(var(--input));
-  border-radius: 0.3rem;
+  /* The control step, not a hand-picked 0.3rem. A checkbox is something you
+     press, and this selector outranks the `rounded` utility every checkbox in
+     the tree also carried — so that fourth radius was the one actually being
+     drawn while the class said otherwise. */
+  border-radius: var(--radius-control);
   cursor: pointer;
   background: hsl(var(--background));
   transition:
@@ -377,9 +492,25 @@ input[type="checkbox"]:not(.sr-only):checked::after {
   opacity: 1;
 }
 
-input[type="checkbox"]:not(.sr-only):disabled {
+/* Disabled boxes take the same muted fill and border every other disabled
+   control takes, rather than a blanket opacity — a half-faded tick beside a
+   full-strength label is exactly the "still looks active" reading. */
+input[type="checkbox"]:not(.sr-only):disabled,
+input[type="radio"]:not(.sr-only):disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+input[type="checkbox"]:not(.sr-only):disabled:checked,
+input[type="radio"]:not(.sr-only):disabled:checked {
+  background: hsl(var(--border-strong));
+  border-color: hsl(var(--border-strong));
+}
+
+input[type="checkbox"]:not(.sr-only):disabled:hover,
+input[type="radio"]:not(.sr-only):disabled:hover {
+  border-color: hsl(var(--border));
 }
 
 input[type="radio"]:not(.sr-only):focus-visible,
@@ -468,6 +599,7 @@ input[type="range"]::-moz-range-track {
 
 @media (prefers-reduced-motion: no-preference) {
   .progress-indeterminate::after {
+    width: 40%;
     animation: progress-indeterminate 1.5s ease-in-out infinite;
   }
 }
@@ -478,9 +610,8 @@ input[type="range"]::-moz-range-track {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
   }
 }
 

@@ -15,11 +15,14 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-export type BadgeTone = "neutral" | "primary" | "success" | "warning" | "error" | "info";
+export type BadgeTone =
+  "neutral" | "primary" | "suggest" | "success" | "warning" | "error" | "info";
 
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: "bg-muted text-muted-foreground",
   primary: "bg-tint-primary text-primary",
+  // What a rule proposes, kept apart from what has been settled.
+  suggest: "bg-tint-suggest text-suggest",
   success: "bg-tint-success text-success",
   warning: "bg-tint-warning text-warning",
   error: "bg-tint-error text-error",
@@ -39,7 +42,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex w-max shrink-0 items-center gap-1 rounded-[5px] px-1.5 py-0.5",
+        "inline-flex w-max shrink-0 items-center gap-1 rounded-control px-2 py-0.5",
         "text-3xs font-bold tracking-[0.02em] tabular-nums",
         TONE_CLASS[tone],
         className,

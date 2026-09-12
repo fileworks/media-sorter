@@ -8,7 +8,7 @@ never sufficient, and members must live in the same directory.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -165,7 +165,19 @@ def bind_media_units(
 
     grouped_media: dict[tuple[str, str], list[Path]] = {}
     grouped_candidates: dict[tuple[str, str], list[Path]] = {}
+    by_filename = {
+        path_identity_key(str(path), case_sensitive=case_sensitive): path for path in media
+    }
+    filename_sidecars: dict[Path, list[Path]] = {}
     for path in paths:
+        # Our generated XMPs (and several editors) name the complete media
+        # filename. Attach to that exact member, not an unrelated same-stem image.
+        anchor = by_filename.get(
+            path_identity_key(str(path.with_suffix("")), case_sensitive=case_sensitive)
+        )
+        if path.suffix.lower() in EDIT_SIDECAR_EXTENSIONS and anchor is not None:
+            filename_sidecars.setdefault(anchor, []).append(path)
+            continue
         key = _key(path, case_sensitive=case_sensitive)
         if is_media(path):
             grouped_media.setdefault(key, []).append(path)
@@ -219,6 +231,18 @@ def bind_media_units(
                         (MediaUnitMember(path, None, True),),
                     )
                 )
+    units = [
+        replace(
+            unit,
+            members=unit.members
+            + tuple(
+                MediaUnitMember(sidecar, "edit_sidecar")
+                for member in unit.members
+                for sidecar in sorted(filename_sidecars.get(member.path, []))
+            ),
+        )
+        for unit in units
+    ]
     return sorted(units, key=lambda unit: str(unit.primary)), sorted(
         unmatched, key=lambda item: str(item.path)
     )

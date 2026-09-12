@@ -155,12 +155,14 @@ jobs:
       # transfer engine's cross-volume and identity rules behave differently
       # there than on the Linux runner every other job uses. Running them only
       # on Linux proved the semantics of a filesystem no user has.
-      - name: Run transfer and path-identity suites on APFS
+      # Catalog restoration and non-mutating preflight depend on APFS too.
+      - name: Run transfer, catalog and path-identity suites on APFS
         working-directory: backend
         run: >-
           python -m pytest
           tests/test_verified_transfer.py
           tests/test_transfer_end_to_end.py
+          tests/test_catalog.py
           tests/test_path_identity.py
           tests/test_root_identity.py
           -v

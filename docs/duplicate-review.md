@@ -65,6 +65,10 @@ is only a proposal. It changes no frozen action and sends nothing through `revie
 until it is accepted. The whole proposal batch or one set can be accepted; changing the
 rule replaces only outstanding proposals, and every accepted result remains overridable.
 
+The three states wear three colours and are told apart without reading a word: `primary`
+for undecided, `suggest` for proposed, `success` for decided. A proposal and a decision
+shared one green until recently, which made a plan of untaken offers look finished.
+
 **A set is decidable wherever it is found.** Expanding one in Browse puts every copy side
 by side with its resolution, megapixels, size, source folder, capture date and provenance.
 The comparison uses the available window and the pair's aspect ratio; either side opens
@@ -72,11 +76,23 @@ full screen and returns to the unchanged comparison. Video pairs additionally sh
 and codec. Unknown measurements stay unknown and never create a winner.
 
 Resolve remains, for the other shape of the same task: working through twelve sets in
-sequence rather than meeting one while browsing. It shows one set at a time: activating a
-copy — by pointer or by its number key — **drafts** it, and confirming commits the decision
-and moves to the next set still open. Left and right move between sets, and nothing in it
-needs a pointer. The draft step is deliberate: the recommendation is visible beside the
-copies, and a keeper is chosen rather than triggered.
+sequence rather than meeting one while browsing. It shows one set at a time, and every
+decision is a single gesture on the copy it decides. Activating a copy — by pointer or by
+its number key — keeps it and moves to the next set still open. Left and right move
+between sets, and nothing in it needs a pointer.
+
+There is no confirmation step. There used to be: a copy was *drafted* and a separate
+"Confirm selection" control in a bar at the bottom of the pane committed it, which put the
+decision as far from the copies as the layout allowed, cost two presses per set, and was
+itself the "separate command control that acts on the set without naming the copy it would
+choose" the surface's contract forbids. Nothing here is irreversible, so nothing here is
+confirmed: the set states what it decided, in the same band, and clears it in one press.
+
+A copy row leads with the two facts that can actually differ between byte-identical
+members — the source folder, and the recorded date with its provenance. Size and planned
+destination follow in one quiet line, because for an exact set they are the same value
+printed once per copy. Keep and Compare sit on the copy; Compare names the copy it would
+put beside it, which for a pair is simply the other one.
 
 The list, the position, and the arrow keys all read one order — the one the sort control
 sets. A counter that named a row twelve places down the list was worse than no counter.
@@ -84,13 +100,66 @@ Both surfaces route through the same handlers, so there is one decision
 path and not two. The command `<select>` that used to sit in each set's header is gone; it
 offered a *rule* to a person who had already looked at the pictures.
 
-The whole-plan proposal rule is stated once above the queue, including the rule and proposal
-count. A separate set selection is shared by Browse and Resolve. Its actions always preview
-how many selected sets they can and cannot decide before confirmation:
+The strip above the queue holds the two ways a set gets decided, and only those: the
+rule's offer with the rule that makes it on the left, and the selection with what to do
+with it on the right. Everything that acts on the *list* rather than on a decision — its
+order, walking to the next open set, clearing what has been decided — sits in the list's
+own header. Selecting all and clearing that selection had ended up on opposite sides of
+the screen; they are two halves of one gesture and are both in the strip.
+
+**The keep rule never leaves the screen, and the action beside it is named after the rule
+it runs.** The rule used to sit inside the half of the strip that swaps out when a set is
+ticked, so selecting sets for a bulk decision removed the control that decided them — and
+the dialog that opened next silently applied the rule that had just vanished. It now sits
+outside that swap, and both bulk dialogs carry it as an operand, so whichever door the
+decision is taken through, the rule about to run is on screen and adjustable. The button
+that takes the rule's offer over every open set reads "Apply to *N* open sets", not
+"Accept *N* recommendations": accepting is not a second, cleverer algorithm standing next
+to the keep rule, it *is* the keep rule, run over every set nobody has answered — and the
+old name implied otherwise on the one screen where the distinction matters.
+
+**The list marks what is done and what a bulk action covers.** A decided set loses its
+status dot and takes a check: a dot is a claim on attention, and a finished set is not
+making one. Sets ticked for a bulk action are checked and tinted in the list itself, so
+"5 sets selected" names five rows a reader can see rather than five rows they have to
+take on trust.
+
+A comparison opened on a set of three or more copies steps through every *pair*, not
+every other copy against a fixed first one — that arrangement could never put the second
+copy beside the third, which is the comparison a person reaches for once they have ruled
+the first out. **Each copy is lettered — A, B, C — for as long as its set is open**, and
+the letters name the *copies*, not the sides of the screen: lettering by position meant
+stepping from one pair to the next silently redefined "A", so the badge over the image,
+the keeper radio and the fact column all changed meaning mid-comparison with nothing
+saying so. Every pairing is listed as a chip (`A ↔ B`, `A ↔ C`, `B ↔ C`) with the current
+one marked, so the whole matrix is one press away rather than a ring to be walked. How
+you are looking — side-by-side, difference, the slider, the zoom — survives a change of
+pair and of set; only the draft keeper, which is a fact about *these two copies*, resets.
+
+Every decision covering more than one set states its impact before it acts, in one dialog
+rather than as counts crammed onto a toolbar button. The dialog names the scope, then gives
+each action its own sentence, its own operand, and — on its button, not on hover — the
+number of sets it would decide.
+
+It also states what the decision does to the *files*, which is the part being agreed to: a
+count of sets is a count of decisions, not of consequences. Each action says how many copies
+are set aside and how much that frees, and refuses to state a total where one copy has no
+measured size — a figure that silently treats an unmeasured file as zero has the same shape
+as a true one. Every count is read from live props, so changing the folder, or a selection
+changing underneath, restates the impact instead of leaving the last one's figures beside a
+different choice. The selection-scoped actions are:
 
 - apply the current keep rule to exactly the selected sets;
 - mark the selected sets as different files, keeping every member independently; or
 - keep the unique copy from a source folder present in the selection.
+
+**Browse is sufficient on its own.** A reader who does not care which copy survives can
+finish an entire run without opening Resolve: Browse states how many sets are still open,
+how many the rule can rank and how many need a person, and offers both the batch
+acceptance and the selection-scoped actions from the same dialogs Resolve uses. Accepting
+never overwrites a decision somebody made by hand and never touches a set whose keeper is
+fixed by a reference root; the result shows up immediately in the destination tree, as the
+sets leave the "stays where it is" branch for the folders their keepers land in.
 
 The selection-scoped “not duplicates” action is the bounded path through any catalog,
 including hundreds of burst or plan-found sets no rule can rank. No Review action excludes

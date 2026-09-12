@@ -1,11 +1,8 @@
 /**
  * Stage 2 — the starting point everything else adjusts.
  *
- * Picking a recipe writes fifteen settings in one click. That made it the
- * largest decision in the flow and, until it got its own stage, the first card
- * *inside* Configure — visually a peer of the smallest decisions and sitting
- * above the screen's own heading. It is now named in the stepper, named in
- * Configure's heading, and revisitable without hunting for it.
+ * Recipe choice is Setup's default surface; detailed adjustments are optional.
+ * Applying a recipe writes ordinary settings, whose consequences are shown here.
  *
  * The difference region below the grid is permanent. It reserves its space
  * whether or not a card is being read, so choosing one never shifts the grid
@@ -24,7 +21,7 @@ import { RecipeGrid } from "@/components/screens/RecipeGrid";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nContext";
-import { configFieldLabel, formatConfigValue } from "@/lib/configDiff";
+import { changedKeys, configFieldLabel, formatConfigValue } from "@/lib/configDiff";
 import {
   CONFIG_RECIPES,
   activeRecipeId,
@@ -68,12 +65,11 @@ export function RecipeScreen({
 
   // The same list Configure resolves its baseline from — two lists is how a
   // heading and a marker come to disagree about which recipe is in force.
-  const recipes = useMemo<ConfigRecipe[]>(
-    () => allRecipes(savedRecipes, defaults),
-    [defaults, savedRecipes],
-  );
+  const recipes = useMemo<ConfigRecipe[]>(() => allRecipes(savedRecipes), [savedRecipes]);
 
   const selectedId = activeRecipeId(config, recipes);
+  const active = recipes.find((recipe) => recipe.id === selectedId);
+  const isDefault = defaults !== undefined && changedKeys(config, defaults).size === 0;
 
   // On a first run nothing matches, so the region would open empty and the
   // recommended card would be a thing to notice rather than a thing already
@@ -139,10 +135,21 @@ export function RecipeScreen({
   return (
     <div>
       <ScreenHeader
-        eyebrow={t("stage.position", { current: 2, total: 6 })}
+        eyebrow={t("stage.position", { current: 2, total: 4 })}
         title={t("recipes.title")}
         subtitle={t("recipes.help")}
       />
+
+      <div data-current-settings className="mb-4 rounded-window border border-border bg-card p-4">
+        <p className="text-sm font-semibold text-foreground" role="status">
+          {t("recipes.current", {
+            name: active
+              ? recipeName(active, t)
+              : t(isDefault ? "config.baseline.defaults" : "recipes.custom"),
+          })}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("recipes.currentHelp")}</p>
+      </div>
 
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(21rem,.85fr)]">
         <RecipeGrid
@@ -156,28 +163,37 @@ export function RecipeScreen({
 
         <section
           aria-labelledby="recipe-difference"
-          className="min-h-[9rem] min-w-0 rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+          className="min-h-[9rem] min-w-0 rounded-window border border-border bg-card p-4 lg:sticky lg:top-4"
           aria-live="polite"
         >
           <h2 id="recipe-difference" className="text-xs font-bold text-foreground">
-            {pending ? recipeName(pending, t) : t("recipes.difference.none")}
+            {pending
+              ? t("recipes.previewing", { name: recipeName(pending, t) })
+              : t("recipes.difference.none")}
           </h2>
 
           {!pending ? (
-            <p className="mt-1.5 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t("recipes.difference.pick")}</p>
           ) : (
             <>
-              {pending.irreversible && (
-                <p
-                  className={cn(
-                    "mt-1.5 rounded-lg border border-warning/40 bg-tint-warning px-3 py-2 text-xs text-foreground",
-                  )}
-                >
-                  {t(pending.consequenceKey)}
-                </p>
-              )}
+              {/* Every card states its consequences, not only the ones that
+                  take files away. A recipe the reader was told nothing about
+                  is a recipe they have to reconstruct from the table below,
+                  and the table is a list of field names. The tone is what
+                  `irreversible` decides — a warning where originals leave or
+                  bytes are rewritten, a quiet note otherwise. */}
+              <p
+                className={cn(
+                  "mt-2 rounded-panel border px-3 py-2 text-xs leading-relaxed",
+                  pending.irreversible
+                    ? "border-warning/40 bg-tint-warning text-foreground"
+                    : "border-border bg-muted/40 text-muted-foreground",
+                )}
+              >
+                {t(pending.consequenceKey)}
+              </p>
               {planExists && activeRows.length > 0 && (
-                <p className="mt-1.5 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
+                <p className="mt-2 text-xs text-foreground">{t("recipes.discardsPlan")}</p>
               )}
 
               {unauthorized.length > 0 && (
@@ -186,7 +202,7 @@ export function RecipeScreen({
                  * the click, naming the settings responsible — rather than after,
                  * as a dead primary action listing fields nobody touched.
                  */
-                <p className="mt-1.5 text-xs font-medium text-error" role="alert">
+                <p className="mt-2 text-xs font-medium text-error" role="alert">
                   {t("recipes.wouldNotValidate", {
                     settings: unauthorized.map(configFieldLabel).join(", "),
                   })}
@@ -194,13 +210,13 @@ export function RecipeScreen({
               )}
 
               {activeRows.length === 0 && (
-                <p className="mt-2.5 text-xs text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                   {selectedId === pending.id ? t("recipes.inForce") : t("recipes.noChanges")}
                 </p>
               )}
 
               {rowUniverse.length > 0 && (
-                <div className="mt-2.5">
+                <div className="mt-3">
                   <SettingChangeTable
                     rowUniverse={rowUniverse}
                     columns={[
@@ -237,7 +253,7 @@ export function RecipeScreen({
                   checked={resetOthers}
                   disabled={disabled || defaults === undefined}
                   onChange={(event) => setResetOthers(event.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-control border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:bg-muted"
                 />
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-foreground">

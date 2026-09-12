@@ -23,7 +23,7 @@ export function StackVisual({
           path={path}
           maxPx={80}
           className={cn(
-            "absolute h-[2.125rem] w-[2.125rem] rounded-[5px] border-2 border-card shadow-card",
+            "absolute h-[2.125rem] w-[2.125rem] rounded-control border-2 border-card shadow-card",
             index === 0 ? "bottom-0 left-0" : "right-0 top-0",
           )}
         />

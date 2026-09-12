@@ -60,7 +60,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
        17rem: the tree it draws can be five levels deep — year, month, camera,
        a preserved subfolder, the renamed file — and at a fixed width every one
        of those wrapped in a panel that had room beside it. */
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,26rem)] xl:items-start">
+    <div className="sort-layout grid items-start gap-4">
       <SettingGroup
         id="group-sort"
         title={t("config.group.sort.label")}
@@ -117,7 +117,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
           label={t("config.transfer.verify")}
           description={t("config.transfer.verifyHelp")}
         >
-          <span className="rounded-full bg-tint-success px-2.5 py-1 text-3xs font-semibold text-success">
+          <span className="rounded-full bg-tint-success px-3 py-1 text-3xs font-semibold text-success">
             {t("config.transfer.alwaysOn")}
           </span>
         </SettingRow>
@@ -246,7 +246,7 @@ export function SortGroup({ config, updateConfig, samples, onReset }: SectionPro
         </SettingRow>
 
         {config.rename && (
-          <div className="border-b border-border px-5 py-3.5">
+          <div className="border-b border-border px-4 py-3">
             <RenameBuilder
               config={config}
               samples={samples}

@@ -25,6 +25,7 @@ import {
 } from "react-icons/fi";
 
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
@@ -110,8 +111,15 @@ function factLines(
     ];
   }
 
-  // Input. The scan reports one aggregate, not a per-root split, so the totals
-  // belong to the first input card and the rest state only what they indexed.
+  // Input. Every input card states its *own* folder's figures.
+  //
+  // It used to state the run's. The scan reported one aggregate and there were
+  // several cards to put it on, so the totals went on the first input card and
+  // every other card printed the same run-wide count as "N files indexed" — two
+  // presentations of one number, on two folders, each reading as a fact about
+  // the folder it was on. A reader looking at "190 files · 264 MB · png 74" on
+  // one card and "190 files indexed" on the next reasonably concluded the
+  // second folder held no media. The scan now reports `by_root`; this reads it.
   //
   // The unscanned card names the scan rather than describing its own emptiness.
   // Counting the media here instead was asked for and declined: over the drives
@@ -119,27 +127,41 @@ function factLines(
   // produces the figure.
   const unscanned = [t("sources.facts.inputUnscanned"), t("sources.facts.scanToCount")];
   if (!analysis) return unscanned;
-  if (!primaryInput) {
-    return card.indexedFiles === null
-      ? unscanned
-      : [
-          tCount("sources.facts.indexed", card.indexedFiles, {
-            count: card.indexedFiles.toLocaleString(locale),
-          }),
-          t("sources.facts.inputPurpose"),
-        ];
+
+  const mine = analysis.by_root?.find((entry) => entry.root_id === card.rootId);
+  if (mine === undefined) {
+    // An older result carries no split. Say what is true of this folder — that
+    // it is in the run — rather than borrowing a number that belongs to all of
+    // them. The primary card keeps the aggregate, labelled as the whole run.
+    if (!primaryInput) {
+      return card.indexedFiles === null
+        ? unscanned
+        : [t("sources.facts.inputPurpose"), t("sources.facts.totalsAreRunWide")];
+    }
+    return [
+      tCount("sources.facts.runTotals", analysis.total_files, {
+        count: analysis.total_files.toLocaleString(locale),
+        size: formatBytes(analysis.total_size_bytes, { locale }),
+      }),
+      t("sources.facts.inputPurpose"),
+    ];
   }
-  const byType = analysis.by_type ?? {};
-  const kinds = Object.entries(byType)
+
+  const kinds = Object.entries(mine.by_type)
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([kind, count]) => `${kind} ${count.toLocaleString(locale)}`)
     .join(" · ");
+  // A folder the scan found nothing in says so. That is the question the old
+  // two-shaped copy raised and could not answer.
+  if (mine.total_files === 0) {
+    return [t("sources.facts.inputEmpty"), t("sources.facts.inputPurpose")];
+  }
   return [
-    tCount("sources.facts.inputTotals", analysis.total_files, {
-      count: analysis.total_files.toLocaleString(locale),
-      size: formatBytes(analysis.total_size_bytes, { locale }),
+    tCount("sources.facts.inputTotals", mine.total_files, {
+      count: mine.total_files.toLocaleString(locale),
+      size: formatBytes(mine.total_size_bytes, { locale }),
     }),
     kinds || t("sources.facts.inputPurpose"),
   ];
@@ -194,11 +216,11 @@ function FolderCard({
     <li>
       <div
         className={cn(
-          "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border bg-card p-3",
-          "sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]",
-          tone === "error" ? "border-error/50" : "border-border",
-          card.role === "reference" && "border-info/25 bg-tint-info/40",
-          card.role === "destination" && "border-success/25 bg-tint-success/30",
+          "grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-window border bg-card p-3",
+          "sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]",
+          tone === "error" ? "border-error/40" : "border-border",
+          card.role === "reference" && "border-info/40 bg-tint-info",
+          card.role === "destination" && "border-success/40 bg-tint-success",
           // The chip carries the state in words. Dimming the whole card made
           // every fact and control fail contrast in a real browser, so use a
           // structural treatment that leaves its contents fully readable.
@@ -207,7 +229,7 @@ function FolderCard({
       >
         <span
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg",
+            "flex h-9 w-9 items-center justify-center rounded-panel",
             ROLE_BADGE[card.role],
           )}
           aria-hidden
@@ -215,7 +237,7 @@ function FolderCard({
           <FiFolder className="h-[1.125rem] w-[1.125rem]" />
         </span>
         <div className="min-w-0">
-          <div className="flex h-5 min-w-0 items-center gap-1.5">
+          <div className="flex h-5 min-w-0 items-center gap-2">
             <p
               className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
               title={card.path}
@@ -256,7 +278,7 @@ function FolderCard({
             grows. Ordinary and merely skipped cards spend no row on absence. */}
           {ownConflict && (
             <p
-              className={cn("mt-1.5 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
+              className={cn("mt-2 text-xs", ownConflict.blocking ? "text-error" : "text-warning")}
               role={ownConflict.blocking ? "alert" : "status"}
             >
               {t(`sources.conflict.${ownConflict.kind}`, ownConflict.params, ownConflict.message)}
@@ -270,34 +292,24 @@ function FolderCard({
           {/* The section this card sits in already says what a baseline is for,
               so the toggle needs the word and not the explanation. */}
           {onToggleBaseline && (
-            <label className="mr-1 flex min-h-6 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <label className="mr-1 flex min-h-6 cursor-pointer items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={card.role === "reference"}
                 disabled={disabled}
                 onChange={(event) => onToggleBaseline(event.target.checked)}
-                className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-3.5 w-3.5 shrink-0 rounded-control border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               {t("sources.baseline")}
             </label>
           )}
-          <button
-            type="button"
-            onClick={onChangeFolder}
-            disabled={disabled}
-            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          >
+          <Button variant="outline" onClick={onChangeFolder} disabled={disabled}>
             {t("sources.change")}
-          </button>
+          </Button>
           {onRemove && (
-            <button
-              type="button"
-              onClick={onRemove}
-              disabled={disabled}
-              className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            >
+            <Button variant="outline" onClick={onRemove} disabled={disabled}>
               {t("sources.remove")}
-            </button>
+            </Button>
           )}
           <IconButton
             label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
@@ -343,7 +355,7 @@ function IconButton({
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-panel text-faint transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent"
       >
         <Icon className="h-3.5 w-3.5" aria-hidden />
       </button>
@@ -414,7 +426,7 @@ export function SourcesScreen({
   const rolePanelFor = (rootId: string): ReactNode => {
     if (!preview || !pendingRole || pendingRole.rootId !== rootId) return null;
     return (
-      <div className="mt-2 rounded-xl border border-error/40 bg-tint-error p-3.5" role="alert">
+      <div className="mt-2 rounded-window border border-error/40 bg-tint-error p-4" role="alert">
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1 text-xs font-semibold text-error">
             {t("sources.roleChangeConflict")}
@@ -423,12 +435,12 @@ export function SourcesScreen({
             type="button"
             onClick={() => setPendingRole(null)}
             aria-label={t("common.cancel")}
-            className="shrink-0 rounded p-0.5 text-faint hover:text-foreground"
+            className="shrink-0 rounded-control p-0.5 text-faint hover:text-foreground"
           >
             <FiX className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
-        <ul className="mt-1.5 space-y-1 text-xs text-foreground">
+        <ul className="mt-2 space-y-1 text-xs text-foreground">
           {previewBlocking.map((conflict) => (
             <li key={conflict.kind}>
               {t(`sources.conflict.${conflict.kind}`, conflict.params, conflict.message)}
@@ -436,23 +448,18 @@ export function SourcesScreen({
           ))}
         </ul>
         <div className="mt-3 flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={() => {
               onChange(preview.cards);
               setPendingRole(null);
             }}
-            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted"
           >
             {t("sources.roleChangeAnyway")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingRole(null)}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => setPendingRole(null)}>
             {t("common.cancel")}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -498,15 +505,15 @@ export function SourcesScreen({
   );
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div>
         <ScreenHeader
-          eyebrow={t("stage.position", { current: 1, total: 6 })}
+          eyebrow={t("stage.position", { current: 1, total: 4 })}
           title={t("sources.title")}
           subtitle={t("sources.description")}
         />
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           <section aria-labelledby="sources-inputs" className="min-w-0">
             <div className="mb-2 flex items-end gap-2">
               <div>
@@ -520,25 +527,23 @@ export function SourcesScreen({
               </div>
               <span className="flex-1" />
               {sourceCards.length > 0 && (
-                <div className="flex flex-wrap justify-end gap-1.5">
-                  <button
-                    type="button"
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
                     onClick={() => onAddFolder("input")}
                     disabled={disabled}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
                     <FiPlus className="h-3.5 w-3.5" aria-hidden />
                     {t("sources.addFolder")}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => onAddFolder("reference")}
                     disabled={disabled}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                   >
                     <FiPlus className="h-3.5 w-3.5" aria-hidden />
                     {t("sources.addBaseline")}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -549,7 +554,7 @@ export function SourcesScreen({
                   type="button"
                   onClick={() => onAddFolder("input")}
                   disabled={disabled}
-                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
+                  className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-window border border-dashed border-border px-4 py-5 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                 >
                   <FiFolder className="h-5 w-5 text-faint" aria-hidden />
                   <span className="text-xs font-medium text-foreground">
@@ -560,7 +565,7 @@ export function SourcesScreen({
                   type="button"
                   onClick={() => onAddFolder("reference")}
                   disabled={disabled}
-                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-info/30 bg-tint-info/25 px-4 py-6 text-center transition-colors hover:border-info/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
+                  className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-window border border-dashed border-info/40 bg-tint-info px-4 py-5 text-center transition-colors hover:border-info/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-faint"
                 >
                   <FiFolder className="h-5 w-5 text-info" aria-hidden />
                   <span className="text-xs font-medium text-foreground">
@@ -569,7 +574,7 @@ export function SourcesScreen({
                 </button>
               </div>
             ) : (
-              <ul className="space-y-2.5">{sourceCards.map((card) => cardFor(card, false))}</ul>
+              <ul className="space-y-2">{sourceCards.map((card) => cardFor(card, false))}</ul>
             )}
           </section>
 
@@ -591,7 +596,7 @@ export function SourcesScreen({
                 type="button"
                 onClick={() => onAddFolder("destination")}
                 disabled={disabled}
-                className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full flex-col items-center gap-2 rounded-window border border-dashed border-border px-4 py-6 text-center transition-colors hover:border-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-faint"
               >
                 <FiFolder className="h-5 w-5 text-faint" aria-hidden />
                 <span className="text-xs font-medium text-foreground">
@@ -599,14 +604,14 @@ export function SourcesScreen({
                 </span>
               </button>
             ) : (
-              <ul className="space-y-2.5">{cardFor(destination, true)}</ul>
+              <ul className="space-y-2">{cardFor(destination, true)}</ul>
             )}
           </section>
         </div>
 
         {destination && (
-          <aside className="mt-5 flex items-start gap-3 rounded-xl border border-info/25 bg-tint-info/35 p-3.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-tint-info text-info">
+          <aside className="mt-4 flex items-start gap-3 rounded-window border border-info/40 bg-tint-info p-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-panel bg-tint-info text-info">
               <FiInfo className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
@@ -627,7 +632,7 @@ export function SourcesScreen({
               <li key={conflict.kind}>
                 <div
                   className={cn(
-                    "rounded-xl border p-3 text-xs",
+                    "rounded-window border p-3 text-xs",
                     conflict.blocking
                       ? "border-error/40 bg-tint-error"
                       : "border-warning/40 bg-tint-warning",

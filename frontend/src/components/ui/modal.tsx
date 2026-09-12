@@ -27,17 +27,22 @@ import {
 import { createPortal } from "react-dom";
 import { FiX } from "react-icons/fi";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 
-export type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
+export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "full";
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-lg",
   lg: "max-w-3xl",
   xl: "max-w-5xl",
+  // For a dialog whose content is a table of paths. At `xl` the "goes to"
+  // column wrapped a destination across three lines while a 1920-pixel display
+  // sat half empty, which is the one thing a reader is there to compare.
+  "2xl": "max-w-7xl",
   // For a layer whose content *is* the point — a photograph being judged
   // against another. Still the same shell, so it portals, traps focus, stacks
   // and answers Escape exactly like every other dialog.
@@ -49,6 +54,8 @@ interface ModalContextValue {
   title: string;
   titleHidden: boolean;
   onClose: () => void;
+  /** Whether this dialog is the one the user is actually operating. */
+  topmost: boolean;
 }
 
 const ModalContext = createContext<ModalContextValue | null>(null);
@@ -184,12 +191,12 @@ export function Modal({
           // Opacity fades temporarily blend every line with the backdrop and
           // make otherwise compliant dialog text fail contrast while opening.
           "modal-panel-enter my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden",
-          "rounded-lg border border-border bg-card shadow-card outline-none",
+          "rounded-panel border border-border bg-card shadow-card outline-none",
           SIZE_CLASS[size],
           className,
         )}
       >
-        <ModalContext.Provider value={{ titleId, title, titleHidden, onClose }}>
+        <ModalContext.Provider value={{ titleId, title, titleHidden, onClose, topmost }}>
           {children}
         </ModalContext.Provider>
       </div>
@@ -198,6 +205,17 @@ export function Modal({
   );
 }
 
+/**
+ * The header row: identity on the left, controls on the right, one line.
+ *
+ * It used to wrap. A dialog titled with a filename is the common case here —
+ * the media viewer names the file it is showing — and a long one pushed zoom,
+ * fit and close onto a second row, so the controls moved depending on what you
+ * had opened. The row is now `flex-nowrap`: the identity group is the only
+ * thing that shrinks, the controls keep their place at the right edge, and an
+ * over-long name is truncated with the whole of it still in the accessible
+ * name and on hover.
+ */
 export function ModalHeader({
   children,
   actions,
@@ -212,26 +230,71 @@ export function ModalHeader({
   // `div`, not `header`/`footer`: inside a dialog those still map to the page's
   // `banner` and `contentinfo` landmarks, so an open modal reported two of each.
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-border px-3 py-2.5">
-      <h2
-        id={titleId}
-        className={cn("min-w-0 text-sm font-semibold text-foreground", titleHidden && "sr-only")}
-      >
-        {title}
-      </h2>
-      {children}
-      <span className="flex-1" />
-      {actions}
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label={t("common.close")}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <FiX className="h-4 w-4" aria-hidden />
-      </button>
+    <div className="flex flex-nowrap items-center gap-x-2 border-b border-border px-3 py-3">
+      <div className="flex min-w-0 flex-1 items-center gap-x-2">
+        <h2
+          id={titleId}
+          // CSS truncation only: the full string stays in the DOM, so the
+          // accessible name is never the shortened one.
+          title={title}
+          className={cn(
+            "min-w-0 truncate text-sm font-semibold text-foreground",
+            titleHidden && "sr-only",
+          )}
+        >
+          {title}
+        </h2>
+        {children}
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-x-1">{actions}</div>}
+      <Tooltip label={t("common.close")}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("common.close")}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <FiX className="h-4 w-4" aria-hidden />
+        </button>
+      </Tooltip>
     </div>
   );
+}
+
+/**
+ * Key bindings that belong to one dialog, and only while it is on top.
+ *
+ * Rendered *inside* a `Modal` so it can read the stack the modal registered
+ * itself in. The handler is skipped while another dialog is above this one,
+ * and while the key would otherwise be typed into a control — the same
+ * exclusion Review's queue shortcuts use, kept in one place so two surfaces
+ * cannot disagree about what counts as typing.
+ */
+export function ModalShortcuts({ onKey }: { onKey: (event: KeyboardEvent) => void }) {
+  const { topmost } = useModalContext();
+  const handlerRef = useRef(onKey);
+  handlerRef.current = onKey;
+
+  useEffect(() => {
+    if (!topmost) return;
+    const listener = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "input, textarea, select, button, a, video, audio, [contenteditable='true'], [role='slider']",
+        )
+      ) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      handlerRef.current(event);
+    };
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [topmost]);
+
+  return null;
 }
 
 export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
@@ -240,7 +303,7 @@ export function ModalBody({ children, className }: { children: ReactNode; classN
 
 export function ModalFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-2.5">
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-3">
       {children}
     </div>
   );

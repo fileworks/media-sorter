@@ -14,11 +14,34 @@ from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL = Path("branding/app-icon.png")
-# The approved Kontur folder mark is inset on a warm app tile. The added clear
-# space keeps the bundle optically balanced in macOS docks and menu bars while
-# the favicon uses the tighter 32-unit drawing directly.
+# The approved Kontur folder mark is inset on a warm app tile, and that tile is
+# inset within the canvas, on Apple's documented 824/1024 macOS grid.
+#
+# An earlier revision used 744/1024, on the reasoning that macOS composites no
+# mask over an `.icns` and so a smaller tile is a smaller icon in the dock.
+# That is no longer true. macOS 26 normalises every legacy `.icns` into the
+# standard squircle plate, scaling the artwork's opaque bounds to 824/1024
+# whatever they were authored at; measured through `NSWorkspace.icon(forFile:)`
+# on 26.6, this app and Mail, Notes, Terminal and VS Code all render their
+# plate at exactly 412px of 512. The tile ratio therefore no longer changes the
+# icon's size on macOS at all — it only decides whether macOS upscales to reach
+# the grid, and what Windows and Linux, which do not normalise, are handed.
+#
+# What *is* visible on macOS is the mark's share of that fixed plate, and it is
+# set in the SVG (`scale(1.45)`), not here. The tile check below still matters:
+# it is what stops the next adopted blob from restoring a full-bleed slab.
+#
+# The three numbers below are the contract. They are asserted against the
+# rendered canonical PNG on every `make branding` and `make branding-check`,
+# because the icon has now shipped at the wrong size several times over: a
+# geometry that lives only inside an opaque approved blob drifts silently and
+# nothing catches it. See `branding/app-icon.svg`, the drawing this PNG is
+# rendered from. The favicon keeps using the tighter 32-unit drawing directly.
+TILE_RATIO = 824 / 1024
+TILE_TOLERANCE_PX = 4
+CENTER_TOLERANCE_PX = 3
 APPROVED_SOURCE_SHA256 = (
-    "04998437b95f5b3b2271fcbf5b27b4777dc172338f29802892114c99eca70791"
+    "94cc991f8566656602b40148e88f178c40f1f9a03e31284816343d5be6b176ad"
 )
 CANONICAL_SIZE = (1024, 1024)
 
@@ -75,6 +98,63 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _bounding_box(
+    image: Image.Image, predicate: Callable[[tuple[int, int, int, int]], bool]
+) -> tuple[int, int, int, int]:
+    pixels = image.load()
+    width, height = image.size
+    left, top, right, bottom = width, height, -1, -1
+    for y in range(height):
+        for x in range(width):
+            if predicate(pixels[x, y]):
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = max(bottom, y)
+    if right < 0:
+        raise BrandingError("canonical branding source has no visible content")
+    return left, top, right, bottom
+
+
+def _validate_geometry(path: Path, image: Image.Image) -> None:
+    """Assert the tile inset and the mark's centring, not just the file's hash.
+
+    macOS 26 rescales a legacy `.icns` onto the 824/1024 plate for us, so this
+    is no longer what decides the icon's size in the dock. It is still what
+    Windows and Linux are handed verbatim, what keeps macOS from upscaling to
+    reach that plate, and what stops the next adopted blob from quietly
+    restoring a full-bleed slab.
+    """
+    canvas = image.size[0]
+    tile = _bounding_box(image, lambda pixel: pixel[3] > 128)
+    ink = _bounding_box(
+        image, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500
+    )
+    expected_edge = round(canvas * TILE_RATIO)
+    for axis, low, high in (("width", tile[0], tile[2]), ("height", tile[1], tile[3])):
+        edge = high - low + 1
+        if abs(edge - expected_edge) > TILE_TOLERANCE_PX:
+            raise BrandingError(
+                f"{path}: tile {axis} is {edge}px of {canvas}px, expected "
+                f"{expected_edge}px (TILE_RATIO = {TILE_RATIO:.4f}); this is "
+                "Apple's documented macOS grid and the size Windows and Linux "
+                "are handed unaltered"
+            )
+    for label, box, container in (
+        ("tile", tile, (0, 0, canvas - 1, canvas - 1)),
+        ("mark", ink, tile),
+    ):
+        for axis, index in (("horizontally", 0), ("vertically", 1)):
+            offset = (box[index] + box[index + 2]) - (
+                container[index] + container[index + 2]
+            )
+            if abs(offset / 2) > CENTER_TOLERANCE_PX:
+                raise BrandingError(
+                    f"{path}: the {label} sits {abs(offset / 2):.1f}px off centre "
+                    f"{axis}; it must be centred within {CENTER_TOLERANCE_PX}px"
+                )
+
+
 def _validate_canonical(path: Path) -> Image.Image:
     if not path.is_file():
         raise BrandingError(
@@ -82,7 +162,11 @@ def _validate_canonical(path: Path) -> Image.Image:
             "adopt the approved source before generating assets"
         )
     if _sha256(path) != APPROVED_SOURCE_SHA256:
-        raise BrandingError(f"{path} is not the explicitly approved v2 padded artwork")
+        raise BrandingError(
+            f"{path} is not the explicitly approved padded artwork; "
+            "render it from branding/app-icon.svg and update "
+            "APPROVED_SOURCE_SHA256"
+        )
     with Image.open(path) as opened:
         if (
             opened.format != "PNG"
@@ -93,7 +177,9 @@ def _validate_canonical(path: Path) -> Image.Image:
                 f"{path} must be a 1024x1024 RGBA PNG, got "
                 f"{opened.format} {opened.mode} {opened.size}"
             )
-        return opened.copy()
+        source = opened.copy()
+    _validate_geometry(path, source)
+    return source
 
 
 def _atomic_bytes(path: Path, payload: bytes) -> None:

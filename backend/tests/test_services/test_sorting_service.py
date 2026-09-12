@@ -1348,6 +1348,65 @@ async def test_process_file_apply_rename(tmp_path: Path) -> None:
     assert "IMG_2024-03-15" in record["dest_path"]
 
 
+@pytest.mark.asyncio
+async def test_rename_lands_the_file_on_a_lower_case_extension(tmp_path: Path) -> None:
+    """A renamed file is written straight onto its normalised name.
+
+    The extension is part of the name the rename claims, and the transfer has
+    to write it that way rather than land on `.JPG` and correct it afterwards:
+    a case-only rename on a case-insensitive filesystem reads as a collision
+    and comes back as `_001`.
+    """
+    PIL_Image = pytest.importorskip("PIL.Image")
+    piexif = pytest.importorskip("piexif")
+
+    source_root = tmp_path / "source"
+    dest_root = tmp_path / "target"
+    source_root.mkdir()
+    dest_root.mkdir()
+
+    img_path = source_root / "SHOT.JPG"
+    PIL_Image.new("RGB", (10, 10)).save(img_path, format="JPEG")
+    exif = {"Exif": {piexif.ExifIFD.DateTimeOriginal: b"2024:03:15 10:00:00"}}
+    piexif.insert(piexif.dump(exif), str(img_path))
+
+    cfg = Config(
+        source_directory=str(source_root),
+        target_directory=str(dest_root),
+        sort_criteria=["year"],
+        copy_instead_of_move=True,
+        rename=True,
+        rename_pattern="YYYY-MM-DD_NAME",
+    )
+    svc = SortingService(
+        config=cfg,
+        config_service=ConfigService(cfg),
+        filesystem_service=FileSystemService(),
+        extraction_service=DateExtractionService(),
+        duplicate_service=DuplicateService(),
+        metadata_service=MetadataService(),
+        conversion_service=ConversionService(),
+        repair_service=RepairService(),
+        db_manager=None,
+        rule_engine_service=None,
+    )
+
+    record = svc._process_file(
+        file_path=img_path,
+        source_root=source_root,
+        dest_root=dest_root,
+        config=cfg,
+        dry_run=False,
+        registry=DuplicateRegistry(),
+        operation_id="op_rename_case_test",
+    )
+
+    assert record["status"] == "success"
+    written = Path(record["dest_path"])
+    assert written.name == "2024-03-15_SHOT.jpg"
+    assert written.is_file()
+
+
 def test_safe_stat_reports_a_missing_file_as_unknown_rather_than_raising(tmp_path: Path) -> None:
     """_safe_stat must not raise for a non-existent path — and must not claim 0 bytes.
 

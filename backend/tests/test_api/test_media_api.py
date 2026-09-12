@@ -1,6 +1,8 @@
 """Integration tests for the media (thumbnail) API route."""
 
+import asyncio
 import io
+import mimetypes
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -12,8 +14,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from app.api.routes import media
 from app.core.bootstrap import AppFactory
 from app.core.config import Config
+from app.core.media_scope import assert_media_readable
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +43,75 @@ def outside_library() -> Iterator[Path]:
 
 def _write_jpeg(path: Any) -> None:
     Image.new("RGB", (320, 240), (200, 120, 40)).save(path, format="JPEG")
+
+
+@pytest.mark.parametrize("endpoint", ["thumbnail", "media/info", "media/content", "media/diff"])
+def test_media_path_resolution_runs_off_the_event_loop(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, endpoint: str
+) -> None:
+    source = tmp_path / "threaded.jpg"
+    _write_jpeg(source)
+    checked: list[str] = []
+
+    def require_worker(raw_path: str, config: Config) -> Path:
+        with pytest.raises(RuntimeError, match="no running event loop"):
+            asyncio.get_running_loop()
+        checked.append(raw_path)
+        return assert_media_readable(raw_path, config)
+
+    monkeypatch.setattr(media, "assert_media_readable", require_worker)
+    params = (
+        {"a": str(source), "b": str(source)} if endpoint == "media/diff" else {"path": str(source)}
+    )
+    response = client.get(f"/api/{endpoint}", params=params)
+    assert response.status_code == (415 if endpoint == "media/content" else 200)
+    assert checked == [str(source)] * (2 if endpoint == "media/diff" else 1)
+
+
+def test_thumbnail_bounds_decode_before_rgb_conversion_and_keeps_orientation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "portrait.jpg"
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new("RGB", (2400, 1600), "red").save(source, exif=exif)
+    source_bytes = source.read_bytes()
+    original = Image.Image.convert
+    converted_sizes: list[tuple[int, int]] = []
+
+    def bounded_convert(image: Image.Image, *args: Any, **kwargs: Any) -> Image.Image:
+        converted_sizes.append(image.size)
+        return original(image, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", bounded_convert)
+    data = media._render_thumbnail(str(source), 240)
+    assert data is not None
+    with Image.open(io.BytesIO(data)) as thumbnail:
+        assert thumbnail.size == (160, 240)
+    assert converted_sizes and all(max(size) <= 240 for size in converted_sizes)
+    assert source.read_bytes() == source_bytes
+
+
+def test_cold_video_mime_lookup_runs_off_the_event_loop(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "video.mp4"
+    source.write_bytes(b"disposable video response fixture")
+    original = mimetypes.init
+    calls: list[bool] = []
+
+    def require_worker() -> None:
+        with pytest.raises(RuntimeError, match="no running event loop"):
+            asyncio.get_running_loop()
+        calls.append(True)
+        original()
+
+    monkeypatch.setattr(mimetypes, "inited", False)
+    monkeypatch.setattr(mimetypes, "init", require_worker)
+    response = client.get("/api/media/content", params={"path": str(source)})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "video/mp4"
+    assert calls == [True]
 
 
 def test_thumbnail_returns_downscaled_jpeg(client: TestClient, tmp_path: Path) -> None:

@@ -80,7 +80,7 @@
     "companion_handling": "keep_with_primary",
     "convert_images": false,
     "convert_videos": false,
-    "copy_instead_of_move": false,
+    "copy_instead_of_move": true,
     "dedup_index_path": null,
     "duplicate_exact_enabled": true,
     "duplicate_keeper_policy": "smart",
@@ -130,7 +130,7 @@
       },
       "roots": [],
       "schema_version": 1,
-      "transfer_mode": "move"
+      "transfer_mode": "copy"
     },
     "max_file_size_mb": null,
     "max_recursion_depth": null,

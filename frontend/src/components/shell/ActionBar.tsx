@@ -42,11 +42,11 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
   const reason = primary?.disabled ? (primary.disabledReason ?? null) : null;
 
   return (
-    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card px-4 py-2.5 sm:px-6">
+    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card py-3">
       {/* One row once there is room for one. On a narrow window the sentence
           takes its own line and the actions stay together on the next, rather
           than the primary action wrapping away from Back. */}
-      <div className="group/footer mx-auto flex min-h-10 max-w-workspace flex-col gap-2 md:flex-row md:items-center md:gap-3">
+      <div className="workspace-frame group/footer flex min-h-10 flex-col gap-2 md:flex-row md:items-center md:gap-3">
         {/* `basis-1/2` is the guarantee: at the one-row breakpoint the sentence
             starts at half the rail and may grow, so however long the German
             disabled-reason turns out to be it can never squeeze the message to
@@ -102,10 +102,18 @@ export function ActionBar({ tone = "note", message, back, primary, children }: A
               aria-describedby={reason ? "action-bar-reason" : undefined}
               aria-busy={primary.busy || undefined}
             >
+              {/* A transparent ring with one arc in `currentColor`. The ink has
+                  to follow the button — a busy button is also a disabled one,
+                  and a white spinner on the disabled fill was invisible, which
+                  is the one thing meant to prove work is happening. The arc
+                  rather than a two-tone ring because Tailwind cannot put an
+                  alpha on `currentColor`: `border-current/40` silently compiles
+                  to a solid `currentColor`, and a uniform ring does not appear
+                  to turn at all. */}
               {primary.busy && (
                 <span
                   aria-hidden
-                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground"
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent border-t-current"
                 />
               )}
               {primary.label}

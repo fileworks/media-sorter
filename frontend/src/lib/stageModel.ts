@@ -1,28 +1,6 @@
-/**
- * Five stages, several views, and one rule about going backwards.
- *
- * Sources → Recipe → Configure → Review → Execute. Each stage has an entry
- * condition, and moving back to an earlier one invalidates what depended on it —
- * which is the whole reason the model is typed rather than a string in a
- * component: "can I press Execute?" must have exactly one answer, and it must be
- * the same answer everywhere.
- *
- * Configure is its own stage rather than a panel inside Sources because the two
- * ask different questions. Sources asks *where*, and its answer decides whether
- * anything can run at all; Configure asks *how*, and every one of its answers
- * already has a safe default. Splitting them is what lets Sources stay a screen
- * somebody can finish in fifteen seconds.
- *
- * Recipe is its own stage for the mirror-image reason. Picking one writes
- * fifteen settings in a single click — the largest decision in the flow — and it
- * used to be the first card *inside* Configure, visually a peer of the smallest
- * decisions and below the screen's own heading. A stage names it in the stepper,
- * lets Configure say which recipe it is fine-tuning, and makes it revisitable
- * without hunting. It shares Configure's entry condition: both are about *how*,
- * and neither can be answered before there are folders.
- */
+/** Four workflow steps; recipe selection and optional adjustments share Setup. */
 
-export type Stage = "sources" | "recipe" | "configure" | "review" | "execute";
+export type Stage = "sources" | "configure" | "review" | "execute";
 
 /**
  * A stage's sub-view. Every stage now has exactly one.
@@ -38,7 +16,6 @@ export type View = "overview";
 
 export const VIEWS_BY_STAGE: Record<Stage, View[]> = {
   sources: ["overview"],
-  recipe: ["overview"],
   configure: ["overview"],
   review: ["overview"],
   execute: ["overview"],
@@ -75,11 +52,49 @@ export interface StageInputs {
   /** Review has no proposed or undecided duplicate sets left. */
   duplicateReviewReady: boolean;
   duplicateReviewReason: string | null;
+  /**
+   * Review's decisions have been written to the backend.
+   *
+   * Deliberately separate from `duplicateReviewReady`, which is about the
+   * decisions themselves. Folding the two together made "is the review
+   * finished?" depend on whether a background save happened to be in flight,
+   * and the surface saves on *every* durable change — including which set the
+   * queue is on. Stepping to the next duplicate group therefore un-finished the
+   * stage and re-finished it a few milliseconds later, which the stepper showed
+   * as its Review step flicking from "complete" back to "Approve the plan".
+   *
+   * Entering Execute still requires it. Being finished and being saved are two
+   * different claims, and only one of them is about what the reader just did.
+   */
+  reviewStateDurable: boolean;
   /** A backend execution survived this UI instance and is being reattached. */
   executionActive: boolean;
   /** Startup recovery or drift is holding new work. */
   blocked: boolean;
   blockedReason: string | null;
+}
+
+/**
+ * Whether Review's decisions are on disk — as a gate can usefully ask it.
+ *
+ * The raw answer changes several times a second while somebody works: the
+ * review surface writes on every durable change, and "which duplicate set is
+ * open" is durable. A gate reading it directly opens and closes as fast as the
+ * reader can press the next-set arrow, which is what made the stepper's Review
+ * step flick between "complete" and "Approve the plan".
+ *
+ * `slowSave` is that same signal held back until a save is genuinely taking
+ * time (see `useDelayedFlag`), so only a save worth waiting for reaches the
+ * screen. This smooths what is *shown*; starting a run still checks the
+ * unsmoothed state before it does anything.
+ */
+export function reviewStateIsDurable(
+  planState: "idle" | "saving" | "saved" | "error",
+  decisionState: "saving" | "saved" | "error",
+  slowSave: boolean,
+): boolean {
+  if (planState === "error" || decisionState === "error" || planState === "idle") return false;
+  return !slowSave;
 }
 
 /** Completion is based on a still-valid artifact, not screen position. */
@@ -89,8 +104,9 @@ export function stageComplete(
   executionComplete = false,
 ): boolean {
   if (stage === "sources") return inputs.rootsReady;
-  if (stage === "recipe") return inputs.scanned;
   if (stage === "configure") return inputs.planned;
+  // Decisions only. A save in flight is not an unfinished review — see
+  // `reviewStateDurable`.
   if (stage === "review") return inputs.planned && inputs.duplicateReviewReady;
   return executionComplete;
 }
@@ -120,9 +136,9 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
       reason: inputs.rootsReason ?? "Choose at least one input folder and a destination.",
     };
   }
-  // Recipe and Configure share the gate: usable folders and nothing else. Both
+  // Setup requires usable folders and nothing else. Its surfaces
   // ask how the run should behave, and neither needs a scan to be answerable.
-  if (stage === "recipe" || stage === "configure") {
+  if (stage === "configure") {
     return { canEnter: true, reason: null };
   }
   if (stage === "review") {
@@ -137,7 +153,7 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
       reason: inputs.plannedReason ?? "Preview the changes first — nothing has been calculated.",
     };
   }
-  if (stage === "execute" && !inputs.duplicateReviewReady) {
+  if (stage === "execute" && !(inputs.duplicateReviewReady && inputs.reviewStateDurable)) {
     return {
       canEnter: false,
       reason:
@@ -149,7 +165,7 @@ export function readiness(stage: Stage, inputs: StageInputs): StageReadiness {
 }
 
 /** The flow, in the order it is walked. The stepper and every index use it. */
-const ORDER: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+const ORDER: Stage[] = ["sources", "configure", "review", "execute"];
 
 export function availableStages(inputs: StageInputs): Stage[] {
   return ORDER.filter((stage) => readiness(stage, inputs).canEnter);
@@ -163,11 +179,26 @@ export function availableStages(inputs: StageInputs): Stage[] {
  * plan destroyed on the first answer while the remaining five asked about a plan
  * that no longer existed. The lock asks once, at the moment the intent appears.
  */
-const LOCKED_BY_PLAN: readonly Stage[] = ["sources", "recipe", "configure"];
+const LOCKED_BY_PLAN: readonly Stage[] = ["sources", "configure"];
 
 /** Whether standing on this stage with a plan means reading rather than editing. */
 export function isStageLocked(stage: Stage, planExists: boolean): boolean {
   return planExists && LOCKED_BY_PLAN.includes(stage);
+}
+
+/**
+ * The stages that draw their own read-only boundary, so the shell does not.
+ *
+ * `inert` is inherited and cannot be lifted from a descendant — there is no
+ * `inert="false"`. A blanket one over Configure therefore took its navigation
+ * rail down with the settings, and jumping to a heading to *read* a setting
+ * is not editing anything. Configure puts the boundary around its settings
+ * column instead, which is the part that is actually being protected.
+ */
+const DRAWS_OWN_LOCK: readonly Stage[] = ["configure"];
+
+export function stageDrawsOwnLock(stage: Stage): boolean {
+  return DRAWS_OWN_LOCK.includes(stage);
 }
 
 export interface Transition {
@@ -211,9 +242,9 @@ export function goTo(current: StageState, stage: Stage, view?: View): Transition
     if (stage === "sources") {
       invalidated.push("Changing folders makes the current review stale.");
     }
-    // Recipe reports what Configure reports: a recipe writes settings, so
+    // Setup changes settings, so
     // going back to it threatens the plan in exactly the same way.
-    if (stage === "recipe" || stage === "configure") {
+    if (stage === "configure") {
       invalidated.push("Changing settings makes the current review stale.");
     }
   }
@@ -282,7 +313,16 @@ export function reconcile(state: StageState, key: StageKey): Transition {
   if (state.key.catalogGeneration > 0 && state.key.catalogGeneration !== key.catalogGeneration) {
     invalidated.push("The folders were scanned again since you were last here.");
   }
-  if (state.key.planVersion > 0 && state.key.planVersion !== key.planVersion) {
+  // A *replacement* plan is news; a plan that is simply gone is not. Every way
+  // a plan disappears is an explicit act that already said so at the time —
+  // discarding it to edit settings, starting a new run, or asking for it to be
+  // calculated again — so announcing it here is a second notice for a decision
+  // the user has already made.
+  if (
+    state.key.planVersion > 0 &&
+    key.planVersion > 0 &&
+    state.key.planVersion !== key.planVersion
+  ) {
     invalidated.push("The review plan changed.");
   }
   // A plan that no longer exists cannot be reviewed. Landing on Configure —
@@ -292,11 +332,17 @@ export function reconcile(state: StageState, key: StageKey): Transition {
   // Reconciliation may move a stale downstream screen back to the last valid
   // stage, but never pulls somebody forward after deliberate back navigation.
   const firstPlanArrived = state.key.planVersion === 0 && key.planVersion > 0;
+  // Review is the one stage that *computes* a plan as well as reads one, and
+  // it has a state for every moment in between. Evicting it the instant its
+  // plan went away sent "Recalculate" to the settings screen — the plan is
+  // being rebuilt by the very screen it was thrown off.
   const landing = firstPlanArrived
     ? "review"
-    : stageIndex(state.stage) < stageIndex(fallback)
-      ? state.stage
-      : fallback;
+    : state.stage === "review"
+      ? "review"
+      : stageIndex(state.stage) < stageIndex(fallback)
+        ? state.stage
+        : fallback;
   return {
     state: {
       stage: landing,
@@ -322,13 +368,8 @@ export interface StageLabel {
 export const STAGE_LABELS: StageLabel[] = [
   { stage: "sources", label: "Sources", description: "Which folders, and what each one is for" },
   {
-    stage: "recipe",
-    label: "Recipe",
-    description: "The starting point everything else adjusts",
-  },
-  {
     stage: "configure",
-    label: "Configure",
+    label: "Setup",
     description: "How files travel, land, and get cleaned",
   },
   { stage: "review", label: "Review", description: "What would change, before anything does" },

@@ -76,6 +76,12 @@ const names = (entries: readonly BrowseEntry[]) =>
   entries.map((entry) => (entry.kind === "file" ? entry.row.name : entry.id));
 
 describe("review sort", () => {
+  it("does not reorder a set when its keeper changes", () => {
+    const first = row("a.jpg", 100, "2024-01-01");
+    const second = row("z.jpg", 200, "2025-01-01");
+    const entry = setEntry("pair", [first, second]);
+    expect(setSortModel({ ...entry, keeper: second })).toEqual(setSortModel(entry));
+  });
   it("accepts only the three orders the control offers", () => {
     expect(isReviewSort("name")).toBe(true);
     expect(isReviewSort("size")).toBe(true);

@@ -3,6 +3,7 @@ import { FiLoader, FiSearch } from "react-icons/fi";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { companionRoleLabel } from "@/lib/evidenceLabels";
 import { ValidationBadge } from "@/components/ui/validation-badge";
@@ -50,7 +51,7 @@ function SummaryCard({
   const { locale } = useI18n();
   const display = useCountUp(value);
   return (
-    <div className="rounded-xl border border-border bg-muted/30 p-4 text-center">
+    <div className="rounded-window border border-border bg-muted/30 p-4 text-center">
       <p className="mb-1 text-xs text-muted-foreground">{label}</p>
       <p className={cn("text-2xl font-bold tabular-nums", color)}>
         {display.toLocaleString(locale)}
@@ -77,7 +78,7 @@ function BarChart({ data }: { data: Record<string, number> | undefined }) {
         <div key={label} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
           <span className="text-3xs font-mono leading-none text-muted-foreground">{value}</span>
           <div
-            className="w-full rounded-t bg-info/60 transition-colors hover:bg-info/80"
+            className="w-full rounded-t-control bg-info/60 transition-colors hover:bg-info/80"
             style={{ height: `${Math.max((value / max) * BAR_MAX_PX, 4)}px` }}
           />
           <span className="text-3xs leading-none text-muted-foreground">{label}</span>
@@ -120,8 +121,10 @@ function TypeBar({ data }: { data: Record<string, number> | undefined }) {
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {entries.map(([type, count], i) => (
-          <div key={type} className="flex items-center gap-1.5 text-xs">
-            <span className={cn("h-2.5 w-2.5 rounded-sm", TYPE_COLORS[i % TYPE_COLORS.length])} />
+          <div key={type} className="flex items-center gap-2 text-xs">
+            <span
+              className={cn("h-2.5 w-2.5 rounded-control", TYPE_COLORS[i % TYPE_COLORS.length])}
+            />
             <span className="capitalize">{type.replace(/^\./, "")}</span>
             <span className="text-muted-foreground">({count})</span>
           </div>
@@ -188,11 +191,11 @@ function StatsDashboard({
   const hasCameras = Object.keys(statistics.camera_models ?? {}).length > 0;
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div className="rounded-window border border-border bg-card">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+        className="flex w-full items-center justify-between rounded-window px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
       >
         <span>{t("report.statistics")}</span>
         <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
@@ -307,7 +310,10 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className={cn("whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", s.className)}
+      className={cn(
+        "whitespace-nowrap rounded-control px-2 py-0.5 text-xs font-medium",
+        s.className,
+      )}
     >
       {t(s.key, {}, status)}
     </span>
@@ -403,35 +409,31 @@ function FileTableSection({
   );
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div className="rounded-window border border-border bg-card">
       {/* Filters + Search */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex flex-wrap gap-1">
           {FILTER_TABS.map((tabOption) => (
-            <button
+            <Button
               key={tabOption.id}
-              type="button"
+              size="sm"
+              variant={tab === tabOption.id ? "default" : "ghost"}
+              aria-pressed={tab === tabOption.id}
               onClick={() => {
                 setTab(tabOption.id);
                 setPage(0);
               }}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                tab === tabOption.id
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
             >
               {t(`report.filter.${tabOption.id}`)}{" "}
               <span className="tabular-nums">
                 ({tabCounts[tabOption.id].toLocaleString(locale)})
               </span>
-            </button>
+            </Button>
           ))}
         </div>
         <div className="relative">
           <FiSearch className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <input
+          <Input
             type="search"
             placeholder={t("report.searchPlaceholder")}
             aria-label={t("report.searchLabel")}
@@ -440,7 +442,7 @@ function FileTableSection({
               setSearch(e.target.value);
               setPage(0);
             }}
-            className="h-7 w-48 rounded-md border border-input bg-background pl-6 pr-2.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 w-48 pl-6"
           />
         </div>
       </div>
@@ -473,7 +475,7 @@ function FileTableSection({
                   <button
                     type="button"
                     onClick={() => handleSortClick(col)}
-                    className="inline-flex min-h-6 select-none items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="inline-flex min-h-6 select-none items-center rounded-control text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     {t(key)}
                     <SortIcon col={col} />
@@ -518,13 +520,13 @@ function FileTableSection({
                     {formatMetadataSource(f.metadata_source, t)}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <StatusBadge status={f.status} />
                       {["duplicate", "already_in_destination"].includes(f.status) &&
                         f.duplicate_type &&
                         (() => {
                           const badge = (
-                            <span className="rounded-full bg-info/15 px-1.5 py-0.5 text-3xs font-medium text-info">
+                            <span className="rounded-full bg-info/10 px-2 py-0.5 text-3xs font-medium text-info">
                               {f.duplicate_type === "exact"
                                 ? "exact"
                                 : `~${f.duplicate_similarity ?? 0}%`}
@@ -635,7 +637,7 @@ function FileTableSection({
 const OUTCOME_BANNER: Record<StatusTone | "neutral", string> = {
   success: "border-success/40 bg-tint-success",
   warning: "border-warning/40 bg-tint-warning",
-  info: "border-info/40 bg-info/5",
+  info: "border-info/40 bg-info/10",
   error: "border-error/40 bg-tint-error",
   neutral: "border-border bg-muted/30",
 };
@@ -699,9 +701,9 @@ export function ReportPanel({ report }: ReportPanelProps) {
   return (
     <div className="space-y-4">
       {/* ── Section A: Summary Cards ── */}
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="rounded-window border border-border bg-card p-4">
         <div
-          className={cn("mb-4 rounded-xl border px-4 py-3", outcomeBannerClass(outcome))}
+          className={cn("mb-4 rounded-window border px-4 py-3", outcomeBannerClass(outcome))}
           role="status"
           aria-live="polite"
         >
@@ -776,7 +778,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
           </span>
         </div>
 
-        <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+        <div className="mt-3 rounded-panel border border-border bg-muted/40 px-3 py-2">
           <p className="text-xs font-medium text-foreground">
             {t("report.sourcesUsed", { count: sourceRoots.length })}
           </p>
@@ -793,7 +795,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
         </div>
 
         {(report.excluded_roots?.length ?? 0) > 0 && (
-          <div className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+          <div className="mt-3 rounded-panel border border-border bg-muted/40 px-3 py-2">
             <p className="text-xs font-medium text-foreground">
               {t("report.excludedRoots", { count: report.excluded_roots?.length ?? 0 })}
             </p>
@@ -816,7 +818,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
             onClick={() => void handleExport("csv")}
           >
             {exporting === "csv" ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-2">
                 <FiLoader className="h-3.5 w-3.5 animate-spin" />
                 {t("report.exporting")}
               </span>
@@ -831,7 +833,7 @@ export function ReportPanel({ report }: ReportPanelProps) {
             onClick={() => void handleExport("json")}
           >
             {exporting === "json" ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-2">
                 <FiLoader className="h-3.5 w-3.5 animate-spin" />
                 {t("report.exporting")}
               </span>

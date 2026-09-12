@@ -138,7 +138,7 @@ class LibraryProfile(BaseModel):
     profile_id: str = Field(default="default-library", min_length=1, max_length=128)
     name: str = Field(default="Default library", min_length=1, max_length=200)
     roots: list[LibraryRoot] = Field(default_factory=list)
-    transfer_mode: TransferMode = "move"
+    transfer_mode: TransferMode = "copy"
     catalog: CatalogPlacement = Field(default_factory=CatalogPlacement)
     resources: ResourcePreferences = Field(default_factory=ResourcePreferences)
 

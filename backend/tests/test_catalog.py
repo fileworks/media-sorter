@@ -100,7 +100,7 @@ class TestSchema:
 
     def test_future_main_schema_preflight_changes_no_file_metadata(self, tmp_path: Path) -> None:
         path = tmp_path / "future.db"
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
         before = self._snapshot((path,))
 
@@ -136,11 +136,65 @@ class TestSchema:
         assert calls == [(source, destination)]
         assert not destination.exists()
 
+    def test_a_concurrent_reader_does_not_invalidate_schema_inspection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "read-during-preflight.db"
+        with MediaCatalog(path):
+            pass
+        before = self._snapshot((path,))
+        original_copy = catalog_module._copy_without_source_atime
+
+        def copy_while_reading(source: Path, destination: Path) -> None:
+            original_copy(source, destination)
+            source.read_bytes()
+
+        monkeypatch.setattr(catalog_module, "_copy_without_source_atime", copy_while_reading)
+        with MediaCatalog(path) as reopened:
+            assert reopened.schema_version == CATALOG_SCHEMA_VERSION
+        # Windows can disable last-access updates globally; macOS/Linux expose
+        # the read that used to be mistaken for a schema mutation.
+        if os.name != "nt":
+            assert path.stat().st_atime_ns != before[path][1].st_atime_ns
+
+    @pytest.mark.parametrize("change", ["write", "replace", "create_wal", "remove_journal"])
+    def test_schema_inspection_refuses_concurrent_mutations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+    ) -> None:
+        path = tmp_path / "changed.db"
+        with MediaCatalog(path):
+            pass
+        journal = path.with_name(path.name + "-journal")
+        if change == "remove_journal":
+            journal.write_bytes(b"")
+        original_copy = catalog_module._copy_without_source_atime
+
+        def copy_then_change(source: Path, destination: Path) -> None:
+            original_copy(source, destination)
+            if source != path:
+                return
+            if change == "write":
+                with source.open("r+b") as stream:
+                    stream.seek(60)
+                    stream.write((CATALOG_SCHEMA_VERSION + 1).to_bytes(4, "big"))
+            elif change == "replace":
+                replacement = source.with_suffix(".replacement")
+                original_copy(source, replacement)
+                replacement.replace(source)
+            elif change == "create_wal":
+                source.with_name(source.name + "-wal").write_bytes(b"")
+            else:
+                journal.unlink()
+
+        monkeypatch.setattr(catalog_module, "_copy_without_source_atime", copy_then_change)
+        with pytest.raises(CatalogCorruptionError, match="changed while its schema"):
+            MediaCatalog(path)
+
     def test_wal_carried_future_schema_is_refused_without_checkpointing(
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "future-wal.db"
-        with sqlite3.connect(path) as initial:
+        with closing(sqlite3.connect(path)) as initial, initial:
             initial.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION}")
             initial.execute("CREATE TABLE evidence(value TEXT)")
         writer = sqlite3.connect(path)
@@ -167,7 +221,7 @@ class TestSchema:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "future-journal.db"
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION + 1}")
             connection.execute("CREATE TABLE evidence(value TEXT)")
             connection.execute("INSERT INTO evidence VALUES ('before')")

@@ -19,6 +19,7 @@ import {
   entriesIn,
   folderGroups,
   folderTrail,
+  decisionImpact,
   isOpenSet,
   reviewStats,
   staysDivisionOf,
@@ -373,5 +374,60 @@ describe("which subfolder each file lands in", () => {
       { path: "2019/01", name: "01" },
     ]);
     expect(folderTrail(null)).toEqual([]);
+  });
+});
+
+/**
+ * What a bulk decision costs the files, rather than how many sets it settles.
+ *
+ * "Decides 12 of 15" is a count of decisions. The number a person is actually
+ * agreeing to is how many photographs move and how much comes back, and the
+ * dialog said neither.
+ */
+describe("the file-level impact of a bulk decision", () => {
+  const set = (id: string, sizes: Array<number | null>): SetEntry =>
+    ({
+      kind: "set",
+      key: `set:${id}`,
+      id,
+      setKind: "exact",
+      origin: "catalog",
+      rows: sizes.map((sizeBytes, index) => ({
+        source: `/in/${id}-${index}.jpg`,
+        sizeBytes,
+      })) as SetEntry["rows"],
+      keeper: null,
+      hasBaseline: false,
+      decisionState: "undecided",
+      decisionKind: null,
+      proposedKeeper: null,
+      proposalPolicy: null,
+      similarity: null,
+      folder: "",
+    }) as SetEntry;
+
+  it("counts every copy but the keeper, and the bytes they free", () => {
+    const impact = decisionImpact(
+      [set("a", [100, 200, 300]), set("b", [50, 60])],
+      (entry) => `${entry.rows[0].source}`,
+    );
+
+    expect(impact).toEqual({ decided: 2, setAside: 3, bytes: 200 + 300 + 60 });
+  });
+
+  it("leaves a set alone when the action cannot name a keeper for it", () => {
+    const impact = decisionImpact([set("a", [100, 200]), set("b", [50, 60])], (entry) =>
+      entry.id === "a" ? entry.rows[0].source : null,
+    );
+
+    expect(impact).toEqual({ decided: 1, setAside: 1, bytes: 200 });
+  });
+
+  it("refuses to state a total when one copy has no measured size", () => {
+    // A figure that silently treats an unmeasured file as zero is worse than
+    // no figure: it is the same shape as a true one.
+    const impact = decisionImpact([set("a", [100, null])], (entry) => entry.rows[0].source);
+
+    expect(impact).toEqual({ decided: 1, setAside: 1, bytes: null });
   });
 });

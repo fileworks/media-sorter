@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { keeperRationale } from "@/lib/duplicateDecisions";
+import {
+  decisionState,
+  keeperProposals,
+  keeperRecommendations,
+  keeperRationale,
+} from "@/lib/duplicateDecisions";
+import type { DuplicateDecision } from "@/lib/duplicateDecisions";
 import type { DuplicateGroup, GroupMember } from "@/lib/reviewWorkbench";
 
 function member(
@@ -136,5 +142,41 @@ describe("keeper proposal rationale", () => {
 
     expect(rationale.winningRung.key).toBe("review.resolve.rationale.rung.copyMarkers");
     expect(rationale.tieBreak).toBeNull();
+  });
+});
+
+describe("a recommendation outlives the decision it produced", () => {
+  const sets = group(member("winner", { size: 200 }), member("other", { size: 100 }));
+  const accepted = new Map<string, DuplicateDecision>([
+    ["group", { kind: "keeper", memberId: "winner" }],
+  ]);
+
+  it("still names the ranked copy after the recommendation has been accepted", () => {
+    // The bug: accepting the recommendations decided every set, the map was
+    // rebuilt for undecided sets only, and every surface then reported that
+    // there was no recommendation — for the sets it had just applied one to.
+    const recommendations = keeperRecommendations([sets], "largest");
+
+    expect(recommendations.get("group")?.memberId).toBe("winner");
+    expect(keeperRecommendations([sets], "largest").get("group")?.memberId).toBe("winner");
+  });
+
+  it("stops offering it as an outstanding proposal once it has been answered", () => {
+    expect(keeperProposals([sets], "largest", new Map()).has("group")).toBe(true);
+    expect(keeperProposals([sets], "largest", accepted).has("group")).toBe(false);
+  });
+
+  it("reports a decided set as decided even while it carries a recommendation", () => {
+    const recommendations = keeperRecommendations([sets], "largest");
+
+    expect(decisionState("group", accepted, recommendations)).toBe("decided");
+    expect(decisionState("group", new Map(), recommendations)).toBe("proposed");
+  });
+
+  it("never recommends for a set the library contract already answers", () => {
+    const reference = member("baseline");
+    const protectedGroup = group({ ...reference, role: "reference" }, member("copy"));
+
+    expect(keeperRecommendations([protectedGroup], "largest").size).toBe(0);
   });
 });

@@ -7,6 +7,7 @@ import pytest
 
 from app.core.config import Config
 from app.core.exceptions import SourceUnavailableError
+from app.core.library_profiles import LibraryProfile, LibraryRoot
 from app.services.analysis_service import AnalysisService
 from app.services.filesystem_service import FileSystemService
 
@@ -294,3 +295,77 @@ def test_disk_space_check_tolerates_inaccessible_dest(
     ds = asyncio.run(svc.disk_space_check(config))
     assert ds["free_space_known"] is False
     assert ds["sufficient"] is True
+
+
+def test_analyse_reports_each_input_root_separately(svc: AnalysisService, tmp_path: Path) -> None:
+    """Every input folder gets its own totals, not a share of one aggregate.
+
+    The scan walks each input root separately and then merges, so afterwards
+    nothing can tell one root's files from another's. The interface had one
+    aggregate and several folder cards to put it on, and printed the whole
+    run's totals on the first card while every other card showed the same
+    run-wide number as "N files indexed" — a figure that reads per-folder and
+    is not one. "Why does one folder say 190 files and 264 MB and the other
+    just say 190 files indexed?" is the question that produced this test.
+    """
+    holiday = tmp_path / "holiday"
+    archive = tmp_path / "archive"
+    holiday.mkdir()
+    archive.mkdir()
+    (holiday / "a.jpg").write_bytes(b"\x00" * 100)
+    (holiday / "b.jpg").write_bytes(b"\x00" * 100)
+    (archive / "clip.mp4").write_bytes(b"\x00" * 900)
+
+    config = Config(
+        target_directory=str(tmp_path / "dest"),
+        library_profile=LibraryProfile(
+            roots=[
+                LibraryRoot(root_id="holiday", role="input", path=str(holiday)),
+                LibraryRoot(root_id="archive", role="input", path=str(archive), priority=1),
+                LibraryRoot(root_id="dest", role="destination", path=str(tmp_path / "dest")),
+            ]
+        ),
+    )
+
+    result = asyncio.run(svc.analyse(config))
+    by_root = {entry["root_id"]: entry for entry in result["by_root"]}
+
+    assert set(by_root) == {"holiday", "archive"}
+    assert by_root["holiday"]["total_files"] == 2
+    assert by_root["archive"]["total_files"] == 1
+    assert by_root["holiday"]["by_type"] == {"jpeg": 2}
+    assert by_root["archive"]["by_type"] == {"mp4": 1}
+    assert by_root["archive"]["total_size_bytes"] == 900
+    assert by_root["holiday"]["path"] == str(holiday.resolve())
+
+    # The per-root split has to add up to the aggregate it replaces on the cards.
+    assert sum(entry["total_files"] for entry in result["by_root"]) == result["total_files"]
+    assert (
+        sum(entry["total_size_bytes"] for entry in result["by_root"]) == result["total_size_bytes"]
+    )
+
+
+def test_analyse_reports_an_empty_input_root_as_empty(svc: AnalysisService, tmp_path: Path) -> None:
+    """A folder with no media says zero, rather than borrowing its neighbour's."""
+    full = tmp_path / "full"
+    empty = tmp_path / "empty"
+    full.mkdir()
+    empty.mkdir()
+    (full / "a.jpg").write_bytes(b"\x00" * 100)
+
+    config = Config(
+        target_directory=str(tmp_path / "dest"),
+        library_profile=LibraryProfile(
+            roots=[
+                LibraryRoot(root_id="full", role="input", path=str(full)),
+                LibraryRoot(root_id="empty", role="input", path=str(empty), priority=1),
+                LibraryRoot(root_id="dest", role="destination", path=str(tmp_path / "dest")),
+            ]
+        ),
+    )
+
+    by_root = {entry["root_id"]: entry for entry in asyncio.run(svc.analyse(config))["by_root"]}
+
+    assert by_root["empty"]["total_files"] == 0
+    assert by_root["empty"]["by_type"] == {}
+    assert by_root["full"]["total_files"] == 1

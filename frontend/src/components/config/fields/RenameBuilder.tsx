@@ -12,6 +12,7 @@ import { useState, useEffect, useId, useRef } from "react";
 import { FiCamera, FiCopy, FiFilm } from "react-icons/fi";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
 import { ValidationBadge } from "@/components/ui/validation-badge";
 import {
   RENAME_TOKENS,
@@ -21,7 +22,6 @@ import {
 } from "@/lib/renamePattern";
 import { exampleFilename, predictedExtension, type SampleFile } from "@/lib/configSummary";
 import { useI18n } from "@/i18n/I18nContext";
-import { cn } from "@/lib/utils";
 import type { Config } from "@/types/api";
 
 /**
@@ -55,7 +55,7 @@ function PreviewRow({
   return (
     <tr className="border-b border-border last:border-0 align-top">
       <td className="py-1 pr-3">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="flex items-center gap-2 text-muted-foreground">
           {icon}
           <span className="break-all">{before}</span>
         </span>
@@ -128,7 +128,7 @@ export function RenameBuilder({
       <label htmlFor="rename-pattern" className="block text-xs font-medium text-foreground">
         {t("config.rename.patternLabel")}
       </label>
-      <input
+      <Input
         ref={inputRef}
         id="rename-pattern"
         value={local}
@@ -136,11 +136,7 @@ export function RenameBuilder({
         placeholder="TYPE_YYYY-MM-DD"
         aria-invalid={val.error ? true : undefined}
         aria-describedby={val.error || val.warning ? feedbackId : undefined}
-        className={cn(
-          "block w-full rounded-md border border-input bg-background px-3 py-2",
-          "font-mono text-sm text-foreground placeholder:text-muted-foreground",
-          "focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring",
-        )}
+        className="font-mono"
       />
 
       <div className="flex flex-wrap gap-1">
@@ -155,7 +151,7 @@ export function RenameBuilder({
             <button
               type="button"
               onClick={() => insertToken(token.token)}
-              className="rounded-md border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-foreground transition-colors hover:border-faint hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-panel border border-input bg-muted/40 px-2 py-0.5 font-mono text-xs text-foreground transition-colors hover:border-faint hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {token.token}
             </button>
@@ -178,7 +174,7 @@ export function RenameBuilder({
       )}
 
       {!val.error && local && (
-        <div className="overflow-x-auto rounded-md bg-muted/30 p-2">
+        <div className="overflow-x-auto rounded-panel bg-muted/30 p-2">
           <table className="w-full text-left font-mono text-xs">
             <thead>
               <tr className="border-b border-border text-3xs uppercase tracking-[0.08em] text-faint">

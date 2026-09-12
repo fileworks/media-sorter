@@ -193,24 +193,27 @@ const VIDEO_FORMAT_SUFFIX: Record<Config["video_format"], string> = {
 /**
  * The extension the run would leave a file with.
  *
- * Conversion is the only thing that rewrites an extension, and it writes a
- * lowercase one — which is where a `.JPG` becomes a `.jpg`. A file that is
- * *not* converted keeps its extension exactly as it is, uppercase and all;
- * saying otherwise would promise a rename the product does not perform.
+ * Two things can rewrite it, and this mirrors `predicted_filename` on both.
+ * Conversion writes the target format's own lowercase suffix. Renaming takes
+ * authority over the whole filename, extension included: a run that rewrites
+ * `IMG_4382` into a dated stem and leaves `.HEIC` shouting beside it is the
+ * inconsistency the feature exists to remove. With renaming off, the name is
+ * the user's and the extension is left exactly as it is on disk.
  */
 export function predictedExtension(config: Config, sample: SampleFile): string {
   const lower = sample.extension.toLowerCase();
+  const normalize = (extension: string) => (config.rename ? extension.toLowerCase() : extension);
   if (sample.kind === "IMG" && config.convert_images) {
     return IMAGE_FORMAT_EXTENSIONS[config.image_format].includes(lower)
-      ? sample.extension
+      ? normalize(sample.extension)
       : IMAGE_FORMAT_SUFFIX[config.image_format];
   }
   if (sample.kind === "VID" && config.convert_videos) {
     return lower === VIDEO_FORMAT_SUFFIX[config.video_format]
-      ? sample.extension
+      ? normalize(sample.extension)
       : VIDEO_FORMAT_SUFFIX[config.video_format];
   }
-  return sample.extension;
+  return normalize(sample.extension);
 }
 
 /** The filename a sample would carry after conversion and rename are applied. */

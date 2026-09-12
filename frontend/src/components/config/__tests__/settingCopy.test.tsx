@@ -39,7 +39,7 @@ function renderClean(overrides: Partial<Config>) {
 /** The row's own block, so a query cannot pick up a neighbour's text. */
 function rowFor(label: string): HTMLElement {
   const heading = screen.getByText(label);
-  const row = heading.closest("div.px-5");
+  const row = heading.closest("[data-setting-row]");
   expect(row).not.toBeNull();
   return row as HTMLElement;
 }

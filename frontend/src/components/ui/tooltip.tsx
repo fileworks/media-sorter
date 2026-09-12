@@ -114,6 +114,7 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
         createPortal(
           <div
             ref={bubbleRef}
+            data-tooltip
             aria-hidden
             style={{
               position: "fixed",
@@ -124,7 +125,7 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
               visibility: coords ? "visible" : "hidden",
             }}
             className={cn(
-              "z-[200] max-w-[18rem] rounded-lg border border-border bg-popover px-2.5 py-1.5",
+              "z-[200] max-w-[18rem] rounded-panel border border-border bg-popover px-3 py-2",
               "text-2xs leading-snug text-popover-foreground shadow-card",
               // Opacity fades blend the text with the page and briefly take
               // this small copy below AA contrast as the bubble appears.

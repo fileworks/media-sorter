@@ -24,10 +24,12 @@ import { StageShell, type StageNav } from "@/components/StageShell";
 import { StateView } from "@/components/StateView";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { StageFooter } from "@/components/shell/StageFooter";
+import { StartupScreen } from "@/components/shell/StartupScreen";
 import { TitleBar, type BackendState } from "@/components/shell/TitleBar";
 import { ConfigureScreen } from "@/components/screens/ConfigureScreen";
 import { ExecuteScreen } from "@/components/screens/ExecuteScreen";
 import { PlanScreen } from "@/components/screens/PlanScreen";
+import { SetupScreen } from "@/components/screens/SetupScreen";
 import { RecipeScreen } from "@/components/screens/RecipeScreen";
 import { ReviewPlanLifecycle } from "@/components/screens/ReviewPlanLifecycle";
 import { ScreenHeader } from "@/components/screens/ScreenHeader";
@@ -37,16 +39,19 @@ import { Button } from "@/components/ui/button";
 import { Modal, ModalBody, ModalHeader } from "@/components/ui/modal";
 import { useToast } from "@/context/toast-context";
 import { useAnalysis } from "@/hooks/useAnalysis";
+
 import { planImpactFingerprint, usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
+import { useReviewDurability } from "@/hooks/useReviewDurability";
 import { useLogs } from "@/hooks/useLogs";
 import { useRecipes } from "@/hooks/useRecipes";
 import { useRootFolders } from "@/hooks/useRootFolders";
 import { useRootProbes } from "@/hooks/useRootProbes";
 import { usePreview } from "@/hooks/usePreview";
 import { useSorting } from "@/hooks/useSorting";
+import { useStartupProgress } from "@/hooks/useStartupProgress";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useI18n, type Locale } from "@/i18n/I18nContext";
@@ -113,6 +118,7 @@ export default function MainPage() {
   const [requestedStage, setRequestedStage] = useState<StageState["stage"] | null>(null);
   const [reviewView, setReviewView] = useState<"plan" | "review">("review");
   const [pendingSettingAnchor, setPendingSettingAnchor] = useState<string | null>(null);
+  const [adjustingSettings, setAdjustingSettings] = useState(false);
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
@@ -157,17 +163,22 @@ export default function MainPage() {
     if (config?.language) setLocale(config.language);
   }, [config?.language, setLocale]);
 
+  /**
+   * A new plan invalidates the acknowledgement it was going to be run under,
+   * and a *recovered* plan restores the stop the user left it at.
+   *
+   * What it deliberately no longer does is force the view back to Review. That
+   * reset ran whenever the plan changed — including the moment "Recalculate"
+   * cleared it — so asking Plan for a fresh plan moved you off Plan twice: to
+   * Configure while it computed, and to Review when it arrived. Which of the
+   * two stops is being read is now only ever decided by the thing that
+   * navigates: the footer's "Preview changes", recovery, or the user.
+   */
   useEffect(() => {
     setAcknowledgedImpact(null);
-    if (preview.result === null) {
-      setReviewView("review");
-      return;
-    }
-    if (preview.recovered) {
+    if (preview.result !== null && preview.recovered) {
       setReviewView(recoveredReviewStop(preview.result.plan_id));
       setRequestedStage("review");
-    } else {
-      setReviewView("review");
     }
   }, [preview.recovered, preview.result]);
 
@@ -225,8 +236,8 @@ export default function MainPage() {
   }, [activeTask, analysis, analysis.loading, isSorting, preview, preview.loading, sorting]);
 
   const configuredCards = useMemo(
-    () => rootCards(config, scanned, scan?.total_files ?? 0),
-    [config, scan?.total_files, scanned],
+    () => rootCards(config, scanned, scan?.by_root),
+    [config, scan?.by_root, scanned],
   );
   // The probe is the authority on whether a folder is usable; the scan only
   // knows what it saw last time it ran.
@@ -279,14 +290,6 @@ export default function MainPage() {
       updateConfig(patch);
     },
     [discardPlan, discardScan, updateConfig],
-  );
-
-  /** Applying a recipe rewrites the settings the plan was built from. */
-  const handleRecipeApply = useCallback(
-    (patch: Partial<Config>) => {
-      handleConfigSave(patch);
-    },
-    [handleConfigSave],
   );
 
   const onPickerFailed = useCallback(
@@ -425,10 +428,16 @@ export default function MainPage() {
     setExcludedForRun([]);
     setRunDecisions(EMPTY_RUN_DECISIONS);
     setAcknowledgedImpact(null);
+    setReviewView("review");
     setRequestedStage("sources");
   }, [analysis, preview, sorting]);
 
   // ── Stage wiring ───────────────────────────────────────────────────────────
+
+  const reviewStateDurable = useReviewDurability(
+    preview.persistenceState,
+    runDecisions.persistenceState,
+  );
 
   // Both objects are read by `StageShell` from an effect and a memo, so their
   // identity is load-bearing: rebuilding them every render re-ran reconciliation
@@ -444,18 +453,16 @@ export default function MainPage() {
       scanned,
       planned,
       plannedReason: t("stage.gate.plan"),
+      // What the reader decided, and nothing about whether a save is in flight.
       duplicateReviewReady:
-        runDecisions.planId === preview.result?.plan_id &&
-        runDecisions.outstandingSets === 0 &&
-        runDecisions.persistenceState === "saved" &&
-        preview.persistenceState === "saved",
+        runDecisions.planId === preview.result?.plan_id && runDecisions.outstandingSets === 0,
+      reviewStateDurable,
       duplicateReviewReason:
         preview.persistenceState === "error" || runDecisions.persistenceState === "error"
           ? t("stage.gate.reviewPersistence")
           : runDecisions.planId !== preview.result?.plan_id ||
               runDecisions.outstandingSets === null ||
-              runDecisions.persistenceState !== "saved" ||
-              preview.persistenceState !== "saved"
+              !reviewStateDurable
             ? t("stage.gate.duplicateLoading")
             : tCount("stage.gate.duplicates", runDecisions.outstandingSets),
       executionActive: isSorting || activeTask?.operation_kind === "sort",
@@ -472,6 +479,7 @@ export default function MainPage() {
       rootBlocker,
       rootIssue,
       rootsReady,
+      reviewStateDurable,
       runDecisions.outstandingSets,
       runDecisions.persistenceState,
       runDecisions.planId,
@@ -555,10 +563,8 @@ export default function MainPage() {
     toast(extractErrorMessage(impactError, t("review.impactRefused")).message, "warning");
   }, [impactError, t, toast]);
 
-  // Review publishes its derived decision wire from an effect. Keep this
-  // boundary stable and ignore a byte-identical publication; an inline
-  // callback made the effect publish, rerender MainPage, receive a new callback
-  // and publish forever in a real run.
+  // A stable publication boundary prevents an effect/render feedback loop.
+  // Keep the draft with its plan when navigation unmounts Review.
   const publishRunDecisions = useCallback(
     (decisions: ReviewDecisionUpdate) => {
       const planId = preview.result?.plan_id ?? null;
@@ -569,6 +575,7 @@ export default function MainPage() {
         current.undecidedSets === decisions.undecidedSets &&
         current.persistenceState === decisions.persistenceState &&
         current.persistenceError === decisions.persistenceError &&
+        current.reviewState === decisions.reviewState &&
         sameReviewedSets(current.reviewedSets, decisions.reviewedSets)
           ? current
           : { ...decisions, planId },
@@ -600,6 +607,7 @@ export default function MainPage() {
 
   /** Open Configure and focus a named setting row once it has mounted. */
   const openSetting = useCallback((anchorId: string, nav: StageNav) => {
+    setAdjustingSettings(true);
     setPendingSettingAnchor(anchorId);
     nav.go("configure");
   }, []);
@@ -624,6 +632,12 @@ export default function MainPage() {
         : healthLoading
           ? "connecting"
           : "connecting";
+
+  const startup = useStartupProgress({
+    configReady: config !== undefined,
+    backendReady: health?.status === "ok",
+    backendFailed: Boolean(healthError),
+  });
 
   // Reports provide completed runs; diagnostics provides the one task that may
   // still be running. Combining them makes the operation center available from
@@ -661,7 +675,7 @@ export default function MainPage() {
         type="button"
         onClick={() => setOperationCenterOpen(true)}
         aria-label={t("operations.title")}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex h-8 shrink-0 items-center gap-2 rounded-panel px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <FiActivity className="h-3.5 w-3.5" aria-hidden />
         <span className="hidden lg:inline">{t("operations.title")}</span>
@@ -690,7 +704,7 @@ export default function MainPage() {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="rounded-lg border border-current px-3 py-1 text-xs"
+              className="rounded-panel border border-current px-3 py-1 text-xs"
             >
               {t("app.reload")}
             </button>
@@ -713,13 +727,27 @@ export default function MainPage() {
     </>
   );
 
+  // ── Starting ───────────────────────────────────────────────────────────────
+
+  // Placed after every hook, alongside the History branch, so the hook order is
+  // identical on the first render and on the thousandth.
+  if (!startup.started) {
+    return (
+      <StartupScreen
+        steps={startup.steps}
+        failure={startup.failure}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
+
   // ── History is a separate place, not a stage ───────────────────────────────
 
   if (historyOpen) {
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-background">
         {titleBar}
-        <div className="border-b border-border bg-card px-4 py-2.5 sm:px-5">
+        <div className="border-b border-border bg-card px-4 py-3 sm:px-5">
           <Button
             variant="ghost"
             size="sm"
@@ -750,7 +778,6 @@ export default function MainPage() {
         inputs={stageInputs}
         stageKey={stageKey}
         requestedStage={requestedStage}
-        reviewView={reviewView}
         onReviewViewChange={changeReviewView}
         titleBar={titleBar}
         banners={banners}
@@ -780,6 +807,9 @@ export default function MainPage() {
             onPreview={() => {
               // Review owns both the computation and its result. Move first so
               // the first visible state is progress, then replace it in place.
+              // This is the one path that *asks* to be taken to the finished
+              // plan's review, so it is the one path that names the stop.
+              changeReviewView("review");
               nav.go("review");
               void buildPlan();
             }}
@@ -788,7 +818,7 @@ export default function MainPage() {
           />
         )}
       >
-        {(state, nav) => {
+        {(state, nav, locked) => {
           if (state.stage === "sources") {
             return config ? (
               <SourcesScreen
@@ -811,34 +841,39 @@ export default function MainPage() {
             );
           }
 
-          if (state.stage === "recipe") {
+          if (state.stage === "configure") {
             return config ? (
-              <RecipeScreen
-                config={config}
-                savedRecipes={savedRecipes}
-                onApply={handleRecipeApply}
-                onDelete={(recipeId: string) => deleteRecipe.mutate(recipeId)}
-                disabled={isAnyRunning}
-                planExists={planExists}
-                defaults={configDefaults}
+              <SetupScreen
+                locked={locked}
+                adjusting={adjustingSettings}
+                onAdjustingChange={setAdjustingSettings}
+                recipe={
+                  <RecipeScreen
+                    config={config}
+                    savedRecipes={savedRecipes}
+                    onApply={handleConfigSave}
+                    onDelete={(id) => deleteRecipe.mutate(id)}
+                    disabled={isAnyRunning}
+                    planExists={planExists}
+                    defaults={configDefaults}
+                  />
+                }
+                settings={(onBack) => (
+                  <ConfigureScreen
+                    disabled={isAnyRunning}
+                    locked={locked}
+                    onSaveConfig={handleConfigSave}
+                    onSaveRecipe={async (name, settings) => {
+                      await saveRecipe.mutateAsync({ name, settings });
+                    }}
+                    savedRecipes={savedRecipes}
+                    onEditRecipe={onBack}
+                    samples={configureSamples}
+                  />
+                )}
               />
             ) : (
               <StateView variant="loading" layout="page" title={t("state.loading")} />
-            );
-          }
-
-          if (state.stage === "configure") {
-            return (
-              <ConfigureScreen
-                disabled={isAnyRunning}
-                onSaveConfig={handleConfigSave}
-                onSaveRecipe={async (name, settings) => {
-                  await saveRecipe.mutateAsync({ name, settings });
-                }}
-                savedRecipes={savedRecipes}
-                onEditRecipe={() => nav.go("recipe")}
-                samples={configureSamples}
-              />
             );
           }
 
@@ -860,6 +895,7 @@ export default function MainPage() {
                         activeRootCards.filter((card) => card.role === "reference").length
                       }
                       onRecalculate={() => void buildPlan()}
+                      onOpenReview={() => changeReviewView("review")}
                     />
                   ) : (
                     <Suspense
@@ -871,12 +907,21 @@ export default function MainPage() {
                         key={preview.result.plan_id}
                         result={preview.result}
                         config={config}
-                        recoveredState={preview.recoveryEvidence?.review_state ?? null}
+                        recoveredState={
+                          runDecisions.planId === preview.result.plan_id
+                            ? (runDecisions.reviewState ?? preview.recoveryEvidence?.review_state)
+                            : preview.recoveryEvidence?.review_state
+                        }
+                        recoveredStateSaved={
+                          runDecisions.planId !== preview.result.plan_id ||
+                          runDecisions.persistenceState === "saved"
+                        }
                         planPersistenceState={preview.persistenceState}
                         planPersistenceError={preview.persistenceError}
                         onRetryPlanPersistence={preview.retryPersistence}
                         onOpenSetting={(anchorId) => openSetting(anchorId, nav)}
                         onOpenSources={() => nav.go("sources")}
+                        onOpenPlan={() => changeReviewView("plan")}
                         onRerunPreview={() => {
                           setRunDecisions(EMPTY_RUN_DECISIONS);
                           void preview.generatePreview(excludedForRun);
@@ -913,7 +958,7 @@ export default function MainPage() {
             return (
               <div className="mx-auto max-w-5xl">
                 <ScreenHeader
-                  eyebrow={t("stage.position", { current: 6, total: 6 })}
+                  eyebrow={t("stage.position", { current: 4, total: 4 })}
                   title={t("preflight.title")}
                   subtitle={t("preflight.description")}
                 />

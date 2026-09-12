@@ -161,6 +161,7 @@ function renderShell(locale: Locale, planExists = false) {
         plannedReason: null,
         duplicateReviewReady: true,
         duplicateReviewReason: null,
+        reviewStateDurable: true,
         executionActive: false,
         blocked: false,
         blockedReason: null,
@@ -514,7 +515,7 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
     const rendered = renderShell(locale);
     await expectNoViolations(rendered.container);
 
-    for (const stage of ["recipe", "configure", "review", "execute"] as const) {
+    for (const stage of ["configure", "review", "execute"] as const) {
       fireEvent.click(
         within(rendered.container).getByRole("button", {
           name: new RegExp(`^${translate(locale, `stage.${stage}.label`)}`),

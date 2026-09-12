@@ -18,6 +18,13 @@ vi.mock("@/components/ui/media-image", () => ({
   MediaImage: ({ alt }: { alt: string }) => <div role="img" aria-label={alt} />,
 }));
 
+/** Three copies make three pairings: A·B, A·C, B·C. */
+const THREE_COPY_PAIRS = [
+  { index: 0, a: "A", b: "B", nameA: "portraits/a.jpg", nameB: "portraits/b.jpg" },
+  { index: 1, a: "A", b: "C", nameA: "portraits/a.jpg", nameB: "portraits/c.jpg" },
+  { index: 2, a: "B", b: "C", nameA: "portraits/b.jpg", nameB: "portraits/c.jpg" },
+] as const;
+
 const known = (value: unknown): FactValue => ({ known: true, value, issue: null });
 const unknown = (issue = "not recorded"): FactValue => ({ known: false, value: null, issue });
 
@@ -103,7 +110,13 @@ describe("duplicate comparison", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByText("Recommended: a.jpg")).toBeTruthy();
+    // The recommendation is stated once, above the pair, and marked on the
+    // side it points at — never as a selection.
+    expect(screen.getByText(/Recommended: a\.jpg/)).toBeTruthy();
+    expect(
+      screen.getByText(/Suggested by quality; it is not selected automatically\./),
+    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /A.*a\.jpg/ }).getAttribute("checked")).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /B.*b\.jpg/ }));
     expect(onKeep).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm selection" }));
@@ -135,10 +148,83 @@ describe("duplicate comparison", () => {
     );
   });
 
-  it("cycles every other copy in a set without leaving comparison", () => {
+  it("steps through every pair of a set without leaving comparison", () => {
     const onPrevious = vi.fn();
     const onNext = vi.fn();
+    const onSelect = vi.fn();
     render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("b", facts({ width: 1000, height: 1500 }))}
+          keeperId={null}
+          setId="set-1"
+          letterA="A"
+          letterB="C"
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+          comparisonPosition={{
+            index: 1,
+            total: 3,
+            pairs: THREE_COPY_PAIRS,
+            onPrevious,
+            onNext,
+            onSelect,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    // Three copies make three pairs, and the stepper walks all of them —
+    // including the one that does not involve the first copy.
+    expect(screen.getAllByText("Pair 2 of 3").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Previous pair" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next pair" }));
+    expect(onPrevious).toHaveBeenCalledOnce();
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
+  it("names each copy by its set letter and offers every pairing directly", () => {
+    const onSelect = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("b", facts({ width: 1000, height: 1500 }))}
+          keeperId={null}
+          setId="set-1"
+          letterA="A"
+          letterB="C"
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+          comparisonPosition={{
+            index: 1,
+            total: 3,
+            pairs: THREE_COPY_PAIRS,
+            onPrevious: () => undefined,
+            onNext: () => undefined,
+            onSelect,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    // The side on screen is C, not "whatever is on the right", so the fact
+    // column and the keeper card agree with the chip that selected this pair.
+    expect(screen.getByText("C — b.jpg")).toBeTruthy();
+    expect(screen.getByText("A — a.jpg")).toBeTruthy();
+
+    const current = screen.getByRole("button", { name: "Compare a.jpg with c.jpg" });
+    expect(current.getAttribute("aria-current")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare b.jpg with c.jpg" }));
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("keeps the comparison mode when the pair changes", () => {
+    const { rerender } = render(
       <I18nProvider initialLocale="en">
         <CompareModal
           a={file("a", facts({ width: 2000, height: 3000 }))}
@@ -148,16 +234,34 @@ describe("duplicate comparison", () => {
           onKeep={() => undefined}
           onKeepBoth={() => undefined}
           onClose={() => undefined}
-          comparisonPosition={{ index: 1, total: 3, onPrevious, onNext }}
         />
       </I18nProvider>,
     );
 
-    expect(screen.getByText("Copy 2 of 3")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Previous copy" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next copy" }));
-    expect(onPrevious).toHaveBeenCalledOnce();
-    expect(onNext).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("radio", { name: "Difference" }));
+    expect((screen.getByRole("radio", { name: "Difference" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+
+    // Stepping to the next pair is not a reason to go back to side-by-side:
+    // somebody comparing four copies in difference mode chose it once.
+    rerender(
+      <I18nProvider initialLocale="en">
+        <CompareModal
+          a={file("a", facts({ width: 2000, height: 3000 }))}
+          b={file("c", facts({ width: 900, height: 1350 }))}
+          keeperId={null}
+          setId="set-1"
+          onKeep={() => undefined}
+          onKeepBoth={() => undefined}
+          onClose={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect((screen.getByRole("radio", { name: "Difference" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
   });
 
   it("uses the portrait aspect ratio throughout all three viewport-scaled modes", () => {
@@ -167,7 +271,7 @@ describe("duplicate comparison", () => {
     );
 
     expect(screen.getByTestId("comparison-frame").getAttribute("data-aspect-ratio")).toBe("1.3333");
-    expect(screen.getByTestId("comparison-frame").parentElement?.className).toContain("38dvh");
+    expect(screen.getByTestId("comparison-frame").parentElement?.className).toContain("44dvh");
     expect(screen.getByTestId("thumbnail:/source/a.jpg")).not.toBeNull();
     expect(screen.getByTestId("thumbnail:/source/b.jpg")).not.toBeNull();
 

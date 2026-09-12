@@ -31,7 +31,28 @@ MAX_SAVED_RECIPES = 50
 
 MAX_RECIPE_NAME_LENGTH = 60
 
-_BUILT_IN_IDS = frozenset({"safe_sort", "clean_sweep", "archive_convert", "scratch"})
+#: The ids the shipped cards use. A saved recipe may not shadow one: the two
+#: are drawn from the same list, and a user recipe answering to a built-in id
+#: would make "which recipe is this configuration?" ambiguous.
+#:
+#: The retired ids stay listed. They were reachable in shipped builds, so a
+#: recipe saved under one of them exists in the wild, and letting the name be
+#: reused would silently rebind somebody's stored settings.
+_BUILT_IN_IDS = frozenset(
+    {
+        "consolidate",
+        "tidy_library",
+        "import_dump",
+        "archive_normalize",
+        "scratch",
+        # Retired, never reissued.
+        "safe_sort",
+        "clean_sweep",
+        "archive_convert",
+        "find_duplicates_only",
+        "blank_defaults",
+    }
+)
 
 
 def utc_now_iso() -> str:
@@ -54,7 +75,7 @@ class RecipeSettings(BaseModel):
     max_recursion_depth: int | None = None
     preserve_subfolders: bool = False
     override_metadata: bool = False
-    copy_instead_of_move: bool = False
+    copy_instead_of_move: bool = True
     companion_handling: Literal["keep_with_primary", "leave_in_place", "ignore"] = (
         "keep_with_primary"
     )

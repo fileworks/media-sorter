@@ -43,9 +43,9 @@ function ReportModal({ operationId, onClose }: { operationId: string; onClose: (
       <ModalBody>
         {isLoading ? (
           <div className="animate-pulse space-y-4" aria-busy>
-            <div className="h-24 rounded-xl bg-muted" />
-            <div className="h-48 rounded-xl bg-muted" />
-            <div className="h-64 rounded-xl bg-muted" />
+            <div className="h-24 rounded-window bg-muted" />
+            <div className="h-48 rounded-window bg-muted" />
+            <div className="h-64 rounded-window bg-muted" />
           </div>
         ) : isError ? (
           <StateView
@@ -91,7 +91,7 @@ function ClearHistoryButton() {
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2">
+      <div className="flex items-center gap-2 rounded-panel border border-destructive/40 bg-destructive/10 px-3 py-2">
         <FiAlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
         <span className="text-xs text-destructive">{t("history.deleteAll")}</span>
         <Button
@@ -121,7 +121,7 @@ function ClearHistoryButton() {
       variant="ghost"
       size="sm"
       onClick={() => setConfirming(true)}
-      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1.5"
+      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-2"
     >
       <FiTrash2 className="h-3.5 w-3.5" />
       {t("history.clear")}
@@ -202,7 +202,7 @@ export function HistoryPanel() {
     return (
       <div className="animate-pulse space-y-3 py-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-16 rounded-xl bg-muted" />
+          <div key={i} className="h-16 rounded-window bg-muted" />
         ))}
       </div>
     );
@@ -240,7 +240,7 @@ export function HistoryPanel() {
               setSearch(e.target.value);
               setPage(0);
             }}
-            className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 w-full rounded-panel border border-input bg-background pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
         <ClearHistoryButton />
@@ -254,7 +254,7 @@ export function HistoryPanel() {
       ) : (
         <>
           {/* Operations list */}
-          <div className="divide-y divide-border rounded-xl border border-border bg-card">
+          <div className="divide-y divide-border rounded-window border border-border bg-card">
             {filteredOps.map((op) => {
               const roots = op.source_roots.length
                 ? op.source_roots

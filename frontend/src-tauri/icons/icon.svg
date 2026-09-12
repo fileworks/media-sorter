@@ -1,9 +1,13 @@
 <!-- Keep in sync with branding/app-icon.svg; generated bundle assets derive from the canonical PNG. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="t">
   <title id="t">MediaSorter · Kontur</title>
-  <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="11.9" fill="#EFEAE2" stroke="#DED7CB" stroke-width="1.5"/>
-  <g transform="translate(8 8)" fill="none" stroke="#2A251F" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M4.6 11a2.4 2.4 0 0 1 2.4-2.4h4.8l2.5 2.9h11a2.4 2.4 0 0 1 2.4 2.4v9.5a2.4 2.4 0 0 1-2.4 2.4H7a2.4 2.4 0 0 1-2.4-2.4z"/>
-    <path stroke="#E8582A" d="M16 15.2v6.2m-2.8-2.8 2.8 2.8 2.8-2.8"/>
+  <g transform="translate(24 24) scale(0.7266) translate(-24 -24)">
+    <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="11.9" fill="#EFEAE2" stroke="#DED7CB" stroke-width="1.5"/>
+    <g transform="translate(24 24) scale(1.28) translate(-24 -24)">
+      <g transform="translate(7.849 6.79)" fill="none" stroke="#2A251F" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.6 11a2.4 2.4 0 0 1 2.4-2.4h4.8l2.5 2.9h11a2.4 2.4 0 0 1 2.4 2.4v9.5a2.4 2.4 0 0 1-2.4 2.4H7a2.4 2.4 0 0 1-2.4-2.4z"/>
+        <path stroke="#E8582A" d="M16 15.2v6.2m-2.8-2.8 2.8 2.8 2.8-2.8"/>
+      </g>
+    </g>
   </g>
 </svg>

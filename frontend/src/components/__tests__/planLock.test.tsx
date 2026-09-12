@@ -25,6 +25,7 @@ const PLANNED: StageInputs = {
   plannedReason: null,
   duplicateReviewReady: true,
   duplicateReviewReason: null,
+  reviewStateDurable: true,
   executionActive: false,
   blocked: false,
   blockedReason: null,
@@ -71,35 +72,54 @@ function goToStage(stage: string) {
 }
 
 describe("which stages a plan locks", () => {
-  it("locks the three that fed the plan and neither of the two that read it", () => {
+  it("locks the two that fed the plan and neither of the two that read it", () => {
     expect(isStageLocked("sources", true)).toBe(true);
-    expect(isStageLocked("recipe", true)).toBe(true);
     expect(isStageLocked("configure", true)).toBe(true);
     expect(isStageLocked("review", true)).toBe(false);
     expect(isStageLocked("execute", true)).toBe(false);
   });
 
   it("locks nothing at all without a plan", () => {
-    for (const stage of ["sources", "recipe", "configure", "review", "execute"] as const) {
+    for (const stage of ["sources", "configure", "review", "execute"] as const) {
       expect(isStageLocked(stage, false)).toBe(false);
     }
   });
 });
 
 describe("the lock", () => {
-  it("makes every control inert and says so, with the way out beside it", () => {
+  it("disables every control and says so, with the way out beside it", () => {
     renderShell();
 
     expect(screen.getByTestId("locked").textContent).toBe("true");
     expect(screen.getByText(translate("en", "stage.locked.title"))).toBeTruthy();
 
-    // The settings sit inside an inert region; the banner's action does not.
+    // The settings sit inside a disabled fieldset; the banner's action does not.
     const setting = screen.getByRole("button", { name: "A setting" });
-    const inertRegion = setting.closest("[inert]");
-    expect(inertRegion).not.toBeNull();
+    const boundary = setting.closest("fieldset[disabled]");
+    expect(boundary).not.toBeNull();
+    // `button.disabled` reflects the attribute only; the inherited state is
+    // what `:disabled` matches, and it is what stops the click and the focus.
+    expect(setting.matches(":disabled")).toBe(true);
 
     const unlock = screen.getByRole("button", { name: translate("en", "stage.locked.action") });
-    expect(inertRegion?.contains(unlock)).toBe(false);
+    expect(boundary?.contains(unlock)).toBe(false);
+    expect(unlock.matches(":disabled")).toBe(false);
+  });
+
+  it("leaves the text selectable, because a locked screen is one you are reading", () => {
+    renderShell();
+
+    // `inert` would have been the shorter way to block the region and it also
+    // makes everything inside it unselectable — which takes away the one
+    // interaction a read-only screen exists for. Nothing here may reintroduce
+    // it, by attribute or by `user-select`.
+    const setting = screen.getByRole("button", { name: "A setting" });
+    expect(setting.closest("[inert]")).toBeNull();
+
+    const boundary = setting.closest("fieldset[disabled]") as HTMLElement;
+    expect(boundary.className).toContain("read-only-region");
+    expect(boundary.style.userSelect).toBe("");
+    expect(screen.getByText(translate("en", "stage.locked.selectable"))).toBeTruthy();
   });
 
   it("asks once before discarding, and only then unlocks", () => {
@@ -144,7 +164,7 @@ describe("walking back through locked stages", () => {
   it("raises no dialog and keeps the plan", () => {
     const onUnlock = renderShell();
 
-    for (const stage of ["review", "configure", "recipe", "sources"]) {
+    for (const stage of ["review", "configure", "sources"]) {
       goToStage(stage);
       expect(screen.getByTestId("stage").textContent).toBe(stage);
       // No confirmation, no warning banner: nothing was lost by looking.

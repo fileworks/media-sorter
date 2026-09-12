@@ -9,6 +9,7 @@ import {
   isStale,
   readiness,
   reconcile,
+  reviewStateIsDurable,
   selectView,
   stageComplete,
   stageIndex,
@@ -26,6 +27,7 @@ const READY: StageInputs = {
   plannedReason: null,
   duplicateReviewReady: true,
   duplicateReviewReason: null,
+  reviewStateDurable: true,
   executionActive: false,
   blocked: false,
   blockedReason: null,
@@ -34,6 +36,52 @@ const READY: StageInputs = {
 function issue(field: string | null, key: string): ConfigIssue {
   return { field, message: key, message_key: key, params: {} };
 }
+
+describe("a save in flight is not a change in what the review says", () => {
+  // Every durable change writes to the backend, and "which duplicate set is
+  // open" is durable — so stepping to the next set started a save. Folding that
+  // into completeness made the stepper's Review step flick from "complete" back
+  // to "Approve the plan" on every arrow press, and made the review surface
+  // insert a "Saving…" row that appeared and vanished inside a frame or two,
+  // taking a scrollbar with it.
+
+  it("keeps Review complete while its decisions are being written", () => {
+    const saving: StageInputs = { ...READY, reviewStateDurable: false };
+
+    expect(stageComplete("review", READY)).toBe(true);
+    expect(stageComplete("review", saving)).toBe(true);
+  });
+
+  it("still refuses Execute until those decisions are on disk", () => {
+    const saving: StageInputs = { ...READY, reviewStateDurable: false };
+
+    expect(readiness("execute", READY).canEnter).toBe(true);
+    expect(readiness("execute", saving).canEnter).toBe(false);
+  });
+
+  it("leaves an undecided set incomplete however the save is going", () => {
+    const undecided: StageInputs = { ...READY, duplicateReviewReady: false };
+
+    expect(stageComplete("review", undecided)).toBe(false);
+    expect(stageComplete("review", { ...undecided, reviewStateDurable: false })).toBe(false);
+  });
+
+  it("treats a save nobody could have noticed as durable, and a slow one as not", () => {
+    // The fast case is the one that used to flicker: a local write finishes in
+    // a few milliseconds, and reporting it changes nothing for the reader
+    // except the layout under their cursor.
+    expect(reviewStateIsDurable("saving", "saving", false)).toBe(true);
+    expect(reviewStateIsDurable("saved", "saved", false)).toBe(true);
+    expect(reviewStateIsDurable("saving", "saving", true)).toBe(false);
+  });
+
+  it("never calls a failed or unstarted save durable, however fast it was", () => {
+    expect(reviewStateIsDurable("error", "saved", false)).toBe(false);
+    expect(reviewStateIsDurable("saved", "error", false)).toBe(false);
+    // Nothing has been written for this plan yet.
+    expect(reviewStateIsDurable("idle", "saved", false)).toBe(false);
+  });
+});
 
 describe("validation routing", () => {
   it("routes a folder problem to Sources and everything else to Configure", () => {
@@ -83,12 +131,6 @@ describe("stage readiness", () => {
     expect(readiness("configure", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
   });
 
-  it("gates Recipe exactly as it gates Configure", () => {
-    expect(readiness("recipe", { ...READY, planned: false }).canEnter).toBe(true);
-    expect(readiness("recipe", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
-    expect(readiness("recipe", { ...READY, rootsReady: false }).canEnter).toBe(false);
-  });
-
   it("lets Review host a plan being computed, but still requires usable folders", () => {
     expect(readiness("review", { ...READY, rootsReady: false }).reason).toMatch(/input folder/i);
     expect(readiness("review", { ...READY, planned: false }).canEnter).toBe(true);
@@ -109,6 +151,7 @@ describe("stage readiness", () => {
       ...READY,
       duplicateReviewReady: false,
       duplicateReviewReason: "3 duplicate sets still need a decision.",
+      reviewStateDurable: true,
     };
 
     expect(readiness("review", awaitingDuplicates).canEnter).toBe(true);
@@ -130,10 +173,9 @@ describe("stage readiness", () => {
   });
 
   it("lists exactly the stages that can be entered", () => {
-    expect(availableStages(READY)).toEqual(["sources", "recipe", "configure", "review", "execute"]);
+    expect(availableStages(READY)).toEqual(["sources", "configure", "review", "execute"]);
     expect(availableStages({ ...READY, planned: false })).toEqual([
       "sources",
-      "recipe",
       "configure",
       "review",
     ]);
@@ -144,7 +186,6 @@ describe("stage readiness", () => {
 describe("stage completion", () => {
   it("keeps valid completion visible when navigating backward", () => {
     expect(stageComplete("sources", READY)).toBe(true);
-    expect(stageComplete("recipe", READY)).toBe(true);
     expect(stageComplete("configure", READY)).toBe(true);
     expect(stageComplete("review", READY)).toBe(true);
     expect(stageComplete("execute", READY, true)).toBe(true);
@@ -153,7 +194,6 @@ describe("stage completion", () => {
   it("removes only completion whose artifact was invalidated", () => {
     const previewInvalidated = { ...READY, planned: false, duplicateReviewReady: false };
     expect(stageComplete("sources", previewInvalidated)).toBe(true);
-    expect(stageComplete("recipe", previewInvalidated)).toBe(true);
     expect(stageComplete("configure", previewInvalidated)).toBe(false);
     expect(stageComplete("review", previewInvalidated)).toBe(false);
   });
@@ -178,21 +218,6 @@ describe("stage transitions", () => {
     expect(transition.invalidated.join(" ")).toMatch(/changing settings/i);
   });
 
-  it("reports the same loss for Recipe as for Configure", () => {
-    const fromReview = { ...planned, stage: "review" as const };
-
-    expect(goTo(fromReview, "recipe").invalidated).toEqual(
-      goTo(fromReview, "configure").invalidated,
-    );
-  });
-
-  it("counts Recipe as forward from Sources and backward from Configure", () => {
-    expect(goTo({ ...planned, stage: "sources" as const }, "recipe").invalidated).toEqual([]);
-    expect(goTo({ ...planned, stage: "configure" as const }, "recipe").invalidated).toEqual([
-      "Changing settings makes the current review stale.",
-    ]);
-  });
-
   it("invalidates nothing when no plan was ever computed", () => {
     // Standing in Review is not the same as having a plan. This is what made
     // the back-navigation dialog appear with nothing to discard.
@@ -206,16 +231,14 @@ describe("stage transitions", () => {
   });
 
   it("invalidates nothing when moving forward", () => {
-    expect(goTo(INITIAL_STATE, "recipe").invalidated).toEqual([]);
     expect(goTo(INITIAL_STATE, "configure").invalidated).toEqual([]);
     expect(goTo(INITIAL_STATE, "review").invalidated).toEqual([]);
   });
 
   it("gives every destination one story across the complete planned route matrix", () => {
-    const stages: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+    const stages: Stage[] = ["sources", "configure", "review", "execute"];
     const storyFor: Record<Stage, string[]> = {
       sources: ["Changing folders makes the current review stale."],
-      recipe: ["Changing settings makes the current review stale."],
       configure: ["Changing settings makes the current review stale."],
       review: [],
       execute: [],
@@ -233,7 +256,7 @@ describe("stage transitions", () => {
   });
 
   it("gives the complete unplanned route matrix no invented loss", () => {
-    const stages: Stage[] = ["sources", "recipe", "configure", "review", "execute"];
+    const stages: Stage[] = ["sources", "configure", "review", "execute"];
     for (const from of stages) {
       for (const destination of stages) {
         expect(
@@ -271,6 +294,35 @@ describe("Review's owner boundary", () => {
     expect(source).toContain("const publishRunDecisions = useCallback(");
     expect(source).toContain("onDecisionsChange={publishRunDecisions}");
     expect(source).not.toMatch(/onDecisionsChange=\{\s*\([^)]*\)\s*=>/);
+  });
+
+  /**
+   * Which of Plan and Review is being read is a navigation decision, and only
+   * something that navigates may make it.
+   *
+   * A plan arriving is not a navigation. The effect that watches the preview
+   * result used to force the view back to Review whenever it changed, which
+   * included the moment "Recalculate" cleared it — so a request for a fresh
+   * plan, made from Plan, moved the user off Plan.
+   */
+  it("never rewrites the review stop from the plan-result effect", () => {
+    const pages = import.meta.glob("../../pages/MainPage.tsx", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }) as Record<string, string>;
+    const source = Object.values(pages)[0] ?? "";
+
+    const effect = source.slice(
+      source.indexOf("useEffect(() => {\n    setAcknowledgedImpact(null);"),
+    );
+    const body = effect.slice(0, effect.indexOf("}, [preview.recovered, preview.result]);"));
+
+    expect(body, "the effect was renamed or removed").not.toBe("");
+    // The recovered plan restores the stop it was left at. Nothing else in
+    // here may set one.
+    expect(body).toContain("recoveredReviewStop(preview.result.plan_id)");
+    expect(body).not.toContain('setReviewView("review")');
   });
 });
 
@@ -341,5 +393,49 @@ describe("stage reconciliation", () => {
     const state = { ...INITIAL_STATE, key };
 
     expect(reconcile(state, { ...key, profileId: "p2" }).invalidated[0]).toMatch(/profile/i);
+  });
+
+  /**
+   * Recalculating from the Plan view.
+   *
+   * Pressing "Recalculate" clears the plan, then computes a new one — two key
+   * changes in quick succession, both arriving underneath a screen the user is
+   * standing on and did not ask to leave. Reconciliation used to answer the
+   * first by evicting them to Configure, which is the settings screen, and the
+   * second by putting them back: a round trip through a stage nobody asked for.
+   */
+  describe("a plan being recomputed under Review", () => {
+    it("keeps the user on Review while the plan is gone", () => {
+      const atReview = { ...INITIAL_STATE, stage: "review" as const, key };
+
+      expect(reconcile(atReview, { ...key, planVersion: 0 }).state.stage).toBe("review");
+    });
+
+    it("keeps them there when the new plan lands", () => {
+      const cleared = { profileId: "p1", catalogGeneration: 3, planVersion: 0, taskId: null };
+      const atReview = { ...INITIAL_STATE, stage: "review" as const, key: cleared };
+
+      expect(reconcile(atReview, { ...cleared, planVersion: 5 }).state.stage).toBe("review");
+    });
+
+    it("says nothing about a plan that is gone rather than replaced", () => {
+      const atReview = { ...INITIAL_STATE, stage: "review" as const, key };
+
+      expect(reconcile(atReview, { ...key, planVersion: 0 }).invalidated).toEqual([]);
+    });
+
+    it("still reports a plan that was genuinely replaced", () => {
+      const atExecute = { ...INITIAL_STATE, stage: "execute" as const, key };
+
+      expect(reconcile(atExecute, { ...key, planVersion: 9 }).invalidated).toEqual([
+        "The review plan changed.",
+      ]);
+    });
+
+    it("still lands elsewhere on Configure when its plan disappears", () => {
+      const atExecute = { ...INITIAL_STATE, stage: "execute" as const, key };
+
+      expect(reconcile(atExecute, { ...key, planVersion: 0 }).state.stage).toBe("configure");
+    });
   });
 });

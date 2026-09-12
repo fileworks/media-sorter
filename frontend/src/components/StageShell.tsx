@@ -1,5 +1,5 @@
 /**
- * Sources → Recipe → Configure → Plan → Review → Execute, inside one window frame.
+ * Sources → Setup → Review → Execute, inside one window frame.
  *
  * The shell owns exactly one thing: which stage and view are current, and
  * whether the next one may be entered. Everything it renders around the content
@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { FiAlertTriangle, FiEdit2, FiLock } from "react-icons/fi";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 import { StageStepper } from "@/components/shell/StageStepper";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/I18nContext";
@@ -28,6 +29,7 @@ import {
   readiness,
   reconcile,
   selectView,
+  stageDrawsOwnLock,
   type Stage,
   type StageInputs,
   type StageKey,
@@ -59,8 +61,6 @@ interface StageShellProps {
   complete?: (stage: Stage) => boolean;
   /** An explicit lifecycle action such as “start a new run” may request a stage. */
   requestedStage?: Stage | null;
-  /** The two visual stops backed by the internal Review stage. */
-  reviewView?: "plan" | "review";
   onReviewViewChange?: (view: "plan" | "review") => void;
   /** Discard the plan, which is the one way out of the lock. */
   onUnlock?: () => void;
@@ -87,7 +87,6 @@ export function StageShell({
   planExists = false,
   complete = () => false,
   requestedStage = null,
-  reviewView = "plan",
   onReviewViewChange,
   onUnlock,
   children,
@@ -177,8 +176,6 @@ export function StageShell({
         current={state.stage}
         gate={(stage) => readiness(stage, inputs)}
         complete={complete}
-        planReady={inputs.planned}
-        reviewView={reviewView}
         onSelect={(stage, nextReviewView) => {
           if (nextReviewView) onReviewViewChange?.(nextReviewView);
           requestMove(stage);
@@ -198,7 +195,7 @@ export function StageShell({
         // Without it a focused row lands underneath them, and the keyboard user
         // cannot see what they just focused.
         className="relative min-h-0 flex-1 overflow-y-auto scroll-pb-actionzone focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_hsl(var(--border-strong))]"
-        style={{ scrollbarGutter: "stable" }}
+        style={{ scrollbarGutter: "stable both-edges" }}
         aria-labelledby="current-stage-heading"
       >
         {/* The 1480px source-of-truth workspace. The screens that need the width are two-column —
@@ -207,13 +204,13 @@ export function StageShell({
             display sat half empty. The bound stays: prose inside a settings row
             still has to be readable, and an unbounded column would set a line
             length nobody can track back to the next line. */}
-        <div className="mx-auto w-full max-w-workspace px-4 py-5 sm:px-6">
+        <div className="workspace-frame py-4">
           {(banners || invalidated.length > 0) && (
             <div className="mb-4 space-y-3">
               {banners}
               {invalidated.length > 0 && (
                 <div
-                  className="flex items-start gap-3 rounded-xl border border-warning/40 bg-tint-warning p-3 text-xs"
+                  className="flex items-start gap-3 rounded-window border border-warning/40 bg-tint-warning p-3 text-xs"
                   role="status"
                 >
                   <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
@@ -226,7 +223,7 @@ export function StageShell({
                     type="button"
                     onClick={() => setInvalidated([])}
                     className={cn(
-                      "shrink-0 rounded-lg px-2 py-1 font-medium text-warning",
+                      "shrink-0 rounded-panel px-2 py-1 font-medium text-warning",
                       "hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     )}
                   >
@@ -240,11 +237,11 @@ export function StageShell({
           {/* One banner, always in the same place, with the way out inside it.
               A lock whose exit is not obvious is indistinguishable from a bug,
               so the action sits in the explanation rather than somewhere the
-              reader has to go and find. It is outside the inert region, which
+              reader has to go and find. It is outside the disabled region, which
               is the only reason it stays usable. */}
           {locked && (
             <div
-              className="mb-4 flex flex-wrap items-start gap-3 rounded-xl border border-border bg-surface-muted p-3.5"
+              className="mb-4 flex flex-wrap items-start gap-3 rounded-window border border-border bg-surface-muted p-4"
               role="status"
             >
               <FiLock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -253,29 +250,44 @@ export function StageShell({
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {t("stage.locked.description")}
                 </p>
+                {/* Said once, where the lock is explained: the one interaction
+                    that survives a lock is selecting text, and a reader who
+                    assumes otherwise never tries. */}
+                <p className="mt-0.5 text-3xs text-faint">{t("stage.locked.selectable")}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setUnlockAsked(true)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <Button variant="outline" onClick={() => setUnlockAsked(true)}>
                 <FiEdit2 className="h-3.5 w-3.5" aria-hidden />
                 {t("stage.locked.action")}
-              </button>
+              </Button>
             </div>
           )}
 
-          {/* `inert` also blocks keyboard focus — `pointer-events-none` alone
-              would leave every locked control tab-reachable. It takes a real
-              boolean: React 19 reads an empty string as `false`, which would
-              silently leave the screen editable while it looked locked. */}
-          <div
+          {/* A native `fieldset[disabled]` rather than `inert`. Both stop every
+              control and remove it from the tab order; they differ on the one
+              thing that matters here, which is that `inert` also makes the text
+              inside it unselectable. A locked stage is a stage you are reading
+              — folder paths, names, planned outcomes — and not being able to
+              drag a cursor over a path to copy it is a worse bug than the one
+              the lock was fixing.
+              A stage that draws its own boundary is skipped here, because a
+              disabled fieldset cannot be re-enabled from a descendant: see
+              `stageDrawsOwnLock`. */}
+          {/* A stage that cannot be edited has to *look* it. The boundary alone
+              blocked every control and changed nothing on screen, so a locked
+              Sources or Setup read as an ordinary screen whose buttons had
+              stopped working — which is the complaint this answers. Disabled
+              controls now carry their own `:disabled` styling, which is the
+              part a reader actually recognises. */}
+          <fieldset
             key={`${state.stage}:${state.key.planVersion}`}
-            inert={locked || undefined}
-            className={cn("stage-enter", locked && "select-none")}
+            disabled={locked && !stageDrawsOwnLock(state.stage)}
+            className={cn(
+              "stage-enter m-0 min-w-0 border-0 p-0",
+              locked && !stageDrawsOwnLock(state.stage) && "read-only-region",
+            )}
           >
             {children(state, nav, locked)}
-          </div>
+          </fieldset>
         </div>
       </main>
 

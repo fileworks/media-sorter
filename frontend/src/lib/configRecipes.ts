@@ -7,7 +7,32 @@
  * whole truth, and so a recipe can never quietly reach into a setting it does
  * not claim.
  *
- * The four here mirror the four cards on the Sources screen, in that order.
+ * ## The set, and where it comes from
+ *
+ * One card per *job somebody actually has*, established with the operator
+ * rather than derived from the settings screen:
+ *
+ * | Card | The job | The shape of it |
+ * | --- | --- | --- |
+ * | `consolidate` | combine scattered folders or import new media | copy, dated, original names, duplicates reviewed |
+ * | `tidy_library` | a library that is already organised | find duplicates and junk, place nothing |
+ * | `archive_normalize` | odd formats and broken files | consolidate plus conversion and repair |
+ * | `scratch` | none of the above | the smallest coherent run, to build on |
+ *
+ * The previous set was organised around *settings* — "safe sort", "clean
+ * sweep", "archive & convert", "find duplicates only", "blank" — and two of
+ * those cards differed from each other by a single boolean while nothing named
+ * the recurring import, which is the job people do most often.
+ *
+ * Initial consolidation and recurring imports share the same safe starting
+ * point. Moving and renaming are explicit adjustments, not consequences of
+ * choosing an import card. The retired import_dump id stays reserved.
+ *
+ * Local AI tagging and categorisation are deliberately off in every card. They
+ * are the one capability a recipe cannot promise: the model has to be
+ * downloaded and the tier is decided by a hardware probe, so a card that
+ * switched them on would be a card that sometimes describes a run the machine
+ * cannot perform.
  */
 
 import type { Config, SavedRecipe } from "@/types/api";
@@ -115,15 +140,18 @@ function disabledOptimization(current: Config): Config["optimization_profile"] {
   };
 }
 
+/** Every recipe that places files under a date names them the same way. */
+const DATED_RENAME_PATTERN = "YYYY-MM-DD_NAME";
+
 export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
   {
-    // Copy, date folders, duplicates parked. Nothing in the input folder moves
-    // and nothing anywhere is rewritten — the only recipe that is true no-ops
-    // away from a mistake.
-    id: "safe_sort",
-    labelKey: "recipes.safeSort.label",
-    descriptionKey: "recipes.safeSort.description",
-    consequenceKey: "recipes.safeSort.consequence",
+    // Several folders and old drives into one dated library. Copy, so the
+    // input tree is untouched and a wrong answer costs disk space and nothing
+    // else — which is why this is the card the screen opens on.
+    id: "consolidate",
+    labelKey: "recipes.consolidate.label",
+    descriptionKey: "recipes.consolidate.description",
+    consequenceKey: "recipes.consolidate.consequence",
     irreversible: false,
     recommended: true,
     fields: (current) => ({
@@ -131,10 +159,14 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: true,
+      rename: false,
+      rename_pattern: DATED_RENAME_PATTERN,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
       duplicate_perceptual_enabled: true,
-      junk_filter_enabled: false,
+      junk_filter_enabled: true,
+      categorize_enabled: false,
+      ai_tagging_enabled: false,
       convert_images: false,
       convert_videos: false,
       repair_enabled: false,
@@ -143,23 +175,26 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     }),
   },
   {
-    // Move, so the input folder actually empties, with junk parked too. Content
-    // is still untouched — relocating a file is organizing, not rewriting — but
-    // the originals do leave, so it asks first.
-    id: "clean_sweep",
-    labelKey: "recipes.cleanSweep.label",
-    descriptionKey: "recipes.cleanSweep.description",
-    consequenceKey: "recipes.cleanSweep.consequence",
+    // The library is already the shape its owner wants. Nothing is placed by
+    // date; only the copies and the junk leave where they were found.
+    id: "tidy_library",
+    labelKey: "recipes.tidyLibrary.label",
+    descriptionKey: "recipes.tidyLibrary.description",
+    consequenceKey: "recipes.tidyLibrary.consequence",
     irreversible: true,
     fields: (current) => ({
-      run_mode: "organize",
+      run_mode: "deduplicate_only" as const,
       sort: true,
-      sort_criteria: ["year", "month"],
       copy_instead_of_move: false,
+      // Nothing is placed by date in this mode, so a rename pattern would
+      // describe a name no file receives.
+      rename: false,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
       duplicate_perceptual_enabled: true,
       junk_filter_enabled: true,
+      categorize_enabled: false,
+      ai_tagging_enabled: false,
       convert_images: false,
       convert_videos: false,
       repair_enabled: false,
@@ -170,20 +205,26 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
   {
     // The only recipe that rewrites pixels and frames, so it is the only one
     // that turns on explicit mutation and a validated optimization contract.
-    id: "archive_convert",
-    labelKey: "recipes.archiveConvert.label",
-    descriptionKey: "recipes.archiveConvert.description",
-    consequenceKey: "recipes.archiveConvert.consequence",
+    // Copy-based: it is already rewriting content, and taking the originals
+    // away in the same run would leave nothing to compare the result against.
+    id: "archive_normalize",
+    labelKey: "recipes.archiveNormalize.label",
+    descriptionKey: "recipes.archiveNormalize.description",
+    consequenceKey: "recipes.archiveNormalize.consequence",
     irreversible: true,
     fields: (current) => ({
       run_mode: "organize",
       sort: true,
       sort_criteria: ["year", "month"],
       copy_instead_of_move: true,
+      rename: true,
+      rename_pattern: DATED_RENAME_PATTERN,
       remove_duplicates: true,
       duplicate_exact_enabled: true,
       duplicate_perceptual_enabled: true,
       junk_filter_enabled: true,
+      categorize_enabled: false,
+      ai_tagging_enabled: false,
       convert_images: true,
       image_format: "jpeg",
       convert_videos: true,
@@ -194,30 +235,17 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     }),
   },
   {
-    // Everything off. Not a shortcut — a clean slate to build a recipe on.
-    // Use case (c): the input tree is already organised the way its owner
-    // wants it. They want the duplicates gone and nothing else touched, which
-    // is why this is a run mode and not a sort with everything switched off.
-    id: "find_duplicates_only",
-    labelKey: "recipes.findDuplicatesOnly.label",
-    descriptionKey: "recipes.findDuplicatesOnly.description",
-    consequenceKey: "recipes.findDuplicatesOnly.consequence",
-    irreversible: false,
-    fields: (current) => ({
-      run_mode: "deduplicate_only" as const,
-      sort: true,
-      remove_duplicates: true,
-      duplicate_exact_enabled: true,
-      duplicate_perceptual_enabled: true,
-      junk_filter_enabled: false,
-      convert_images: false,
-      convert_videos: false,
-      repair_enabled: false,
-      ...organizeOnly(current),
-      optimization_profile: disabledOptimization(current),
-    }),
-  },
-  {
+    // The floor, not a blank.
+    //
+    // There used to be two cards here — "From scratch", which switched every
+    // optional stage off, and "Blank (defaults)", which restored the shipped
+    // values. Between them they answered the same question twice and neither
+    // answered it well: everything-off is not a configuration anybody runs,
+    // and a factory dump is a card whose contents change with the build.
+    //
+    // One card, writing the smallest set of values that still makes a coherent
+    // run: place by year, copy, catch exact duplicates. Everything that costs
+    // time, rewrites bytes, or needs a model is left off for the user to add.
     id: "scratch",
     labelKey: "recipes.scratch.label",
     descriptionKey: "recipes.scratch.description",
@@ -225,19 +253,24 @@ export const CONFIG_RECIPES: readonly ConfigRecipe[] = [
     irreversible: false,
     outline: true,
     fields: (current) => ({
-      sort: false,
+      run_mode: "organize",
+      sort: true,
+      sort_criteria: ["year"],
       copy_instead_of_move: true,
-      remove_duplicates: false,
-      duplicate_exact_enabled: false,
+      rename: false,
+      remove_duplicates: true,
+      duplicate_exact_enabled: true,
+      // Perceptual matching is the expensive half and the half that needs a
+      // human answer per set. It is opt-in from here.
       duplicate_perceptual_enabled: false,
       junk_filter_enabled: false,
-      rename: false,
+      preserve_subfolders: false,
       categorize_enabled: false,
+      rules_enabled: false,
+      ai_tagging_enabled: false,
       convert_images: false,
       convert_videos: false,
       repair_enabled: false,
-      rules_enabled: false,
-      ai_tagging_enabled: false,
       ...organizeOnly(current),
       optimization_profile: disabledOptimization(current),
     }),
@@ -299,21 +332,12 @@ export function recipeName(recipe: ConfigRecipe, t: (key: string) => string): st
 /**
  * Every recipe on offer, in the order they are shown.
  *
- * One list, built in one place: the Recipe stage draws cards from it and
+ * One list, built in one place: Setup draws recipe cards from it and
  * Configure resolves its baseline from it, and the two answering "which recipe
  * is this?" from different lists is how a heading and a marker come to disagree.
- * The **Blank** card needs the backend's defaults, so with none available it is
- * omitted rather than offered and doing nothing.
  */
-export function allRecipes(
-  savedRecipes: readonly SavedRecipe[],
-  defaults: Partial<Config> | undefined,
-): ConfigRecipe[] {
-  return [
-    ...CONFIG_RECIPES,
-    ...(defaults ? [blankRecipe(defaults)] : []),
-    ...savedRecipes.map(toConfigRecipe),
-  ];
+export function allRecipes(savedRecipes: readonly SavedRecipe[]): ConfigRecipe[] {
+  return [...CONFIG_RECIPES, ...savedRecipes.map(toConfigRecipe)];
 }
 
 /** The recipe the current configuration corresponds to, if any still does. */
@@ -404,53 +428,6 @@ export function unclaimedDefaults(
     if (key in defaults) patch[key] = defaults[key] as never;
   }
   return patch;
-}
-
-/**
- * "Blank (defaults)" — every recipe-scoped setting back to what it shipped as.
- *
- * Not the same card as **From scratch**, which switches every optional stage
- * *off*. The factory default has duplicate detection on and a date structure
- * set; a user who has been experimenting and wants the product's own opinion
- * back has, until now, had no card that gives it to them.
- *
- * Built from the backend's own defaults rather than a mirror in the frontend,
- * which is why it is a function of them and not a constant: with no defaults
- * available there is nothing honest to offer, and the caller omits the card.
- */
-export function blankRecipe(defaults: Partial<Config>): ConfigRecipe {
-  return {
-    id: "blank_defaults",
-    labelKey: "recipes.blank.label",
-    descriptionKey: "recipes.blank.description",
-    consequenceKey: "recipes.blank.consequence",
-    irreversible: false,
-    outline: true,
-    fields: (current) => {
-      const patch: Partial<Config> = {};
-      for (const key of RECIPE_SETTING_KEYS) {
-        if (key in defaults) patch[key] = defaults[key] as never;
-      }
-      // The two profiles are not recipe settings, but every other recipe sets
-      // them, so leaving them alone would make "blank" the one card that can
-      // leave an explicit-mutation posture standing.
-      //
-      // Whenever the destination profile permits nothing, the fields that would
-      // request something are cleared with it — including any the defaults do
-      // not mention. This card writes only keys the backend's defaults happen to
-      // carry, which is precisely how it could leave repair or metadata
-      // overwriting on beneath a profile that forbids both.
-      const profile = defaults.preservation_profile;
-      if (profile && profile.mode !== "organize_only") {
-        patch.preservation_profile = profile;
-      } else {
-        Object.assign(patch, organizeOnly(current));
-        if (profile) patch.preservation_profile = profile;
-      }
-      patch.optimization_profile = defaults.optimization_profile ?? disabledOptimization(current);
-      return patch;
-    },
-  };
 }
 
 /**

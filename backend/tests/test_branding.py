@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "generate_branding.py"
@@ -21,6 +22,60 @@ def test_approved_canonical_source_and_derivatives_are_fresh() -> None:
 
     assert generate_branding._sha256(canonical) == (generate_branding.APPROVED_SOURCE_SHA256)
     generate_branding.check_assets(REPO_ROOT)
+
+
+def test_canonical_geometry_is_a_contract_not_a_hash() -> None:
+    """The tile inset and the mark's centring are asserted, not just the bytes.
+
+    The tile is drawn on Apple's documented 824/1024 macOS grid. macOS 26
+    normalises a legacy `.icns` onto that plate itself, so this is no longer
+    what decides the icon's size there — but it is what Windows and Linux are
+    handed unaltered, and what keeps macOS from upscaling to reach the grid.
+    It has shipped wrong more than once because the geometry lived only inside
+    an approved blob.
+    """
+    with Image.open(REPO_ROOT / generate_branding.CANONICAL) as image:
+        source = image.convert("RGBA")
+
+    canvas = source.size[0]
+    tile = generate_branding._bounding_box(source, lambda pixel: pixel[3] > 128)
+    edge = tile[2] - tile[0] + 1
+
+    assert abs(edge - round(canvas * generate_branding.TILE_RATIO)) <= (
+        generate_branding.TILE_TOLERANCE_PX
+    )
+    # Apple's grid exactly: 824 of 1024, which is 100px — 9.77% — a side. The
+    # bound used to start at 10%, which excluded the very value it was meant to
+    # describe; the upper bound is what actually matters, since the failure
+    # mode this guards is a tile so inset that the mark is lost in the plate.
+    assert edge == round(canvas * 824 / 1024), "the tile is Apple's 824/1024 grid"
+    assert 0.09 <= (1 - edge / canvas) / 2 <= 0.20, "macOS wants 9-20% clear space"
+
+    full_bleed = Image.new("RGBA", (canvas, canvas), (239, 234, 226, 255))
+    full_bleed.paste((42, 37, 31, 255), (400, 400, 600, 600))
+    with pytest.raises(generate_branding.BrandingError, match="tile width"):
+        generate_branding._validate_geometry(Path("full-bleed.png"), full_bleed)
+
+    off_centre = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    off_centre.paste((239, 234, 226, 255), (tile[0], tile[1], tile[2] + 1, tile[3] + 1))
+    off_centre.paste((42, 37, 31, 255), (400, 500, 600, 700))
+    with pytest.raises(generate_branding.BrandingError, match="off centre"):
+        generate_branding._validate_geometry(Path("off-centre.png"), off_centre)
+
+
+def test_macos_bundle_ships_the_verified_icns() -> None:
+    """Tauri only copies an `.icns` it is given; otherwise it invents one.
+
+    Without this entry the bundler synthesised an icon set from the PNG list,
+    so the `.icns` this script generates and `--check` verifies never shipped,
+    and the bundle carried no 1024px slice for a Retina dock.
+    """
+    config = json.loads(
+        (REPO_ROOT / "frontend/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+    )
+
+    assert "icons/icon.icns" in config["bundle"]["icon"]
+    assert 1024 in generate_branding.ICNS_SIZES
 
 
 def test_generated_branding_formats_and_dimensions() -> None:

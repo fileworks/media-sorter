@@ -93,6 +93,30 @@ def test_post_config_merges_update(client: TestClient) -> None:
     assert response.json()["sort"] is False
 
 
+def test_tag_storage_policy_round_trips_without_enabling_media_edits(client: TestClient) -> None:
+    original = client.get("/api/config").json()
+    profile = Config.defaults().preservation_profile.model_dump(mode="json")
+    try:
+        for policy in ("sidecar_and_report", "report_only"):
+            expected = {**profile, "derived_metadata": policy}
+            response = client.post(
+                "/api/config",
+                json={"embed_tags_in_files": False, "preservation_profile": expected},
+            )
+            assert response.status_code == 200, response.text
+            saved = client.get("/api/config").json()
+            assert saved["embed_tags_in_files"] is False
+            assert saved["preservation_profile"] == expected
+    finally:
+        client.post(
+            "/api/config",
+            json={
+                "embed_tags_in_files": original["embed_tags_in_files"],
+                "preservation_profile": original["preservation_profile"],
+            },
+        )
+
+
 def test_post_config_updates_sort_criteria(client: TestClient) -> None:
     response = client.post(
         "/api/config",

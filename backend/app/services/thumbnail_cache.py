@@ -14,7 +14,7 @@ from app.core.logging_config import get_logger
 from app.core.paths import resolve_app_paths
 
 logger = get_logger(__name__)
-THUMBNAIL_RENDERER_VERSION = 1
+THUMBNAIL_RENDERER_VERSION = 2
 DEFAULT_THUMBNAIL_CACHE_BYTES = 512 * 1024 * 1024
 _SAMPLE_BYTES = 64 * 1024
 

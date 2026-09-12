@@ -30,7 +30,8 @@ export function fixedWindow(
   overscan = 5,
 ): FixedWindow {
   const safeRow = Math.max(rowHeight, 1);
-  const start = Math.max(0, Math.floor(scrollTop / safeRow) - overscan);
+  const boundedScroll = Math.min(scrollTop, Math.max(0, total * safeRow - viewportHeight));
+  const start = Math.max(0, Math.floor(boundedScroll / safeRow) - overscan);
   const end = Math.min(total, start + Math.ceil(viewportHeight / safeRow) + overscan * 2);
   return {
     start,
@@ -48,6 +49,17 @@ interface VirtualWindowOptions {
   overscan?: number;
   /** Changes when filtering/reordering should preserve the current anchor. */
   anchorKey?: string | null;
+  /**
+   * Stable identity per row, for callers whose rows change position.
+   *
+   * Measured heights are stored against this rather than against the index.
+   * Keyed by index, inserting one row — expanding a duplicate set, say —
+   * shifts every index below it, so every stored height then describes the
+   * wrong row and the whole map has to be thrown away. That is what made an
+   * expand jump: the list fell back to the estimate for every row at once,
+   * re-laid out, and snapped back a frame later once the observers caught up.
+   */
+  keyForIndex?: (index: number) => string;
   /** Identity of the ordered rows; invalidates measurements when rows move. */
   measurementKey?: unknown;
 }
@@ -65,17 +77,27 @@ export function useVirtualWindow({
   emptyHeight = 96,
   overscan = 6,
   anchorKey = null,
+  keyForIndex,
   measurementKey = count,
 }: VirtualWindowOptions) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // A keyed caller keeps its heights across reorders; an index-keyed one still
+  // discards them whenever `measurementKey` changes, which is all it can do.
+  const keyed = keyForIndex !== undefined;
   const measurement = useMemo(
     () => ({
-      key: measurementKey,
-      sizes: new Map<number, number>(),
+      sizes: new Map<string, number>(),
       observers: new Map<Element, ResizeObserver>(),
     }),
-    [measurementKey],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [keyed ? "keyed" : measurementKey],
   );
+  const keyOf = useCallback(
+    (index: number) => keyForIndex?.(index) ?? String(index),
+    [keyForIndex],
+  );
+  const keyOfRef = useRef(keyOf);
+  keyOfRef.current = keyOf;
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(maxHeight);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -125,14 +147,14 @@ export function useVirtualWindow({
     let cursor = 0;
     for (let index = 0; index < count; index += 1) {
       starts[index] = cursor;
-      const size = measurement.sizes.get(index) ?? estimateSize;
+      const size = measurement.sizes.get(keyOf(index)) ?? estimateSize;
       sizes[index] = size;
       cursor += size;
     }
     return { starts, sizes, totalSize: cursor, fixed: false };
     // measurementVersion is the invalidation signal for the mutable size map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count, estimateSize, measurement, measurementVersion]);
+  }, [count, estimateSize, keyOf, measurement, measurementVersion]);
 
   const virtualItems = useMemo(() => {
     if (count === 0) return [];
@@ -162,9 +184,16 @@ export function useVirtualWindow({
       const update = () => {
         const index = Number(element.dataset.virtualIndex);
         if (!Number.isInteger(index)) return;
+        // One source of truth for the key, shared with the layout pass below:
+        // filing a height under one key and reading it under another silently
+        // discards every measurement, which looks exactly like having none.
+        // Read through a ref because the observer outlives the render that
+        // created it, and a stale closure would file the height under whatever
+        // row used to be at this index.
+        const key = keyOfRef.current(index);
         const next = element.getBoundingClientRect().height;
-        if (next <= 0 || measurement.sizes.get(index) === next) return;
-        measurement.sizes.set(index, next);
+        if (next <= 0 || measurement.sizes.get(key) === next) return;
+        measurement.sizes.set(key, next);
         setMeasurementVersion((version) => version + 1);
       };
       update();

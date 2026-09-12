@@ -39,7 +39,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
 
   return (
     <div
-      className={`flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm ${severityClass("info")}`}
+      className={`flex flex-col gap-2 rounded-window border px-4 py-3 text-sm ${severityClass("info")}`}
       data-severity="info"
       role="status"
       aria-live="polite"
@@ -57,7 +57,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             <button
               type="button"
               onClick={() => setShowNotes((n) => !n)}
-              className="rounded-md px-2.5 py-1 text-xs font-medium text-info hover:bg-info/15"
+              className="rounded-panel px-3 py-1 text-xs font-medium text-info hover:bg-info/10"
             >
               {showNotes ? t("update.hideNotes") : t("update.whatsNew")}
             </button>
@@ -66,8 +66,8 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             type="button"
             onClick={handleDownload}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border border-info/30",
-              "bg-info/15 px-3 py-1 text-xs font-medium text-info hover:bg-info/25",
+              "flex items-center gap-2 rounded-panel border border-info/40",
+              "bg-info/10 px-3 py-1 text-xs font-medium text-info hover:bg-info/20",
             )}
           >
             <FiDownload className="h-3 w-3" />
@@ -77,7 +77,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
             type="button"
             onClick={handleDismiss}
             aria-label={t("update.dismiss")}
-            className="rounded-md p-1 text-info/70 hover:bg-info/15 hover:text-info"
+            className="rounded-panel p-1 text-info hover:bg-info/10 hover:text-info"
           >
             <FiX className="h-4 w-4" />
           </button>
@@ -85,7 +85,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
       </div>
 
       {showNotes && info.release_notes && (
-        <pre className="mt-1 max-h-48 overflow-y-auto rounded-lg bg-muted p-3 text-xs text-foreground/80 whitespace-pre-wrap font-sans">
+        <pre className="mt-1 max-h-48 overflow-y-auto rounded-panel bg-muted p-3 text-xs text-foreground/80 whitespace-pre-wrap font-sans">
           {info.release_notes}
         </pre>
       )}

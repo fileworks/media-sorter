@@ -20,6 +20,7 @@ from app.core.provenance import OutcomeProvenance
 from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.destination import (
     build_dest_dir,
+    normalized_suffix,
     predicted_filename,
     quarantine_dir,
     rename_stem,
@@ -177,10 +178,15 @@ class SortingSupportMixin:
         config: Config,
         preservation: PreservationProfile,
         authorization: MutationAuthorization,
+        preserve_tag_sidecar: bool = False,
     ) -> str:
         """Record derived tags without touching media bytes by default."""
         if not tags:
             return ""
+        if preserve_tag_sidecar:
+            # The original XMP is still queued for verified transfer. Generated
+            # predictions must not occupy its reviewed destination first.
+            return "report"
         if config.embed_tags_in_files:
             authorization.require("embedded_metadata")
             try:
@@ -286,14 +292,21 @@ class SortingSupportMixin:
         else:
             final = self._fs.find_available_filename(wanted)
         self._collisions_planned += int(final != wanted)
-        initial = final.with_suffix(file_path.suffix)
+        # The pre-conversion name, which is where the transfer actually writes.
+        # It carries the *source's* extension so a conversion still has its
+        # input format, but normalised the same way the final name is: without
+        # that, a renamed `.HEIC` landed as `.HEIC` and was corrected by a
+        # case-only rename afterwards — which a case-insensitive filesystem
+        # answers by inventing a `_001` suffix.
+        initial = final.with_suffix(normalized_suffix(file_path.suffix, config))
         return initial, final
 
     def _apply_rename(self, path: Path, extracted_date: date, config: Config) -> Path:
         """Compatibility helper using the shared single-pass rename tokens."""
         file_type = "VID" if is_video(path) else "IMG"
         new_stem = rename_stem(config.rename_pattern, extracted_date, path.stem, file_type)
-        new_path = self._fs.find_available_filename(path.parent / (new_stem + path.suffix))
+        new_name = new_stem + normalized_suffix(path.suffix, config)
+        new_path = self._fs.find_available_filename(path.parent / new_name)
         path.rename(new_path)
         return new_path
 

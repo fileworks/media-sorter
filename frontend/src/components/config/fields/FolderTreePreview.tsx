@@ -28,7 +28,7 @@ function TreeNode({ node }: { node: FolderPreviewNode }) {
     <li>
       <span
         className={cn(
-          "flex items-center gap-1.5 py-px",
+          "flex items-center gap-2 py-px",
           review ? "text-warning" : file ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -71,7 +71,7 @@ export function FolderTreePreview({
   return (
     <section
       aria-labelledby={headingId}
-      className="rounded-xl border border-border bg-card p-4 xl:sticky xl:top-4"
+      className="rounded-window border border-border bg-card p-4 xl:sticky xl:top-4"
     >
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
         <h2
@@ -84,10 +84,10 @@ export function FolderTreePreview({
           <span className="text-3xs text-faint">{t("config.folder.previewExample")}</span>
         )}
       </div>
-      <p className="mb-2.5 text-xs text-faint">{t("config.folder.previewAttribution")}</p>
+      <p className="mb-3 text-xs text-faint">{t("config.folder.previewAttribution")}</p>
       <ul className="font-mono text-xs">
         <li>
-          <span className="flex items-center gap-1.5 py-px font-semibold text-foreground">
+          <span className="flex items-center gap-2 py-px font-semibold text-foreground">
             <FiFolder className="h-3 w-3 shrink-0" aria-hidden />
             <span className="break-all">{t("config.example.destination")}/</span>
           </span>

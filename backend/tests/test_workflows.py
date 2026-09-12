@@ -342,7 +342,7 @@ def test_the_windows_only_contracts_run_on_a_windows_runner() -> None:
         assert module in invocation, module
 
 
-def test_the_transfer_suites_also_run_on_apfs() -> None:
+def test_the_transfer_and_catalog_suites_also_run_on_apfs() -> None:
     """The same argument in the other direction: APFS is case-insensitive and
     stores names decomposed, so proving the transfer and identity rules only on
     the Linux runner proves them for a filesystem no user has."""
@@ -354,6 +354,7 @@ def test_the_transfer_suites_also_run_on_apfs() -> None:
     for module in (
         "tests/test_verified_transfer.py",
         "tests/test_transfer_end_to_end.py",
+        "tests/test_catalog.py",
         "tests/test_path_identity.py",
     ):
         assert module in invocation, module

@@ -29,6 +29,10 @@ def test_defaults_are_valid() -> None:
     cfg = Config.defaults()
     assert cfg.sort is True
     assert cfg.sort_criteria == ["year"]
+    assert cfg.copy_instead_of_move is True
+    assert cfg.rename is False
+    assert cfg.library_profile is not None
+    assert cfg.library_profile.transfer_mode == "copy"
     assert cfg.recursive_scan is True
     assert cfg.preservation_profile == PreservationProfile()
     assert cfg.repair_enabled is False
@@ -45,6 +49,19 @@ def test_round_trip(tmp_config_loader: ConfigLoader) -> None:
     assert [root.path for root in loaded.library_profile.inputs] == ["/src"]
     assert loaded.library_profile.destination is not None
     assert loaded.library_profile.destination.path == "/dst"
+
+
+def test_explicit_move_and_date_structure_survive_new_defaults(
+    tmp_config_loader: ConfigLoader,
+) -> None:
+    original = Config(copy_instead_of_move=False, sort_criteria=["year"], rename=True)
+    tmp_config_loader.save(original)
+    loaded = tmp_config_loader.load()
+    assert loaded.copy_instead_of_move is False
+    assert loaded.sort_criteria == ["year"]
+    assert loaded.rename is True
+    assert loaded.library_profile is not None
+    assert loaded.library_profile.transfer_mode == "move"
 
 
 def test_profile_round_trip_preserves_multiple_roots_and_reference(

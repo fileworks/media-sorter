@@ -66,7 +66,17 @@ class AnalysisService:
         if task is not None:
             task.transition("scanning_source")
         # Analysis counts every configured input, not only the first one.
+        #
+        # Which input each file came from is recorded here as an index span,
+        # because it is knowable here and nowhere afterwards: the merge below
+        # produces one flat list, and the counting pass over that list cannot
+        # tell a file in the second input from a file in the first. Without the
+        # spans the interface had one aggregate to show and several folder cards
+        # to show it on, so it printed the run's totals on the first card and the
+        # same run-wide count as "N files indexed" on each of the others —
+        # which reads as a per-folder figure and is not one.
         traversal = TraversalResult()
+        root_spans: list[tuple[str, str, int, int]] = []
         for validated_input in library.inputs:
             part = self._fs._traverse_sync(
                 validated_input.canonical_path,
@@ -78,6 +88,15 @@ class AnalysisService:
                 task.cancel_token if task is not None else None,
                 config.companion_handling,
                 validated_input.exclusions,
+            )
+            span_start = len(traversal.files)
+            root_spans.append(
+                (
+                    validated_input.root.root_id,
+                    str(validated_input.canonical_path),
+                    span_start,
+                    span_start + len(part.files),
+                )
             )
             traversal.files.extend(part.files)
             traversal.units.extend(part.units)
@@ -122,10 +141,28 @@ class AnalysisService:
         earliest: str | None = None
         latest: str | None = None
         no_date_estimate = 0
+        per_root: dict[str, dict[str, Any]] = {
+            root_id: {
+                "root_id": root_id,
+                "path": path,
+                "total_files": 0,
+                "total_size_bytes": 0,
+                "by_type": {},
+            }
+            for root_id, path, _, _ in root_spans
+        }
+        span_cursor = 0
 
         for index, file_path in enumerate(traversal.files):
             if task is not None and task.cancel_token.is_set():
                 break
+            # The spans are contiguous and walked in the same order the files
+            # were merged in, so this is a cursor rather than a search.
+            while span_cursor < len(root_spans) and index >= root_spans[span_cursor][3]:
+                span_cursor += 1
+            root_totals = (
+                per_root[root_spans[span_cursor][0]] if span_cursor < len(root_spans) else None
+            )
             suffix = file_path.suffix.lower()
 
             # One stat per file covers both the size filter and the mtime-based
@@ -144,6 +181,12 @@ class AnalysisService:
             # Type categorization
             cat = categorize_media_type(suffix)
             by_type[cat] = by_type.get(cat, 0) + 1
+
+            if root_totals is not None:
+                root_totals["total_files"] += 1
+                root_totals["total_size_bytes"] += size
+                root_by_type: dict[str, int] = root_totals["by_type"]
+                root_by_type[cat] = root_by_type.get(cat, 0) + 1
 
             # Date estimation via mtime
             try:
@@ -204,6 +247,10 @@ class AnalysisService:
                 "mode": mode,
                 "free_space_known": known,
             },
+            # Per input root, so a folder card can state what is in *that*
+            # folder. Without it the interface had one aggregate and several
+            # cards, and put the whole run's totals on the first card.
+            "by_root": list(per_root.values()),
             "excluded_files": excluded_files,
             "estimated_duration_seconds": round(total_files * 0.1),
             "media_units": len(traversal.units),
@@ -368,6 +415,7 @@ class AnalysisService:
             "total_files": 0,
             "total_size_bytes": 0,
             "by_type": {},
+            "by_root": [],
             "date_range": {"earliest": None, "latest": None, "no_date_estimate": 0},
             "disk_space": {
                 "source_size_bytes": 0,

@@ -26,11 +26,19 @@ export function Toggle({ checked, onChange, disabled = false, label, id }: Toggl
         onChange={(event) => onChange(event.target.checked)}
         className="toggle-control peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0 focus-visible:outline-none disabled:cursor-not-allowed"
       />
+      {/* `peer-disabled:` as well as the prop. A read-only stage wraps its
+          screen in a disabled fieldset, which disables the input below without
+          any prop reaching this component — and a switch still drawn in solid
+          brand orange is the clearest possible statement that it is live. */}
       <span
         className={cn(
           "pointer-events-none absolute inset-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
           "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
           disabled ? "border-border bg-muted" : checked ? "bg-primary" : "bg-input",
+          // The knob is a child of this span, not a sibling of the input, so it
+          // cannot carry a `peer-` variant of its own; it is reached from here.
+          "peer-disabled:border-border peer-disabled:bg-muted",
+          "peer-disabled:[&>span]:bg-faint peer-disabled:[&>span]:shadow-none",
         )}
         aria-hidden
       >

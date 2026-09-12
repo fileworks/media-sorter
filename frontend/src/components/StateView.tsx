@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 import { useI18n } from "@/i18n/I18nContext";
 import { userFacingError } from "@/lib/errorUtils";
@@ -118,7 +119,7 @@ export function StateView({
   const card = (
     <div
       className={cn(
-        "rounded-xl border",
+        "rounded-window border",
         severityClass(VARIANT_SEVERITY[variant]),
         compact ? "px-3 py-2" : "px-5 py-6 text-center",
         layout === "page" && "w-full max-w-md",
@@ -139,19 +140,15 @@ export function StateView({
       {(safeDetail || code) && (
         <p className="mt-1 text-xs leading-relaxed">
           {safeDetail}
-          {code && <code className={cn("font-mono", safeDetail && "ml-1.5")}>{code}</code>}
+          {code && <code className={cn("font-mono", safeDetail && "ml-2")}>{code}</code>}
         </p>
       )}
       {(retry || action) && (
         <div className={cn("mt-3 flex flex-wrap gap-2", centred && "justify-center")}>
           {retry && (
-            <button
-              type="button"
-              onClick={retry}
-              className="rounded-lg border border-current px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="outline" size="sm" onClick={retry}>
               {t("state.retry")}
-            </button>
+            </Button>
           )}
           {action}
         </div>

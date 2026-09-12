@@ -751,3 +751,37 @@ export function comparableFromRow(row: {
     plannedStatus: row.status ?? null,
   };
 }
+
+/**
+ * Every unordered pair of `count` items, as index pairs, in a stable order.
+ *
+ * `(0,1), (0,2), (1,2)` for three — the order a person would list them in, and
+ * the order the pair stepper walks.
+ */
+export function pairsOf(count: number): Array<[number, number]> {
+  const pairs: Array<[number, number]> = [];
+  for (let first = 0; first < count; first += 1) {
+    for (let second = first + 1; second < count; second += 1) pairs.push([first, second]);
+  }
+  return pairs;
+}
+
+/**
+ * A copy's name within its set: A, B, C … then A2, B2 past the alphabet.
+ *
+ * The comparison used to letter the *sides of the screen* — whatever was on the
+ * left was "A". In a set of two that is harmless, because the left side is
+ * always the same copy. Past two it is actively wrong: stepping from the first
+ * pair to the second silently redefined "A", so the badge over the image, the
+ * keep radio and the facts column all changed meaning while the reader was
+ * mid-comparison and nothing said so.
+ *
+ * The letter belongs to the copy for as long as the set is open. "Pair 2 of 3"
+ * is then also readable as "A ↔ C", and which two of the four you have already
+ * looked at is a question the screen can answer.
+ */
+export function memberLetter(index: number): string {
+  const letter = String.fromCharCode(65 + (index % 26));
+  const cycle = Math.floor(index / 26);
+  return cycle === 0 ? letter : `${letter}${cycle + 1}`;
+}

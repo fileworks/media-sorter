@@ -25,7 +25,7 @@ export function RecoveryBanner({ operation, onDecide, onOpenReport }: RecoveryBa
 
   return (
     <section
-      className={`rounded-lg border p-3 ${severityClass(severity)}`}
+      className={`rounded-panel border p-3 ${severityClass(severity)}`}
       data-severity={severity}
       role={plan.blocksNewOperations ? "alert" : "status"}
       aria-live={plan.blocksNewOperations ? "assertive" : "polite"}
@@ -45,7 +45,7 @@ export function RecoveryBanner({ operation, onDecide, onOpenReport }: RecoveryBa
           {plan.decisions.map(({ artifact, explanation }) => (
             <li
               key={artifact.action_id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-panel border border-border p-2"
             >
               <div className="min-w-0">
                 <p className="truncate text-xs text-foreground">{redactRoot(artifact.path)}</p>
@@ -78,7 +78,7 @@ export function RecoveryBanner({ operation, onDecide, onOpenReport }: RecoveryBa
         <button
           type="button"
           onClick={() => onOpenReport(plan.operationId)}
-          className="mt-3 rounded-lg border border-border px-3 py-1 text-xs hover:border-primary"
+          className="mt-3 rounded-panel border border-border px-3 py-1 text-xs hover:border-primary"
         >
           Open the report
         </button>

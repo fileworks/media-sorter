@@ -1,5 +1,5 @@
 /**
- * The horizontal stepper: six named stops, each carrying its current context.
+ * The horizontal stepper: four named stops, each carrying its current context.
  *
  * Three states, and each is a different shape rather than a different colour
  * alone — filled accent pill for the current stage, a check in a green disc for
@@ -21,14 +21,11 @@ interface StageStepperProps {
   current: Stage;
   gate: (stage: Stage) => StageReadiness;
   complete: (stage: Stage) => boolean;
-  /** A finished dry run turns the visual Plan step into Review. */
-  planReady: boolean;
-  reviewView: "plan" | "review";
   onSelect: (stage: Stage, reviewView?: "plan" | "review") => void;
 }
 
 type VisualStep = {
-  id: Stage | "plan";
+  id: Stage;
   stage: Stage;
   labelKey: string;
   /** The full sentence, which only the tooltip has room for. */
@@ -37,70 +34,26 @@ type VisualStep = {
   hintKey: string;
 };
 
-const VISUAL_STEPS: VisualStep[] = [
-  ...STAGE_LABELS.slice(0, 3).map((entry) => ({
-    id: entry.stage,
-    stage: entry.stage,
-    labelKey: `stage.${entry.stage}.label`,
-    descriptionKey: `stage.${entry.stage}.description`,
-    hintKey: `stage.${entry.stage}.hint`,
-  })),
-  {
-    id: "plan",
-    stage: "review",
-    labelKey: "stage.plan.label",
-    descriptionKey: "stage.plan.description",
-    hintKey: "stage.plan.hint",
-  },
-  {
-    id: "review",
-    stage: "review",
-    labelKey: "stage.review.label",
-    descriptionKey: "stage.review.description",
-    hintKey: "stage.review.hint",
-  },
-  {
-    id: "execute",
-    stage: "execute",
-    labelKey: "stage.execute.label",
-    descriptionKey: "stage.execute.description",
-    hintKey: "stage.execute.hint",
-  },
-];
+const VISUAL_STEPS: VisualStep[] = STAGE_LABELS.map((entry) => ({
+  id: entry.stage,
+  stage: entry.stage,
+  labelKey: `stage.${entry.stage}.label`,
+  descriptionKey: `stage.${entry.stage}.description`,
+  hintKey: `stage.${entry.stage}.hint`,
+}));
 
-export function StageStepper({
-  current,
-  gate,
-  complete,
-  planReady,
-  reviewView,
-  onSelect,
-}: StageStepperProps) {
+export function StageStepper({ current, gate, complete, onSelect }: StageStepperProps) {
   const { t } = useI18n();
   return (
     <nav
       aria-label={t("stage.navigation")}
-      className="relative h-16 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
+      className="relative h-14 shrink-0 overflow-hidden border-b border-border bg-card md:h-stepper md:overflow-x-auto xl:h-stepper-wide"
     >
-      <ol className="relative mx-auto grid h-full min-w-0 max-w-workspace grid-cols-1 gap-1 px-3 py-1.5 md:min-w-[48rem] md:grid-cols-6 md:px-4">
+      <ol className="workspace-frame relative grid h-full min-w-0 grid-cols-1 gap-1 py-1 md:grid-cols-4">
         {VISUAL_STEPS.map((entry, index) => {
-          const active =
-            entry.id === "plan"
-              ? current === "review" && reviewView === "plan"
-              : entry.id === "review"
-                ? current === "review" && reviewView === "review"
-                : entry.stage === current;
-          const isComplete =
-            entry.id === "plan"
-              ? planReady
-              : entry.id === "review"
-                ? complete("review")
-                : complete(entry.stage);
-          const baseReadiness = gate(entry.stage);
-          const readiness: StageReadiness =
-            entry.id === "review" && !planReady
-              ? { canEnter: false, reason: t("stage.review.planNeeded") }
-              : baseReadiness;
+          const active = entry.stage === current;
+          const isComplete = complete(entry.stage);
+          const readiness = gate(entry.stage);
           const reachable = readiness.canEnter || active;
           return (
             <li key={entry.id} className={cn("min-w-0", active ? "block" : "hidden md:block")}>
@@ -112,15 +65,12 @@ export function StageStepper({
                   aria-current={active ? "step" : undefined}
                   aria-label={`${t(entry.labelKey)}${isComplete ? `, ${t("stage.complete")}` : ""}`}
                   onClick={() =>
-                    onSelect(
-                      entry.stage,
-                      entry.id === "plan" ? "plan" : entry.id === "review" ? "review" : undefined,
-                    )
+                    onSelect(entry.stage, entry.stage === "review" ? "review" : undefined)
                   }
                   className={cn(
-                    "relative z-[1] flex h-full w-full items-center gap-2.5 rounded-lg border border-transparent px-2.5 text-left transition-colors",
+                    "relative z-[1] flex h-full w-full items-center gap-2 rounded-panel border border-transparent px-2 text-left transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active && "border-primary/30 bg-tint-primary text-foreground",
+                    active && "border-primary/40 bg-tint-primary text-foreground",
                     !active &&
                       reachable &&
                       "hover:border-border hover:bg-muted hover:text-foreground",
@@ -130,9 +80,9 @@ export function StageStepper({
                 >
                   <span
                     className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-3xs font-bold tabular-nums",
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-3xs font-bold tabular-nums",
                       active &&
-                        "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]",
+                        "border-primary bg-primary text-primary-foreground shadow-[0_0_0_2px_hsl(var(--primary)/0.12)]",
                       isComplete && !active && "border-success/40 bg-tint-success text-success",
                       !active && !isComplete && "border border-border text-faint",
                     )}

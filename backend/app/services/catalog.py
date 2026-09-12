@@ -137,8 +137,7 @@ def _preflight_schema_read_only(path: Path) -> None:
 
     SQLite may create or recover ``-wal``, ``-shm`` or hot-journal siblings as
     a side effect of an ordinary connection. A downgraded binary must refuse
-    before that point, so the future-schema check uses an explicit read-only
-    URI and performs no PRAGMA that can change journal mode.
+    before that point, so the future-schema check opens only a disposable clone.
     """
     if not path.is_file() or path.stat().st_size == 0:
         return
@@ -146,18 +145,14 @@ def _preflight_schema_read_only(path: Path) -> None:
     # even read-only, may recover/checkpoint it and alter or remove siblings.
     # Inspect a coherent disposable clone instead. Clone/no-atime copy keeps
     # the original files' bytes and stat metadata untouched.
-    siblings = tuple(
-        candidate
-        for candidate in (
-            path,
-            path.with_name(path.name + "-wal"),
-            path.with_name(path.name + "-shm"),
-            path.with_name(path.name + "-journal"),
-        )
-        if candidate.exists()
+    siblings = (
+        path,
+        path.with_name(path.name + "-wal"),
+        path.with_name(path.name + "-shm"),
+        path.with_name(path.name + "-journal"),
     )
-    before = {candidate: _stat_identity(candidate) for candidate in siblings}
     try:
+        before = {candidate: _stat_identity(candidate) for candidate in siblings}
         with tempfile.TemporaryDirectory(prefix="mediasort-catalog-preflight-") as temporary:
             snapshot_root = Path(temporary)
             snapshot = snapshot_root / path.name
@@ -170,11 +165,11 @@ def _preflight_schema_read_only(path: Path) -> None:
             # locks. SQLite safely rebuilds one beside the disposable WAL.
             with closing(sqlite3.connect(snapshot)) as connection:
                 version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        after = {candidate: _stat_identity(candidate) for candidate in siblings}
     except (OSError, sqlite3.DatabaseError, ValueError) as exc:
         raise CatalogCorruptionError(
             f"Catalog schema could not be inspected without mutation: {path}: {exc}"
         ) from exc
-    after = {candidate: _stat_identity(candidate) for candidate in siblings}
     if after != before:
         raise CatalogCorruptionError(
             f"Catalog changed while its schema was inspected: {path}; refusing writable open"
@@ -187,13 +182,19 @@ def _preflight_schema_read_only(path: Path) -> None:
         )
 
 
-def _stat_identity(path: Path) -> tuple[int, int, int, int, int, int]:
-    observed = path.stat()
+def _stat_identity(path: Path) -> tuple[int, int, int, int, int, int] | None:
+    try:
+        observed = path.stat()
+    except FileNotFoundError:
+        return None
+    # A concurrent reader can advance atime without changing the schema. Keep
+    # the no-atime copy below, but judge snapshot coherence by mutation evidence.
+    # Presence is evidence too: a WAL created during inspection invalidates it.
     return (
+        observed.st_dev,
         observed.st_ino,
         observed.st_size,
         observed.st_mode,
-        observed.st_atime_ns,
         observed.st_mtime_ns,
         observed.st_ctime_ns,
     )

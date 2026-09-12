@@ -28,7 +28,7 @@ export function ProgressBar({ value, label, className = "" }: ProgressBarProps) 
     >
       {!isIndeterminate && (
         <div
-          className="h-full rounded-full bg-primary transition-all duration-300 ease-in-out"
+          className="h-full rounded-full bg-primary transition-[width] duration-300 ease-in-out"
           style={{ width: `${clamped}%` }}
         />
       )}

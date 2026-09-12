@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
-import { keeperProposals, type DuplicateDecision } from "@/lib/duplicateDecisions";
+import {
+  keeperProposals,
+  keeperRecommendations,
+  type DuplicateDecision,
+} from "@/lib/duplicateDecisions";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import { REVIEW_SORTS, type ReviewSort } from "@/lib/reviewSort";
 import { dropScopedExcept, readStored, removeStored, writeStored } from "@/lib/storage";
@@ -58,8 +63,8 @@ function stored<T extends string>(key: string, fallback: T, allowed: readonly T[
  * The Review screen's run state: what keeper was overridden, what is selected,
  * and what is being looked at.
  *
- * Keeper overrides are run state, sent to `sorting/start` and forgotten. The
- * view and filter are preferences and do persist.
+ * Decisions and browsing state persist with their plan. Global view and sort
+ * preferences also seed a new plan.
  */
 export function useReviewSurface(
   result: PreviewResult,
@@ -67,22 +72,30 @@ export function useReviewSurface(
   defaultKeepPolicy: KeeperPolicyId,
   catalogReady = true,
   recoveredState: PlanReviewState | null = null,
+  recoveredStateSaved = true,
 ) {
   const [initialState] = useState<PlanReviewState | null>(() =>
     recoveredState?.config_fingerprint === result.config_fingerprint ? recoveredState : null,
   );
-  const newPlanEntryRef = useRef(initialState === null);
-  const [mode, setModeState] = useState<ReviewMode>(() => initialState?.mode ?? "resolve");
+  /**
+   * A new plan opens on Browse.
+   *
+   * Arriving from Plan, the first question is "what would this run do", and
+   * Browse is the screen that answers it: the whole plan, in its folders.
+   * Resolve answers a narrower one — "which of these copies do I keep" — and
+   * opening straight onto a decision queue asked for judgements about files
+   * before the reader had seen any of them. A *recovered* plan still reopens
+   * wherever it was left, because that is a session being resumed rather than
+   * a plan being met.
+   */
+  const [mode, setModeState] = useState<ReviewMode>(() => initialState?.mode ?? "browse");
   /** Which set the queue is on. Null means "the first one still undecided". */
   const [queueSetId, setQueueSetId] = useState<string | null>(initialState?.queue_set_id ?? null);
   /** The file the detail view is open on, by source path. */
   const [detailPath, setDetailPath] = useState<string | null>(initialState?.detail_path ?? null);
   /** The file being examined full screen, which may be opened over the detail view. */
   const [viewerPath, setViewerPath] = useState<string | null>(initialState?.viewer_path ?? null);
-  // Keeper choices, held here and sent with the run — never round-tripped.
-  // They used to POST to `/api/review/decide`, which wrote a server-side plan
-  // nothing read back: the refetch that followed returned identical data, so
-  // the screen showed the same thing before and after every decision.
+  // Explicit keeper choices are persisted with the plan and sent with the run.
   const [decisions, setDecisions] = useState<Map<string, DuplicateDecision>>(
     () => new Map(decisionEntries(initialState)),
   );
@@ -108,10 +121,14 @@ export function useReviewSurface(
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const desiredStateRef = useRef<{ fingerprint: string; state: PlanReviewState } | null>(null);
   const savedFingerprintRef = useRef<string | null>(
-    initialState === null ? null : JSON.stringify(initialState),
+    initialState === null || !recoveredStateSaved ? null : JSON.stringify(initialState),
   );
   const savingRef = useRef(false);
   const mountedRef = useRef(true);
+  const { mutateAsync: saveState } = useMutation({
+    scope: { id: `review-state:${result.plan_id}` },
+    mutationFn: (state: PlanReviewState) => api.savePlanReviewState(result.plan_id, state),
+  });
 
   useEffect(() => {
     // React StrictMode intentionally runs mount cleanup/setup twice in
@@ -120,8 +137,15 @@ export function useReviewSurface(
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Finish the latest draft even if navigation unmounts its screen during
+      // a save. The per-plan mutation scope orders it before a remounted
+      // screen's writes; a late old response cannot overwrite a new choice.
+      const desired = desiredStateRef.current;
+      if (desired !== null && desired.fingerprint !== savedFingerprintRef.current) {
+        void saveState(desired.state).catch(() => undefined);
+      }
     };
-  }, []);
+  }, [saveState]);
 
   // Delete the superseded browser-authoritative snapshot for this plan. The
   // backend envelope now owns decisions and view state; browser storage keeps
@@ -176,7 +200,7 @@ export function useReviewSurface(
         setPersistenceState("saving");
         setPersistenceError(null);
         try {
-          await api.savePlanReviewState(result.plan_id, desired.state);
+          await saveState(desired.state);
         } catch (cause) {
           if (mountedRef.current) {
             setPersistenceState("error");
@@ -190,7 +214,7 @@ export function useReviewSurface(
       savingRef.current = false;
       if (mountedRef.current) setPersistenceState("saved");
     })();
-  }, [result.plan_id]);
+  }, [saveState]);
 
   useEffect(() => {
     desiredStateRef.current = {
@@ -206,6 +230,19 @@ export function useReviewSurface(
     flushPersistence();
   }, [flushPersistence]);
 
+  /**
+   * Two readings of the same ranking.
+   *
+   * `recommendations` is what the rule says about every set, decided or not,
+   * and is what the rows carry — so a set keeps showing which copy was
+   * recommended after somebody accepts it. `proposals` is the subset nobody
+   * has answered yet: it is what "accept all" writes and what the outstanding
+   * count is measured against, so taking a recommendation still closes it.
+   */
+  const recommendations = useMemo(
+    () => keeperRecommendations(stacks, keepPolicy),
+    [keepPolicy, stacks],
+  );
   const proposals = useMemo(
     () => keeperProposals(stacks, keepPolicy, decisions),
     [decisions, keepPolicy, stacks],
@@ -240,8 +277,8 @@ export function useReviewSurface(
   }, []);
 
   const rows = useMemo(
-    () => toReviewRows(result, stacks, decisions, proposals),
-    [decisions, proposals, result, stacks],
+    () => toReviewRows(result, stacks, decisions, recommendations),
+    [decisions, recommendations, result, stacks],
   );
 
   const selectedRows = useMemo(
@@ -328,16 +365,6 @@ export function useReviewSurface(
     }
     return members;
   }, [result.items, stacks]);
-
-  // Review is decision-first when there is work to decide. When the completed
-  // catalog proves there are no duplicate sets, an empty "auto-keep 0" queue
-  // is not a useful landing page, so a new plan opens its result browser. A
-  // recovered plan keeps the exact view the user deliberately left behind.
-  useEffect(() => {
-    if (!newPlanEntryRef.current || !catalogReady) return;
-    newPlanEntryRef.current = false;
-    if (liveMembersBySet.size === 0) setModeState("browse");
-  }, [catalogReady, liveMembersBySet]);
 
   const protectedSetIds = useMemo(
     () =>
@@ -443,14 +470,6 @@ export function useReviewSurface(
     });
   }, []);
 
-  const acceptProposal = useCallback(
-    (groupId: string) => {
-      const proposal = proposals.get(groupId);
-      if (proposal) chooseKeeper(groupId, proposal.memberId);
-    },
-    [chooseKeeper, proposals],
-  );
-
   const acceptAllProposals = useCallback(() => {
     setDecisions((current) => {
       const next = new Map(current);
@@ -483,6 +502,7 @@ export function useReviewSurface(
   const decidedSetIds = useMemo(() => new Set(decisions.keys()), [decisions]);
 
   return {
+    durableState,
     mode,
     setMode,
     queueSetId,
@@ -502,7 +522,6 @@ export function useReviewSurface(
     markManyNotDuplicates,
     clearDecision,
     clearDecisions,
-    acceptProposal,
     acceptAllProposals,
     reviewedSets,
     selectedSetIds,
