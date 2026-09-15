@@ -193,6 +193,28 @@ def test_release_ref_is_verified_before_any_packaging_job_can_run() -> None:
     assert "needs: [check-ci, check-native]" in release
 
 
+def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
+    release_path = WORKFLOWS / "release.yml"
+    release = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+    package = release["jobs"]["package"]
+    package_runs = "\n".join(str(step.get("run", "")) for step in package["steps"])
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    install_release = makefile.split("install-release:", maxsplit=1)[1].split(
+        "\n\n", maxsplit=1
+    )[0]
+
+    assert "astral-sh/setup-uv@" in str(package["steps"])
+    assert "make install-release" in package_runs
+    assert "uv export --locked --all-extras" in install_release
+    assert "uv pip install --python" in install_release
+    assert "npm ci" in install_release
+
+    source_gate = release_path.read_text(encoding="utf-8").split("  check-ci:", maxsplit=1)[1].split(
+        "\n  check-native:", maxsplit=1
+    )[0]
+    assert "uv export --locked --all-extras" in source_gate
+
+
 def test_native_ci_denies_clippy_warnings() -> None:
     workflow = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
     native = workflow.split("  native:", maxsplit=1)[1].split("\n  docs-links:", maxsplit=1)[0]

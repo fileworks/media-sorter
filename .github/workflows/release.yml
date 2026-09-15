@@ -79,7 +79,7 @@ jobs:
         working-directory: backend
         shell: bash
         run: |
-          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv export --locked --all-extras --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
           uv pip install --system -r requirements.ci.txt
           uv pip install --system -e . --no-deps
 
@@ -306,12 +306,14 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/pyproject.toml
 
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
       - name: Install GNU Make (Windows runner)
         if: runner.os == 'Windows'
         run: choco install make --no-progress -y
 
-      - name: Install project dependencies
-        run: make install
+      - name: Install locked packaging dependencies
+        run: make install-release
 
       - name: Verify optional-model lifecycle on the package host
         working-directory: backend
