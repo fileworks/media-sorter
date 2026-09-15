@@ -92,15 +92,22 @@ function headFile(path) {
   return execFileSync("git", ["show", `HEAD:${path}`], { encoding: "utf8" });
 }
 
-function renderReleaseSection(version, previousTag, currentTag, releaseDate) {
-  return execFileSync(
+function renderReleaseSection(
+  version,
+  previousTag,
+  currentTag,
+  toRef,
+  releaseDate,
+  execute = execFileSync,
+) {
+  return execute(
     process.execPath,
     [
       "scripts/render-release-changelog.mjs",
       version,
       previousTag,
       currentTag,
-      "HEAD^",
+      toRef,
       releaseDate,
     ],
     { encoding: "utf8" },
@@ -354,7 +361,7 @@ function assertReleaseTag(
     version,
     read,
     readParent,
-    renderSection(version, previous, tag, releaseDate),
+    renderSection(version, previous, tag, "HEAD^", releaseDate),
   );
   if (increment(previousVersion, bump) !== version) {
     throw new Error("releaseability: tag version does not match the calculated next version");
@@ -399,4 +406,5 @@ module.exports = {
   bumpLevel,
   versions,
   whatBump,
+  renderReleaseSection,
 };
