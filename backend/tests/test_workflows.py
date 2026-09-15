@@ -215,6 +215,18 @@ def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
     assert "uv export --locked --all-extras" in source_gate
 
 
+def test_shipped_local_ai_keeps_a_macos_intel_onnxruntime_wheel() -> None:
+    pyproject = (ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
+    lock = (ROOT / "backend" / "uv.lock").read_text(encoding="utf-8")
+
+    # ONNX Runtime 1.24+ no longer publishes macOS x86_64 wheels. The release
+    # matrix still includes the Intel runner, so the package's Python 3.11
+    # profile must stay on the reviewed 1.23.2 wheel until upstream restores it.
+    assert "onnxruntime>=1.23.2,<1.24; python_version < '3.14'" in pyproject
+    assert 'version = "1.23.2"' in lock
+    assert "onnxruntime-1.23.2-cp311-cp311-macosx_13_0_x86_64.whl" in lock
+
+
 def test_native_ci_denies_clippy_warnings() -> None:
     workflow = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
     native = workflow.split("  native:", maxsplit=1)[1].split("\n  docs-links:", maxsplit=1)[0]
