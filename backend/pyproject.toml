@@ -88,7 +88,10 @@ local-ai = [
     # tokenizers loads the Gemma tokenizer. huggingface_hub remains an explicit
     # runtime dependency for fastembed compatibility, but application code
     # disables its network path and passes only verified local component paths.
-    "onnxruntime>=1.17.0",
+    # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
+    # releases on the last universal wheel; fastembed requires 1.24.2+ on 3.14+.
+    "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
+    "onnxruntime>=1.24.2; python_version >= '3.14'",
     "tokenizers>=0.15.0",
     "huggingface_hub>=1.26.1",
     # Reliable cross-platform RAM detection for the hardware tier probe (the
