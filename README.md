@@ -30,8 +30,13 @@ from [Releases](https://github.com/fileworks/media-sorter/releases/latest).
 Python, Node, and ffmpeg are bundled. The macOS build requires macOS 12 or
 later, matching the minimum version of its bundled media tools.
 
-The installers are currently unsigned. On first launch, use **right-click →
-Open** on macOS or **More info → Run anyway** in Windows SmartScreen.
+The installers are currently unsigned. On supported macOS 12 through 14, if
+Gatekeeper blocks the first launch, Control-click the app, choose **Open**, and
+confirm **Open**. On macOS 15 Sequoia and later, after the blocked launch open
+**System Settings > Privacy & Security**, scroll to **Security**, choose
+**Open Anyway** beside MediaSorter, and confirm **Open**. On Windows, choose
+**More info > Run anyway** in SmartScreen only for the verified Fileworks
+download.
 
 ## Status
 
