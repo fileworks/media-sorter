@@ -65,6 +65,7 @@ Every transfer failure carries a stable `reason`, the `phase` it happened in, an
 | `unsafe_source_type` / `unsafe_path_link` | The source is not a regular file, or the path resolves through too many links | `source_retained` |
 | `source_drift` / `source_changed_during_copy` | The content moved away from what was authorized or read | `source_retained` |
 | `stage_hash_mismatch` / `stage_drift` | The staged copy failed independent verification | `source_retained` |
+| `atomic_commit_unavailable` | The destination filesystem cannot provide conditional no-replace publication | `source_retained` |
 | `source_removal_failed` | The destination is verified but the source could not be dropped | `redundant_verified_copies` |
 | `transfer_io_error` | An unmapped filesystem error; the raw errno is attached rather than guessed at | `source_retained` |
 
@@ -95,7 +96,7 @@ path past the filesystem limit.
    now reachable only through a reviewed profile).
 
 `backend/tests/test_verified_transfer.py` and `backend/tests/test_action_journal.py`
-cover the protocol selection, degraded commit labelling, journal ordering, and
+cover the protocol selection, unsupported-commit refusal, journal ordering, and
 crash-truncation behavior directly. `backend/tests/test_organize_only_preservation.py`
 proves byte identity across copy, move, rename, quarantine, and duplicate scenarios, and
 pins the timestamp, sidecar, policy-refusal, manifest, journal, and report behavior.

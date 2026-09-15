@@ -39,16 +39,13 @@ from app.core.paths import paths_refer_to_same_file
 TRANSFER_CHUNK_BYTES = 1024 * 1024
 ProgressCallback = Callable[[int, int], None]
 
-CommitMethod = Literal["atomic_rename", "staged_atomic_promote", "recoverable_non_atomic"]
+CommitMethod = Literal["atomic_rename", "staged_atomic_promote"]
 TransferProtocol = Literal[
     "same_volume_link",
-    "same_volume_rename",
     "staged_atomic_promote",
-    "staged_recoverable",
 ]
 IntegritySource = Literal["measured", "revalidated_identity", "same_inode"]
 STAGED_TRANSFER_KINDS = frozenset({"copy", "move", "quarantine", "restore", "replace"})
-REDUCED_ATOMICITY = "atomic_no_clobber_publication_unavailable"
 
 #: Errno values that mean "this filesystem cannot publish atomically without
 #: clobbering", as opposed to a genuine I/O failure that must propagate.
@@ -352,8 +349,8 @@ def commit_staged_no_replace(staged: StagedTransfer) -> CommittedTransfer:
     """Atomically publish a verified stage without replacing an existing path.
 
     A same-directory hard link is an atomic no-clobber publication on supported
-    filesystems. Unsupported filesystems remain staged for the recoverable
-    non-atomic protocol implemented separately.
+    filesystems. Unsupported filesystems fail closed rather than falling back to
+    a check followed by a replacement race.
     """
     stage = staged.stage_path
     destination = staged.destination_path
@@ -393,42 +390,9 @@ def commit_staged_no_replace(staged: StagedTransfer) -> CommittedTransfer:
     return CommittedTransfer(staged=staged, destination_path=destination)
 
 
-def commit_staged_recoverable(staged: StagedTransfer) -> CommittedTransfer:
-    """Publish a verified stage on a filesystem without atomic no-clobber support.
-
-    The reduced guarantee is explicit: the destination is checked immediately
-    before an atomic rename, so an interruption never publishes partial content,
-    but a concurrent writer that wins the gap between check and rename would be
-    replaced. Callers must surface ``recoverable_non_atomic`` to the user.
-    """
-    stage = staged.stage_path
-    destination = staged.destination_path
-    _require_intact_stage(staged)
-    if destination.exists() or destination.is_symlink():
-        raise IntegrityTransferError(
-            "Destination changed after staging; nothing was replaced.",
-            reason="destination_changed",
-            action_id=staged.action_id,
-            destination_path=str(destination),
-            source_safety="source_retained",
-        )
-    os.rename(stage, destination)
-    _fsync_directory(destination.parent)
-    return CommittedTransfer(
-        staged=staged,
-        destination_path=destination,
-        commit_method="recoverable_non_atomic",
-    )
-
-
 def commit_staged(staged: StagedTransfer) -> CommittedTransfer:
-    """Publish a verified stage atomically, degrading only when unsupported."""
-    try:
-        return commit_staged_no_replace(staged)
-    except IntegrityTransferError as exc:
-        if exc.details.get("reason") != "atomic_commit_unavailable":
-            raise
-    return commit_staged_recoverable(staged)
+    """Publish a verified stage atomically, failing closed when unsupported."""
+    return commit_staged_no_replace(staged)
 
 
 # ---------------------------------------------------------------------- #
@@ -627,9 +591,8 @@ def _transfer_staged(
     except BaseException:
         staged.stage_path.unlink(missing_ok=True)
         raise
-    atomic = committed.commit_method == "staged_atomic_promote"
-    protocol: TransferProtocol = "staged_atomic_promote" if atomic else "staged_recoverable"
-    reduced = None if atomic else REDUCED_ATOMICITY
+    protocol: TransferProtocol = "staged_atomic_promote"
+    reduced = None
     _record(journal, request, "committed", "redundant_verified_copies", integrity=staged.integrity)
     _record(
         journal,
@@ -707,19 +670,16 @@ def _publish_same_volume(
             "Destination appeared during commit; nothing was replaced.",
         ) from exc
     except OSError as exc:
-        if exc.errno not in _ATOMIC_UNAVAILABLE_ERRNOS:
-            raise
+        if exc.errno in _ATOMIC_UNAVAILABLE_ERRNOS:
+            raise _error(
+                request,
+                "atomic_commit_unavailable",
+                "Atomic no-replace publication is unavailable on this filesystem.",
+                os_error=exc.errno,
+            ) from exc
+        raise
     else:
         return "same_volume_link", "atomic_rename", None
-
-    if destination.exists() or destination.is_symlink():
-        raise _error(
-            request,
-            "destination_changed",
-            "Destination appeared during commit; nothing was replaced.",
-        )
-    os.rename(source, destination)
-    return "same_volume_rename", "recoverable_non_atomic", REDUCED_ATOMICITY
 
 
 def _remove_verified_source(

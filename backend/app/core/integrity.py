@@ -349,6 +349,8 @@ class ActionOutcome(BaseModel):
         "none",
         "atomic_rename",
         "staged_atomic_promote",
+        # Accepted for reports written before unsupported publication became
+        # fail-closed; new transfer execution never emits this value.
         "recoverable_non_atomic",
     ] = "none"
     filesystem_metadata_requested: FilesystemMetadataSnapshot | None = None

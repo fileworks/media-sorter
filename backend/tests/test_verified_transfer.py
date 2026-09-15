@@ -264,7 +264,7 @@ def test_same_volume_move_removes_the_source_only_after_a_durable_commit(
     assert stages[-1] == "terminal"
 
 
-def test_same_volume_move_falls_back_to_a_labelled_recoverable_rename(
+def test_same_volume_move_fails_closed_when_hard_links_are_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -278,14 +278,12 @@ def test_same_volume_move_falls_back_to_a_labelled_recoverable_rename(
 
     monkeypatch.setattr(os, "link", unsupported_link)
 
-    result = execute_transfer(action)
+    with pytest.raises(IntegrityTransferError) as error:
+        execute_transfer(action)
 
-    assert result.protocol == "same_volume_rename"
-    assert result.commit_method == "recoverable_non_atomic"
-    assert result.reduced_guarantee == "atomic_no_clobber_publication_unavailable"
-    assert result.warnings == ("atomic_no_clobber_publication_unavailable",)
-    assert destination.read_bytes() == b"no hard links here"
-    assert source.exists() is False
+    assert error.value.details["reason"] == "atomic_commit_unavailable"
+    assert source.read_bytes() == b"no hard links here"
+    assert destination.exists() is False
 
 
 def test_same_volume_move_never_replaces_an_existing_destination(tmp_path: Path) -> None:
@@ -444,7 +442,7 @@ def test_cross_volume_copy_keeps_both_verified_copies(
     assert destination.read_bytes() == b"retained"
 
 
-def test_staged_commit_degrades_to_a_labelled_recoverable_protocol(
+def test_staged_commit_fails_closed_when_hard_links_are_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -458,12 +456,12 @@ def test_staged_commit_degrades_to_a_labelled_recoverable_protocol(
 
     monkeypatch.setattr(os, "link", unsupported_link)
 
-    result = execute_transfer(action)
+    with pytest.raises(IntegrityTransferError) as error:
+        execute_transfer(action)
 
-    assert result.protocol == "staged_recoverable"
-    assert result.commit_method == "recoverable_non_atomic"
-    assert result.reduced_guarantee == "atomic_no_clobber_publication_unavailable"
-    assert destination.read_bytes() == b"no links"
+    assert error.value.details["reason"] == "atomic_commit_unavailable"
+    assert source.read_bytes() == b"no links"
+    assert destination.exists() is False
     assert list(destination.parent.glob(".*ms-stage-*")) == []
 
 
