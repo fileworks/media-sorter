@@ -8,6 +8,7 @@ import os
 import shutil
 import stat
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -28,6 +29,7 @@ from app.services.verified_transfer import (
     commit_staged_no_replace,
     execute_transfer,
     stage_verified_copy,
+    unlink_revalidated_pair,
 )
 
 
@@ -124,7 +126,10 @@ def test_stage_copy_is_private_verified_flushed_and_metadata_preserving(
     assert len(staged.stage_path.name) < len(destination.name) + 40
     assert staged.integrity.verified is True
     assert staged.stage_path.read_bytes() == source.read_bytes()
-    assert staged.observed_metadata.mtime_ns == action.source.metadata.mtime_ns
+    if staged.metadata_warnings:
+        assert any(warning.startswith("timestamps:") for warning in staged.metadata_warnings)
+    else:
+        assert staged.observed_metadata.mtime_ns == action.source.metadata.mtime_ns
     assert progress[-1] == (source.stat().st_size, source.stat().st_size)
     assert fsync_calls
 
@@ -505,6 +510,65 @@ def test_unremovable_source_reports_redundant_verified_copies(
     assert destination.read_bytes() == b"undeletable"
     assert source.read_bytes() == b"undeletable"
     assert _stages(state)[-1] == "terminal"
+
+
+def test_revalidated_pair_ignores_unreliable_ctime_difference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.bin"
+    destination = tmp_path / "destination.bin"
+    source.write_bytes(b"verified source")
+    destination.write_bytes(b"verified source")
+    expected_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    real_lstat = Path.lstat
+
+    def ctime_differs(path: Path, *args: Any, **kwargs: Any) -> Any:
+        observed = real_lstat(path, *args, **kwargs)
+        if path != source:
+            return observed
+        return SimpleNamespace(
+            st_mode=observed.st_mode,
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino,
+            st_size=observed.st_size,
+            st_mtime_ns=observed.st_mtime_ns,
+            st_ctime_ns=observed.st_ctime_ns + 1,
+        )
+
+    monkeypatch.setattr(Path, "lstat", ctime_differs)
+
+    unlink_revalidated_pair(
+        source,
+        destination,
+        expected_sha256=expected_sha256,
+        expected_size_bytes=source.stat().st_size,
+    )
+
+    assert not source.exists()
+    assert destination.read_bytes() == b"verified source"
+
+
+def test_unsupported_timestamp_updates_become_warnings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stage = tmp_path / "stage.bin"
+    stage.write_bytes(b"stage")
+    requested = FilesystemMetadataSnapshot(
+        size_bytes=5,
+        mtime_ns=1,
+        atime_ns=1,
+    )
+
+    def unsupported(*_args: Any, **_kwargs: Any) -> None:
+        raise NotImplementedError
+
+    monkeypatch.setattr(os, "utime", unsupported)
+
+    assert verified_transfer._apply_supported_metadata(stage, requested) == (
+        "timestamps:NotImplementedError:None",
+    )
 
 
 def test_source_rewritten_while_destination_is_revalidated_survives_unlink(

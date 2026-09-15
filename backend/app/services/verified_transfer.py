@@ -858,7 +858,6 @@ def unlink_revalidated_pair(
             and before.st_ino == after.st_ino
             and before.st_size == after.st_size
             and before.st_mtime_ns == after.st_mtime_ns
-            and before.st_ctime_ns == after.st_ctime_ns
         )
         same_named_file = (
             stat.S_ISREG(named.st_mode)
@@ -867,7 +866,6 @@ def unlink_revalidated_pair(
             and named.st_ino == after.st_ino
             and named.st_size == after.st_size
             and named.st_mtime_ns == after.st_mtime_ns
-            and named.st_ctime_ns == after.st_ctime_ns
         )
         if (
             not stable_descriptor
@@ -1104,7 +1102,61 @@ def _open_regular_source(path: Path) -> BinaryIO:
             source_path=str(path),
             source_safety="source_retained",
         )
+    if os.name == "nt":
+        return _open_windows_delete_shared_source(path)
     return path.open("rb")
+
+
+def _open_windows_delete_shared_source(path: Path) -> BinaryIO:
+    """Open a source with Windows sharing that permits the final unlink."""
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    generic_read = 0x80000000
+    share_all = 0x00000001 | 0x00000002 | 0x00000004
+    open_existing = 3
+    sequential_scan = 0x08000000
+    invalid_handle = ctypes.c_void_p(-1).value
+
+    ctypes_namespace: Any = ctypes
+    windows_dll: Any = ctypes_namespace.WinDLL
+    windows_error: Any = ctypes_namespace.WinError
+    last_error: Any = ctypes_namespace.get_last_error
+    windows_runtime: Any = msvcrt
+    kernel32 = windows_dll("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+
+    handle = create_file(
+        str(path),
+        generic_read,
+        share_all,
+        None,
+        open_existing,
+        sequential_scan,
+        None,
+    )
+    if handle == invalid_handle:
+        raise windows_error(last_error())
+    try:
+        source_fd = windows_runtime.open_osfhandle(
+            int(handle), os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        )
+    except BaseException:
+        close_handle(handle)
+        raise
+    return os.fdopen(source_fd, "rb")
 
 
 def _snapshot_source(request: _TransferRequest, source: Path) -> os.stat_result:
@@ -1147,8 +1199,8 @@ def _apply_supported_metadata(
     warnings: list[str] = []
     try:
         os.utime(stage, ns=(requested.atime_ns, requested.mtime_ns), follow_symlinks=False)
-    except OSError as exc:
-        warnings.append(f"timestamps:{type(exc).__name__}:{exc.errno}")
+    except (NotImplementedError, OSError) as exc:
+        warnings.append(f"timestamps:{type(exc).__name__}:{getattr(exc, 'errno', None)}")
     if requested.mode is not None:
         try:
             stage.chmod(stat.S_IMODE(requested.mode), follow_symlinks=False)
