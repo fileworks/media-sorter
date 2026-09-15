@@ -1,4 +1,4 @@
-.PHONY: install install-rust check-deps branding branding-check generate-icons dev backend frontend \
+.PHONY: install install-release install-rust check-deps branding branding-check generate-icons dev backend frontend \
         test test-cov test-ci test-unit test-integration test-e2e test-services test-api \
         lint typecheck format contracts-check clean \
         bundle-backend bundle-ffmpeg bundle-portable \
@@ -77,6 +77,7 @@ help:
 	@echo "Setup:"
 	@echo "  make check-deps         Verify all required tools are installed"
 	@echo "  make install            Install all dependencies (backend + frontend)"
+	@echo "  make install-release    Install the locked packaging environment"
 	@echo "  make install-rust       Install the Rust toolchain via rustup"
 	@echo "  make branding           Regenerate app and installer artwork from branding/app-icon.png"
 	@echo "  make branding-check     Verify tracked branding is deterministic and fresh"
@@ -203,6 +204,25 @@ install:
 	cd $(FRONTEND) && npm install
 	@echo ""
 	@echo "✓ All dependencies installed."
+
+# Packaging must use the exact lock resolution that passed the release source gate.
+install-release:
+	@# Rust check — give an actionable error rather than a cryptic Cargo message later.
+	@if ! PATH="$(DEV_PATH)" command -v cargo >/dev/null 2>&1; then \
+		echo ""; \
+		echo "ERROR: Rust/Cargo is not installed or not on PATH."; \
+		echo "  Run: make install-rust"; \
+		echo "  Then add ~/.cargo/bin to PATH and re-run: make install-release"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@test -d $(BACKEND)/.venv || $(SYS_PYTHON) -m venv $(BACKEND)/.venv
+	cd $(BACKEND) && uv export --locked --all-extras --no-hashes --no-emit-project --format requirements-txt -o requirements.ci.txt
+	uv pip install --python "$(VENV_PYTHON)" -r "$(BACKEND)/requirements.ci.txt"
+	uv pip install --python "$(VENV_PYTHON)" -e "$(BACKEND)" --no-deps
+	cd $(FRONTEND) && npm ci
+	@echo ""
+	@echo "✓ Locked packaging dependencies installed."
 
 # ── Development servers ───────────────────────────────────────────────────────
 

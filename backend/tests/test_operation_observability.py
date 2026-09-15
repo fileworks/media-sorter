@@ -126,7 +126,7 @@ def test_action_events_correlate_to_the_manifest_action(tmp_path: Path) -> None:
 # ------------------------------------------------------------------ #
 
 
-def test_a_degraded_commit_is_reported_as_its_own_event(
+def test_an_unsupported_commit_fails_closed_without_a_degraded_success_event(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -139,20 +139,20 @@ def test_a_degraded_commit_is_reported_as_its_own_event(
 
     monkeypatch.setattr(os, "link", unsupported_link)
 
-    execution.place(
-        _source(tmp_path),
-        tmp_path / "sorted" / "photo.jpg",
-        kind="copy",
-        move=False,
-        root_id=str(tmp_path / "source"),
-        relative_path="photo.jpg",
-    )
-    execution.finish("completed_with_warnings")
+    with pytest.raises(IntegrityTransferError) as error:
+        execution.place(
+            _source(tmp_path),
+            tmp_path / "sorted" / "photo.jpg",
+            kind="copy",
+            move=False,
+            root_id=str(tmp_path / "source"),
+            relative_path="photo.jpg",
+        )
+    execution.finish("failed")
 
-    degraded = [event for event in _events(execution) if event.event_code == "transfer.degraded"]
-    assert len(degraded) == 1
-    assert degraded[0].severity == "warning"
-    assert degraded[0].context["reason"] == "atomic_no_clobber_publication_unavailable"
+    assert error.value.details["reason"] == "atomic_commit_unavailable"
+    assert "transfer.degraded" not in _codes(execution)
+    assert _codes(execution)[-1] == "operation.failed"
 
 
 def test_a_failed_placement_still_reaches_exactly_one_terminal_event(tmp_path: Path) -> None:

@@ -196,10 +196,7 @@ def test_i04_the_stage_is_cleaned_up_on_baseexception() -> None:
     assert cleanup, "the handler no longer removes the stage"
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["commit_staged_no_replace", "commit_staged_recoverable"],
-)
+@pytest.mark.parametrize("name", ["commit_staged_no_replace"])
 def test_i05_every_commit_fsyncs_its_directory(name: str) -> None:
     """A rename is not durable until the containing directory is synced."""
     node = _function("services/verified_transfer.py", name)
@@ -212,7 +209,7 @@ def test_i05_the_commit_dispatcher_cannot_skip_a_synced_path() -> None:
     node = _function("services/verified_transfer.py", "commit_staged")
     called = _called_names(node)
 
-    assert called & {"commit_staged_no_replace", "commit_staged_recoverable"}, (
+    assert "commit_staged_no_replace" in called, (
         "commit_staged no longer delegates to a directory-syncing commit"
     )
     assert "replace" not in called and "rename" not in called, (

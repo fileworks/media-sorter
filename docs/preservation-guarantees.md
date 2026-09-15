@@ -48,11 +48,11 @@ or extended attributes. MediaSorter applies what the target supports and **repor
 it could not reproduce** as a warning on that file. It never claims full preservation it
 did not achieve. Byte identity is independent of this and always holds.
 
-**Atomic publication is not universal.** On filesystems that support it, the
+**Atomic no-replace publication is required.** On filesystems that support it, the
 final path appears atomically and cannot clobber an existing file. Where that is
-unavailable (some network shares, some removable media), MediaSorter uses a documented
-recoverable protocol and labels the result `recoverable_non_atomic` — a smaller
-guarantee, shown rather than hidden.
+unavailable (some network shares, some removable media), MediaSorter fails closed
+with `atomic_commit_unavailable`, retaining the source rather than risking a
+check-then-replace race.
 
 **Quarantine is not a backup.** Files MediaSorter cannot place go to a named
 folder under the destination. They are never deleted — but they live on the same disk as
