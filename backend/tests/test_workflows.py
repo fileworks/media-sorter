@@ -199,9 +199,7 @@ def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
     package = release["jobs"]["package"]
     package_runs = "\n".join(str(step.get("run", "")) for step in package["steps"])
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    install_release = makefile.split("install-release:", maxsplit=1)[1].split(
-        "\n\n", maxsplit=1
-    )[0]
+    install_release = makefile.split("install-release:", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
 
     assert "astral-sh/setup-uv@" in str(package["steps"])
     assert "make install-release" in package_runs
@@ -209,9 +207,11 @@ def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
     assert "uv pip install --python" in install_release
     assert "npm ci" in install_release
 
-    source_gate = release_path.read_text(encoding="utf-8").split("  check-ci:", maxsplit=1)[1].split(
-        "\n  check-native:", maxsplit=1
-    )[0]
+    source_gate = (
+        release_path.read_text(encoding="utf-8")
+        .split("  check-ci:", maxsplit=1)[1]
+        .split("\n  check-native:", maxsplit=1)[0]
+    )
     assert "uv export --locked --all-extras" in source_gate
 
 
