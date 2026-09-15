@@ -27,8 +27,10 @@ the application has no cloud media provider or credential path.
 
 Download the latest macOS DMG, Windows MSI/installer, or portable Windows ZIP
 from [Releases](https://github.com/fileworks/media-sorter/releases/latest).
-Python, Node, and ffmpeg are bundled. The macOS build requires macOS 12 or
-later, matching the minimum version of its bundled media tools.
+No separate Python, Node, or ffmpeg installation is required. The package
+contains the frozen Python backend, built frontend assets, and bundled
+ffmpeg/ffprobe media tools. The macOS build requires macOS 12 or later,
+matching the minimum version of its bundled media tools.
 
 The installers are currently unsigned. On supported macOS 12 through 14, if
 Gatekeeper blocks the first launch, Control-click the app, choose **Open**, and
