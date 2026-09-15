@@ -3,6 +3,22 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.5.0](https://github.com/fileworks/media-sorter/compare/v1.4.4...v1.5.0) (2026-09-15)
+
+### Features
+
+* rework the app icon, duplicate review, and interface consistency ([#88](https://github.com/fileworks/media-sorter/issues/88)) ([c11d208](https://github.com/fileworks/media-sorter/commit/c11d2080e0a524aaae3314e6336ab95fe7400723))
+* streamline duplicate review ([95b264a](https://github.com/fileworks/media-sorter/commit/95b264a957a286cd352bec96c00be4c2fdb7fc2e))
+
+### Bug Fixes
+
+* a durability defect, a keeper parity divergence, and four hygiene findings ([#87](https://github.com/fileworks/media-sorter/issues/87)) ([6387f04](https://github.com/fileworks/media-sorter/commit/6387f0470bfb11967bb80ca908a79f202607d82d))
+* bound media reads to the configured library roots ([#84](https://github.com/fileworks/media-sorter/issues/84)) ([da23814](https://github.com/fileworks/media-sorter/commit/da23814093706b4f7b8f5b68b8541580fa0621ff))
+* give the report's filter tabs a contract, and make them agree ([#86](https://github.com/fileworks/media-sorter/issues/86)) ([53f2d28](https://github.com/fileworks/media-sorter/commit/53f2d280146048ac82f6b2cd554eb504714bd4dd))
+* preserve locked packaging and Windows transfers ([#93](https://github.com/fileworks/media-sorter/issues/93)) ([40088bb](https://github.com/fileworks/media-sorter/commit/40088bb3fc4b907a956e7ed42d99ddc5d821f89b))
+* **release:** repair prepared changelog verification ([#94](https://github.com/fileworks/media-sorter/issues/94)) ([1a95e30](https://github.com/fileworks/media-sorter/commit/1a95e30812c7b43805e68febed50ed62fa64a5e3))
+* repair three defects on the review surface ([#85](https://github.com/fileworks/media-sorter/issues/85)) ([fb2543e](https://github.com/fileworks/media-sorter/commit/fb2543ed0259b841f843cb2f8461c9175fff688b))
+
 ## [1.4.4](https://github.com/fileworks/media-sorter/compare/v1.4.3...v1.4.4) (2026-08-13)
 
 ### Bug Fixes
