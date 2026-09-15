@@ -356,6 +356,10 @@ def test_move_blocks_if_source_changes_while_being_revalidated(
     def mutate_after_hash(path: Path, **kwargs: object) -> tuple[str, int]:
         result = real_hash(path, **kwargs)  # type: ignore[arg-type]
         path.write_bytes(b"after!")
+        os.utime(
+            path,
+            ns=(action.source.metadata.atime_ns, action.source.metadata.mtime_ns + 2_000_000_000),
+        )
         return result
 
     monkeypatch.setattr(verified_transfer, "stream_sha256", mutate_after_hash)
