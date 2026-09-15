@@ -3,6 +3,12 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.5.1](https://github.com/fileworks/media-sorter/compare/v1.5.0...v1.5.1) (2026-09-15)
+
+### Bug Fixes
+
+* **build:** keep macOS Intel packaging viable ([#95](https://github.com/fileworks/media-sorter/issues/95)) ([ad28006](https://github.com/fileworks/media-sorter/commit/ad28006d172cb02d18a2a52fb098cda7ab96de2d))
+
 ## [1.5.0](https://github.com/fileworks/media-sorter/compare/v1.4.4...v1.5.0) (2026-09-15)
 
 ### Features
