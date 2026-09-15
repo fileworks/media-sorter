@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const { mkdtempSync, rmSync, writeFileSync } = require("node:fs");
-const { tmpdir } = require("node:os");
+const { EOL, tmpdir } = require("node:os");
 const { join } = require("node:path");
 const test = require("node:test");
 
@@ -12,6 +12,7 @@ const {
   assertReleaseTag,
   assertSourceAtLatestTag,
   bumpLevel,
+  renderReleaseSection,
   whatBump,
 } = require("./releaseability.cjs");
 
@@ -67,9 +68,10 @@ function versionFile(path, version, { released = false } = {}) {
   }
   if (path === "CHANGELOG.md") {
     const old = "## [1.4.4] - 2026-08-13\n\n* fix: prior release\n";
-    return released
+    const changelog = released
       ? `${RELEASE_HEADER}\n\n## [1.5.0] (2026-08-22)\n\n* feat: reviewed work\n\n${old}`
       : `${RELEASE_HEADER}\n\n${old}`;
+    return changelog.replaceAll("\n", EOL);
   }
   throw new Error(`unexpected version file: ${path}`);
 }
@@ -77,7 +79,7 @@ function versionFile(path, version, { released = false } = {}) {
 const releasedVersionFile = (path) => versionFile(path, "1.5.0", { released: true });
 const parentVersionFile = (path) => versionFile(path, "1.4.4");
 const generatedReleaseSection = () =>
-  "## [1.5.0] (2026-08-22)\n\n* feat: reviewed work";
+  "## [1.5.0] (2026-08-22)\n\n* feat: reviewed work".replaceAll("\n", EOL);
 const renderer = join(__dirname, "render-release-changelog.mjs");
 
 function runGit(cwd, ...args) {
@@ -139,6 +141,31 @@ test("release-it receives a conventional recommended-bump shape", () => {
     level: 1,
     reason: "Reviewed conventional commit records",
   });
+});
+
+test("release renderer forwards the verification ref and date", () => {
+  let invocation;
+  const output = renderReleaseSection(
+    "1.5.0",
+    "v1.4.4",
+    "v1.5.0",
+    "HEAD",
+    "2026-08-22",
+    (...args) => {
+      invocation = args;
+      return "rendered";
+    },
+  );
+
+  assert.equal(output, "rendered");
+  assert.deepEqual(invocation[1], [
+    "scripts/render-release-changelog.mjs",
+    "1.5.0",
+    "v1.4.4",
+    "v1.5.0",
+    "HEAD",
+    "2026-08-22",
+  ]);
 });
 
 test("material history with no next version fails closed", () => {
