@@ -38,7 +38,7 @@ dependencies = [
     # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
     # NumPy 2.5+ requires Python 3.12 and its stubs cannot represent this
     # project's Python 3.10 API contract; lift the cap when the product floor moves.
-    "numpy>=2.5.3,<3",
+    "numpy>=1.24.0,<2.5",
 
     # HTTP
     "httpx>=0.25.0",
@@ -90,7 +90,7 @@ local-ai = [
     # disables its network path and passes only verified local component paths.
     # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
     # releases on the last universal wheel; fastembed requires 1.24.2+ on 3.14+.
-    "onnxruntime>=1.29,<1.30; python_version < '3.14'",
+    "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
     "onnxruntime>=1.24.2; python_version >= '3.14'",
     "tokenizers>=0.15.0",
     "huggingface_hub>=1.26.1",
