@@ -16,14 +16,18 @@
       "matchPackageNames": [
         "onnxruntime"
       ],
-      "enabled": false
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "groupName": null
     },
     {
       "description": "CI and packaging interpreter versions are support contracts, changed together by review.",
       "matchDatasources": [
         "python-version"
       ],
-      "enabled": false
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "groupName": null
     },
     {
       "description": "Keep the tested Docker interpreter line until a reviewed runtime migration.",
@@ -33,7 +37,9 @@
       "matchPackageNames": [
         "python"
       ],
-      "enabled": false
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "groupName": null
     },
     {
       "description": "Official action majors are verified by the workflow contract; third-party actions remain pinned.",
