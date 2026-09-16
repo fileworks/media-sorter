@@ -82,6 +82,10 @@ def test_changed_source_is_never_removed(
             if operation == "replace":
                 replacement = tmp_path / "replacement"
                 replacement.write_bytes(b"EVIL")
+                # Windows MoveFileEx can reject replacing an open target even
+                # with DELETE sharing. Renaming that shared target away first
+                # exercises a real pathname swap without that incidental refusal.
+                source.rename(tmp_path / "renamed-original")
                 replacement.replace(source)
             else:
                 _rewrite_preserving_mtime(source, stamp)
