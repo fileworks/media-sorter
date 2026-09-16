@@ -1,4 +1,49 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>fileworks/maintenance:renovate-policy"]
+  "extends": [
+    "github>fileworks/maintenance:renovate-policy"
+  ],
+  "packageRules": [
+    {
+      "description": "NumPy 2.5 drops the supported Python 3.10 and 3.11 range.",
+      "matchPackageNames": [
+        "numpy"
+      ],
+      "allowedVersions": "<2.5"
+    },
+    {
+      "description": "ONNX has different Python-marker constraints and must retain Intel macOS wheels; update manually as one compatibility change.",
+      "matchPackageNames": [
+        "onnxruntime"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "CI and packaging interpreter versions are support contracts, changed together by review.",
+      "matchDatasources": [
+        "python-version"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep the tested Docker interpreter line until a reviewed runtime migration.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Official action majors are verified by the workflow contract; third-party actions remain pinned.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "/^actions\\//"
+      ],
+      "pinDigests": false
+    }
+  ]
 }
