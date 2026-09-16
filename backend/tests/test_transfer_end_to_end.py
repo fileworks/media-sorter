@@ -116,13 +116,14 @@ def test_timestamp_limitations_are_reported_not_claimed(media: Path, tmp_path: P
     destination = tmp_path / "sorted" / "clip.mp4"
     precise = 1_700_000_000_123_456_789
     os.utime(media, ns=(precise, precise))
+    requested = media.stat().st_mtime_ns
 
     result = execute_transfer(_action(media, destination, move=False))
 
     observed = destination.stat().st_mtime_ns
     if observed != precise:
         assert result.observed_metadata.mtime_ns == observed
-        assert result.requested_metadata.mtime_ns == precise
+        assert result.requested_metadata.mtime_ns == requested
     else:
         assert result.observed_metadata.mtime_ns == result.requested_metadata.mtime_ns
 

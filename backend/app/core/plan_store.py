@@ -294,11 +294,12 @@ class PlanStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, target)
-            directory = os.open(self.root, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            if os.name != "nt":
+                directory = os.open(self.root, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
         except OSError as exc:
             temporary.unlink(missing_ok=True)
             raise PlanStoreError(f"Could not persist the reviewed plan: {exc}") from exc

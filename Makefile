@@ -187,23 +187,8 @@ contracts-check:
 # canonical source rather than the historical procedural icon generator.
 generate-icons: branding
 
-install:
-	@# Rust check — give an actionable error rather than a cryptic Cargo message later.
-	@if ! PATH="$(DEV_PATH)" command -v cargo >/dev/null 2>&1; then \
-		echo ""; \
-		echo "ERROR: Rust/Cargo is not installed or not on PATH."; \
-		echo "  Run: make install-rust"; \
-		echo "  Then add ~/.cargo/bin to PATH and re-run: make install"; \
-		echo ""; \
-		exit 1; \
-	fi
-	@# Create the virtualenv if it doesn't exist yet, then install everything into it.
-	@test -d $(BACKEND)/.venv || $(SYS_PYTHON) -m venv $(BACKEND)/.venv
-	$(BACKEND)/.venv/$(VENV_BIN)/python$(EXE) -m pip install --quiet --upgrade pip
-	$(BACKEND)/.venv/$(VENV_BIN)/python$(EXE) -m pip install -e "$(BACKEND)/.[dev,local-ai]"
-	cd $(FRONTEND) && npm install
-	@echo ""
-	@echo "✓ All dependencies installed."
+# Development and packaging share one locked installation.
+install: install-release
 
 # Packaging must use the exact lock resolution that passed the release source gate.
 install-release:

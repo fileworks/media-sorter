@@ -28,7 +28,7 @@ describe("progressView", () => {
 
     expect(view.determinate).toBe(false);
     expect(view.percentage).toBeNull();
-    expect(view.countLabel).toMatch(/1,204 found so far/);
+    expect(view.countLabel).toBe(`${new Intl.NumberFormat().format(1204)} found so far`);
   });
 
   it("reports a stall as still-working rather than freezing", () => {
@@ -58,7 +58,7 @@ describe("progressView", () => {
     expect(progressView(snapshot(), 1_000).byteLabel).toBeNull();
     expect(
       progressView(snapshot({ bytesProcessed: 500, bytesTotal: 2_000 }), 1_000).byteLabel,
-    ).toBe("500 of 2,000 bytes");
+    ).toBe(`500 of ${new Intl.NumberFormat().format(2000)} bytes`);
   });
 });
 
