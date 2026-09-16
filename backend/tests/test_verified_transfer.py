@@ -112,6 +112,14 @@ def test_stage_copy_is_private_verified_flushed_and_metadata_preserving(
         real_fsync(descriptor)
 
     monkeypatch.setattr(os, "fsync", observe_fsync)
+    real_utime = os.utime
+
+    def supported_utime(path: Path, *, ns: tuple[int, int], follow_symlinks: bool) -> None:
+        assert follow_symlinks is False
+        assert not path.is_symlink()
+        real_utime(path, ns=ns)
+
+    monkeypatch.setattr(os, "utime", supported_utime)
     progress: list[tuple[int, int]] = []
 
     staged = stage_verified_copy(
@@ -126,10 +134,8 @@ def test_stage_copy_is_private_verified_flushed_and_metadata_preserving(
     assert len(staged.stage_path.name) < len(destination.name) + 40
     assert staged.integrity.verified is True
     assert staged.stage_path.read_bytes() == source.read_bytes()
-    if staged.metadata_warnings:
-        assert any(warning.startswith("timestamps:") for warning in staged.metadata_warnings)
-    else:
-        assert staged.observed_metadata.mtime_ns == action.source.metadata.mtime_ns
+    assert not any(warning.startswith("timestamps:") for warning in staged.metadata_warnings)
+    assert staged.observed_metadata.mtime_ns == action.source.metadata.mtime_ns
     assert progress[-1] == (source.stat().st_size, source.stat().st_size)
     assert fsync_calls
 
@@ -502,6 +508,7 @@ def test_unremovable_source_reports_redundant_verified_copies(
         raise OSError(errno.EACCES, "source is locked")
 
     monkeypatch.setattr(Path, "unlink", refuse_unlink)
+    monkeypatch.setattr(verified_transfer, "_delete_windows_handle", refuse_unlink)
 
     with _journal(state, action) as journal:
         with pytest.raises(IntegrityTransferError) as error:
@@ -629,7 +636,8 @@ def test_source_rewritten_after_final_hash_callback_survives_unlink(
     with pytest.raises(IntegrityTransferError, match="changed"):
         execute_transfer(action)
 
-    assert source.read_bytes() == b"new user bytes"
+    # Windows excludes the competing write; POSIX observes and refuses it.
+    assert source.read_bytes() == (b"authorized-old" if os.name == "nt" else b"new user bytes")
     assert destination.read_bytes() == b"authorized-old"
 
 

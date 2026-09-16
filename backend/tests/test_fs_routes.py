@@ -73,7 +73,9 @@ def test_a_file_path_is_400(client: TestClient, tree: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
-@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+@pytest.mark.skipif(
+    getattr(os, "geteuid", lambda: -1)() == 0, reason="root ignores permission bits"
+)
 def test_an_unreadable_directory_is_200_and_empty_rather_than_an_error(
     client: TestClient, tmp_path: Path
 ) -> None:
@@ -93,7 +95,9 @@ def test_an_unreadable_directory_is_200_and_empty_rather_than_an_error(
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
-@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+@pytest.mark.skipif(
+    getattr(os, "geteuid", lambda: -1)() == 0, reason="root ignores permission bits"
+)
 def test_writable_agrees_with_the_sorter(client: TestClient, tmp_path: Path) -> None:
     """The probe must match `validate_target_directory`, or a browsable folder
     could be rejected the moment the run starts."""

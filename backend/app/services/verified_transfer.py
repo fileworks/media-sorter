@@ -799,7 +799,7 @@ def unlink_revalidated_pair(
             source_safety="source_retained",
         )
 
-    with _open_regular_source(source) as source_handle:
+    with _open_removal_source(source) as source_handle:
         before = os.fstat(source_handle.fileno())
         source_sha256, source_size = _hash_open_source(source_handle)
         after = os.fstat(source_handle.fileno())
@@ -818,6 +818,7 @@ def unlink_revalidated_pair(
             and before.st_ino == after.st_ino
             and before.st_size == after.st_size
             and before.st_mtime_ns == after.st_mtime_ns
+            and (os.name == "nt" or before.st_ctime_ns == after.st_ctime_ns)
         )
         same_named_file = (
             stat.S_ISREG(named.st_mode)
@@ -843,7 +844,10 @@ def unlink_revalidated_pair(
                 observed_size=source_size,
             )
         try:
-            source.unlink()
+            if os.name == "nt":
+                _delete_windows_handle(source_handle)
+            else:
+                source.unlink()
         except OSError as exc:
             raise IntegrityTransferError(
                 "The destination is verified but the source could not be removed.",
@@ -1068,13 +1072,31 @@ def _open_regular_source(path: Path) -> BinaryIO:
 
 
 def _open_windows_delete_shared_source(path: Path) -> BinaryIO:
-    """Open a source with Windows sharing that permits the final unlink."""
+    return _open_windows_source(path, for_removal=False)
+
+
+def _open_removal_source(path: Path) -> BinaryIO:
+    if os.name == "nt":
+        return _open_windows_source(path, for_removal=True)
+    return _open_regular_source(path)
+
+
+def _open_windows_source(path: Path, *, for_removal: bool) -> BinaryIO:
+    """Keep writers and renames out of a final proof until handle deletion.
+
+    DELETE access plus FILE_SHARE_READ excludes existing and new writable or
+    deleting handles. OPEN_REPARSE_POINT keeps a raced symlink from redirecting
+    the proof; the final descriptor/path regular-file checks reject it.
+    """
     import ctypes
     import msvcrt
     from ctypes import wintypes
 
     generic_read = 0x80000000
     share_all = 0x00000001 | 0x00000002 | 0x00000004
+    delete_access = 0x00010000
+    share_read = 0x00000001
+    open_reparse_point = 0x00200000
     open_existing = 3
     sequential_scan = 0x08000000
     invalid_handle = ctypes.c_void_p(-1).value
@@ -1097,14 +1119,16 @@ def _open_windows_delete_shared_source(path: Path) -> BinaryIO:
     )
     create_file.restype = wintypes.HANDLE
     close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (wintypes.HANDLE,)
+    close_handle.restype = wintypes.BOOL
 
     handle = create_file(
         str(path),
-        generic_read,
-        share_all,
+        generic_read | (delete_access if for_removal else 0),
+        share_read if for_removal else share_all,
         None,
         open_existing,
-        sequential_scan,
+        sequential_scan | open_reparse_point,
         None,
     )
     if handle == invalid_handle:
@@ -1117,6 +1141,25 @@ def _open_windows_delete_shared_source(path: Path) -> BinaryIO:
         close_handle(handle)
         raise
     return os.fdopen(source_fd, "rb")
+
+
+def _delete_windows_handle(source: BinaryIO) -> None:
+    """Remove the proved object, without releasing ownership to a pathname."""
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    namespace: Any = ctypes
+    runtime: Any = msvcrt
+    kernel32 = namespace.WinDLL("kernel32", use_last_error=True)
+    disposition = kernel32.SetFileInformationByHandle
+    disposition.argtypes = (wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD)
+    disposition.restype = wintypes.BOOL
+    delete = wintypes.BOOL(True)
+    if not disposition(
+        runtime.get_osfhandle(source.fileno()), 4, ctypes.byref(delete), ctypes.sizeof(delete)
+    ):
+        raise namespace.WinError(namespace.get_last_error())
 
 
 def _snapshot_source(request: _TransferRequest, source: Path) -> os.stat_result:
