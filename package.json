@@ -9,8 +9,8 @@
     "release:guard:test": "node --test scripts/releaseability.test.cjs"
   },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^12.0.0",
-    "conventional-changelog": "^8.1.1",
-    "release-it": "^21.0.1"
+    "@release-it/conventional-changelog": "12.0.0",
+    "conventional-changelog": "8.1.1",
+    "release-it": "21.0.1"
   }
 }
