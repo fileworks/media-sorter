@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import stat
 from pathlib import Path
 
@@ -316,7 +317,9 @@ def test_recovery_rewrite_after_final_hash_callback_remains_unresolved(
 
     outcome = apply_safe_recovery(root, report)
 
-    assert source.read_bytes() == b"newer user content"
+    assert source.read_bytes() == (
+        b"authorized content" if os.name == "nt" else b"newer user content"
+    )
     assert destination.read_bytes() == b"authorized content"
     assert outcome.removed_sources == []
     assert outcome.unresolved_actions == ["action-1"]

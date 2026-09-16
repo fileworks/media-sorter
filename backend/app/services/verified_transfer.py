@@ -1081,7 +1081,9 @@ def _open_removal_source(path: Path) -> BinaryIO:
     return _open_regular_source(path)
 
 
-def _open_windows_source(path: Path, *, for_removal: bool) -> BinaryIO:
+def _open_windows_source(
+    path: Path, *, for_removal: bool, write_metadata: bool = False
+) -> BinaryIO:
     """Keep writers and renames out of a final proof until handle deletion.
 
     DELETE access plus FILE_SHARE_READ excludes existing and new writable or
@@ -1095,6 +1097,7 @@ def _open_windows_source(path: Path, *, for_removal: bool) -> BinaryIO:
     generic_read = 0x80000000
     share_all = 0x00000001 | 0x00000002 | 0x00000004
     delete_access = 0x00010000
+    write_attributes = 0x00000100
     share_read = 0x00000001
     open_reparse_point = 0x00200000
     open_existing = 3
@@ -1124,8 +1127,10 @@ def _open_windows_source(path: Path, *, for_removal: bool) -> BinaryIO:
 
     handle = create_file(
         str(path),
-        generic_read | (delete_access if for_removal else 0),
-        share_read if for_removal else share_all,
+        generic_read
+        | (delete_access if for_removal else 0)
+        | (write_attributes if write_metadata else 0),
+        share_read if for_removal or write_metadata else share_all,
         None,
         open_existing,
         sequential_scan | open_reparse_point,
@@ -1201,15 +1206,52 @@ def _apply_supported_metadata(
 ) -> tuple[str, ...]:
     warnings: list[str] = []
     try:
-        os.utime(stage, ns=(requested.atime_ns, requested.mtime_ns), follow_symlinks=False)
+        _set_timestamps(stage, requested.atime_ns, requested.mtime_ns)
     except (NotImplementedError, OSError) as exc:
         warnings.append(f"timestamps:{type(exc).__name__}:{getattr(exc, 'errno', None)}")
-    if requested.mode is not None:
+    if requested.mode is not None and stat.S_IMODE(stage.lstat().st_mode) != stat.S_IMODE(
+        requested.mode
+    ):
         try:
             stage.chmod(stat.S_IMODE(requested.mode), follow_symlinks=False)
         except (NotImplementedError, OSError) as exc:
             warnings.append(f"mode:{type(exc).__name__}")
     return tuple(warnings)
+
+
+def _set_timestamps(path: Path, atime_ns: int, mtime_ns: int) -> None:
+    if os.name != "nt" or os.utime in os.supports_follow_symlinks:
+        os.utime(path, ns=(atime_ns, mtime_ns), follow_symlinks=False)
+        return
+
+    # Python 3.12 on Windows cannot use utime(follow_symlinks=False). Set the
+    # timestamps on a no-follow handle instead of falling back to following a
+    # potentially replaced stage pathname.
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    namespace: Any = ctypes
+    runtime: Any = msvcrt
+    kernel32 = namespace.WinDLL("kernel32", use_last_error=True)
+    set_time = kernel32.SetFileTime
+    pointer = ctypes.POINTER(wintypes.FILETIME)
+    set_time.argtypes = (wintypes.HANDLE, pointer, pointer, pointer)
+    set_time.restype = wintypes.BOOL
+
+    def filetime(nanoseconds: int) -> wintypes.FILETIME:
+        ticks = nanoseconds // 100 + 116444736000000000
+        return wintypes.FILETIME(ticks & 0xFFFFFFFF, ticks >> 32)
+
+    accessed, modified = filetime(atime_ns), filetime(mtime_ns)
+    with _open_windows_source(path, for_removal=False, write_metadata=True) as handle:
+        if not set_time(
+            runtime.get_osfhandle(handle.fileno()),
+            None,
+            ctypes.byref(accessed),
+            ctypes.byref(modified),
+        ):
+            raise namespace.WinError(namespace.get_last_error())
 
 
 def _metadata_snapshot(path: Path) -> FilesystemMetadataSnapshot:

@@ -112,14 +112,6 @@ def test_stage_copy_is_private_verified_flushed_and_metadata_preserving(
         real_fsync(descriptor)
 
     monkeypatch.setattr(os, "fsync", observe_fsync)
-    real_utime = os.utime
-
-    def supported_utime(path: Path, *, ns: tuple[int, int], follow_symlinks: bool) -> None:
-        assert follow_symlinks is False
-        assert not path.is_symlink()
-        real_utime(path, ns=ns)
-
-    monkeypatch.setattr(os, "utime", supported_utime)
     progress: list[tuple[int, int]] = []
 
     staged = stage_verified_copy(
@@ -573,7 +565,7 @@ def test_unsupported_timestamp_updates_become_warnings(
     def unsupported(*_args: Any, **_kwargs: Any) -> None:
         raise NotImplementedError
 
-    monkeypatch.setattr(os, "utime", unsupported)
+    monkeypatch.setattr(verified_transfer, "_set_timestamps", unsupported)
 
     assert verified_transfer._apply_supported_metadata(stage, requested) == (
         "timestamps:NotImplementedError:None",

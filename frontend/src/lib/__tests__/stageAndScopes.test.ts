@@ -289,7 +289,7 @@ describe("Review's owner boundary", () => {
       import: "default",
       eager: true,
     }) as Record<string, string>;
-    const source = Object.values(pages)[0] ?? "";
+    const source = (Object.values(pages)[0] ?? "").replace(/\r\n/g, "\n");
 
     expect(source).toContain("const publishRunDecisions = useCallback(");
     expect(source).toContain("onDecisionsChange={publishRunDecisions}");
@@ -311,7 +311,7 @@ describe("Review's owner boundary", () => {
       import: "default",
       eager: true,
     }) as Record<string, string>;
-    const source = Object.values(pages)[0] ?? "";
+    const source = (Object.values(pages)[0] ?? "").replace(/\r\n/g, "\n");
 
     const effect = source.slice(
       source.indexOf("useEffect(() => {\n    setAcknowledgedImpact(null);"),

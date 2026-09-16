@@ -132,6 +132,9 @@ def test_cross_volume_move_removal_failure_reports_recoverable_duplicate_state(
 
     monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_: False)
     monkeypatch.setattr(Path, "unlink", fail_source_unlink)
+    monkeypatch.setattr(
+        verified_transfer, "_delete_windows_handle", lambda _handle: fail_source_unlink(source)
+    )
 
     with pytest.raises(SortingError) as error:
         FileSystemService().safe_move(source, destination)
