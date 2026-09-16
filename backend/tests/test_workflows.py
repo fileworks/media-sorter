@@ -3,6 +3,7 @@
 import itertools
 import json
 import re
+import shlex
 from pathlib import Path
 
 import yaml
@@ -203,9 +204,17 @@ def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
 
     assert "astral-sh/setup-uv@" in str(package["steps"])
     assert "make install-release" in package_runs
-    assert "uv export --locked --all-extras" in install_release
-    assert "uv pip install --python" in install_release
-    assert "npm ci" in install_release
+    commands = [
+        shlex.split(command.strip().lstrip("@"), comments=True)
+        for line in install_release.replace("\\\n", " ").splitlines()[1:]
+        for command in line.split("&&")
+    ]
+    exports = [tokens for tokens in commands if tokens[:2] == ["uv", "export"]]
+    assert len(exports) == 1
+    assert {"--locked", "--all-extras", "--no-emit-project"} <= set(exports[0])
+    assert any(tokens[:3] == ["uv", "pip", "install"] for tokens in commands)
+    assert ["npm", "ci"] in commands
+    assert "install: install-release" in makefile
 
     source_gate = (
         release_path.read_text(encoding="utf-8")

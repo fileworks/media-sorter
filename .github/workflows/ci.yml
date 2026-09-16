@@ -160,6 +160,8 @@ jobs:
           tests/test_filesystem_capabilities.py
           tests/test_integrity_contracts.py
           tests/test_verified_transfer.py
+          tests/test_source_removal_races.py
+          tests/test_plan_store.py
           tests/test_quarantine_removal.py
           -v
 

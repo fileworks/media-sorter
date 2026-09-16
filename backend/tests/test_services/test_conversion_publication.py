@@ -408,7 +408,9 @@ class TestNoClobberPromotion:
         with pytest.raises(ConversionPublicationError, match="candidate changed"):
             promote_no_clobber(candidate, target)
 
-        assert candidate.read_bytes() == b"rewritten candidate bytes"
+        assert candidate.read_bytes() == (
+            original if os.name == "nt" else b"rewritten candidate bytes"
+        )
         assert target.read_bytes() == original
 
     def test_a_destination_created_after_the_proof_is_not_overwritten(self, tmp_path: Path) -> None:
