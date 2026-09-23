@@ -120,7 +120,11 @@ def _assert_no_partial_destination(scenario: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize(
     "target",
-    ["_publish_same_volume", "_remove_verified_source", "_fsync_directory"],
+    [
+        "_publish_same_volume",
+        "_remove_verified_source" if os.name == "nt" else "_rename_no_replace",
+        "_fsync_directory",
+    ],
 )
 def test_interruption_at_each_same_volume_boundary_keeps_a_verified_copy(
     scenario: dict[str, Any],
@@ -283,7 +287,11 @@ def test_a_second_restart_is_a_no_op(
 
     assert reconcile_pending_operations(scenario["root"]) == ()
     assert scenario["destination"].read_bytes() == first
-    assert read_journal(_journal_path(scenario["root"])).state == "completed"
+    assert read_journal(_journal_path(scenario["root"])).state == (
+        "completed" if os.name == "nt" else "reconciliation_required"
+    )
+    if os.name != "nt":
+        assert scenario["source"].read_bytes() == CONTENT
 
 
 def test_a_crash_truncated_journal_still_reconciles(

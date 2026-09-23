@@ -39,7 +39,12 @@ from app.services.conversion_guard import (
     validate_converted_video,
 )
 from app.services.quarantine import QuarantineError, QuarantineRecord, QuarantineStore
-from app.services.verified_transfer import stream_sha256, unlink_revalidated_pair
+from app.services.verified_transfer import (
+    _fsync_directory,
+    _rename_no_replace,
+    stream_sha256,
+    unlink_revalidated_pair,
+)
 
 logger = get_logger(__name__)
 
@@ -90,12 +95,28 @@ def promote_no_clobber(candidate: Path, target: Path) -> Path:
     fails with `FileExistsError` when the target exists, and that failure is the
     guarantee — the link is created or nothing happened.
 
-    Falls back to an exclusive create plus verified copy when the filesystem has
+    POSIX uses an atomic no-replace rename and fails closed if unsupported.
+    Windows falls back to an exclusive create plus verified copy when the filesystem has
     no hard links (exFAT, some SMB mounts). Candidate removal still goes through
     the final open-handle source/destination identity guard.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     expected_sha256, expected_size = stream_sha256(candidate)
+    if os.name != "nt":
+        try:
+            _rename_no_replace(candidate, target)
+        except FileExistsError:
+            raise ConversionPublicationError(
+                f"refusing to replace an existing file at {target}"
+            ) from None
+        except OSError as exc:
+            raise ConversionPublicationError(
+                f"atomic no-replace publication unavailable at {target}: {exc}"
+            ) from exc
+        _fsync_directory(target.parent)
+        if candidate.parent != target.parent:
+            _fsync_directory(candidate.parent)
+        return target
     try:
         os.link(candidate, target)
     except FileExistsError:

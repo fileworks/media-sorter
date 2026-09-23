@@ -18,6 +18,7 @@ be the only surviving copy of an action whose source was already removed.
 from __future__ import annotations
 
 import hashlib
+import os
 import stat
 from pathlib import Path
 
@@ -140,16 +141,22 @@ class TestTheDestinationIsReMeasuredBeforeTheSourceGoes:
         assert source.is_file()
         assert outcome.removed_sources == []
 
-    def test_an_unchanged_destination_still_removes_the_source(self, tmp_path: Path) -> None:
-        """The guard against 'fixing' this by never completing a recovery."""
+    def test_recovery_removes_source_only_with_destination_protection(self, tmp_path: Path) -> None:
+        """Supported removal completes; unsupported removal retains both copies."""
         root, source, _destination = self._committed_move(tmp_path)
         (report,) = reconcile_pending_operations(root)
 
         outcome = apply_safe_recovery(root, report)
 
-        assert not source.exists(), "a genuinely verified destination must still finish the move"
-        assert outcome.removed_sources == [source]
-        assert outcome.unresolved_actions == []
+        if os.name == "nt":
+            assert not source.exists(), "a protected destination must still finish the move"
+            assert outcome.removed_sources == [source]
+            assert outcome.unresolved_actions == []
+        else:
+            assert source.read_bytes() == _destination.read_bytes()
+            assert outcome.removed_sources == []
+            assert outcome.unresolved_actions == [report.actions[0].action_id]
+            assert outcome.journal_state == "reconciliation_required"
 
 
 class TestStagesBelongToOneAction:

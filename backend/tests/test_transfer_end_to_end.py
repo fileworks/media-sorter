@@ -94,6 +94,13 @@ def test_copy_and_move_deliver_identical_content_on_either_volume_layout(
     if not same_volume:
         monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_: False)
 
+    if move and not same_volume and os.name != "nt":
+        with pytest.raises(IntegrityTransferError) as error:
+            execute_transfer(_action(media, destination, move=move))
+        assert error.value.details["reason"] == "destination_protection_unavailable"
+        assert error.value.details["source_safety"] == "source_retained"
+        assert media.read_bytes() == destination.read_bytes() == MEDIA
+        return
     result = execute_transfer(_action(media, destination, move=move))
 
     assert destination.read_bytes() == MEDIA

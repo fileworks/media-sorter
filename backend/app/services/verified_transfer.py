@@ -17,6 +17,7 @@ import hashlib
 import os
 import shutil
 import stat
+import sys
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -42,6 +43,7 @@ ProgressCallback = Callable[[int, int], None]
 CommitMethod = Literal["atomic_rename", "staged_atomic_promote"]
 TransferProtocol = Literal[
     "same_volume_link",
+    "same_volume_rename",
     "staged_atomic_promote",
 ]
 IntegritySource = Literal["measured", "revalidated_identity", "same_inode"]
@@ -55,6 +57,8 @@ _ATOMIC_UNAVAILABLE_ERRNOS = frozenset(
         errno.EXDEV,
         errno.EPERM,
         errno.EACCES,
+        errno.EINVAL,
+        errno.ENOSYS,
         getattr(errno, "ENOTSUP", None),
         getattr(errno, "EOPNOTSUPP", None),
         getattr(errno, "EMLINK", None),
@@ -233,8 +237,8 @@ def stage_measured_copy(
     """Stage a copy whose integrity contract is measured rather than authorized.
 
     Used by callers that have no plan-time hash. The staged bytes are still
-    hashed twice — once while reading the source, once by rereading the closed
-    stage — and the source must be unchanged across the whole read.
+    hashed twice â€” once while reading the source, once by rereading the closed
+    stage â€” and the source must be unchanged across the whole read.
     """
     return _stage_copy(
         _TransferRequest(
@@ -526,6 +530,8 @@ def _transfer_same_volume(
             "Published destination does not match the verified source identity.",
         )
     _fsync_directory(destination.parent)
+    if protocol == "same_volume_rename":
+        _fsync_directory(source.parent)
     _record(
         journal,
         request,
@@ -662,6 +668,9 @@ def _publish_same_volume(
     source = request.source
     destination = request.destination
     try:
+        if os.name != "nt":
+            _rename_no_replace(source, destination)
+            return "same_volume_rename", "atomic_rename", None
         os.link(source, destination, follow_symlinks=False)
     except FileExistsError as exc:
         raise _error(
@@ -680,6 +689,39 @@ def _publish_same_volume(
         raise
     else:
         return "same_volume_link", "atomic_rename", None
+
+
+def _rename_no_replace(source: Path, destination: Path) -> None:
+    """Move a name atomically without a check-then-replace or unlink window."""
+    import ctypes
+
+    library = ctypes.CDLL(None, use_errno=True)
+    result: int
+    if sys.platform == "darwin":
+        rename = getattr(library, "renamex_np", None)
+        if rename is None:
+            raise OSError(errno.ENOTSUP, "Atomic no-replace rename is unavailable")
+        rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        rename.restype = ctypes.c_int
+        result = rename(os.fsencode(source), os.fsencode(destination), 4)  # RENAME_EXCL
+    elif sys.platform.startswith("linux"):
+        rename = getattr(library, "renameat2", None)
+        if rename is None:
+            raise OSError(errno.ENOTSUP, "Atomic no-replace rename is unavailable")
+        rename.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        rename.restype = ctypes.c_int
+        result = rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1)
+    else:
+        raise OSError(errno.ENOTSUP, "Atomic no-replace rename is unavailable")
+    if result:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code), str(destination))
 
 
 def _remove_verified_source(
@@ -719,6 +761,20 @@ def _remove_verified_source(
             expected_size_bytes=authorized_size_bytes,
         )
     except IntegrityTransferError as exc:
+        if exc.details.get("reason") == "destination_protection_unavailable":
+            _record(
+                journal,
+                request,
+                "terminal",
+                "source_retained",
+                diagnostic_code="destination_protection_unavailable",
+            )
+            raise _error(
+                request,
+                "destination_protection_unavailable",
+                "The source was retained because this platform cannot protect the "
+                "destination during removal. Use Copy mode for this transfer.",
+            ) from exc
         if exc.details.get("reason") == "source_removal_failed":
             _record(
                 journal,
@@ -778,86 +834,153 @@ def unlink_revalidated_pair(
     expected_sha256: str,
     expected_size_bytes: int,
 ) -> None:
-    """Unlink *source* only while an open handle still proves its identity.
+    """Keep both proven files protected through the destructive boundary."""
+    with _protect_removal_destination(destination, source) as destination_handle:
+        destination_sha256, destination_size = revalidate_sha256(
+            destination,
+            expected_sha256=expected_sha256,
+        )
+        if destination_sha256 != expected_sha256 or destination_size != expected_size_bytes:
+            raise IntegrityTransferError(
+                "Destination changed before the destructive unlink.",
+                reason="destination_drift_before_unlink",
+                source_path=str(source),
+                destination_path=str(destination),
+                source_safety="source_retained",
+            )
 
-    Destination bytes are measured first. The source is then opened without
-    following links, hashed through that descriptor, checked for in-place
-    writes through pre/post ``fstat``, matched back to the pathname, and
-    unlinked before this function returns. Callers therefore cannot insert a
-    rewrite between a successful validator return and the destructive syscall.
-    """
-    destination_sha256, destination_size = revalidate_sha256(
-        destination,
-        expected_sha256=expected_sha256,
-    )
-    if destination_sha256 != expected_sha256 or destination_size != expected_size_bytes:
+        with _open_pair_source(source, destination_handle) as source_handle:
+            _unlink_open_pair(
+                source,
+                destination,
+                source_handle,
+                destination_handle,
+                expected_sha256=expected_sha256,
+                expected_size_bytes=expected_size_bytes,
+            )
+    _fsync_directory(source.parent)
+
+
+def _unlink_open_pair(
+    source: Path,
+    destination: Path,
+    source_handle: BinaryIO,
+    destination_handle: BinaryIO | None,
+    *,
+    expected_sha256: str,
+    expected_size_bytes: int,
+) -> None:
+    before = os.fstat(source_handle.fileno())
+    source_sha256, source_size = _hash_open_source(source_handle)
+    after = os.fstat(source_handle.fileno())
+    try:
+        named = source.lstat()
+    except OSError as exc:
         raise IntegrityTransferError(
-            "Destination changed before the destructive unlink.",
-            reason="destination_drift_before_unlink",
+            "Source pathname changed before the destructive unlink.",
+            reason="source_drift_before_unlink",
             source_path=str(source),
             destination_path=str(destination),
             source_safety="source_retained",
+        ) from exc
+    stable_descriptor = (
+        before.st_dev == after.st_dev
+        and before.st_ino == after.st_ino
+        and before.st_size == after.st_size
+        and before.st_mtime_ns == after.st_mtime_ns
+        and (os.name == "nt" or before.st_ctime_ns == after.st_ctime_ns)
+    )
+    same_named_file = (
+        stat.S_ISREG(named.st_mode)
+        and not stat.S_ISLNK(named.st_mode)
+        and named.st_dev == after.st_dev
+        and named.st_ino == after.st_ino
+        and named.st_size == after.st_size
+        and named.st_mtime_ns == after.st_mtime_ns
+    )
+    if (
+        not stable_descriptor
+        or not same_named_file
+        or source_sha256 != expected_sha256
+        or source_size != expected_size_bytes
+    ):
+        raise IntegrityTransferError(
+            "Source changed at the destructive unlink boundary.",
+            reason="source_drift_before_unlink",
+            source_path=str(source),
+            destination_path=str(destination),
+            source_safety="source_retained",
+            observed_sha256=source_sha256,
+            observed_size=source_size,
         )
+    _require_protected_destination(destination, destination_handle)
+    try:
+        if os.name == "nt":
+            _delete_windows_handle(source_handle)
+            source_handle.close()
+        else:
+            source.unlink()
+    except OSError as exc:
+        raise IntegrityTransferError(
+            "The destination is verified but the source could not be removed.",
+            reason="source_removal_failed",
+            source_path=str(source),
+            destination_path=str(destination),
+            source_safety="redundant_verified_copies",
+            os_error=exc.errno,
+        ) from exc
 
-    with _open_removal_source(source) as source_handle:
-        before = os.fstat(source_handle.fileno())
-        source_sha256, source_size = _hash_open_source(source_handle)
-        after = os.fstat(source_handle.fileno())
-        try:
-            named = source.lstat()
-        except OSError as exc:
-            raise IntegrityTransferError(
-                "Source pathname changed before the destructive unlink.",
-                reason="source_drift_before_unlink",
-                source_path=str(source),
-                destination_path=str(destination),
-                source_safety="source_retained",
-            ) from exc
-        stable_descriptor = (
-            before.st_dev == after.st_dev
-            and before.st_ino == after.st_ino
-            and before.st_size == after.st_size
-            and before.st_mtime_ns == after.st_mtime_ns
-            and (os.name == "nt" or before.st_ctime_ns == after.st_ctime_ns)
+
+@contextmanager
+def _protect_removal_destination(destination: Path, source: Path) -> Iterator[BinaryIO | None]:
+    # POSIX advisory locks cannot exclude unrelated writers or pathname swaps.
+    # Validation still runs, but the destructive boundary below fails closed.
+    if os.name != "nt":
+        yield None
+        return
+    if source.samefile(destination):
+        # Protect both links with one handle, opened through the name removed.
+        with _open_removal_source(source) as handle:
+            yield handle
+    else:
+        with _open_windows_source(destination, for_removal=False, protect=True) as handle:
+            yield handle
+
+
+@contextmanager
+def _open_pair_source(source: Path, destination_handle: BinaryIO | None) -> Iterator[BinaryIO]:
+    if destination_handle is not None:
+        held = os.fstat(destination_handle.fileno())
+        named = source.lstat()
+        if (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino):
+            yield destination_handle
+            return
+    with _open_removal_source(source) as handle:
+        yield handle
+
+
+def _require_protected_destination(destination: Path, handle: BinaryIO | None) -> None:
+    if handle is None:
+        raise IntegrityTransferError(
+            "This platform cannot protect the destination during source removal. "
+            "The source was retained; use Copy mode.",
+            reason="destination_protection_unavailable",
+            destination_path=str(destination),
+            source_safety="source_retained",
         )
-        same_named_file = (
-            stat.S_ISREG(named.st_mode)
-            and not stat.S_ISLNK(named.st_mode)
-            and named.st_dev == after.st_dev
-            and named.st_ino == after.st_ino
-            and named.st_size == after.st_size
-            and named.st_mtime_ns == after.st_mtime_ns
+    held = os.fstat(handle.fileno())
+    named = destination.lstat()
+    if (
+        not stat.S_ISREG(named.st_mode)
+        or stat.S_ISLNK(named.st_mode)
+        or (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino)
+    ):
+        raise IntegrityTransferError(
+            "Destination pathname changed before source removal.",
+            reason="destination_drift_before_unlink",
+            destination_path=str(destination),
+            source_safety="source_retained",
         )
-        if (
-            not stable_descriptor
-            or not same_named_file
-            or source_sha256 != expected_sha256
-            or source_size != expected_size_bytes
-        ):
-            raise IntegrityTransferError(
-                "Source changed at the destructive unlink boundary.",
-                reason="source_drift_before_unlink",
-                source_path=str(source),
-                destination_path=str(destination),
-                source_safety="source_retained",
-                observed_sha256=source_sha256,
-                observed_size=source_size,
-            )
-        try:
-            if os.name == "nt":
-                _delete_windows_handle(source_handle)
-            else:
-                source.unlink()
-        except OSError as exc:
-            raise IntegrityTransferError(
-                "The destination is verified but the source could not be removed.",
-                reason="source_removal_failed",
-                source_path=str(source),
-                destination_path=str(destination),
-                source_safety="redundant_verified_copies",
-                os_error=exc.errno,
-            ) from exc
-    _fsync_directory(source.parent)
 
 
 def _hash_open_source(source: BinaryIO) -> tuple[str, int]:
@@ -1082,7 +1205,7 @@ def _open_removal_source(path: Path) -> BinaryIO:
 
 
 def _open_windows_source(
-    path: Path, *, for_removal: bool, write_metadata: bool = False
+    path: Path, *, for_removal: bool, write_metadata: bool = False, protect: bool = False
 ) -> BinaryIO:
     """Keep writers and renames out of a final proof until handle deletion.
 
@@ -1130,7 +1253,7 @@ def _open_windows_source(
         generic_read
         | (delete_access if for_removal else 0)
         | (write_attributes if write_metadata else 0),
-        share_read if for_removal or write_metadata else share_all,
+        share_read if for_removal or write_metadata or protect else share_all,
         None,
         open_existing,
         sequential_scan | open_reparse_point,
@@ -1287,7 +1410,7 @@ def stage_glob(action_id: str) -> str:
     """Match only the stages belonging to ``action_id``.
 
     Recovery used `.*.ms-stage-*.tmp`, which matches every action's stage in the
-    directory — so one action's recovery could discard another's (C-08). The
+    directory â€” so one action's recovery could discard another's (C-08). The
     token makes ownership readable from the name, which is what a directory
     scan has to work with.
     """

@@ -108,7 +108,7 @@ def test_same_volume_move_revalidates_bytes_without_a_second_copy(tmp_path: Path
 
     result = FileSystemService().safe_move(source, destination)
 
-    assert result.protocol == "same_volume_link"
+    assert result.protocol == ("same_volume_link" if os.name == "nt" else "same_volume_rename")
     assert result.integrity_source == "measured"
     assert result.integrity is not None
     assert result.source_removed is True
@@ -139,8 +139,12 @@ def test_cross_volume_move_removal_failure_reports_recoverable_duplicate_state(
     with pytest.raises(SortingError) as error:
         FileSystemService().safe_move(source, destination)
 
-    assert error.value.details["reason"] == "source_removal_failed"
-    assert error.value.details["source_safety"] == "redundant_verified_copies"
+    assert error.value.details["reason"] == (
+        "source_removal_failed" if os.name == "nt" else "destination_protection_unavailable"
+    )
+    assert error.value.details["source_safety"] == (
+        "redundant_verified_copies" if os.name == "nt" else "source_retained"
+    )
     assert source.exists()
     assert destination.exists()
     assert source.read_bytes() == destination.read_bytes()

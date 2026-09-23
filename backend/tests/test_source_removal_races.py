@@ -130,6 +130,46 @@ def test_existing_writer_prevents_source_removal(tmp_path: Path) -> None:
     assert source.read_bytes() == destination.read_bytes() == b"GOOD"
 
 
+@pytest.mark.parametrize("operation", ["rewrite", "replace"])
+def test_destination_change_during_final_source_proof_retains_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    source, destination = tmp_path / "source", tmp_path / "destination"
+    source.write_bytes(b"GOOD")
+    real_hash = transfer._hash_open_source
+    changed = False
+
+    def race(handle: BinaryIO) -> tuple[str, int]:
+        nonlocal changed
+        proof = real_hash(handle)
+        try:
+            if operation == "rewrite":
+                destination.write_bytes(b"EVIL")
+            else:
+                replacement = tmp_path / "replacement"
+                replacement.write_bytes(b"EVIL")
+                destination.rename(tmp_path / "renamed-destination")
+                replacement.replace(destination)
+            changed = True
+        except PermissionError:
+            assert os.name == "nt"
+        return proof
+
+    monkeypatch.setattr(transfer, "_same_volume", lambda *_args: False)
+    monkeypatch.setattr(transfer, "_hash_open_source", race)
+    try:
+        result = transfer.transfer_path(source, destination, move=True)
+    except IntegrityTransferError:
+        assert source.read_bytes() == b"GOOD"
+    else:
+        assert not changed, "removed the only good source after destination drift"
+        assert result.source_removed
+        assert destination.read_bytes() == b"GOOD"
+    if changed:
+        assert source.read_bytes() == b"GOOD"
+        assert destination.read_bytes() == b"EVIL"
+
+
 @pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
 def test_interrupted_final_proof_releases_handle_without_deleting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interruption: type[BaseException]

@@ -405,6 +405,13 @@ class TestNoClobberPromotion:
         monkeypatch.setattr(os, "link", no_links)
         monkeypatch.setattr(verified_transfer, "_hash_open_source", rewrite_after_copy_hash)
 
+        if os.name != "nt":
+            # POSIX publishes by one atomic rename, without a later copy/unlink.
+            assert promote_no_clobber(candidate, target) == target
+            assert not candidate.exists()
+            assert target.read_bytes() == original
+            return
+
         with pytest.raises(ConversionPublicationError, match="candidate changed"):
             promote_no_clobber(candidate, target)
 

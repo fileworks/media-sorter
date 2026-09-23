@@ -88,7 +88,7 @@ hash, never by size or by assumption:
 | Classification | Situation | What startup does |
 |---|---|---|
 | `completed` | Destination hashes to the authorized content and no source removal is outstanding | Closes the record; discards stages now proven redundant |
-| `redundant_verified_copies` | Destination is verified and the original still exists | Removes the source **only** if the journal recorded the commit; otherwise leaves both copies and asks for review |
+| `redundant_verified_copies` | Destination is verified and the original still exists | Removes the source **only** if the journal recorded the commit and both files can be protected through deletion (currently Windows); otherwise leaves both copies and asks for review |
 | `stage_recoverable` | No destination, but a staged file hashes to the authorized content | Keeps the stage and offers promotion; never deletes it |
 | `resumable` | Nothing was published and the source still matches the manifest | Offers a retry |
 | `ambiguous` | Unexpected destination content, or no verified copy anywhere | Changes nothing and reports the operation for review |
