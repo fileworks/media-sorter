@@ -237,8 +237,8 @@ def stage_measured_copy(
     """Stage a copy whose integrity contract is measured rather than authorized.
 
     Used by callers that have no plan-time hash. The staged bytes are still
-    hashed twice â€” once while reading the source, once by rereading the closed
-    stage â€” and the source must be unchanged across the whole read.
+    hashed twice — once while reading the source, once by rereading the closed
+    stage — and the source must be unchanged across the whole read.
     """
     return _stage_copy(
         _TransferRequest(
@@ -1410,7 +1410,7 @@ def stage_glob(action_id: str) -> str:
     """Match only the stages belonging to ``action_id``.
 
     Recovery used `.*.ms-stage-*.tmp`, which matches every action's stage in the
-    directory â€” so one action's recovery could discard another's (C-08). The
+    directory — so one action's recovery could discard another's (C-08). The
     token makes ownership readable from the name, which is what a directory
     scan has to work with.
     """
