@@ -663,27 +663,39 @@ test.describe("later stages", () => {
     await expect(page.locator('[data-stage-id="execute"]')).toBeDisabled();
   });
 
-  test("later screens pass target, keyboard, focus, locale, theme and width checks", async ({
-    page,
-  }) => {
-    const cases = [
-      { width: 360, locale: "de", theme: "dark", motion: "reduce" },
-      { width: 768, locale: "en", theme: "light", motion: "no-preference" },
-      { width: 1280, locale: "de", theme: "light", motion: "reduce" },
-      { width: 1920, locale: "en", theme: "dark", motion: "no-preference" },
-    ] as const;
+  const reviewCases = [
+    { width: 360, locale: "de", theme: "dark", motion: "reduce" },
+    { width: 768, locale: "en", theme: "light", motion: "no-preference" },
+    { width: 1280, locale: "de", theme: "light", motion: "reduce" },
+    { width: 1920, locale: "en", theme: "dark", motion: "no-preference" },
+  ] as const;
 
-    for (const item of cases) {
+  for (const item of reviewCases) {
+    test(`later screens pass target, keyboard, focus, locale, theme and width checks: ${JSON.stringify(item)}`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.emulateMedia({
         colorScheme: item.theme,
         reducedMotion: item.motion,
       });
+      // Each scenario gets the normal test deadline. Start in the other locale
+      // so the target selection must save a real change, including English.
+      const language = page.getByRole("combobox", { name: /Language|Sprache/ });
+      const initialLocale = item.locale === "de" ? "en" : "de";
+      if ((await language.inputValue()) !== initialLocale) {
+        const initialSaved = page.waitForResponse(
+          (response) =>
+            response.url().includes("/api/config") && response.request().method() === "POST",
+        );
+        await language.selectOption(initialLocale);
+        await initialSaved;
+      }
       const languageSaved = page.waitForResponse(
         (response) =>
           response.url().includes("/api/config") && response.request().method() === "POST",
       );
-      await page.getByRole("combobox", { name: /Language|Sprache/ }).selectOption(item.locale);
+      await language.selectOption(item.locale);
       await languageSaved;
       await page.evaluate(({ theme }) => {
         localStorage.setItem("mediasort_theme", theme);
@@ -703,8 +715,8 @@ test.describe("later stages", () => {
       ).toMatchObject({ document: false, body: false });
       expect(await contrastViolations(page), JSON.stringify(item)).toEqual([]);
       await expectTargetsAndFocus(page, `Review ${JSON.stringify(item)}`);
-    }
-  });
+    });
+  }
 
   test("the reset comparison stacks at 360px and its associated label activates", async ({
     page,
