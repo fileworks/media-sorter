@@ -67,6 +67,52 @@ describe("the variant vocabulary", () => {
 });
 
 describe("the accessibility contract", () => {
+  it("retains the text node through loading, error and retry", () => {
+    const view = (variant: StateViewVariant) => (
+      <I18nProvider initialLocale="en">
+        <StateView variant={variant} title={variant} onRetry={vi.fn()} />
+      </I18nProvider>
+    );
+    const { rerender } = render(view("loading"));
+    const announcement = screen.getByRole("status");
+    rerender(view("error"));
+    expect(screen.getByRole("alert")).toBe(announcement);
+    expect(announcement.textContent).toBe("error");
+    const retry = screen.getByRole("button", { name: RETRY });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+    expect(announcement.contains(retry)).toBe(false);
+    rerender(view("loading"));
+    expect(screen.getByRole("status")).toBe(announcement);
+    expect(announcement.textContent).toBe("loading");
+  });
+
+  it("keeps controls outside the text announcement", () => {
+    renderView({
+      variant: "error",
+      title: "Could not load",
+      detail: "Try again after reconnecting.",
+      onRetry: vi.fn(),
+      action: <a href="#settings">Settings</a>,
+      children: <button>Details</button>,
+    });
+    const announcement = screen.getByRole("alert");
+    expect(announcement.textContent).toContain("Could not load");
+    expect(announcement.querySelector("button, a, input, [tabindex]")).toBeNull();
+    expect(screen.getByRole("button", { name: RETRY })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Details" })).toBeTruthy();
+  });
+
+  it.each<StateViewVariant>(["empty", "success", "blocked", "info", "warning"])(
+    "%s has no implicit live semantics",
+    (variant) => {
+      renderView({ variant });
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
   it("reserves the assertive role for error", () => {
     renderView({ variant: "error", title: "It broke" });
 
@@ -86,8 +132,8 @@ describe("the accessibility contract", () => {
   ])("%s announces politely: %s", (variant, expected) => {
     const { container } = renderView({ variant });
 
-    const panel = container.querySelector("[data-severity]");
-    expect(panel?.getAttribute("aria-live")).toBe(expected);
+    const announcement = container.querySelector("[aria-atomic]");
+    expect(announcement?.getAttribute("aria-live")).toBe(expected);
   });
 
   it.each<StateViewVariant>(["partial", "stale-derived", "cancelled"])(
@@ -95,7 +141,7 @@ describe("the accessibility contract", () => {
     (variant) => {
       const { container } = renderView({ variant });
 
-      expect(container.querySelector("[data-severity]")?.getAttribute("role")).toBe("status");
+      expect(container.querySelector("[aria-atomic]")?.getAttribute("role")).toBe("status");
     },
   );
 

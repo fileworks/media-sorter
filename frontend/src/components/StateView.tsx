@@ -62,8 +62,9 @@ const ANNOUNCED: ReadonlySet<StateViewVariant> = new Set<StateViewVariant>([
   "cancelled",
 ]);
 
-function roleFor(variant: StateViewVariant): "alert" | "status" {
-  return variant === "error" ? "alert" : "status";
+function roleFor(variant: StateViewVariant): "alert" | "status" | undefined {
+  if (variant === "error") return "alert";
+  return ANNOUNCED.has(variant) ? "status" : undefined;
 }
 
 function ariaLiveFor(variant: StateViewVariant): "polite" | undefined {
@@ -126,23 +127,23 @@ export function StateView({
         className,
       )}
       data-severity={VARIANT_SEVERITY[variant]}
-      role={roleFor(variant)}
-      aria-live={ariaLiveFor(variant)}
       aria-busy={variant === "loading" || undefined}
     >
-      {layout === "page" ? (
-        <h1 id="current-stage-heading" className="text-sm font-medium">
-          {safeTitle}
-        </h1>
-      ) : (
-        <p className="text-sm font-medium">{safeTitle}</p>
-      )}
-      {(safeDetail || code) && (
-        <p className="mt-1 text-xs leading-relaxed">
-          {safeDetail}
-          {code && <code className={cn("font-mono", safeDetail && "ml-2")}>{code}</code>}
-        </p>
-      )}
+      <div role={roleFor(variant)} aria-live={ariaLiveFor(variant)} aria-atomic="true">
+        {layout === "page" ? (
+          <h1 id="current-stage-heading" className="text-sm font-medium">
+            {safeTitle}
+          </h1>
+        ) : (
+          <p className="text-sm font-medium">{safeTitle}</p>
+        )}
+        {(safeDetail || code) && (
+          <p className="mt-1 text-xs leading-relaxed">
+            {safeDetail}
+            {code && <code className={cn("font-mono", safeDetail && "ml-2")}>{code}</code>}
+          </p>
+        )}
+      </div>
       {(retry || action) && (
         <div className={cn("mt-3 flex flex-wrap gap-2", centred && "justify-center")}>
           {retry && (
