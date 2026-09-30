@@ -140,6 +140,13 @@ def test_recovery_completes_the_record_without_repeating_the_transfer(tmp_path: 
     (report,) = reconcile_pending_operations(root)
     outcome = apply_safe_recovery(root, report)
 
+    if os.name != "nt":
+        assert outcome.removed_sources == []
+        assert outcome.unresolved_actions == ["action-1"]
+        assert outcome.journal_state == "reconciliation_required"
+        assert source.read_bytes() == destination.read_bytes() == b"finish the record"
+        assert read_journal(journal_path(root, "manifest-1")).state == "reconciliation_required"
+        return
     assert outcome.removed_sources == [source]
     assert outcome.unresolved_actions == []
     assert outcome.journal_state == "completed"
@@ -486,8 +493,14 @@ def test_an_interrupted_real_transfer_reconciles_to_a_redundant_state(
     outcome = apply_safe_recovery(root, report)
 
     assert report.actions[0].classification == "redundant_verified_copies"
-    assert outcome.removed_sources == [source]
-    assert source.exists() is False
+    if os.name == "nt":
+        assert outcome.removed_sources == [source]
+        assert source.exists() is False
+    else:
+        assert outcome.removed_sources == []
+        assert outcome.unresolved_actions == ["action-1"]
+        assert outcome.journal_state == "reconciliation_required"
+        assert source.read_bytes() == b"real transfer, real crash"
     assert destination.read_bytes() == b"real transfer, real crash"
 
 

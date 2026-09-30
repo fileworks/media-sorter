@@ -228,7 +228,7 @@ def test_same_volume_move_publishes_without_copying_after_full_revalidation(
     with _journal(state, action) as journal:
         result = execute_transfer(action, journal=journal)
 
-    assert result.protocol == "same_volume_link"
+    assert result.protocol == ("same_volume_link" if os.name == "nt" else "same_volume_rename")
     assert result.commit_method == "atomic_rename"
     assert result.integrity_source == "measured"
     assert result.integrity is not None
@@ -236,7 +236,7 @@ def test_same_volume_move_publishes_without_copying_after_full_revalidation(
     # The final source proof now reads the already-open descriptor inside the
     # unlink helper, so the path-based calls are only the initial source and
     # destination-first boundary checks.
-    assert hashed == [source, destination]
+    assert hashed == ([source, destination] if os.name == "nt" else [source])
     assert result.source_removed is True
     assert result.source_safety == "destination_verified"
     assert result.reduced_guarantee is None
@@ -246,6 +246,7 @@ def test_same_volume_move_publishes_without_copying_after_full_revalidation(
 
 def test_same_volume_move_removes_the_source_only_after_a_durable_commit(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state = tmp_path / "state"
     source = tmp_path / "source.bin"
@@ -253,16 +254,31 @@ def test_same_volume_move_removes_the_source_only_after_a_durable_commit(
     source.write_bytes(b"ordering")
     action = _move_action(source, destination)
 
+    real_rename = verified_transfer._rename_no_replace
+
+    def observe_atomic_rename(source: Path, destination: Path) -> None:
+        assert _stages(state)[-1] == "committing"
+        assert source.read_bytes() == b"ordering"
+        assert not destination.exists()
+        real_rename(source, destination)
+
+    monkeypatch.setattr(verified_transfer, "_rename_no_replace", observe_atomic_rename)
+
     with _journal(state, action) as journal:
         execute_transfer(action, journal=journal)
 
     stages = _stages(state)
-    assert stages.index("journal_durable") < stages.index("source_removing")
-    assert stages.index("source_removing") < stages.index("source_removed")
+    if os.name == "nt":
+        assert stages.index("journal_durable") < stages.index("source_removing")
+        assert stages.index("source_removing") < stages.index("source_removed")
+    else:
+        assert stages.index("committing") < stages.index("committed")
+        assert stages.index("committed") < stages.index("source_removed")
+        assert "source_removing" not in stages  # no separate destructive unlink
     assert stages[-1] == "terminal"
 
 
-def test_same_volume_move_fails_closed_when_hard_links_are_unavailable(
+def test_same_volume_move_fails_closed_when_atomic_publication_is_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,6 +291,7 @@ def test_same_volume_move_fails_closed_when_hard_links_are_unavailable(
         raise OSError(errno.EPERM, "hard links are not supported")
 
     monkeypatch.setattr(os, "link", unsupported_link)
+    monkeypatch.setattr(verified_transfer, "_rename_no_replace", unsupported_link)
 
     with pytest.raises(IntegrityTransferError) as error:
         execute_transfer(action)
@@ -318,7 +335,7 @@ def test_same_volume_move_rehashes_the_source_when_asked(
 
     result = execute_transfer(action, rehash_source=True)
 
-    assert hashed == [source, destination]
+    assert hashed == ([source, destination] if os.name == "nt" else [source])
     assert result.integrity_source == "measured"
     assert destination.read_bytes() == b"rehash me"
 
@@ -400,6 +417,15 @@ def test_cross_volume_move_stages_verifies_and_then_removes_the_source(
     progress: list[tuple[int, int]] = []
 
     with _journal(state, action) as journal:
+        if os.name != "nt":
+            with pytest.raises(IntegrityTransferError) as error:
+                execute_transfer(action, journal=journal)
+            assert error.value.details["reason"] == "destination_protection_unavailable"
+            assert error.value.details["source_safety"] == "source_retained"
+            assert source.read_bytes() == destination.read_bytes() == b"cross volume" * 5_000
+            assert "source_removed" not in _stages(state)
+            assert _stages(state)[-1] == "terminal"
+            return
         result = execute_transfer(
             action,
             journal=journal,
@@ -486,7 +512,7 @@ def test_failed_staged_commit_leaves_no_stage_and_keeps_the_source(
     assert list(destination.parent.glob(".*ms-stage-*")) == []
 
 
-def test_unremovable_source_reports_redundant_verified_copies(
+def test_unremovable_source_is_retained_with_actionable_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -501,16 +527,24 @@ def test_unremovable_source_reports_redundant_verified_copies(
 
     monkeypatch.setattr(Path, "unlink", refuse_unlink)
     monkeypatch.setattr(verified_transfer, "_delete_windows_handle", refuse_unlink)
+    monkeypatch.setattr(
+        verified_transfer, "_rename_no_replace", lambda *_args: refuse_unlink(source)
+    )
 
     with _journal(state, action) as journal:
         with pytest.raises(IntegrityTransferError) as error:
             execute_transfer(action, journal=journal)
 
-    assert error.value.details["reason"] == "source_removal_failed"
-    assert error.value.details["source_safety"] == "redundant_verified_copies"
-    assert destination.read_bytes() == b"undeletable"
     assert source.read_bytes() == b"undeletable"
-    assert _stages(state)[-1] == "terminal"
+    if os.name == "nt":
+        assert error.value.details["reason"] == "source_removal_failed"
+        assert error.value.details["source_safety"] == "redundant_verified_copies"
+        assert destination.read_bytes() == b"undeletable"
+        assert _stages(state)[-1] == "terminal"
+    else:
+        assert error.value.details["reason"] == "atomic_commit_unavailable"
+        assert error.value.details["source_safety"] == "source_retained"
+        assert not destination.exists()
 
 
 def test_revalidated_pair_ignores_unreliable_ctime_difference(
@@ -539,14 +573,24 @@ def test_revalidated_pair_ignores_unreliable_ctime_difference(
 
     monkeypatch.setattr(Path, "lstat", ctime_differs)
 
-    unlink_revalidated_pair(
-        source,
-        destination,
-        expected_sha256=expected_sha256,
-        expected_size_bytes=source.stat().st_size,
-    )
-
-    assert not source.exists()
+    if os.name == "nt":
+        unlink_revalidated_pair(
+            source,
+            destination,
+            expected_sha256=expected_sha256,
+            expected_size_bytes=source.stat().st_size,
+        )
+        assert not source.exists()
+    else:
+        with pytest.raises(IntegrityTransferError) as error:
+            unlink_revalidated_pair(
+                source,
+                destination,
+                expected_sha256=expected_sha256,
+                expected_size_bytes=source.stat().st_size,
+            )
+        assert error.value.details["reason"] == "destination_protection_unavailable"
+        assert source.read_bytes() == b"verified source"
     assert destination.read_bytes() == b"verified source"
 
 
@@ -647,6 +691,7 @@ def test_interrupted_move_leaves_a_recoverable_journal_and_both_copies(
         raise KeyboardInterrupt("power loss after commit")
 
     journal = _journal(state, action)
+    monkeypatch.setattr(verified_transfer, "_same_volume", lambda *_args: False)
     monkeypatch.setattr(verified_transfer, "_remove_verified_source", crash)
     with pytest.raises(KeyboardInterrupt):
         execute_transfer(action, journal=journal)

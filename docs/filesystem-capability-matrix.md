@@ -4,6 +4,15 @@ MediaSorter must probe the actual destination filesystem. An operating-system la
 alone is not proof of timestamp precision, atomic promotion, extended attributes, or
 cross-volume behavior.
 
+Source removal also requires protection against concurrent writers. Windows holds
+handles excluding writes and replacement until source deletion completes. macOS
+and Linux use an atomic no-replace rename for same-volume moves. Their advisory
+locks cannot protect a separately copied destination against arbitrary writers:
+cross-volume moves and recovery cleanup therefore retain the source, report that
+protection is unavailable, and require Copy mode or manual review. This also
+applies when quarantine is on a different volume. No platform falls back to an
+unprotected source unlink.
+
 | Capability | Windows lane | macOS lane | Linux lane | Runtime decision |
 | --- | --- | --- | --- | --- |
 | Timestamp round-trip and precision | Required | Required | Required | Measure requested and observed nanoseconds |

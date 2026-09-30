@@ -78,8 +78,11 @@ startup before new work is allowed.
 ## Safety model
 
 - Source scanning, analysis, preview, and review are read-only.
-- Every copy or move is staged and verified before publication; source removal
-  happens only after a verified move.
+- Copies are staged and verified before publication. Same-volume moves use an
+  atomic no-replace rename on macOS/Linux and protected link publication on Windows.
+  Cross-volume moves remove the source only when both files can be protected
+  through removal. macOS/Linux retain the source and report an actionable error;
+  use Copy mode for transfers between volumes on those platforms.
 - Existing destination content is indexed before execution. Exact matches are
   reported without another write.
 - Duplicate losers are never silently deleted. They follow the selected keeper
