@@ -178,3 +178,84 @@ for (const width of [640, 960]) {
     });
   }
 }
+
+for (const locked of [false, true]) {
+  for (const locale of ["en", "de"]) {
+    test(`settings rail reaches a visible destination: ${locale}, ${locked ? "locked" : "editable"}`, async ({
+      page,
+    }) => {
+      await stubBackend(page);
+      if (locked) {
+        await page.addInitScript(
+          ({ result, analysis }) =>
+            localStorage.setItem(
+              "mediasort_completed_plan",
+              JSON.stringify({
+                schemaVersion: 3,
+                planId: result.plan_id,
+                configFingerprint: result.config_fingerprint,
+                analysis,
+              }),
+            ),
+          { result: E2E_PREVIEW_RESULT, analysis: E2E_ANALYSIS },
+        );
+      }
+      await page.goto("/");
+      const language = page.getByRole("combobox", { name: /language|sprache/i });
+      if ((await language.inputValue()) !== locale) {
+        const saved = page.waitForResponse(
+          (response) =>
+            response.url().includes("/api/config") && response.request().method() === "POST",
+        );
+        await language.selectOption(locale);
+        await saved;
+        await page.reload();
+      }
+      await openSurface(page, "recipe");
+      await expect(page.locator("[data-open-settings]")).toBeVisible();
+      await openSurface(page, "configure");
+      await page.evaluate(() => document.fonts.ready);
+      const row = page.locator("#setting-rules");
+      const rules = row.locator("#rules-enabled");
+      for (const width of [640, 1920]) {
+        await page.setViewportSize({ width, height: width === 640 ? 406 : 900 });
+        if (width === 640) {
+          await page
+            .getByRole("button", { name: /settings overview|einstellungsübersicht/i })
+            .click();
+        }
+        const link = page
+          .locator("nav")
+          .getByRole("button", { name: /^(tagging rules|regeln)(\s|$)/i, includeHidden: true });
+        await link.click();
+        await expect
+          .poll(async () =>
+            row.evaluate((element) => {
+              const box = element.getBoundingClientRect();
+              const main = document.querySelector("main")!.getBoundingClientRect();
+              return box.top >= main.top + 80 && box.top < main.bottom - 40;
+            }),
+          )
+          .toBe(true);
+        await expect(link).toHaveAttribute("aria-current", "true");
+        expect(await row.evaluate((element) => element.contains(document.activeElement))).toBe(
+          true,
+        );
+        expect(await focusObscuredBy(page)).toBeNull();
+        if (locked) {
+          await expect(rules).toBeDisabled();
+          await expect(row).toBeFocused();
+          const checked = await rules.isChecked();
+          await page.keyboard.press("Space");
+          expect(await rules.isChecked()).toBe(checked);
+        } else {
+          await expect(rules).toBeEnabled();
+          await expect(rules).toBeFocused();
+          const checked = await rules.isChecked();
+          await page.keyboard.press("Space");
+          await expect(rules).toBeChecked({ checked: !checked });
+        }
+      }
+    });
+  }
+}

@@ -1,6 +1,6 @@
 /** Screen 3 — fine-tune the active recipe against its named baseline. */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   FiAlertCircle,
   FiArrowLeft,
@@ -73,9 +73,8 @@ const GROUP_BODIES: Record<GroupId, typeof SortGroup> = {
  * `scroll-mt` a row is given, so a row the rail just scrolled to counts as
  * reached rather than as still-below-the-fold.
  *
- * Three numbers move together: this, the `scroll-mt-[5.5rem]` on a settings row
- * and the `top-4` the group header pins at (`setting-row.tsx`). The header
- * resting 16px down rather than flush adds 16px to the two below it.
+ * The row's 5.5rem clearance leaves room for a wrapped sticky group heading.
+ * This threshold includes that clearance, so the reached row is selected.
  */
 const STICKY_HEADER_OFFSET = 104;
 
@@ -105,6 +104,7 @@ export function ConfigureScreen({
   const sectionMeta = useConfigSections();
   const [naming, setNaming] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const [requestedAnchor, setRequestedAnchor] = useState<string | null>(null);
   const [recipeName, setRecipeName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -340,18 +340,38 @@ export function ConfigureScreen({
     [changed, sectionFields],
   );
 
+  // Wait for React to collapse the compact rail before measuring the row. A
+  // scroll started in the click handler targets the expanded layout instead.
+  useLayoutEffect(() => {
+    if (!requestedAnchor) return;
+    const target = document.getElementById(requestedAnchor);
+    if (target) {
+      target.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
+      const controls = readOnly
+        ? []
+        : Array.from(
+            target.querySelectorAll<HTMLElement>(
+              "input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), summary, [tabindex]:not([tabindex='-1']):not(:disabled)",
+            ),
+          ).filter((element) => element.getClientRects().length > 0);
+      // Prefer the field itself over its preceding changed-value reset action.
+      const control =
+        controls.find((element) => element.matches("input, select, textarea")) ?? controls[0];
+      // Locked rows stay readable and focusable without enabling their controls.
+      (control ?? target).focus({ preventScroll: true });
+    }
+    setRequestedAnchor(null);
+  }, [requestedAnchor, readOnly]);
+
   const openSetting = (anchorId: string) => {
-    const target = document.getElementById(anchorId);
-    if (!target) return;
-    // On a narrow window the rail is a disclosure; selecting a row closes it so
-    // the requested setting is immediately visible.
+    if (!document.getElementById(anchorId)) return;
     setRailOpen(false);
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    // Move focus too, so keyboard users end up where the click sent everyone else.
-    const focusable = target.querySelector<HTMLElement>(
-      "input, select, button, [tabindex]:not([tabindex='-1'])",
-    );
-    focusable?.focus({ preventScroll: true });
+    setRequestedAnchor(anchorId);
   };
 
   // The rail follows the reader rather than only the last thing they clicked:

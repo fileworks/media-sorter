@@ -184,11 +184,15 @@ export function SettingRow({
   stacked = false,
   field,
 }: SettingRowProps) {
+  const labelId = useId();
   const Label = htmlFor ? "label" : "div";
   const reason = disabled ? (disabledReason ?? null) : null;
   return (
     <div
       id={id}
+      tabIndex={id ? -1 : undefined}
+      role={id ? "group" : undefined}
+      aria-labelledby={id ? labelId : undefined}
       // A stable hook for anything that needs to find "the row this control
       // belongs to". Tests used to reach for `closest("[class*='px-5']")`,
       // which made a spacing decision load-bearing: condensing the row broke
@@ -208,8 +212,8 @@ export function SettingRow({
         disabled && "read-only-region",
         // The rail scrolls a row into view; leave it clear of the sticky group
         // header, and no further — `useScrollSpy`'s offset is matched to this.
-        // 4.5rem of header plus the 1rem inset it now rests at.
-        id && "scroll-mt-[5.5rem]",
+        id &&
+          "scroll-mt-[5.5rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
       )}
     >
       <div
@@ -221,6 +225,7 @@ export function SettingRow({
         <div className="min-w-0 flex-1">
           <div className="flex min-h-6 flex-wrap items-center gap-2">
             <Label
+              id={labelId}
               {...(htmlFor ? { htmlFor } : {})}
               className={cn(
                 "flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground",
