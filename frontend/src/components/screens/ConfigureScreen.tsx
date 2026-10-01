@@ -359,7 +359,7 @@ export function ConfigureScreen({
       const pane = target.closest("main");
       // Large setup blocks can put their first field below a short pane even
       // when the row heading is correctly aligned. Keep ordinary row anchors;
-      // centre the field only when row alignment cannot show it in full.
+      // align the field's own labelled row when the outer block cannot fit it.
       const fieldOverflows =
         control &&
         pane &&
@@ -367,11 +367,21 @@ export function ConfigureScreen({
           target.getBoundingClientRect().top +
           parseFloat(window.getComputedStyle(target).scrollMarginTop) >
           pane.clientHeight;
-      (fieldOverflows ? control : target).scrollIntoView({
+      const fieldRow = control?.closest<HTMLElement>("[data-setting-row]");
+      const fieldRowFits =
+        fieldRow &&
+        pane &&
+        control &&
+        control.getBoundingClientRect().bottom -
+          fieldRow.getBoundingClientRect().top +
+          parseFloat(window.getComputedStyle(fieldRow).scrollMarginTop) <=
+          pane.clientHeight;
+      const scrollTarget = fieldOverflows ? (fieldRowFits ? fieldRow : control) : target;
+      scrollTarget.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
           ? "instant"
           : "smooth",
-        block: fieldOverflows ? "center" : "start",
+        block: "start",
       });
       // Locked rows stay readable and focusable without enabling their controls.
       (control ?? target).focus({ preventScroll: true });
