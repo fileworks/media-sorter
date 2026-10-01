@@ -214,7 +214,9 @@ describe("rename preview", () => {
       const input = screen.getByRole<HTMLInputElement>("textbox", { name: "Filename pattern" });
       input.focus();
       input.setSelectionRange(0, 4);
-      fireEvent.click(screen.getByRole("button", { name: /Year \(4 digits\)/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "YYYY", description: /Year \(4 digits\)/ }),
+      );
       expect(onCommit).toHaveBeenCalledWith("YYYY");
     } finally {
       vi.unstubAllGlobals();

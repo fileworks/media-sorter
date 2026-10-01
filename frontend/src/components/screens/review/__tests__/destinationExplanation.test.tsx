@@ -96,18 +96,19 @@ describe("destination provenance ownership", () => {
 });
 
 describe("DestinationExplanation", () => {
-  it("draws the whole destination, one control per part, each naming its reason", () => {
+  it("draws the whole destination, one named control per part with its reason as a description", () => {
     render(
       <I18nProvider initialLocale="en">
         <DestinationExplanation provenance={provenance} onOpenSetting={() => undefined} />
       </I18nProvider>,
     );
 
-    // Every recorded part is on the path line, and carries its decision and
-    // detail in its accessible name rather than in a card of its own.
+    // The visible path segment stays the accessible name. Its decision and
+    // detail remain available as an associated description.
     for (const part of provenance.path) {
       const control = screen.getByRole("button", {
-        name: `${en(`review.detail.decision.${part.decision}`)} — ${part.detail}`,
+        name: part.segment,
+        description: `${en(`review.detail.decision.${part.decision}`)} — ${part.detail}`,
       });
       expect(control.textContent).toBe(part.segment);
     }
@@ -126,7 +127,8 @@ describe("DestinationExplanation", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: `${en("review.detail.decision.date")} — year from filename`,
+        name: "2024",
+        description: `${en("review.detail.decision.date")} — year from filename`,
       }),
     );
     expect(screen.getByText("year from filename")).toBeTruthy();
@@ -150,7 +152,8 @@ describe("DestinationExplanation", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: `${en("review.detail.decision.collision")} — reserved after collision with 2024_IMG_1.png`,
+        name: "2024_IMG_1_001.png",
+        description: `${en("review.detail.decision.collision")} — reserved after collision with 2024_IMG_1.png`,
       }),
     );
     expect(screen.getByText(en("review.detail.noSetting"))).toBeTruthy();
