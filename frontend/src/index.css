@@ -604,6 +604,13 @@ input[type="range"]::-moz-range-track {
   }
 }
 
+/* Keep keyboard-revealed settings controls below their sticky group heading.
+   Match the existing settings-row anchor clearance. */
+main:has([data-setting-header])
+  :is(button, input, select, textarea, summary, [tabindex], [data-setting-row]) {
+  scroll-margin-top: 5.5rem;
+}
+
 /* System reduced-motion preference overrides all motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
