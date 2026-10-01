@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { stubBackend, openSurface, E2E_PREVIEW_RESULT, E2E_ANALYSIS } from "./support";
+import {
+  stubBackend,
+  openSurface,
+  E2E_PREVIEW_RESULT,
+  E2E_ANALYSIS,
+  tabStops,
+  focusObscuredBy,
+} from "./support";
 
 test("Setup names the active settings and makes detailed adjustments explicitly optional", async ({
   page,
@@ -106,3 +113,68 @@ test("workspace rails are symmetric and sticky settings meet the scrollport", as
     }
   }
 });
+
+for (const width of [640, 960]) {
+  for (const locale of ["en", "de"]) {
+    test(`settings keep keyboard focus below sticky headings: ${locale}, ${width}x406`, async ({
+      page,
+    }) => {
+      await stubBackend(page);
+      await page.addInitScript(
+        ({ result, analysis, theme }) => {
+          localStorage.setItem("mediasort_theme", theme);
+          localStorage.setItem(
+            "mediasort_completed_plan",
+            JSON.stringify({
+              schemaVersion: 3,
+              planId: result.plan_id,
+              configFingerprint: result.config_fingerprint,
+              analysis,
+            }),
+          );
+        },
+        {
+          result: E2E_PREVIEW_RESULT,
+          analysis: E2E_ANALYSIS,
+          theme: locale === "en" ? "light" : "dark",
+        },
+      );
+      await page.goto("/");
+      const language = page.getByRole("combobox", { name: /language|sprache/i });
+      if ((await language.inputValue()) !== locale) {
+        const saved = page.waitForResponse(
+          (response) =>
+            response.url().includes("/api/config") && response.request().method() === "POST",
+        );
+        await language.selectOption(locale);
+        await saved;
+        await page.reload();
+      }
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await openSurface(page, "recipe");
+      await expect(page.locator("[data-open-settings]")).toBeVisible();
+      await openSurface(page, "configure");
+      // Actual Chromium tab zoom at 200% gives these CSS viewports for a
+      // 1280/1920 x 900 window. The reduced height triggers focus scrolling;
+      // the earlier 900px-high narrow-width checks never covered this case.
+      await page.setViewportSize({ width, height: 406 });
+      const editRules = page
+        .locator("summary")
+        .filter({ hasText: /edit rules|regeln bearbeiten/i });
+      await expect(editRules).toBeVisible();
+      await page.locator("main").focus();
+      let reachedEditRules = false;
+      const obscured: unknown[] = [];
+      for await (const stop of tabStops(page, 18)) {
+        void stop;
+        reachedEditRules ||= await editRules.evaluate(
+          (element) => element === document.activeElement,
+        );
+        const hit = await focusObscuredBy(page);
+        if (hit) obscured.push(hit);
+      }
+      expect(reachedEditRules, "the keyboard walk must reach the affected action").toBe(true);
+      expect(obscured).toEqual([]);
+    });
+  }
+}
