@@ -146,7 +146,14 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
         </Select>
       </SettingRow>
 
-      <div id="setting-ai" data-local-ai-setup className="space-y-3 border-b border-border p-4">
+      <div
+        id="setting-ai"
+        data-local-ai-setup
+        tabIndex={-1}
+        role="group"
+        aria-label={t("config.rail.ai")}
+        className="scroll-mt-[5.5rem] space-y-3 border-b border-border p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
         {hardware ? (
           <>
             <AiCapabilityChip hardware={hardware} config={config} />
