@@ -267,20 +267,38 @@ for (const locked of [false, true]) {
           .getByRole("button", { name: /^(local ai|lokale ki)(\s|$)/i, includeHidden: true });
         const ai = page.locator("#setting-ai");
         await aiLink.click();
-        await expect
-          .poll(async () =>
-            ai.evaluate((element) => {
-              const box = element.getBoundingClientRect();
-              const main = document.querySelector("main")!.getBoundingClientRect();
-              return box.top >= main.top + 80 && box.top < main.bottom - 40;
-            }),
-          )
-          .toBe(true);
+        // In a short editable pane, this large block's first field cannot fit
+        // with the whole block aligned below the header. Check the field below;
+        // ordinary and locked destinations retain their row anchor clearance.
+        if (locked || width !== 640) {
+          await expect
+            .poll(async () =>
+              ai.evaluate((element) => {
+                const box = element.getBoundingClientRect();
+                const main = document.querySelector("main")!.getBoundingClientRect();
+                return box.top >= main.top + 80 && box.top < main.bottom - 40;
+              }),
+            )
+            .toBe(true);
+        }
         await expect(aiLink).toHaveAttribute("aria-current", "true");
         expect(await ai.evaluate((element) => element.contains(document.activeElement))).toBe(true);
         await expect(ai).toHaveAccessibleName(locale === "en" ? "Local AI" : "Lokale KI");
         expect(await focusObscuredBy(page)).toBeNull();
         if (locked) await expect(ai).toBeFocused();
+        else {
+          // Hit testing a clipped intersection cannot prove the whole field is
+          // visible. Navigation must leave its text and focus ring in the pane.
+          await expect
+            .poll(async () =>
+              ai.evaluate(() => {
+                const box = document.activeElement!.getBoundingClientRect();
+                const main = document.querySelector("main")!.getBoundingClientRect();
+                return box.top >= main.top + 80 && box.bottom <= main.bottom;
+              }),
+            )
+            .toBe(true);
+        }
       }
     });
   }

@@ -346,12 +346,6 @@ export function ConfigureScreen({
     if (!requestedAnchor) return;
     const target = document.getElementById(requestedAnchor);
     if (target) {
-      target.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
       const controls = readOnly
         ? []
         : Array.from(
@@ -362,6 +356,23 @@ export function ConfigureScreen({
       // Prefer the field itself over its preceding changed-value reset action.
       const control =
         controls.find((element) => element.matches("input, select, textarea")) ?? controls[0];
+      const pane = target.closest("main");
+      // Large setup blocks can put their first field below a short pane even
+      // when the row heading is correctly aligned. Keep ordinary row anchors;
+      // centre the field only when row alignment cannot show it in full.
+      const fieldOverflows =
+        control &&
+        pane &&
+        control.getBoundingClientRect().bottom -
+          target.getBoundingClientRect().top +
+          parseFloat(window.getComputedStyle(target).scrollMarginTop) >
+          pane.clientHeight;
+      (fieldOverflows ? control : target).scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: fieldOverflows ? "center" : "start",
+      });
       // Locked rows stay readable and focusable without enabling their controls.
       (control ?? target).focus({ preventScroll: true });
     }
