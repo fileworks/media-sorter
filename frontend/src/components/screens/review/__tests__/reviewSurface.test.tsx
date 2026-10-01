@@ -1660,7 +1660,8 @@ describe("selecting a file and opening a file are different gestures", () => {
     // part being read, not to a card per segment.
     fireEvent.click(
       await within(dialog).findByRole("button", {
-        name: `${en("review.detail.decision.date")} — year from exif`,
+        name: "2025",
+        description: `${en("review.detail.decision.date")} — year from exif`,
       }),
     );
     fireEvent.click(

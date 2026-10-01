@@ -115,6 +115,7 @@ export function Thumbnail({
     <Tooltip label={label}>
       <button
         type="button"
+        aria-label={label}
         onClick={onOpen}
         className={cn(
           "group/thumb relative block cursor-zoom-in overflow-hidden bg-muted",

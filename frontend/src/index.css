@@ -81,8 +81,8 @@
 
     --border: 28 10% 89%;
     /* Strong hover edge for bordered controls. */
-    --border-strong: 27 8% 68%;
-    --input: 28 10% 89%;
+    --border-strong: 27 8% 45%;
+    --input: 28 10% 54%;
     --ring: 19 88% 37%;
 
     /* Shape: three steps, one job each — and no fourth.
@@ -179,8 +179,8 @@
     --destructive-foreground: 220 12% 8%;
 
     --border: 220 9% 22%;
-    --border-strong: 218 8% 39%;
-    --input: 220 9% 22%;
+    --border-strong: 218 8% 59%;
+    --input: 220 9% 52%;
     --ring: 20 95% 58%;
 
     --faint: 215 10% 70%;
