@@ -16,6 +16,9 @@
   "overrides": {
     "release-it": {
       "undici": "7.29.1"
+    },
+    "get-uri": {
+      "basic-ftp": "6.2.1"
     }
   }
 }
