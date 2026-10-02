@@ -1,8 +1,8 @@
 const assert = require("node:assert/strict");
-const { execFileSync } = require("node:child_process");
-const { mkdtempSync, rmSync, writeFileSync } = require("node:fs");
+const { execFileSync, spawnSync } = require("node:child_process");
+const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require("node:fs");
 const { EOL, tmpdir } = require("node:os");
-const { join } = require("node:path");
+const { dirname, join } = require("node:path");
 const test = require("node:test");
 
 const {
@@ -85,6 +85,104 @@ const renderer = join(__dirname, "render-release-changelog.mjs");
 function runGit(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
+
+function withCandidateSource(check) {
+  const cwd = mkdtempSync(join(tmpdir(), "media-sorter-candidate-"));
+  try {
+    runGit(cwd, "init", "--quiet");
+    runGit(cwd, "config", "core.autocrlf", "false");
+    runGit(cwd, "config", "user.name", "Release Test");
+    runGit(cwd, "config", "user.email", "release-test@example.invalid");
+    for (const path of GENERATED_RELEASE_FILES) {
+      mkdirSync(dirname(join(cwd, path)), { recursive: true });
+      writeFileSync(join(cwd, path), versionFile(path, "1.4.4"));
+    }
+    runGit(cwd, "add", ".");
+    runGit(cwd, "commit", "--quiet", "-m", "fix: prior release");
+    runGit(cwd, "tag", "-a", "v1.4.4", "-m", "v1.4.4");
+    writeFileSync(join(cwd, "backend/app/feature.py"), "reviewed = True\n");
+    runGit(cwd, "add", ".");
+    runGit(cwd, "commit", "--quiet", "-m", "fix: reviewed source correction");
+    runGit(cwd, "update-ref", "refs/remotes/origin/main", "HEAD");
+    const verify = (environment = {}, flag = "--verify-build-source") =>
+      spawnSync(process.execPath, [join(__dirname, "releaseability.cjs"), flag], {
+        cwd,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "workflow_dispatch",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REF_NAME: "main",
+          ...environment,
+        },
+      });
+    check(cwd, verify);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+test("manual current-main candidate is explicitly unpublished", () => {
+  withCandidateSource((_cwd, verify) => {
+    const result = verify();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /verified unpublished main candidate v1\.4\.4/);
+  });
+});
+
+for (const environment of [
+  { GITHUB_EVENT_NAME: "push" },
+  { GITHUB_REF: "refs/heads/unreviewed", GITHUB_REF_NAME: "unreviewed" },
+]) {
+  test(`candidate rejects unsupported invocation ${JSON.stringify(environment)}`, () => {
+    withCandidateSource((_cwd, verify) => {
+      const result = verify(environment);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /candidate builds require manual dispatch on main/);
+    });
+  });
+}
+
+test("candidate rejects source that is not current origin main", () => {
+  withCandidateSource((cwd, verify) => {
+    runGit(cwd, "update-ref", "refs/remotes/origin/main", "HEAD^");
+    const result = verify();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /candidate source is not current origin\/main/);
+  });
+});
+
+test("candidate rejects uncommitted tracked source changes", () => {
+  withCandidateSource((cwd, verify) => {
+    writeFileSync(join(cwd, "backend/app/feature.py"), "reviewed = False\n");
+    const result = verify();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /candidate source contains uncommitted changes/);
+  });
+});
+
+test("candidate rejects committed embedded version drift", () => {
+  withCandidateSource((cwd, verify) => {
+    writeFileSync(join(cwd, "backend/app/_version.py"), versionFile("backend/app/_version.py", "9.9.9"));
+    runGit(cwd, "add", ".");
+    runGit(cwd, "commit", "--quiet", "-m", "chore: drift the embedded version");
+    runGit(cwd, "update-ref", "refs/remotes/origin/main", "HEAD");
+    const result = verify();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /source versions must all equal/);
+  });
+});
+
+test("tag invocations still require the generated release transaction", () => {
+  withCandidateSource((_cwd, verify) => {
+    const result = verify({ GITHUB_REF: "refs/tags/v1.4.4", GITHUB_REF_NAME: "v1.4.4" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /checked-out source does not match the release tag/);
+    const original = verify({}, "--verify-tag");
+    assert.notEqual(original.status, 0);
+    assert.match(original.stderr, /expected an exact stable tag, got main/);
+  });
+});
 
 function generatedReleaseGit(...args) {
   const command = args.join(" ");

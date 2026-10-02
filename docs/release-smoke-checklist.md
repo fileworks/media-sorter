@@ -9,6 +9,21 @@ Attach completed evidence to the release or a follow-up issue when the checklist
 Record the commit, tag, artifact SHA-256 values, tester, date, OS version, architecture,
 package form, and whether the artifact is signed or explicitly unsigned.
 
+## Unpublished installer candidates
+
+Run `gh workflow run release.yml --ref main` to build and smoke-test the exact
+current main commit without publishing a release. The workflow repeats the source,
+dependency, native, and package gates, including installed Windows MSI/NSIS and
+mounted macOS DMG launch checks. Download the packages from that Actions run and
+record its source commit and artifact checksums with the results.
+
+Candidate builds require a manual dispatch on current `origin/main`, clean tracked
+source, and embedded versions matching the latest release tag. They keep that
+version and are identified by their Actions run and source commit; they do not
+replace the published version. Other branch dispatches are rejected. Tag builds
+still require the exact generator-owned release transaction, and only tag builds
+can enter the public-release job. Use Version Release for a reviewed new version.
+
 ## macOS Apple Silicon and Intel
 
 Complete every item independently on fresh compatible profiles:

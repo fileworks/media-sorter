@@ -59,10 +59,14 @@ jobs:
       - name: Install release-tool dependencies
         run: npm ci --ignore-scripts
 
-      - name: Verify exact generated release source and tag
+      - name: Verify exact release or unpublished candidate source
         run: |
           node --test scripts/releaseability.test.cjs
-          node scripts/releaseability.cjs --verify-tag
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            node scripts/releaseability.cjs --verify-build-source
+          else
+            node scripts/releaseability.cjs --verify-tag
+          fi
 
       - name: Install Rust toolchain
         # dtolnay/rust-toolchain stable

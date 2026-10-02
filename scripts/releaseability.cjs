@@ -382,8 +382,31 @@ function assertReleaseTag(
   return version;
 }
 
+function assertBuildSource() {
+  if (process.env.GITHUB_REF?.startsWith("refs/tags/v")) {
+    return `verified release v${assertReleaseTag()}`;
+  }
+  if (
+    process.env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
+    process.env.GITHUB_REF !== "refs/heads/main"
+  ) {
+    throw new Error("releaseability: candidate builds require manual dispatch on main");
+  }
+  if (git("rev-parse", "HEAD") !== git("rev-parse", "refs/remotes/origin/main")) {
+    throw new Error("releaseability: candidate source is not current origin/main");
+  }
+  if (git("diff", "--name-only", "HEAD")) {
+    throw new Error("releaseability: candidate source contains uncommitted changes");
+  }
+  const version = assertSourceAtLatestTag();
+  assertReleaseable();
+  return `verified unpublished main candidate v${version}`;
+}
+
 if (require.main === module) {
-  if (process.argv.includes("--verify-tag")) {
+  if (process.argv.includes("--verify-build-source")) {
+    console.log(`releaseability: ${assertBuildSource()}`);
+  } else if (process.argv.includes("--verify-tag")) {
     console.log(`releaseability: verified release v${assertReleaseTag()}`);
   } else if (process.argv.includes("--verify-bump")) {
     const index = process.argv.indexOf("--verify-bump");
