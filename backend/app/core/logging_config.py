@@ -1,0 +1,281 @@
+"""Structured logging configuration via structlog."""
+
+import asyncio
+import contextlib
+import logging
+import logging.handlers
+import sys
+from collections.abc import MutableMapping
+from pathlib import Path
+from typing import Any, cast
+
+import structlog
+
+from app.core.paths import resolve_app_paths
+
+LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
+LOG_RETENTION_MAX_BYTES = LOG_FILE_MAX_BYTES * (LOG_BACKUP_COUNT + 1)
+
+_SENSITIVE_FIELD_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "password",
+    "secret",
+    "token",
+)
+_REDACTED = "[REDACTED]"
+
+# Diagnostics about logging itself. A sink that silently fails is worse than
+# one that fails loudly, so every drop and handler failure is counted here and
+# surfaced through the runtime-diagnostics endpoint.
+_dropped_live_events = 0
+_sink_failures: list[str] = []
+
+
+def record_sink_failure(detail: str) -> None:
+    """Record a logging-sink failure through a non-recursive channel."""
+    if detail not in _sink_failures:
+        _sink_failures.append(detail)
+    del _sink_failures[:-20]
+
+
+def logging_health() -> dict[str, Any]:
+    """Report where logs go, how much is retained, and what has degraded."""
+    root_logger = logging.getLogger()
+    handlers: list[dict[str, Any]] = []
+    for handler in root_logger.handlers:
+        entry: dict[str, Any] = {
+            "type": type(handler).__name__,
+            "level": logging.getLevelName(handler.level),
+        }
+        if isinstance(handler, logging.handlers.RotatingFileHandler):
+            entry["path"] = str(handler.baseFilename)
+            entry["max_bytes"] = handler.maxBytes
+            entry["backup_count"] = handler.backupCount
+        handlers.append(entry)
+    try:
+        log_dir: str | None = str(resolve_app_paths().log_dir)
+    except Exception:
+        log_dir = None
+    return {
+        "log_directory": log_dir,
+        "level": logging.getLevelName(root_logger.level),
+        "handlers": handlers,
+        "file_logging_active": any(entry["type"] == "RotatingFileHandler" for entry in handlers),
+        "rotation": {
+            "max_bytes": LOG_FILE_MAX_BYTES,
+            "backup_count": LOG_BACKUP_COUNT,
+            "retention_max_bytes": LOG_RETENTION_MAX_BYTES,
+        },
+        "dropped_live_events": _dropped_live_events,
+        "sink_failures": list(_sink_failures),
+        "degraded": bool(_sink_failures)
+        or not any(entry["type"] == "RotatingFileHandler" for entry in handlers),
+    }
+
+
+# The event loop running the FastAPI app. Captured at startup so cross-thread
+# log calls (e.g. from asyncio.to_thread workers in SortingService) can hand
+# entries back to the loop via call_soon_threadsafe — asyncio.Queue is NOT
+# thread-safe, so a worker thread must never put onto it directly.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_log_dir() -> Path:
+    """Return the OS-appropriate log directory for MediaSorter, creating it if needed."""
+    log_dir = resolve_app_paths().log_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Coerce a structlog context value into something json.dumps can serialise."""
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _to_jsonable(v) for k, v in value.items()}
+    return str(value)  # Path, Exception, ImageHash, bytes, datetime, …
+
+
+def _redact_sensitive_fields(
+    logger: Any,
+    method: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
+    """Remove credential values before logs reach any handler or live client."""
+
+    def redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    _REDACTED
+                    if any(marker in str(key).lower() for marker in _SENSITIVE_FIELD_MARKERS)
+                    else redact(nested)
+                )
+                for key, nested in value.items()
+            }
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(redact(item) for item in value)
+        return value
+
+    return cast(MutableMapping[str, Any], redact(dict(event_dict)))
+
+
+class LogQueueBroadcast:
+    """Structlog processor that pushes log entries to the WebSocket broadcast queue.
+
+    Must be inserted AFTER TimeStamper and add_log_level so those fields are
+    already present, but BEFORE JSONRenderer so event_dict is still a dict.
+    Normalises structlog's 'event' key to 'message' for the frontend contract.
+    Carries all extra context fields as a JSON-safe 'context' dict.
+    """
+
+    _RESERVED = {"event", "timestamp", "level", "logger", "level_number"}
+
+    def __call__(
+        self, logger: Any, method: str, event_dict: MutableMapping[str, Any]
+    ) -> MutableMapping[str, Any]:
+        context = {k: _to_jsonable(v) for k, v in event_dict.items() if k not in self._RESERVED}
+        entry = {
+            "timestamp": event_dict.get("timestamp", ""),
+            "level": event_dict.get("level", "info"),
+            "message": event_dict.get("event", ""),
+            "context": context or None,
+        }
+        try:
+            from app.core.log_queue import get_queue
+
+            q = get_queue()
+            # asyncio.Queue is not thread-safe; structlog runs on whichever
+            # thread emitted the log (per-file work runs on asyncio.to_thread
+            # workers). Marshal the put onto the captured event loop.
+            if _main_loop is not None and _main_loop.is_running():
+                try:
+                    asyncio.get_running_loop()
+                    # On the loop thread — put directly (still drop-oldest on full).
+                    _drop_oldest_put(q, entry)
+                except RuntimeError:
+                    _main_loop.call_soon_threadsafe(_drop_oldest_put, q, entry)
+            else:
+                # No loop yet (early startup) — best-effort direct put.
+                _drop_oldest_put(q, entry)
+        except Exception:
+            pass
+        return event_dict
+
+
+def _drop_oldest_put(q: Any, entry: dict[str, Any]) -> None:
+    """Push *entry* onto *q*; if full, drop the oldest entry first (ring buffer).
+
+    Must only be called on the loop thread. ``q`` is typed loosely so the
+    legacy ``_BroadcastQueue`` fan-out (which only quacks like asyncio.Queue)
+    can be passed alongside real asyncio queues.
+    """
+    global _dropped_live_events
+    try:
+        if q.full():
+            with contextlib.suppress(asyncio.QueueEmpty):
+                q.get_nowait()
+                _dropped_live_events += 1
+        q.put_nowait(entry)
+    except Exception as exc:
+        _dropped_live_events += 1
+        record_sink_failure(f"live_queue:{type(exc).__name__}")
+
+
+def capture_main_loop() -> None:
+    """Capture the currently-running event loop for thread-safe log dispatch.
+
+    Call once from the FastAPI lifespan startup, after the loop is running.
+    """
+    global _main_loop
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _main_loop = None
+
+
+def setup_logging(log_level: str = "INFO") -> None:
+    """Configure structlog and stdlib logging, writing to stdout and a rotating log file."""
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            _redact_sensitive_fields,
+            LogQueueBroadcast(),
+            structlog.processors.JSONRenderer(),
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    root_logger = logging.getLogger()
+
+    # Avoid double-registering handlers if setup_logging is called more than once.
+    has_stream = any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        for h in root_logger.handlers
+    )
+    has_file = any(
+        isinstance(h, logging.handlers.RotatingFileHandler) for h in root_logger.handlers
+    )
+
+    if not has_stream:
+        logging.basicConfig(
+            format="%(message)s",
+            stream=sys.stdout,
+            level=numeric_level,
+        )
+    # Always set the root level — basicConfig is a no-op when root already has
+    # handlers (e.g. from pytest, uvicorn, or another library), so setLevel must
+    # be called unconditionally rather than only in the else-branch.
+    root_logger.setLevel(numeric_level)
+
+    if not has_file:
+        try:
+            log_dir = _get_log_dir()
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_dir / "backend.log",
+                maxBytes=LOG_FILE_MAX_BYTES,
+                backupCount=LOG_BACKUP_COUNT,
+                encoding="utf-8",
+            )
+            file_handler.setLevel(numeric_level)
+            file_handler.setFormatter(logging.Formatter("%(message)s"))
+            root_logger.addHandler(file_handler)
+        except Exception as exc:
+            # Never let logging setup crash the app, but never pretend it worked
+            # either: the degraded state is reported through logging_health().
+            record_sink_failure(f"file_handler:{type(exc).__name__}")
+    else:
+        # Level may have changed since the handler was first registered.
+        for h in root_logger.handlers:
+            if isinstance(h, logging.handlers.RotatingFileHandler):
+                h.setLevel(numeric_level)
+
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("uvicorn").setLevel(logging.INFO)
+
+
+def get_logger(name: str) -> structlog.BoundLogger:
+    """Return a bound structlog logger."""
+    # structlog.get_logger is typed to return Any (it hands back a lazy proxy
+    # that only resolves to a BoundLogger on first bind); cast to the concrete
+    # type so callers get checked logging calls.
+    return cast(structlog.BoundLogger, structlog.get_logger(name))

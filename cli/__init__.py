@@ -1,0 +1,1 @@
+"""MediaSorter CLI package."""

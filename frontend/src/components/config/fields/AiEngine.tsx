@@ -1,0 +1,149 @@
+import { FiCpu, FiAlertTriangle, FiZap } from "react-icons/fi";
+import { SettingRow } from "@/components/ui/setting-row";
+import { Select, SelectItem } from "@/components/ui/select";
+import { Toggle } from "@/components/ui/toggle";
+import { cn } from "@/lib/utils";
+import type { AiModelTier, Config, HardwareInfo } from "@/types/api";
+import {
+  TIER_LABEL,
+  TIER_RANK,
+  effectiveTier,
+  machineTooWeak,
+  type ResolvedTier,
+} from "@/lib/aiTier";
+import { useI18n } from "@/i18n/I18nContext";
+import { AiModelManager } from "@/components/config/fields/AiModelManager";
+
+/**
+ * Capability chip: tells the user, in one line, whether their machine can run
+ * local AI and which tier is recommended. Honest auto-disable lives here — when
+ * the probe says "off", this reads as a clear blocker, not a silent greying-out.
+ */
+export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo; config: Config }) {
+  const { t, locale } = useI18n();
+  const tooWeak = machineTooWeak(hardware);
+  const eff = effectiveTier(config, hardware);
+  const summary = t("config.ai.machineSummary", {
+    cores: hardware.logical_cpus.toLocaleString(locale),
+    ram: Math.round(hardware.total_ram_gb).toLocaleString(locale),
+    gpu: hardware.has_accelerator ? " · GPU" : "",
+  });
+
+  if (tooWeak) {
+    return (
+      <div className="flex items-start gap-2 rounded-panel border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <FiAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          {t("config.ai.machineWeak")}
+          <span className="mt-0.5 block text-warning">{summary}</span>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-panel border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      <FiCpu className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span>
+        <span className="font-medium text-foreground">{summary}</span>
+        {" · "}
+        <span data-tier-recommendation className="font-medium text-suggest">
+          {t("config.ai.recommended", { tier: TIER_LABEL[hardware.recommended_tier] })}
+        </span>
+        {eff !== "off" && eff !== hardware.recommended_tier && (
+          <span className="text-warning"> {t("config.ai.running", { tier: TIER_LABEL[eff] })}</span>
+        )}
+      </span>
+      {hardware.has_accelerator && (
+        <span className="ml-auto flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-success">
+          <FiZap className="h-3 w-3" /> GPU
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Model-tier selector + GPU toggle for the local encoder. Options above what the
+ * hardware comfortably handles are flagged "may be slow"; the recommended tier is
+ * marked so "Auto" is an informed choice.
+ */
+export function ModelTierSelect({
+  hardware,
+  config,
+  updateConfig,
+}: {
+  hardware: HardwareInfo;
+  config: Config;
+  updateConfig: (patch: Partial<Config>) => void;
+}) {
+  const { t } = useI18n();
+  const recommended = hardware.recommended_tier;
+  const tier = config.ai_model_tier;
+
+  const slowFlag = (tierValue: ResolvedTier): string =>
+    recommended !== "off" && TIER_RANK[tierValue] > TIER_RANK[recommended]
+      ? t("config.ai.slow")
+      : "";
+
+  const options: { value: AiModelTier; label: string }[] = [
+    {
+      value: "auto",
+      label: t("config.ai.tier.auto", { tier: TIER_LABEL[recommended] }),
+    },
+    { value: "lite", label: t("config.ai.tier.lite", { slow: slowFlag("lite") }) },
+    {
+      value: "standard",
+      label: t("config.ai.tier.standard", { slow: slowFlag("standard") }),
+    },
+    { value: "max", label: t("config.ai.tier.max", { slow: slowFlag("max") }) },
+    { value: "off", label: t("config.ai.tier.off") },
+  ];
+
+  const eff = effectiveTier(config, hardware);
+
+  return (
+    <div className="space-y-3">
+      <SettingRow
+        field="ai_model_tier"
+        label={t("config.ai.model")}
+        description={t("help.aiModelTier")}
+        htmlFor="ai-model-tier"
+      >
+        <Select
+          id="ai-model-tier"
+          value={tier}
+          onValueChange={(v) => updateConfig({ ai_model_tier: v as AiModelTier })}
+          className="w-full max-w-sm"
+        >
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </Select>
+      </SettingRow>
+
+      {/* GPU toggle only matters when an accelerator EP is actually present. */}
+      {hardware.has_accelerator && eff !== "off" && (
+        <SettingRow
+          field="ai_allow_gpu"
+          label={t("config.ai.gpu")}
+          description={t("help.aiAllowGpu")}
+          htmlFor="ai-allow-gpu"
+          last
+        >
+          <Toggle
+            id="ai-allow-gpu"
+            label={t("config.ai.gpu")}
+            checked={config.ai_allow_gpu}
+            onChange={(v) => updateConfig({ ai_allow_gpu: v })}
+          />
+        </SettingRow>
+      )}
+
+      {eff !== "off" && <AiModelManager />}
+      <p className={cn("text-xs text-muted-foreground")}>{t("config.ai.download")}</p>
+    </div>
+  );
+}

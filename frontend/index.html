@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
+    <title>MediaSorter</title>
+
+    <!--
+      Apply the persisted (or OS) theme before first paint. Mirrors
+      useTheme.getInitialTheme() so the app doesn't flash light→dark on load for
+      dark-mode users, and so the startup splash below matches the real theme.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("mediasort_theme");
+          if (t !== "dark" && t !== "light") {
+            t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          if (t === "dark") document.documentElement.classList.add("dark");
+          document.documentElement.lang =
+            localStorage.getItem("mediasort_language") === "de" ? "de" : "en";
+        } catch (e) {
+          /* localStorage unavailable — fall back to light */
+        }
+      })();
+    </script>
+
+    <!--
+      Startup splash. Rendered from static HTML so it appears the instant the
+      document paints — before the JS bundle parses or React mounts — so the user
+      never sees a blank white screen. React's createRoot().render() replaces the
+      contents of #root on first commit, which removes this automatically.
+      Theme-aware and reduced-motion aware; uses no external CSS/JS.
+    -->
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        background: #fbfaf9;
+        color: #221e1c;
+        font-family: "Geist Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        z-index: 9999;
+      }
+      html.dark #app-splash {
+        background: #141619;
+        color: #ebedf0;
+      }
+      /* The product mark, so the first frame already says which app this is.
+         Colours are literal because no stylesheet has loaded yet. */
+      .app-splash__mark {
+        --mark-ink: #221e1c;
+        --mark-frame: #ffffff;
+        --mark-edge: #e6e3e0;
+        --mark-arrow: #f55f14;
+      }
+      html.dark .app-splash__mark {
+        --mark-ink: #ebedf0;
+        --mark-frame: #1c1e22;
+        --mark-edge: #33363d;
+        --mark-arrow: #fa722e;
+      }
+      .app-splash__spinner {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 3px solid #e6e3e0;
+        border-top-color: #f55f14;
+        animation: app-splash-spin 0.8s linear infinite;
+      }
+      html.dark .app-splash__spinner {
+        border-color: #33363d;
+        border-top-color: #fa722e;
+      }
+      .app-splash__title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .app-splash__hint {
+        font-size: 0.8rem;
+        opacity: 0.6;
+      }
+      @keyframes app-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-splash__spinner {
+          animation-duration: 1.8s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="app-splash" role="status" aria-live="polite" aria-label="Loading MediaSorter">
+        <svg
+          class="app-splash__mark"
+          width="56"
+          height="56"
+          viewBox="0 0 48 48"
+          fill="none"
+          aria-hidden="true"
+        >
+          <rect
+            x="1.5"
+            y="1.5"
+            width="45"
+            height="45"
+            rx="12"
+            fill="var(--mark-frame)"
+            stroke="var(--mark-edge)"
+          />
+          <path
+            d="M10 36V20a2 2 0 012-2h7l3 3h14a2 2 0 012 2v13a2 2 0 01-2 2H12a2 2 0 01-2-2z"
+            stroke="var(--mark-ink)"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M24 8v7M20.5 11.5L24 15l3.5-3.5"
+            stroke="var(--mark-arrow)"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <div class="app-splash__spinner"></div>
+        <div class="app-splash__title">MediaSorter</div>
+        <div id="app-splash-hint" class="app-splash__hint">Starting up…</div>
+      </div>
+      <script>
+        if (document.documentElement.lang === "de") {
+          document.getElementById("app-splash").setAttribute("aria-label", "MediaSorter wird geladen");
+          document.getElementById("app-splash-hint").textContent = "Wird gestartet…";
+        }
+      </script>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

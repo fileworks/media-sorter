@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">MediaSorter · Fileworks</title>
+  <desc id="description">Review duplicates. Organize photos and videos with confidence.</desc>
+  <rect width="1280" height="640" fill="#FAF7F2"/>
+  <rect x="72" y="72" width="1136" height="496" rx="32" fill="#FFFFFF" stroke="#E6E3E0" stroke-width="2"/>
+  <svg x="112" y="108" width="128" height="128" viewBox="0 0 32 32" aria-hidden="true">
+    <g fill="none" stroke="#2A251F" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 10.8a2.2 2.2 0 0 1 2.2-2.2h4.9l2.5 2.9h11.1a2.2 2.2 0 0 1 2.2 2.2v9.9a2.2 2.2 0 0 1-2.2 2.2H6.8a2.2 2.2 0 0 1-2.2-2.2z"/><path stroke="#E8582A" d="M16 15.2v6.2m-2.8-2.8 2.8 2.8 2.8-2.8"/></g>
+  </svg>
+  <text x="274" y="159" fill="#C2410C" font-family="Geist Sans,system-ui,sans-serif" font-size="24" font-weight="700" letter-spacing="2">FILEWORKS</text>
+  <text x="274" y="220" fill="#14110F" font-family="Geist Sans,system-ui,sans-serif" font-size="52" font-weight="650">MediaSorter</text>
+  <text x="112" y="354" fill="#221E1C" font-family="Geist Sans,system-ui,sans-serif" font-size="31" font-weight="500">Review duplicates. Organize photos and videos with confidence.</text>
+  <path d="M112 410H1168" stroke="#E6E3E0" stroke-width="2"/>
+  <g>
+    <text x="112" y="461" fill="#C2410C" font-family="Geist Sans,system-ui,sans-serif" font-size="14" font-weight="700" letter-spacing="1.8">TYPE</text>
+    <text x="112" y="500" fill="#655D58" font-family="Geist Sans,system-ui,sans-serif" font-size="22" font-weight="500">Desktop app</text>
+    <text x="456" y="461" fill="#C2410C" font-family="Geist Sans,system-ui,sans-serif" font-size="14" font-weight="700" letter-spacing="1.8">PLATFORMS</text>
+    <text x="456" y="500" fill="#655D58" font-family="Geist Sans,system-ui,sans-serif" font-size="22" font-weight="500">macOS + Windows</text>
+    <text x="800" y="461" fill="#C2410C" font-family="Geist Sans,system-ui,sans-serif" font-size="14" font-weight="700" letter-spacing="1.8">PRIVACY</text>
+    <text x="800" y="500" fill="#655D58" font-family="Geist Sans,system-ui,sans-serif" font-size="22" font-weight="500">Local-first</text>
+  </g>
+</svg>

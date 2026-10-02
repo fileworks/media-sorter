@@ -1,0 +1,127 @@
+/**
+ * The footer rail: one sentence on the left, one primary action on the right.
+ *
+ * The sentence is either a standing safety promise or the run estimate, and it
+ * is deliberately quiet — a persistent line of body text rather than a banner.
+ * Reassurance that shouts stops being read by the third screen.
+ *
+ * There is exactly one primary action per screen and it always sits in the same
+ * place, so the flow can be completed without hunting.
+ *
+ * When the primary action is disabled, the reason sits between the sentence and
+ * the actions, bounded: two lines at most and never more than a third of the
+ * rail, because a two-sentence German reason left unbounded pushed the footer
+ * message down to a word and a half. The whole text stays reachable — on hover,
+ * whenever anything in the footer holds focus, and to assistive technology,
+ * where it is the primary action's accessible description.
+ */
+
+import type { ReactNode } from "react";
+import { FiArrowLeft, FiArrowRight, FiCheck } from "react-icons/fi";
+
+import { Button } from "@/components/ui/button";
+
+interface ActionBarProps {
+  /** `note` reads as a promise (green check); `estimate` reads as a figure. */
+  tone?: "note" | "estimate";
+  message: ReactNode;
+  back?: { label: string; onClick: () => void; disabled?: boolean };
+  primary?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    /** Explains a disabled primary action; also its accessible description. */
+    disabledReason?: string | null;
+    busy?: boolean;
+  };
+  /** Extra controls between the message and the buttons. */
+  children?: ReactNode;
+}
+
+export function ActionBar({ tone = "note", message, back, primary, children }: ActionBarProps) {
+  const reason = primary?.disabled ? (primary.disabledReason ?? null) : null;
+
+  return (
+    <footer className="min-h-actionbar shrink-0 border-t border-border bg-card py-3">
+      {/* One row once there is room for one. On a narrow window the sentence
+          takes its own line and the actions stay together on the next, rather
+          than the primary action wrapping away from Back. */}
+      <div className="workspace-frame group/footer flex min-h-10 flex-col gap-2 md:flex-row md:items-center md:gap-3">
+        {/* `basis-1/2` is the guarantee: at the one-row breakpoint the sentence
+            starts at half the rail and may grow, so however long the German
+            disabled-reason turns out to be it can never squeeze the message to
+            a sliver. Both are `min-w-0` so the clamp does the shrinking. */}
+        <p className="hidden min-w-0 flex-1 basis-1/2 items-start gap-2 text-xs leading-relaxed text-muted-foreground md:flex">
+          {tone === "note" && (
+            <FiCheck
+              className="mt-px h-3.5 w-3.5 shrink-0 text-success sm:h-4 sm:w-4"
+              aria-hidden
+            />
+          )}
+          <span className="min-w-0">{message}</span>
+        </p>
+
+        {/* Below the one-row breakpoint the reason takes its own line above the
+            actions rather than competing with them for the same row. */}
+        {reason && (
+          <p
+            id="action-bar-reason"
+            title={reason}
+            className="line-clamp-2 min-w-0 max-w-full text-2xs text-faint hover:line-clamp-none group-focus-within/footer:line-clamp-none md:max-w-[18rem]"
+          >
+            {reason}
+          </p>
+        )}
+
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+          {children}
+
+          {back && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={back.onClick}
+              disabled={back.disabled}
+              className="flex-1 md:flex-none"
+            >
+              <FiArrowLeft className="h-3.5 w-3.5" aria-hidden />
+              {back.label}
+            </Button>
+          )}
+
+          {/* The one primary action on the screen, in the one shape a primary
+              has. This used to repaint the `default` variant by hand, which is
+              a fifth definition of it that drifts the first time the palette
+              moves. */}
+          {primary && (
+            <Button
+              size="sm"
+              className="flex-1 px-5 font-semibold md:flex-none"
+              onClick={primary.onClick}
+              disabled={primary.disabled || primary.busy}
+              aria-describedby={reason ? "action-bar-reason" : undefined}
+              aria-busy={primary.busy || undefined}
+            >
+              {/* A transparent ring with one arc in `currentColor`. The ink has
+                  to follow the button — a busy button is also a disabled one,
+                  and a white spinner on the disabled fill was invisible, which
+                  is the one thing meant to prove work is happening. The arc
+                  rather than a two-tone ring because Tailwind cannot put an
+                  alpha on `currentColor`: `border-current/40` silently compiles
+                  to a solid `currentColor`, and a uniform ring does not appear
+                  to turn at all. */}
+              {primary.busy && (
+                <span
+                  aria-hidden
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent border-t-current"
+                />
+              )}
+              {primary.label}
+              {!primary.busy && <FiArrowRight className="h-3.5 w-3.5" aria-hidden />}
+            </Button>
+          )}
+        </div>
+      </div>
+    </footer>
+  );
+}

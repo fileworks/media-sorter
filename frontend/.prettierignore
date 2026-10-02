@@ -1,0 +1,4 @@
+dist
+src-tauri/target
+src-tauri/resources
+package-lock.json

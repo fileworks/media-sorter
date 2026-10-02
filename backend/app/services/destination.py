@@ -1,0 +1,199 @@
+"""Pure destination prediction shared by SortingService and PreviewService.
+
+Both services must agree on where a file will land — the preview is a promise
+the sort has to keep. Keeping the path math here, as side-effect-free
+functions, guarantees the two can never drift (the historical bug was each
+service re-implementing this by hand) and lets a dry run compute paths without
+touching the filesystem: directories are created only by the actual copy/move
+(``FileSystemService.safe_copy`` mkdirs the parent itself).
+"""
+
+import re
+from datetime import date
+from pathlib import Path
+
+from app.core.config import UNCATEGORIZED_FOLDER, Config
+from app.core.destination_paths import (
+    CONTEXTUAL_COPY_FOLDER,
+    QUARANTINE_FOLDERS,
+    companion_destination,
+    copy_destination,
+    reserve_destination,
+)
+from app.core.rules import append_contained_route
+from app.services.conversion_service import predicted_image_suffix, predicted_video_suffix
+from app.utils.media_utils import is_image, is_video
+from app.utils.path_utils import sanitize_filename_stem, sanitize_path_segment
+
+# A single-pass re.sub is used so a token value that happens to contain
+# another token name is never double-substituted.
+_RENAME_TOKEN_RE = re.compile(r"YYYY|MM|DD|NAME|TYPE")
+
+# Folders for files that have no meaningful place in the normal library.
+# Duplicate copies are deliberately absent: `copy_destination` places those
+# beside their keeper. A destination match is absent too because no second file
+# is written when identical content is already present.
+# Read-only recognition for destinations created by older versions. New runs
+# never choose these names, but indexing their contents as ordinary library
+# media would make old set-aside copies become keepers on the next run.
+RETIRED_QUARANTINE_FOLDERS = frozenset(
+    {
+        "_unknown_dates",
+        "_future_dates",
+        "_duplicates",
+        "_failed",
+        "_already_in_destination",
+    }
+)
+RECOGNIZED_SET_ASIDE_FOLDERS = frozenset(
+    {*QUARANTINE_FOLDERS.values(), *RETIRED_QUARANTINE_FOLDERS, CONTEXTUAL_COPY_FOLDER}
+)
+
+
+def quarantine_dir(dest_root: Path, reason: str, file_path: Path, source_root: Path) -> Path:
+    """Quarantine directory for *file_path*, preserving its source-relative
+    subfolders (``_undated/2019-holiday/…``) so a large set-aside folder stays
+    navigable and filename hints survive. Pure — never mkdirs. Files outside
+    *source_root* (e.g. an already-placed destination file being quarantined as
+    corrupted) fall back to the flat quarantine root.
+    """
+    base = dest_root / QUARANTINE_FOLDERS[reason]
+    try:
+        rel = file_path.parent.relative_to(source_root)
+    except ValueError:
+        return base
+    return base / rel if str(rel) != "." else base
+
+
+def build_dest_dir(
+    file_path: Path,
+    extracted_date: date,
+    source_root: Path,
+    dest_root: Path,
+    config: Config,
+    category: str | None = None,
+    camera: str = "",
+    route_suffix: str | None = None,
+) -> Path:
+    """Compute the destination *directory* for a file. Pure — never mkdirs.
+
+    Layout: date parts (per ``sort_criteria``), then either the topic folder or
+    the preserved source subfolders, then the camera-model folder.
+    """
+    parts: list[str] = []
+    if "year" in config.sort_criteria:
+        parts.append(str(extracted_date.year))
+    if "month" in config.sort_criteria:
+        parts.append(f"{extracted_date.month:02d}")
+    if "day" in config.sort_criteria:
+        parts.append(f"{extracted_date.day:02d}")
+    dest_dir = dest_root.joinpath(*parts) if parts else dest_root
+
+    # Topic vs. source-subfolder are mutually exclusive organizing schemes:
+    # Smart Categorization wins when enabled (the precedence is enforced here
+    # regardless of config, so a hand-edited config.json stays deterministic).
+    if config.categorize_enabled:
+        seg = sanitize_path_segment(category) if category else ""
+        dest_dir = dest_dir / (seg or UNCATEGORIZED_FOLDER)
+    elif config.preserve_subfolders:
+        # Recreate the source subfolder structure under the date folder.
+        try:
+            rel_parent = file_path.parent.relative_to(source_root)
+            if str(rel_parent) != ".":
+                dest_dir = dest_dir / rel_parent
+        except ValueError:
+            pass
+
+    # Camera model subfolder (orthogonal — may stack under the topic folder).
+    if config.camera_subfolder_enabled and camera:
+        dest_dir = dest_dir / camera
+
+    if route_suffix:
+        dest_dir = append_contained_route(dest_dir, route_suffix)
+
+    return dest_dir
+
+
+def rename_stem(pattern: str, d: date, stem: str, file_type: str) -> str:
+    """Substitute rename tokens and return one safe, portable filename stem.
+
+    Configuration validation gives users corrective guidance for unsafe
+    literals. This final sanitization is defence in depth for hand-edited or
+    legacy configuration and for original filenames containing characters the
+    destination filesystem cannot represent.
+    """
+    tokens = {
+        "YYYY": str(d.year),
+        "MM": f"{d.month:02d}",
+        "DD": f"{d.day:02d}",
+        "NAME": stem,
+        "TYPE": file_type,
+    }
+    rendered = _RENAME_TOKEN_RE.sub(lambda m: tokens[m.group(0)], pattern)
+    safe = sanitize_filename_stem(rendered)
+    if safe:
+        return safe
+    # A pathological pattern (or a reserved original name such as ``CON``)
+    # must never turn into an empty leaf or escape the destination directory.
+    return sanitize_filename_stem(stem) or f"{file_type}_{d:%Y-%m-%d}"
+
+
+def normalized_suffix(suffix: str, config: Config) -> str:
+    """The extension a renamed file lands with.
+
+    Renaming is the one setting that claims authority over the filename, and
+    the interface has always said so: a run that rewrites ``IMG_4382`` into a
+    dated stem and leaves ``.HEIC`` shouting beside it produced exactly the
+    inconsistency the feature exists to remove. So when renaming is on the
+    extension is lower-cased with the stem; when it is off the name is the
+    user's and nothing here touches it.
+
+    Conversion already writes a lower-case suffix of its own, so this is a
+    no-op on a converted file rather than a second opinion about it.
+
+    Scope is the media file. A companion keeps its own extension exactly as it
+    is: `companion_destination` lives in `core` without a configuration, and
+    three of its five call sites rewrite a *reviewed* plan where none is in
+    scope. Normalising it at some of them would put the preview and the run at
+    odds about a path, which is worse than a sidecar that still shouts.
+    """
+    return suffix.lower() if config.rename else suffix
+
+
+def predicted_filename(file_path: Path, extracted_date: date, config: Config) -> str:
+    """Predict the final filename the sort will produce for *file_path*.
+
+    Mirrors the sort pipeline's post-placement steps in order: format
+    conversion changes the suffix (a no-op when already in the target format),
+    then the rename pattern rewrites the stem and normalises the extension.
+    Collision suffixes (``_001``) depend on the destination disk state and are
+    deliberately not predicted.
+    """
+    suffix = file_path.suffix
+    if config.convert_images and is_image(file_path):
+        suffix = predicted_image_suffix(suffix, config.image_format)
+    elif config.convert_videos and is_video(file_path):
+        suffix = predicted_video_suffix(suffix, config.video_format)
+
+    stem = file_path.stem
+    if config.rename:
+        file_type = "VID" if is_video(file_path) else "IMG"
+        stem = rename_stem(config.rename_pattern, extracted_date, stem, file_type)
+    return stem + normalized_suffix(suffix, config)
+
+
+# Re-exported so every existing import keeps working. The definitions moved to
+# `app.core.destination_paths` because `core/sort_plan.py` needs them and
+# `core` must not import `services` (A-01).
+__all__ = [
+    "CONTEXTUAL_COPY_FOLDER",
+    "QUARANTINE_FOLDERS",
+    "build_dest_dir",
+    "companion_destination",
+    "copy_destination",
+    "normalized_suffix",
+    "predicted_filename",
+    "quarantine_dir",
+    "rename_stem",
+    "reserve_destination",
+]

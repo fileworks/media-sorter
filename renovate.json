@@ -1,0 +1,82 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Central dependency-maintenance policy for fileworks repositories.",
+  "extends": [
+    "config:best-practices",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "semanticCommits": "enabled",
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 1,
+  "branchConcurrentLimit": 1,
+  "prHourlyLimit": 0,
+  "schedule": [
+    "before 5am on monday"
+  ],
+  "minimumReleaseAge": "7 days",
+  "automerge": false,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "packageRules": [
+    {
+      "description": "Batch routine maintenance into one tested weekly patch release.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly dependency updates",
+      "groupSlug": "weekly-dependency-updates",
+      "automerge": true,
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Require explicit review for breaking-risk dependency changes.",
+      "matchUpdateTypes": [
+        "major",
+        "replacement",
+        "rollback"
+      ],
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps-major"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": [
+      "DEC-05: an urgent lane for genuinely time-sensitive vulnerabilities.",
+      "Every field below is set explicitly rather than inherited. Renovate's docs",
+      "say vulnerability-alert PRs skip the routine queue and may ignore schedule",
+      "and concurrency fields, but 'may ignore' is not a guarantee to build a",
+      "security lane on, and an unset field would otherwise inherit the weekly",
+      "lane's soak and automerge. These are declarative defence-in-depth: they do",
+      "not prevent queueing, and nothing here claims they do."
+    ],
+    "enabled": true,
+    "minimumReleaseAge": null,
+    "schedule": [
+      "at any time"
+    ],
+    "groupName": null,
+    "labels": [
+      "security"
+    ],
+    "prConcurrentLimit": 0,
+    "branchConcurrentLimit": 0,
+    "automerge": false,
+    "dependencyDashboardApproval": false
+  }
+}

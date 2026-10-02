@@ -1,0 +1,161 @@
+[project]
+name = "mediasort-backend"
+# Derived from app/_version.py (the single source of truth, bumped by
+# scripts/sync-version.mjs on release) via hatchling's dynamic-version hook below.
+dynamic = ["version"]
+description = "MediaSorter — intelligent media organisation backend"
+authors = [
+    {name = "Niklas Büchel", email = "gykonik@gmail.com"}
+]
+requires-python = ">=3.10"
+readme = "README.md"
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.1",
+    "python-multipart>=0.0.6",
+    "websockets>=16.1.1",
+
+    # Configuration & validation
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.0.0",
+    "platformdirs>=4.11.0",
+
+    # Logging
+    "structlog>=24.1.0",
+    "python-json-logger>=2.0.7",
+
+    # Image processing
+    "pillow>=12.3.0",
+    "piexif>=1.1.3",
+    "imagehash>=4.3.1",
+    # HEIC/HEIF support (registers a Pillow plugin)
+    "pillow-heif>=1.5.0",
+    # RAW decoding (bundles libraw via the wheel)
+    "rawpy>=0.18.0",
+    # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
+    # NumPy 2.5+ requires Python 3.12 and its stubs cannot represent this
+    # project's Python 3.10 API contract; lift the cap when the product floor moves.
+    "numpy>=1.24.0,<2.5",
+
+    # HTTP
+    "httpx>=0.25.0",
+    "aiofiles>=23.2.0",
+
+    # Utilities
+    "filetype>=1.2.0",
+    "python-dateutil>=2.8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.0",
+    # Property testing (`P-08`). Ported from unpacksort, where it already covers
+    # the archive-path safety rules this backend re-derived as `path_identity_key`.
+    "hypothesis>=6.140.3",
+    # Workflow tests parse `.github/workflows/*.yml` structurally rather than by
+    # substring, so the shape they assert is the shape Actions will read. It was
+    # only ever present transitively before, which is a CI break waiting to
+    # happen.
+    "pyyaml>=6.0.2",
+    # Ruff is the single linter + formatter (replaces black + isort + pylint).
+    "ruff>=0.16.1",
+    "mypy>=2.3.0",
+    "httpx>=0.25.0",
+    # Starlette's TestClient is built on HTTPX2; plain HTTPX is a deprecated
+    # compatibility fallback and emits a warning during every test process.
+    "httpx2>=2.0.0",
+    # Bundling — used by `make bundle-backend` to freeze the backend for distribution
+    "pyinstaller>=6.21.0",
+]
+
+# Local, offline AI tagging (CLIP/SigLIP zero-shot + GPS geocoding). Optional so
+# CI/tests do not pull onnxruntime; release builds freeze
+# the inference runtime but never model weights. Those are installed explicitly
+# from immutable, checksum-covered sources. fastembed provides the CLIP runtime
+# without torch and does not pin pillow/numpy, so it coexists with pillow-heif/rawpy.
+# reverse_geocoder bundles the GeoNames dataset (~26 MB) for offline GPS → city
+# name resolution — no network needed at runtime.
+local-ai = [
+    "fastembed>=0.8.0",
+    "reverse_geocoder>=1.5.1",
+    # SigLIP 2 ("standard"/"max" tiers): onnxruntime runs the towers and
+    # tokenizers loads the Gemma tokenizer. huggingface_hub remains an explicit
+    # runtime dependency for fastembed compatibility, but application code
+    # disables its network path and passes only verified local component paths.
+    # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
+    # releases on the last universal wheel; fastembed requires 1.24.2+ on 3.14+.
+    "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
+    "onnxruntime>=1.24.2; python_version >= '3.14'",
+    "tokenizers>=0.15.0",
+    "huggingface_hub>=1.26.1",
+    # Reliable cross-platform RAM detection for the hardware tier probe (the
+    # probe degrades gracefully without it, but psutil avoids per-OS fallbacks).
+    "psutil>=5.9.0",
+]
+
+[tool.hatch.version]
+path = "app/_version.py"
+
+[tool.uv]
+# Security floors for runtime-transitive packages that are not part of the
+# backend's public import surface. Keep them here so every shipped extra set is
+# resolved above known vulnerable releases without pretending they are direct
+# application dependencies.
+constraint-dependencies = [
+    "setuptools>=83.0.0",
+    "starlette>=1.3.1",
+    "urllib3>=2.8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Lets test modules in subdirectories import the shared helpers in tests/support.py.
+pythonpath = ["tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+ignore_missing_imports = true
+# Same scope as the sibling CLI repos. The suite is the thing that says the
+# product is correct, so it is held to the product's standard: a fixture that
+# quietly returns the wrong shape is a test that proves nothing.
+files = ["app", "tests"]
+
+# `pillow-heif` 1.6.0 began shipping a `py.typed` marker while still declaring
+# no `__all__`, so every name its `__init__` re-exports — `register_heif_opener`
+# among them — became invisible to `strict`'s `no_implicit_reexport`. The import
+# is correct and works at runtime; only the package's export declaration is
+# missing. Scoping `implicit_reexport` to this one module keeps the rule on
+# everywhere else, and it quietly becomes a no-op once upstream declares its
+# exports — unlike a `type: ignore`, which would then fail as `unused-ignore`.
+[[tool.mypy.overrides]]
+module = "pillow_heif"
+implicit_reexport = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# A pragmatic, recommended rule set: pyflakes (F) + pycodestyle (E/W) catch real
+# bugs and style; isort (I) replaces the old isort; pyupgrade (UP), bugbear (B),
+# comprehensions (C4) and simplify (SIM) are high-signal, low-noise.
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests favour explicit, repetitive setup over clever refactors.
+"tests/**" = ["B011", "SIM"]

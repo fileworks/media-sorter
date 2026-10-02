@@ -1,0 +1,66 @@
+{
+  "manifest_version": "2026-08-13.1",
+  "targets": {
+    "darwin-arm64": [
+      {
+        "binaries": ["ffmpeg"],
+        "format": "binary",
+        "license": "GPL-3.0-or-later",
+        "sha256": "6d175a4743ca50256e89a8cdd731100f9cee33bd79aeea46894d209410dc6617",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffmpeg-darwin-arm64"
+      },
+      {
+        "binaries": ["ffprobe"],
+        "format": "binary",
+        "license": "GPL-3.0-or-later",
+        "sha256": "df2684842eca145bd72f4724ce9cecbf38558a4d64b2aef7846680f877702baa",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffprobe-darwin-arm64"
+      }
+    ],
+    "darwin-x86_64": [
+      {
+        "binaries": ["ffmpeg"],
+        "license": "GPL-3.0-or-later",
+        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
+        "upstream_version": "7.1.1",
+        "url": "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+      },
+      {
+        "binaries": ["ffprobe"],
+        "license": "GPL-3.0-or-later",
+        "sha256": "5a0a77d5e0c689f7b577788e286dd46b2c6120babd14301cce7a79fcfd3f7d28",
+        "upstream_version": "7.1.1",
+        "url": "https://evermeet.cx/ffmpeg/ffprobe-7.1.1.zip"
+      }
+    ],
+    "linux-arm64": [
+      {
+        "binaries": ["ffmpeg", "ffprobe"],
+        "license": "GPL-3.0-or-later",
+        "sha256": "e01e07da838c46ceab5bdf05e7386c02fb3e2acddc6697a2e23f5b362ae7b88c",
+        "upstream_version": "N-125365-g9a01c1cb6a",
+        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-30-13-34/ffmpeg-N-125365-g9a01c1cb6a-linuxarm64-gpl.tar.xz"
+      }
+    ],
+    "linux-x86_64": [
+      {
+        "binaries": ["ffmpeg", "ffprobe"],
+        "license": "GPL-3.0-or-later",
+        "sha256": "85fe3e1754ddf9ad7b9e55b0b6a1bd97dc442ebcafc48c027ae5abaf9257281f",
+        "upstream_version": "N-125365-g9a01c1cb6a",
+        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-30-13-34/ffmpeg-N-125365-g9a01c1cb6a-linux64-gpl.tar.xz"
+      }
+    ],
+    "windows-x86_64": [
+      {
+        "binaries": ["ffmpeg.exe", "ffprobe.exe"],
+        "license": "GPL-3.0-or-later",
+        "sha256": "52c0383c460f0ec1039088f1591921fb82e3b870b32aab8faf2ff1e5ae14bf9d",
+        "upstream_version": "N-125365-g9a01c1cb6a",
+        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-30-13-34/ffmpeg-N-125365-g9a01c1cb6a-win64-gpl.zip"
+      }
+    ]
+  }
+}

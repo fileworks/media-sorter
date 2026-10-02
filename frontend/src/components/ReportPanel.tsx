@@ -1,0 +1,860 @@
+import { useState, useMemo } from "react";
+import { FiLoader, FiSearch } from "react-icons/fi";
+import { api } from "@/services/api";
+import { useToast } from "@/context/toast-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
+import { companionRoleLabel } from "@/lib/evidenceLabels";
+import { ValidationBadge } from "@/components/ui/validation-badge";
+import { triggerDownload } from "@/lib/download";
+import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/formatters";
+import { formatDate } from "@/lib/dateFormatters";
+import { formatMetadataSource } from "@/lib/metadataSource";
+import { useCountUp } from "@/hooks/useCountUp";
+import { REPORT_FILTER_TABS, reportTabForStatus, type ReportFilterTab } from "@/lib/reportStatuses";
+import { presentOutcome, type StatusTone } from "@/lib/statusPresentation";
+import type { OperationOutcome, OperationReport, FileOperationRecord } from "@/types/api";
+import { useI18n } from "@/i18n/I18nContext";
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface ReportPanelProps {
+  report: OperationReport;
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+
+function pct(value: number, total: number, locale: string): string {
+  if (total === 0) return "0.0%";
+  return new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(value / total);
+}
+
+// ── Section A — Summary Cards ─────────────────────────────────────────────────
+
+function SummaryCard({
+  label,
+  value,
+  subtext,
+  color,
+}: {
+  label: string;
+  value: number;
+  subtext: string;
+  color: string;
+}) {
+  const { locale } = useI18n();
+  const display = useCountUp(value);
+  return (
+    <div className="rounded-window border border-border bg-muted/30 p-4 text-center">
+      <p className="mb-1 text-xs text-muted-foreground">{label}</p>
+      <p className={cn("text-2xl font-bold tabular-nums", color)}>
+        {display.toLocaleString(locale)}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{subtext}</p>
+    </div>
+  );
+}
+
+// ── Section B — Statistics Dashboard ─────────────────────────────────────────
+
+/** CSS-only vertical bar chart for files-per-year. */
+function BarChart({ data }: { data: Record<string, number> | undefined }) {
+  const BAR_MAX_PX = 72;
+  const entries = Object.entries(data ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+
+  return (
+    <div
+      className="flex items-end gap-1 overflow-x-auto pb-1"
+      style={{ minHeight: `${BAR_MAX_PX + 40}px` }}
+    >
+      {entries.map(([label, value]) => (
+        <div key={label} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
+          <span className="text-3xs font-mono leading-none text-muted-foreground">{value}</span>
+          <div
+            className="w-full rounded-t-control bg-info/60 transition-colors hover:bg-info/80"
+            style={{ height: `${Math.max((value / max) * BAR_MAX_PX, 4)}px` }}
+          />
+          <span className="text-3xs leading-none text-muted-foreground">{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Horizontal stacked percentage bar for file types.
+ * Categorical series, not statuses: "which file type" is not "is this good or
+ * bad", so these are their own named tokens rather than success/error reused
+ * for something they do not mean. Defined in index.css, themed for both. */
+const TYPE_COLORS = [
+  "bg-chart-1",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
+  "bg-chart-5",
+  "bg-chart-6",
+];
+
+function TypeBar({ data }: { data: Record<string, number> | undefined }) {
+  const safeData = data ?? {};
+  const total = Math.max(
+    Object.values(safeData).reduce((a, b) => a + b, 0),
+    1,
+  );
+  const entries = Object.entries(safeData).sort(([, a], [, b]) => b - a);
+  return (
+    <div className="space-y-3">
+      <div className="flex h-4 w-full overflow-hidden rounded-full">
+        {entries.map(([type, count], i) => (
+          <div
+            key={type}
+            className={TYPE_COLORS[i % TYPE_COLORS.length]}
+            style={{ width: `${(count / total) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {entries.map(([type, count], i) => (
+          <div key={type} className="flex items-center gap-2 text-xs">
+            <span
+              className={cn("h-2.5 w-2.5 rounded-control", TYPE_COLORS[i % TYPE_COLORS.length])}
+            />
+            <span className="capitalize">{type.replace(/^\./, "")}</span>
+            <span className="text-muted-foreground">({count})</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Top camera models list with percentage bars. */
+function CameraTable({ data }: { data: Record<string, number> }) {
+  const { t, locale } = useI18n();
+  const total = Math.max(
+    Object.values(data).reduce((a, b) => a + b, 0),
+    1,
+  );
+  const entries = Object.entries(data)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 8);
+
+  if (entries.length === 0) {
+    return <p className="text-xs italic text-muted-foreground">{t("report.noCamera")}</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {entries.map(([model, count]) => (
+        <div key={model} className="space-y-0.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="truncate text-foreground" title={model}>
+              {!model || model.trim().toLowerCase() === "unknown" ? t("report.unknown") : model}
+            </span>
+            <span className="ml-2 shrink-0 tabular-nums text-muted-foreground">
+              {count.toLocaleString(locale)} (
+              {new Intl.NumberFormat(locale, { style: "percent" }).format(count / total)})
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-muted-foreground/40"
+              style={{ width: `${(count / total) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type ReportStatistics = NonNullable<OperationReport["statistics"]>;
+
+function StatsDashboard({
+  statistics,
+  open,
+  onToggle,
+}: {
+  statistics: ReportStatistics;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  const hasYears = Object.keys(statistics.files_per_year ?? {}).length > 0;
+  const hasTypes = Object.keys(statistics.files_per_type ?? {}).length > 0;
+  const hasCameras = Object.keys(statistics.camera_models ?? {}).length > 0;
+
+  return (
+    <div className="rounded-window border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between rounded-window px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+      >
+        <span>{t("report.statistics")}</span>
+        <span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="space-y-5 border-t border-border px-4 pb-5 pt-4">
+          {hasYears && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("report.filesPerYear")}
+              </p>
+              <BarChart data={statistics.files_per_year} />
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {hasTypes && (
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("report.fileTypes")}
+                </p>
+                <TypeBar data={statistics.files_per_type} />
+              </div>
+            )}
+            {hasCameras && (
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("report.cameraModels")}
+                </p>
+                <CameraTable data={statistics.camera_models} />
+              </div>
+            )}
+          </div>
+          {!hasYears && !hasTypes && !hasCameras && (
+            <p className="text-xs italic text-muted-foreground">{t("report.noStatistics")}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Section C — File Table ────────────────────────────────────────────────────
+
+type FilterTab = ReportFilterTab;
+type SortCol = keyof Pick<
+  FileOperationRecord,
+  "source_path" | "dest_path" | "extracted_date" | "metadata_source" | "status"
+>;
+
+const FILTER_TABS = REPORT_FILTER_TABS;
+
+const STATUS_STYLES: Record<string, { key: string; className: string }> = {
+  success: {
+    key: "report.status.sorted",
+    className: "text-success bg-success/10",
+  },
+  unknown_date: {
+    key: "report.status.unknownDate",
+    className: "text-warning bg-warning/10",
+  },
+  future_date: {
+    key: "report.status.futureDate",
+    className: "text-warning bg-warning/10",
+  },
+  duplicate: {
+    key: "report.status.duplicate",
+    className: "text-info bg-info/10",
+  },
+  failed: {
+    key: "report.status.failed",
+    className: "text-error bg-error/10",
+  },
+  corrupted: {
+    key: "report.status.corrupted",
+    className: "text-warning bg-warning/10",
+  },
+  junk: {
+    key: "report.status.junk",
+    className: "text-warning bg-warning/10",
+  },
+  already_in_destination: {
+    key: "report.status.inDestination",
+    className: "text-info bg-info/10",
+  },
+  kept_in_place: {
+    key: "report.status.keptInPlace",
+    className: "text-muted-foreground bg-muted",
+  },
+  incomplete_unit: {
+    key: "report.status.incompleteUnit",
+    className: "text-error bg-error/10",
+  },
+  unmatched_companion: {
+    key: "report.status.unmatchedCompanion",
+    className: "text-warning bg-warning/10",
+  },
+  cancelled: {
+    key: "report.status.cancelled",
+    className: "text-info bg-info/10",
+  },
+  blocked: {
+    key: "report.status.blocked",
+    className: "text-error bg-error/10",
+  },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
+  const s = STATUS_STYLES[status] ?? {
+    key: status,
+    className: "text-muted-foreground bg-muted",
+  };
+  return (
+    <span
+      className={cn(
+        "whitespace-nowrap rounded-control px-2 py-0.5 text-xs font-medium",
+        s.className,
+      )}
+    >
+      {t(s.key, {}, status)}
+    </span>
+  );
+}
+
+const FILE_PAGE_SIZE = 50;
+
+const SORT_COLUMNS: { col: SortCol; key: string }[] = [
+  { col: "source_path", key: "report.column.source" },
+  { col: "dest_path", key: "report.column.destination" },
+  { col: "extracted_date", key: "report.column.date" },
+  { col: "metadata_source", key: "report.column.dateSource" },
+  { col: "status", key: "report.column.status" },
+];
+
+function leaf(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
+function FileTableSection({
+  files,
+  suspiciousCount,
+}: {
+  files: FileOperationRecord[];
+  suspiciousCount: number;
+}) {
+  const { t, tCount, locale } = useI18n();
+  const [tab, setTab] = useState<FilterTab>("all");
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<SortCol>("source_path");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(0);
+
+  const handleSortClick = (col: SortCol) => {
+    if (col === sortCol) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+    setPage(0);
+  };
+
+  // One table decides both which rows a tab shows and the number on it. They
+  // were two lists of the same strings, free to disagree.
+  const tabCounts = useMemo(() => {
+    const counts: Record<FilterTab, number> = {
+      all: files.length,
+      sorted: 0,
+      quarantined: 0,
+      duplicates: 0,
+      failed: 0,
+    };
+    for (const f of files) {
+      const tab = reportTabForStatus(f.status);
+      if (tab !== null) counts[tab]++;
+    }
+    return counts;
+  }, [files]);
+
+  const activeStatuses = FILTER_TABS.find((t) => t.id === tab)?.statuses ?? null;
+
+  const filtered = useMemo(() => {
+    let result = files;
+    if (activeStatuses) {
+      result = result.filter((f) => activeStatuses.includes(f.status));
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((f) => f.source_path.toLowerCase().includes(q));
+    }
+    return result;
+  }, [files, activeStatuses, search]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aVal = String(a[sortCol] ?? "");
+      const bVal = String(b[sortCol] ?? "");
+      const cmp = aVal.localeCompare(bVal);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortCol, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / FILE_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageFiles = sorted.slice(safePage * FILE_PAGE_SIZE, (safePage + 1) * FILE_PAGE_SIZE);
+
+  const SortIcon = ({ col }: { col: SortCol }) => (
+    <span className="ml-1 text-muted-foreground/60">
+      {sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+    </span>
+  );
+
+  return (
+    <div className="rounded-window border border-border bg-card">
+      {/* Filters + Search */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div className="flex flex-wrap gap-1">
+          {FILTER_TABS.map((tabOption) => (
+            <Button
+              key={tabOption.id}
+              size="sm"
+              variant={tab === tabOption.id ? "default" : "ghost"}
+              aria-pressed={tab === tabOption.id}
+              onClick={() => {
+                setTab(tabOption.id);
+                setPage(0);
+              }}
+            >
+              {t(`report.filter.${tabOption.id}`)}{" "}
+              <span className="tabular-nums">
+                ({tabCounts[tabOption.id].toLocaleString(locale)})
+              </span>
+            </Button>
+          ))}
+        </div>
+        <div className="relative">
+          <FiSearch className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder={t("report.searchPlaceholder")}
+            aria-label={t("report.searchLabel")}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
+            className="h-8 w-48 pl-6"
+          />
+        </div>
+      </div>
+
+      {/* EXIF sanity warning banner */}
+      {suspiciousCount > 0 && (
+        <div className="px-4 pt-3">
+          <ValidationBadge
+            severity="warning"
+            message={tCount("report.suspiciousDates", suspiciousCount, {
+              count: suspiciousCount.toLocaleString(locale),
+            })}
+          />
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
+            <tr>
+              {SORT_COLUMNS.map(({ col, key }) => (
+                <th
+                  key={col}
+                  className="px-3 py-2 text-left font-medium"
+                  aria-sort={
+                    sortCol === col ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSortClick(col)}
+                    className="inline-flex min-h-6 select-none items-center rounded-control text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    {t(key)}
+                    <SortIcon col={col} />
+                  </button>
+                </th>
+              ))}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                {t("report.column.mediaUnit")}
+              </th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                {t("report.column.tags")}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {pageFiles.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  {t("report.noFilterMatch")}
+                </td>
+              </tr>
+            ) : (
+              pageFiles.map((f) => (
+                // `scroll-mt` clears the sticky `<thead>` above these rows.
+                <tr key={f.id} className="scroll-mt-8 transition-colors hover:bg-muted/40">
+                  <td
+                    className="max-w-[180px] truncate px-3 py-2 text-foreground"
+                    title={f.source_path}
+                  >
+                    {leaf(f.source_path)}
+                  </td>
+                  <td
+                    className="max-w-[180px] truncate px-3 py-2 text-muted-foreground"
+                    title={f.dest_path ?? "—"}
+                  >
+                    {f.dest_path ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-muted-foreground">
+                    {f.extracted_date ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 capitalize text-muted-foreground">
+                    {formatMetadataSource(f.metadata_source, t)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={f.status} />
+                      {["duplicate", "already_in_destination"].includes(f.status) &&
+                        f.duplicate_type &&
+                        (() => {
+                          const badge = (
+                            <span className="rounded-full bg-info/10 px-2 py-0.5 text-3xs font-medium text-info">
+                              {f.duplicate_type === "exact"
+                                ? "exact"
+                                : `~${f.duplicate_similarity ?? 0}%`}
+                            </span>
+                          );
+                          // Which file this one duplicates is a fact, not a
+                          // truncation, so it goes in the app's tooltip rather
+                          // than a native `title` no keyboard user ever sees.
+                          return f.duplicate_of ? (
+                            <Tooltip label={t("report.duplicateOf", { path: f.duplicate_of })}>
+                              {badge}
+                            </Tooltip>
+                          ) : (
+                            badge
+                          );
+                        })()}
+                    </div>
+                    {f.error_message && (
+                      <p className="mt-1 max-w-[220px] whitespace-normal text-3xs text-warning">
+                        {f.error_message}
+                      </p>
+                    )}
+                  </td>
+                  <td className="max-w-[180px] px-3 py-2 text-muted-foreground">
+                    {f.unit_id ? (
+                      <div className="space-y-0.5">
+                        <p className="text-foreground">
+                          {f.unit_primary_path === f.source_path
+                            ? t("report.unit.primary")
+                            : f.companion_role
+                              ? t("report.unit.companion", {
+                                  role: companionRoleLabel(f.companion_role, t),
+                                })
+                              : t("report.unit.unknownRole")}
+                        </p>
+                        <p className="truncate" title={f.unit_primary_path ?? undefined}>
+                          {f.unit_primary_path
+                            ? t("report.unit.primaryFile", { file: leaf(f.unit_primary_path) })
+                            : t("report.unit.primaryUnknown")}
+                        </p>
+                        <p className="truncate font-mono text-3xs" title={f.unit_id}>
+                          {t("report.unit.id", { id: f.unit_id })}
+                        </p>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td
+                    className="max-w-[120px] truncate px-3 py-2 text-muted-foreground"
+                    title={f.tags.join(", ") || undefined}
+                  >
+                    {f.tags.join(", ") || "—"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            {tCount("report.pagination", sorted.length, {
+              count: sorted.length.toLocaleString(locale),
+              from: (safePage * FILE_PAGE_SIZE + 1).toLocaleString(locale),
+              to: Math.min((safePage + 1) * FILE_PAGE_SIZE, sorted.length).toLocaleString(locale),
+            })}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={safePage === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              {t("report.previous")}
+            </Button>
+            <span className="tabular-nums text-xs text-muted-foreground">
+              {t("report.page", { page: safePage + 1, pages: totalPages })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={safePage >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {t("report.next")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Export ───────────────────────────────────────────────────────────────
+
+/**
+ * The outcome banner's colours, keyed by tone rather than by outcome.
+ *
+ * This was a third table restating which outcome deserves which colour, after
+ * `presentOutcome` and the history chip. Same words, three opinions — and the
+ * banner is the one the user reads first.
+ */
+const OUTCOME_BANNER: Record<StatusTone | "neutral", string> = {
+  success: "border-success/40 bg-tint-success",
+  warning: "border-warning/40 bg-tint-warning",
+  info: "border-info/40 bg-info/10",
+  error: "border-error/40 bg-tint-error",
+  neutral: "border-border bg-muted/30",
+};
+
+function outcomeBannerClass(outcome: OperationOutcome): string {
+  if (outcome === "unknown") return OUTCOME_BANNER.neutral;
+  return OUTCOME_BANNER[presentOutcome(outcome, 0).tone];
+}
+
+export function ReportPanel({ report }: ReportPanelProps) {
+  const { toast } = useToast();
+  const { t, locale } = useI18n();
+  const [exporting, setExporting] = useState<"csv" | "json" | null>(null);
+  const [statsOpen, setStatsOpen] = useState(true);
+
+  const handleExport = async (format: "csv" | "json") => {
+    if (exporting) return;
+    setExporting(format);
+    try {
+      const blob = await api.exportReport(report.operation_id, format);
+      const filename = `mediasort_${report.operation_id}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.${format}`;
+      await triggerDownload(blob, filename);
+      toast(t("report.exportSuccess"), "success");
+    } catch {
+      toast(t("report.exportFailed"), "error");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const { summary } = report;
+  const total = Math.max(summary.total + summary.skipped, 1);
+  // Fold the P0-engine outcomes into the existing cards so every file is
+  // accounted for and the cards agree with the filter tabs below (junk →
+  // Quarantined, already-in-destination → Duplicates).
+  const junkCount = summary.junk ?? 0;
+  const alreadyInDestCount = summary.already_in_destination ?? 0;
+  const quarantineCount =
+    summary.future_dates + summary.unknown_dates + summary.corrupted + junkCount;
+  const duplicateCount = summary.duplicates;
+  const skippedCount = summary.skipped + alreadyInDestCount;
+  const attentionCount =
+    summary.failed + (summary.incomplete_units ?? 0) + (summary.unmatched_companions ?? 0);
+  const remainingCount = summary.remaining;
+  const sourceRoots =
+    report.source_roots?.length > 0
+      ? report.source_roots
+      : [
+          {
+            root_id: "legacy-input",
+            role: "input" as const,
+            path: report.source_path,
+            display_name: null,
+          },
+        ];
+  const outcome = report.outcome ?? "unknown";
+  const suspiciousCount = report.files.filter((f) => f.suspicious === true).length;
+
+  return (
+    <div className="space-y-4">
+      {/* ── Section A: Summary Cards ── */}
+      <div className="rounded-window border border-border bg-card p-4">
+        <div
+          className={cn("mb-4 rounded-window border px-4 py-3", outcomeBannerClass(outcome))}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="text-sm font-semibold text-foreground">{t(`report.outcome.${outcome}`)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {t(`report.outcome.${outcome}.detail`, {
+              changed: summary.sorted + quarantineCount + duplicateCount,
+              attention: attentionCount,
+              remaining: remainingCount,
+            })}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("report.finishedAt", {
+              date: formatDate(report.finished_at ?? report.execution_date, { locale }),
+            })}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <SummaryCard
+            label={t("report.summary.sorted")}
+            value={summary.sorted}
+            subtext={pct(summary.sorted, total, locale)}
+            color="text-success"
+          />
+          <SummaryCard
+            label={t("report.summary.quarantined")}
+            value={quarantineCount}
+            subtext={pct(quarantineCount, total, locale)}
+            color="text-warning"
+          />
+          <SummaryCard
+            label={t("report.summary.duplicates")}
+            value={duplicateCount}
+            subtext={pct(duplicateCount, total, locale)}
+            color="text-info"
+          />
+          <SummaryCard
+            label={t("report.summary.skipped")}
+            value={skippedCount}
+            subtext={pct(skippedCount, total, locale)}
+            color="text-muted-foreground"
+          />
+          <SummaryCard
+            label={t("report.summary.attention")}
+            value={attentionCount}
+            subtext={pct(attentionCount, total, locale)}
+            color="text-error"
+          />
+          <SummaryCard
+            label={t("report.summary.remaining")}
+            value={remainingCount}
+            subtext={pct(remainingCount, total, locale)}
+            color="text-warning"
+          />
+        </div>
+
+        {/* Meta row */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{t(`report.runMode.${report.run_mode ?? "unknown"}`)}</span>
+          <span>·</span>
+          <span>{t(`report.transferMode.${report.transfer_mode ?? "unknown"}`)}</span>
+          <span>·</span>
+          <span>
+            {t("report.duration", {
+              duration: formatDuration(report.duration_seconds, { style: "long", locale }),
+            })}
+          </span>
+          <span>·</span>
+          <span className="max-w-[220px] truncate" title={report.dest_path}>
+            {t("report.destination", { path: report.dest_path })}
+          </span>
+        </div>
+
+        <div className="mt-3 rounded-panel border border-border bg-muted/40 px-3 py-2">
+          <p className="text-xs font-medium text-foreground">
+            {t("report.sourcesUsed", { count: sourceRoots.length })}
+          </p>
+          <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+            {sourceRoots.map((root) => (
+              <li key={root.root_id} className="flex flex-wrap gap-x-2">
+                <span className="font-medium text-foreground">
+                  {root.display_name ?? t(`report.sourceRole.${root.role}`)}
+                </span>
+                <span className="break-all font-mono">{root.path}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {(report.excluded_roots?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-panel border border-border bg-muted/40 px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
+              {t("report.excludedRoots", { count: report.excluded_roots?.length ?? 0 })}
+            </p>
+            <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+              {report.excluded_roots?.map((path) => (
+                <li key={path} className="break-all font-mono">
+                  {path}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Export buttons */}
+        <div className="mt-3 flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!!exporting}
+            onClick={() => void handleExport("csv")}
+          >
+            {exporting === "csv" ? (
+              <span className="flex items-center gap-2">
+                <FiLoader className="h-3.5 w-3.5 animate-spin" />
+                {t("report.exporting")}
+              </span>
+            ) : (
+              t("report.exportCsv")
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!!exporting}
+            onClick={() => void handleExport("json")}
+          >
+            {exporting === "json" ? (
+              <span className="flex items-center gap-2">
+                <FiLoader className="h-3.5 w-3.5 animate-spin" />
+                {t("report.exporting")}
+              </span>
+            ) : (
+              t("report.exportJson")
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Section B: Statistics Dashboard (only when statistics block exists) ── */}
+      {report.statistics && (
+        <StatsDashboard
+          statistics={report.statistics}
+          open={statsOpen}
+          onToggle={() => setStatsOpen((v) => !v)}
+        />
+      )}
+
+      {/* ── Section C: File Table ── */}
+      <FileTableSection files={report.files} suspiciousCount={suspiciousCount} />
+    </div>
+  );
+}

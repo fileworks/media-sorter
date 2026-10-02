@@ -1,0 +1,212 @@
+"""Tests for LogQueueBroadcast and _to_jsonable in logging_config.py."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+from app.core.logging_config import (
+    LOG_BACKUP_COUNT,
+    LOG_FILE_MAX_BYTES,
+    LOG_RETENTION_MAX_BYTES,
+    LogQueueBroadcast,
+    _redact_sensitive_fields,
+    _to_jsonable,
+    setup_logging,
+)
+
+# ------------------------------------------------------------------ #
+# _to_jsonable                                                          #
+# ------------------------------------------------------------------ #
+
+
+def test_to_jsonable_primitives() -> None:
+    assert _to_jsonable("hello") == "hello"
+    assert _to_jsonable(42) == 42
+    assert _to_jsonable(3.14) == 3.14
+    assert _to_jsonable(True) is True
+    assert _to_jsonable(None) is None
+
+
+def test_to_jsonable_path() -> None:
+    result = _to_jsonable(Path("/some/file.jpg"))
+    assert isinstance(result, str)
+    assert "/some/file.jpg" in result
+
+
+def test_to_jsonable_exception() -> None:
+    exc = ValueError("something went wrong")
+    result = _to_jsonable(exc)
+    assert isinstance(result, str)
+    assert "something went wrong" in result
+
+
+def test_to_jsonable_bytes() -> None:
+    result = _to_jsonable(b"\xff\xd8\xff")
+    assert isinstance(result, str)
+
+
+def test_to_jsonable_list_with_path() -> None:
+    result = _to_jsonable([Path("/a"), Path("/b")])
+    assert isinstance(result, list)
+    assert all(isinstance(x, str) for x in result)
+
+
+def test_to_jsonable_dict_with_non_str_key() -> None:
+    result = _to_jsonable({1: "one", 2: Path("/two")})
+    assert isinstance(result, dict)
+    assert "1" in result
+    assert isinstance(result["2"], str)
+
+
+def test_to_jsonable_nested() -> None:
+    result = _to_jsonable({"path": Path("/x"), "error": ValueError("oops")})
+    assert isinstance(result["path"], str)
+    assert isinstance(result["error"], str)
+    assert "oops" in result["error"]
+
+
+# ------------------------------------------------------------------ #
+# LogQueueBroadcast                                                     #
+# ------------------------------------------------------------------ #
+
+
+def test_log_queue_broadcast_carries_context_fields() -> None:
+    """Extra kwargs (path=Path(...), error=Exception(...)) appear in context as
+    JSON-safe strings."""
+    broadcast = LogQueueBroadcast()
+
+    event_dict = {
+        "event": "File processed",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "level": "info",
+        "path": Path("/some/photo.jpg"),
+        "error": Exception("boom"),
+    }
+
+    captured: list[Any] = []
+
+    with patch("app.core.log_queue.get_queue") as mock_get_queue:
+        q = MagicMock()
+        q.put_nowait.side_effect = lambda entry: captured.append(entry)
+        mock_get_queue.return_value = q
+
+        broadcast(MagicMock(), "info", event_dict)
+
+    assert len(captured) == 1
+    entry = captured[0]
+    assert entry["message"] == "File processed"
+    assert entry["level"] == "info"
+    assert entry["context"] is not None
+
+    # path and error must be JSON-safe strings in context
+    assert "path" in entry["context"]
+    assert isinstance(entry["context"]["path"], str)
+    assert "error" in entry["context"]
+    assert isinstance(entry["context"]["error"], str)
+    assert "boom" in entry["context"]["error"]
+
+
+def test_log_queue_broadcast_reserved_keys_excluded_from_context() -> None:
+    """'event', 'timestamp', 'level', 'logger', 'level_number' must NOT appear in context."""
+    broadcast = LogQueueBroadcast()
+
+    event_dict = {
+        "event": "Something happened",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "level": "warning",
+        "logger": "app.services.sorting",
+        "level_number": 30,
+        "operation_id": "sort_abc123",
+    }
+
+    captured: list[Any] = []
+
+    with patch("app.core.log_queue.get_queue") as mock_get_queue:
+        q = MagicMock()
+        q.put_nowait.side_effect = lambda entry: captured.append(entry)
+        mock_get_queue.return_value = q
+
+        broadcast(MagicMock(), "warning", event_dict)
+
+    entry = captured[0]
+    context = entry["context"]
+    assert "event" not in context
+    assert "timestamp" not in context
+    assert "level" not in context
+    assert "logger" not in context
+    assert "level_number" not in context
+    # non-reserved extra field IS present
+    assert "operation_id" in context
+
+
+def test_log_queue_broadcast_no_extra_context_is_none() -> None:
+    """When there are no extra fields, context should be None (not an empty dict)."""
+    broadcast = LogQueueBroadcast()
+
+    event_dict = {
+        "event": "Ping",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "level": "debug",
+    }
+
+    captured: list[Any] = []
+
+    with patch("app.core.log_queue.get_queue") as mock_get_queue:
+        q = MagicMock()
+        q.put_nowait.side_effect = lambda entry: captured.append(entry)
+        mock_get_queue.return_value = q
+
+        broadcast(MagicMock(), "debug", event_dict)
+
+    assert captured[0]["context"] is None
+
+
+def test_log_queue_broadcast_returns_event_dict_unchanged() -> None:
+    """The processor must return the original event_dict (structlog chain contract)."""
+    broadcast = LogQueueBroadcast()
+
+    event_dict = {"event": "hello", "timestamp": "t", "level": "info", "extra_key": "val"}
+
+    with patch("app.core.log_queue.get_queue"):
+        result = broadcast(MagicMock(), "info", event_dict)
+
+    assert result is event_dict
+
+
+def test_rotating_log_constants_match_documented_retention() -> None:
+    assert LOG_FILE_MAX_BYTES == 5 * 1024 * 1024
+    assert LOG_BACKUP_COUNT == 3
+    assert LOG_RETENTION_MAX_BYTES == 20 * 1024 * 1024
+
+
+def test_file_handler_failure_is_nonfatal() -> None:
+    with patch(
+        "app.core.logging_config._get_log_dir",
+        side_effect=PermissionError("no log directory"),
+    ):
+        setup_logging("INFO")
+
+
+def test_sensitive_context_is_redacted_recursively_before_broadcast() -> None:
+    event = {
+        "event": "operation.started",
+        "task_id": "safe-task-id",
+        "path": "/safe/media",
+        "authorization": "Bearer live-secret",
+        "nested": {
+            "api_key": "key-value",
+            "items": [{"refresh_token": "token-value"}, {"count": 3}],
+        },
+    }
+
+    redacted = _redact_sensitive_fields(None, "info", event)
+
+    assert redacted["task_id"] == "safe-task-id"
+    assert redacted["path"] == "/safe/media"
+    assert redacted["authorization"] == "[REDACTED]"
+    assert redacted["nested"] == {
+        "api_key": "[REDACTED]",
+        "items": [{"refresh_token": "[REDACTED]"}, {"count": 3}],
+    }

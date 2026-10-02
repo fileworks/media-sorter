@@ -1,0 +1,24 @@
+{
+  "name": "media-sorter-release",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Audited release tooling for MediaSorter. This private package is never versioned or published.",
+  "scripts": {
+    "release": "release-it --ci",
+    "release:dry": "release-it --ci --dry-run",
+    "release:guard:test": "node --test scripts/releaseability.test.cjs"
+  },
+  "devDependencies": {
+    "@release-it/conventional-changelog": "12.0.0",
+    "conventional-changelog": "8.1.1",
+    "release-it": "21.0.1"
+  },
+  "overrides": {
+    "release-it": {
+      "undici": "7.29.1"
+    },
+    "get-uri": {
+      "basic-ftp": "6.2.1"
+    }
+  }
+}

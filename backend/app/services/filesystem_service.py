@@ -1,0 +1,938 @@
+"""Filesystem service — file enumeration, safe copy/move, and path helpers."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import os
+import shutil
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
+from app.background_tasks.task_manager import CancellationToken
+from app.core.exceptions import (
+    CorruptedFileError,
+    InsufficientStorageError,
+    IntegrityTransferError,
+    MediaSortException,
+    SortingError,
+)
+
+if TYPE_CHECKING:
+    from PIL.Image import Image
+
+    from app.background_tasks.task_manager import Task
+from app.core.logging_config import get_logger
+from app.core.media_units import (
+    HEIC_EXTENSIONS as HEIC_EXTENSIONS,
+)
+from app.core.media_units import (
+    RAW_EXTENSIONS as RAW_EXTENSIONS,
+)
+from app.core.media_units import (
+    CompanionHandling,
+    MediaUnit,
+    UnmatchedCompanion,
+    bind_media_units,
+)
+from app.services.verified_transfer import TransferResult, transfer_path
+
+# The media extension registries live in app.utils.media_utils (the single source
+# of truth). They are re-exported here — via the redundant ``as`` alias so they
+# stay explicit re-exports under mypy --strict — because many modules and tests
+# import them from this service. New code should import the ``is_*`` helpers
+# straight from app.utils.media_utils.
+from app.utils.media_utils import (
+    IMAGE_EXTENSIONS as IMAGE_EXTENSIONS,
+)
+from app.utils.media_utils import (
+    MEDIA_EXTENSIONS as MEDIA_EXTENSIONS,
+)
+from app.utils.media_utils import (
+    VIDEO_EXTENSIONS as VIDEO_EXTENSIONS,
+)
+from app.utils.media_utils import (
+    is_media,
+    is_size_included,
+)
+from app.utils.path_utils import (
+    is_excluded_by_pattern,
+    path_relationship,
+    safe_destination_name,
+    validate_source_root,
+)
+
+logger = get_logger(__name__)
+
+#: A finite ceiling for `max_recursion_depth: None` (C-05). "No limit" is a
+#: reasonable thing for a user to ask for and an unreasonable thing for a
+#: recursive walk to promise: a directory cycle turns it into a `RecursionError`
+#: that aborts the whole scan. 64 is far deeper than any real media library and
+#: far shallower than Python's recursion limit.
+MAX_TRAVERSAL_DEPTH = 64
+
+_CHUNK = 1024 * 1024  # 1 MB
+
+# Bucketing for type-breakdown charts (Analysis "by_type" and Report
+# "files_per_type"). Everything not bucketed here falls through to its bare
+# extension so webp/tiff/mkv/webm/avif/etc. stay distinct rather than lumping
+# into one "other".
+_JPEG_BUCKET: frozenset[str] = frozenset({".jpg", ".jpeg", ".jpe", ".jfif"})
+_MP4_BUCKET: frozenset[str] = frozenset({".mp4", ".m4v"})
+_MOV_BUCKET: frozenset[str] = frozenset({".mov", ".qt"})
+_PNG_BUCKET: frozenset[str] = frozenset({".png"})
+_HEIC_BUCKET: frozenset[str] = frozenset({".heic", ".heif"})
+_GIF_BUCKET: frozenset[str] = frozenset({".gif"})
+
+
+def categorize_media_type(suffix: str) -> str:
+    """Map a file extension to a coarse type bucket for breakdown charts.
+
+    Single source of truth shared by AnalysisService and ReportService so the
+    Analysis and Report type breakdowns never diverge.
+    """
+    s = suffix.lower()
+    if s in _JPEG_BUCKET:
+        return "jpeg"
+    if s in _MP4_BUCKET:
+        return "mp4"
+    if s in _MOV_BUCKET:
+        return "mov"
+    if s in RAW_EXTENSIONS:
+        return "raw"
+    if s in _PNG_BUCKET:
+        return "png"
+    if s in _HEIC_BUCKET:
+        return "heic"
+    if s in _GIF_BUCKET:
+        return "gif"
+    if s.startswith("."):
+        return s[1:] or "other"
+    return s or "other"
+
+
+def register_heif() -> None:
+    """Register the pillow-heif opener with Pillow. Idempotent; safe to call repeatedly."""
+    try:
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+    except Exception:
+        pass  # HEIC just won't be openable; callers handle None
+
+
+#: Ceiling on the sensor dimensions a RAW file may *declare* (F-06).
+#:
+#: `Image.MAX_IMAGE_PIXELS` is Pillow's decompression-bomb guard and LibRaw
+#: honours none of it: `raw.postprocess()` allocates height x width x 3 from
+#: numbers the file itself supplies. A crafted RAW claiming an enormous sensor
+#: therefore asks for an allocation bounded only by the header it wrote.
+#:
+#: 300 megapixels is roughly twice the largest medium-format sensor shipping
+#: today, so no real camera comes close, and the worst-case allocation stays
+#: bounded. `half_size=True` means the decode itself produces a quarter of this.
+MAX_RAW_DECLARED_PIXELS = 300_000_000
+
+
+def _refuse_absurd_raw_dimensions(path: Path, raw: Any) -> None:
+    """Check the declared sensor size before LibRaw allocates from it."""
+    sizes = getattr(raw, "sizes", None)
+
+    def _dimension(primary: str, fallback: str) -> object:
+        # `or` would be wrong here: a declared 0 is exactly the case worth
+        # refusing, and `0 or fallback` silently reads the other field instead.
+        value = getattr(sizes, primary, None)
+        return getattr(sizes, fallback, None) if value is None else value
+
+    height = _dimension("raw_height", "height")
+    width = _dimension("raw_width", "width")
+    if not isinstance(height, int) or not isinstance(width, int):
+        # Nothing to check against. Decoding is no more dangerous than before,
+        # and refusing every RAW whose bindings expose no sizes would be worse.
+        return
+    if height <= 0 or width <= 0:
+        raise CorruptedFileError(
+            f"RAW declares a non-positive sensor size ({width}x{height})",
+            str(path),
+        )
+    if height * width > MAX_RAW_DECLARED_PIXELS:
+        raise CorruptedFileError(
+            f"RAW declares {width}x{height} = {height * width} pixels, above the "
+            f"{MAX_RAW_DECLARED_PIXELS} ceiling; refusing to decode it",
+            str(path),
+        )
+
+
+def _open_raw(path: Path) -> Image | None:
+    """Decode a RAW file to a PIL.Image.
+
+    Prefers the embedded JPEG thumbnail; falls back to a half-size demosaic.
+    Returns None if rawpy is unavailable or the file is unreadable.
+    """
+    try:
+        import io
+
+        import rawpy
+        from PIL import Image
+
+        with rawpy.imread(str(path)) as raw:
+            try:
+                thumb = raw.extract_thumb()
+                # rawpy>=0.27 stopped re-exporting ThumbFormat and types thumb.data
+                # as bytes | ndarray; match by enum name and narrow to bytes (a JPEG
+                # thumbnail's data is always bytes) so this stays mypy-clean across
+                # rawpy versions without a type: ignore.
+                if thumb.format.name == "JPEG" and isinstance(thumb.data, bytes):
+                    return Image.open(io.BytesIO(thumb.data)).convert("RGB")
+            except Exception:
+                pass
+            _refuse_absurd_raw_dimensions(path, raw)
+            rgb = raw.postprocess(use_camera_wb=True, half_size=True, no_auto_bright=False)
+            return Image.fromarray(rgb)
+    except Exception as exc:
+        logger.debug("_open_raw failed", path=str(path), error=str(exc))
+        return None
+
+
+@contextlib.contextmanager
+def open_image(path: Path) -> Iterator[Image | None]:
+    """Yield a PIL.Image for *path* (HEIC and RAW included), or None if it cannot be opened.
+
+    - HEIC/HEIF: via pillow-heif (registered on first use).
+    - RAW: via rawpy → RGB → PIL.Image (heavier; only call when pixels are actually needed).
+    - Everything else: PIL.Image.open.
+
+    Always use as a context manager. The yielded image is closed on exit.
+    Never raises — yields None on failure and logs at debug.
+    """
+    suffix = path.suffix.lower()
+    img: Image | None = None
+    try:
+        if suffix in HEIC_EXTENSIONS:
+            register_heif()
+            from PIL import Image
+
+            img = Image.open(path)
+        elif suffix in RAW_EXTENSIONS:
+            img = _open_raw(path)
+        else:
+            from PIL import Image
+
+            img = Image.open(path)
+        yield img
+    except Exception as exc:
+        logger.debug("open_image failed", path=str(path), error=str(exc))
+        yield None
+    finally:
+        if img is not None:
+            with contextlib.suppress(Exception):
+                img.close()
+
+
+def load_exif_dict(path: Path) -> dict[str, Any] | None:
+    """Return a piexif-format EXIF dict for *path*, or None if unavailable.
+
+    The single shared EXIF-blob loader (date extraction, camera detection and
+    format conversion all need it): routes through ``open_image`` so HEIC
+    (pillow-heif) and RAW (rawpy) sources work, strips the ``Exif\\x00\\x00``
+    prefix pillow-heif adds, and falls back to piexif's own container parsing
+    for files whose EXIF lives outside Pillow's ``info["exif"]``.
+
+    Never raises — returns None on any failure.
+    """
+    try:
+        import piexif
+
+        raw_exif = b""
+        with open_image(path) as img:
+            if img is not None:
+                raw_exif = img.info.get("exif", b"") or b""
+        if raw_exif:
+            if raw_exif[:6] == b"Exif\x00\x00":
+                raw_exif = raw_exif[6:]
+            return cast("dict[str, Any]", piexif.load(raw_exif))
+        return cast("dict[str, Any]", piexif.load(str(path)))
+    except Exception as exc:
+        logger.debug("load_exif_dict failed", path=str(path), error=str(exc))
+        return None
+
+
+def image_dimensions(path: Path) -> tuple[int, int] | None:
+    """Return ``(width, height)`` of an image in pixels, or None if unreadable.
+
+    Reads dimensions without a full pixel decode where possible:
+    - RAW: rawpy's ``sizes`` reports the native sensor resolution (the demosaiced
+      pixels), not the half-size preview ``open_image`` yields, so the displayed
+      resolution is the real one.
+    - HEIC/HEIF: via pillow-heif (registered on first use).
+    - Everything else: ``PIL.Image.open`` reads the header only.
+
+    Never raises — returns None on any failure.
+    """
+    suffix = path.suffix.lower()
+    if suffix in RAW_EXTENSIONS:
+        try:
+            import rawpy
+
+            with rawpy.imread(str(path)) as raw:
+                s = raw.sizes
+                return int(s.width), int(s.height)
+        except Exception as exc:
+            logger.debug("image_dimensions (raw) failed", path=str(path), error=str(exc))
+            # Fall through to the PIL path (some RAWs carry a readable preview).
+    try:
+        if suffix in HEIC_EXTENSIONS:
+            register_heif()
+        from PIL import Image
+
+        with Image.open(path) as img:
+            return int(img.width), int(img.height)
+    except Exception as exc:
+        logger.debug("image_dimensions failed", path=str(path), error=str(exc))
+        return None
+
+
+def find_available_filename(path: Path) -> Path:
+    """Return *path* if it doesn't exist; otherwise append _001, _002, …
+
+    Module-level helper so ConversionService (and others) can import it
+    without needing a FileSystemService instance.
+
+    Every destination leaf in the program passes through here, which is why the
+    Windows device-name guard lives here too (`C-12`). A source file named
+    `CON.jpg` is a real photograph on macOS and is not a file at all on Windows;
+    left alone it became an unmapped per-file IO error and the picture was
+    simply not sorted. The guard is unconditional rather than Windows-only, for
+    the same reason folder segments are already sanitised unconditionally: a
+    library sorted on one machine and read on another should not have names that
+    exist on only one of them.
+    """
+    path = path.with_name(safe_destination_name(path.name))
+    if not path.exists():
+        return path
+    stem, suffix, parent = path.stem, path.suffix, path.parent
+    counter = 1
+    while True:
+        candidate = parent / f"{stem}_{counter:03d}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def validate_source_directory(directory: str | None) -> Path:
+    """Return the source root, or raise a message the user can act on.
+
+    ``list_files`` answers "no files" for a directory that does not exist, which
+    is the right answer for a generic lister and the wrong one for a sort run:
+    an unplugged external drive or an unmounted network share would otherwise
+    finish with a green tick and "0 files sorted", which reads as "my library is
+    empty" rather than "MediaSorter never saw it".
+    """
+    return validate_source_root(directory)
+
+
+def validate_target_directory(directory: str | None) -> Path:
+    """Return the destination root, creating it if needed, or raise a clear error.
+
+    An unset destination would resolve to ``Path("")`` — the working directory —
+    and scatter the user's library wherever the app happened to be launched from.
+    """
+    if not directory or not directory.strip():
+        raise SortingError("No destination folder is set — choose one in Settings, then sort.")
+    root = Path(directory)
+    if root.exists() and not root.is_dir():
+        raise SortingError(f"The destination path is a file, not a folder: {root}.")
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise SortingError(f"Destination folder cannot be created: {root} ({exc}).") from exc
+    if not os.access(root, os.W_OK):
+        raise SortingError(f"Destination folder is not writable (permission denied): {root}.")
+    return root
+
+
+@dataclass(frozen=True)
+class TraversalIssue:
+    path: str
+    error_class: str
+    message: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "path": self.path,
+            "error_class": self.error_class,
+            "message": self.message,
+        }
+
+
+def is_within_any(path: Path, roots: Sequence[Path]) -> bool:
+    """Whether ``path`` sits under any root, including filesystem aliases."""
+    return any(path_relationship(root, path) in {"equal", "left_contains_right"} for root in roots)
+
+
+@dataclass
+class TraversalResult:
+    files: list[Path] = field(default_factory=list)
+    units: list[MediaUnit] = field(default_factory=list)
+    unmatched_companions: list[UnmatchedCompanion] = field(default_factory=list)
+    companion_candidates: list[Path] = field(default_factory=list)
+    issues: list[TraversalIssue] = field(default_factory=list)
+    excluded_by_pattern: int = 0
+    excluded_by_size: int = 0
+    excluded_by_type: int = 0
+    excluded_directories: int = 0
+    cancelled: bool = False
+
+    @property
+    def partial(self) -> bool:
+        return bool(self.issues)
+
+    @property
+    def excluded_files(self) -> int:
+        return self.excluded_by_pattern + self.excluded_by_size + self.excluded_by_type
+
+
+@dataclass(frozen=True)
+class MultiRootTraversal:
+    """A merged enumeration plus which root each file actually came from."""
+
+    result: TraversalResult
+    root_of: dict[Path, Path]
+
+
+class FileSystemService:
+    MEDIA_EXTENSIONS = MEDIA_EXTENSIONS
+
+    # ------------------------------------------------------------------ #
+    # File enumeration                                                      #
+    # ------------------------------------------------------------------ #
+
+    async def list_files(
+        self,
+        directory: str,
+        recursive: bool = True,
+        max_depth: int | None = None,
+        exclude_patterns: list[str] | None = None,
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        counters: dict[str, int] | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
+    ) -> list[Path]:
+        """Return all media files under *directory* that pass the given filters.
+
+        If *counters* is provided (e.g. ``{"skipped": 0}``), the "skipped" key
+        is incremented for every media file excluded by a pattern or size filter.
+        This allows callers to report the true excluded count without changing
+        the return type.
+        """
+        root = Path(directory)
+        # Off the event loop: a source root is routinely a network mount, and a
+        # bare `stat` on an unreachable share blocks for the mount's timeout —
+        # which would stall every other request for as long as it hung.
+        try:
+            exists = await asyncio.to_thread(root.exists)
+        except OSError:
+            exists = False
+        if not exists:
+            return []
+        result = await self.traverse(
+            root,
+            recursive=recursive,
+            max_depth=max_depth,
+            exclude_patterns=exclude_patterns,
+            min_file_size_kb=min_file_size_kb,
+            max_file_size_mb=max_file_size_mb,
+            cancel_token=cancel_token,
+            task=task,
+        )
+        if counters is not None:
+            counters["skipped"] = counters.get("skipped", 0) + (
+                result.excluded_by_pattern + result.excluded_by_size
+            )
+            counters["issues"] = len(result.issues)
+        return result.files
+
+    async def traverse_roots(
+        self,
+        roots: Sequence[tuple[Path, tuple[Path, ...]]],
+        *,
+        recursive: bool = True,
+        max_depth: int | None = None,
+        exclude_patterns: list[str] | None = None,
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
+        companion_handling: CompanionHandling = "keep_with_primary",
+    ) -> MultiRootTraversal:
+        """Enumerate every configured input root as one merged result.
+
+        Each discovered file remembers the root it came from, so relative
+        layout, quarantine structure, and per-root exclusions stay correct no
+        matter how many libraries are being merged. One unreadable root
+        contributes its issues without stopping the others.
+        """
+        merged = TraversalResult()
+        root_of: dict[Path, Path] = {}
+        for canonical_root, exclusions in roots:
+            if cancel_token is not None and cancel_token.is_set():
+                merged.cancelled = True
+                break
+            try:
+                part = await self.traverse(
+                    canonical_root,
+                    recursive=recursive,
+                    max_depth=max_depth,
+                    exclude_patterns=exclude_patterns,
+                    min_file_size_kb=min_file_size_kb,
+                    max_file_size_mb=max_file_size_mb,
+                    cancel_token=cancel_token,
+                    task=task,
+                    companion_handling=companion_handling,
+                    exclusions=exclusions,
+                )
+            except (MediaSortException, OSError) as exc:
+                # A disconnected or unreadable root is reported as a partial
+                # result. Refusing to enumerate the roots that *are* available
+                # would turn one offline drive into a failed operation.
+                logger.warning(
+                    "Input root could not be enumerated",
+                    root=str(canonical_root),
+                    error=str(exc),
+                )
+                merged.issues.append(
+                    TraversalIssue(
+                        path=str(canonical_root),
+                        error_class=type(exc).__name__,
+                        message=str(exc),
+                    )
+                )
+                continue
+            for path in part.files:
+                root_of.setdefault(path, canonical_root)
+            merged.files.extend(part.files)
+            merged.units.extend(part.units)
+            merged.unmatched_companions.extend(part.unmatched_companions)
+            merged.companion_candidates.extend(part.companion_candidates)
+            for unit in part.units:
+                for member in unit.members:
+                    root_of.setdefault(member.path, canonical_root)
+            merged.issues.extend(part.issues)
+            merged.excluded_by_pattern += part.excluded_by_pattern
+            merged.excluded_by_size += part.excluded_by_size
+            merged.excluded_by_type += part.excluded_by_type
+            merged.excluded_directories += part.excluded_directories
+            merged.cancelled = merged.cancelled or part.cancelled
+        return MultiRootTraversal(result=merged, root_of=root_of)
+
+    async def traverse(
+        self,
+        root: Path,
+        *,
+        recursive: bool = True,
+        max_depth: int | None = None,
+        exclude_patterns: list[str] | None = None,
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        cancel_token: CancellationToken | None = None,
+        task: Task | None = None,
+        companion_handling: CompanionHandling = "keep_with_primary",
+        exclusions: tuple[Path, ...] = (),
+    ) -> TraversalResult:
+        """Enumerate eligible media with cancellation and partial-error details."""
+        result = await asyncio.to_thread(
+            self._traverse_sync,
+            root,
+            recursive,
+            max_depth,
+            exclude_patterns or [],
+            min_file_size_kb,
+            max_file_size_mb,
+            cancel_token,
+            companion_handling,
+            exclusions,
+        )
+        if task is not None and result.issues:
+            task.mark_partial([issue.to_dict() for issue in result.issues])
+            for issue in result.issues:
+                logger.warning(
+                    "operation.partial",
+                    task_id=task.id,
+                    operation_kind=task.operation_kind,
+                    phase=task.progress.phase,
+                    path=issue.path,
+                    error_class=issue.error_class,
+                    error=issue.message,
+                )
+        return result
+
+    def _traverse_sync(
+        self,
+        root: Path,
+        recursive: bool,
+        max_depth: int | None,
+        exclude_patterns: list[str],
+        min_file_size_kb: int | None,
+        max_file_size_mb: int | None,
+        cancel_token: CancellationToken | None,
+        companion_handling: CompanionHandling = "keep_with_primary",
+        exclusions: tuple[Path, ...] = (),
+    ) -> TraversalResult:
+        result = TraversalResult()
+        self._walk_result(
+            root,
+            root,
+            recursive,
+            max_depth,
+            0,
+            result,
+            exclude_patterns,
+            min_file_size_kb,
+            max_file_size_mb,
+            cancel_token,
+            exclusions,
+            is_root=True,
+        )
+        result.units, result.unmatched_companions = bind_media_units(
+            result.files + result.companion_candidates,
+            root,
+            handling=companion_handling,
+        )
+        return result
+
+    def _walk_result(
+        self,
+        root: Path,
+        current: Path,
+        recursive: bool,
+        max_depth: int | None,
+        depth: int,
+        result: TraversalResult,
+        exclude_patterns: list[str],
+        min_file_size_kb: int | None,
+        max_file_size_mb: int | None,
+        cancel_token: CancellationToken | None,
+        exclusions: tuple[Path, ...],
+        *,
+        is_root: bool,
+        visited: set[tuple[int, int]] | None = None,
+    ) -> None:
+        if cancel_token is not None and cancel_token.is_set():
+            result.cancelled = True
+            return
+        # C-05: a directory cycle — `a/loop -> ..`, a bind mount, a hardlinked
+        # directory — used to recurse until `RecursionError`, because
+        # `entry.is_dir()` follows symlinks and `max_depth` defaults to None.
+        # Identity is `(st_dev, st_ino)` rather than the path, so a cycle formed
+        # by any of those routes is recognised as the same directory.
+        if visited is None:
+            visited = set()
+        try:
+            marker = current.stat()
+            identity = (marker.st_dev, marker.st_ino)
+        except OSError as exc:
+            result.issues.append(TraversalIssue(str(current), type(exc).__name__, str(exc)))
+            return
+        if identity in visited:
+            result.issues.append(
+                TraversalIssue(
+                    str(current),
+                    "DirectoryCycle",
+                    "already visited in this traversal; not descending again",
+                )
+            )
+            return
+        visited.add(identity)
+        try:
+            entries: list[Path] = []
+            for entry in current.iterdir():
+                if cancel_token is not None and cancel_token.is_set():
+                    result.cancelled = True
+                    return
+                entries.append(entry)
+            entries.sort()
+        except OSError as exc:
+            if is_root:
+                # validate_source_root normally catches this; preserve failure
+                # if the source disappears between validation and traversal.
+                from app.core.exceptions import SourceUnavailableError
+
+                raise SourceUnavailableError(
+                    f"Source folder cannot be enumerated: {current}.",
+                    path=str(current),
+                    reason="root_inaccessible",
+                ) from exc
+            issue = TraversalIssue(str(current), type(exc).__name__, str(exc))
+            result.issues.append(issue)
+            logger.warning(
+                "operation.partial",
+                path=str(current),
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return
+        for entry in entries:
+            if cancel_token is not None and cancel_token.is_set():
+                result.cancelled = True
+                return
+            try:
+                is_file_entry = entry.is_file()
+                is_dir_entry = entry.is_dir()
+            except OSError as exc:
+                result.issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
+                continue
+
+            if is_file_entry:
+                if exclusions and is_within_any(entry, exclusions):
+                    result.excluded_directories += 1
+                    continue
+                if not is_media(entry) and entry.suffix.lower() not in {
+                    ".xmp",
+                    ".aae",
+                    ".pp3",
+                    ".dop",
+                    ".on1",
+                    ".reastore",
+                    ".thm",
+                    ".wav",
+                }:
+                    result.excluded_by_type += 1
+                    continue
+                # Check exclusion
+                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
+                    logger.debug("Excluded file", path=str(entry))
+                    result.excluded_by_pattern += 1
+                    continue
+                # Check size filters
+                try:
+                    size = entry.stat().st_size
+                    if not is_size_included(size, min_file_size_kb, max_file_size_mb):
+                        too_small = min_file_size_kb is not None and size < min_file_size_kb * 1024
+                        logger.debug(
+                            "Skipping file",
+                            reason="small" if too_small else "large",
+                            path=str(entry),
+                            size=size,
+                        )
+                        result.excluded_by_size += 1
+                        continue
+                except OSError as exc:
+                    result.issues.append(TraversalIssue(str(entry), type(exc).__name__, str(exc)))
+                    continue
+                if is_media(entry):
+                    result.files.append(entry)
+                else:
+                    result.companion_candidates.append(entry)
+            elif is_dir_entry and recursive and not entry.name.startswith("."):
+                # Check directory exclusion
+                if exclusions and is_within_any(entry, exclusions):
+                    logger.debug("Excluded directory", path=str(entry))
+                    result.excluded_directories += 1
+                    continue
+                if exclude_patterns and is_excluded_by_pattern(entry, root, exclude_patterns):
+                    logger.debug("Excluded directory", path=str(entry))
+                    result.excluded_directories += 1
+                    continue
+                effective_depth = MAX_TRAVERSAL_DEPTH if max_depth is None else max_depth
+                if depth >= effective_depth:
+                    result.issues.append(
+                        TraversalIssue(
+                            str(entry),
+                            "MaxDepthReached",
+                            f"stopped at depth {effective_depth}",
+                        )
+                    )
+                    continue
+                self._walk_result(
+                    root,
+                    entry,
+                    recursive,
+                    max_depth,
+                    depth + 1,
+                    result,
+                    exclude_patterns,
+                    min_file_size_kb,
+                    max_file_size_mb,
+                    cancel_token,
+                    exclusions,
+                    is_root=False,
+                    visited=visited,
+                )
+
+    def _walk(
+        self,
+        root: Path,
+        current: Path,
+        recursive: bool,
+        max_depth: int | None,
+        depth: int,
+        results: list[Path],
+        exclude_patterns: list[str],
+        min_file_size_kb: int | None = None,
+        max_file_size_mb: int | None = None,
+        counters: dict[str, int] | None = None,
+    ) -> None:
+        """Compatibility wrapper for older focused tests/internal callers."""
+        traversal = TraversalResult()
+        self._walk_result(
+            root,
+            current,
+            recursive,
+            max_depth,
+            depth,
+            traversal,
+            exclude_patterns,
+            min_file_size_kb,
+            max_file_size_mb,
+            None,
+            (),
+            is_root=current == root,
+        )
+        results.extend(traversal.files)
+        if counters is not None:
+            counters["skipped"] = counters.get("skipped", 0) + (
+                traversal.excluded_by_pattern + traversal.excluded_by_size
+            )
+
+    # ------------------------------------------------------------------ #
+    # Safe copy / move                                                      #
+    # ------------------------------------------------------------------ #
+
+    def safe_copy(
+        self,
+        source: Path,
+        destination: Path,
+        on_progress: Callable[[int, int], None] | None = None,
+        verify: bool = True,
+    ) -> TransferResult:
+        """Copy *source* to *destination* under the content-integrity contract.
+
+        ``verify`` is retained for call-site compatibility but no longer selects
+        a weaker check: content identity is always proven cryptographically, and
+        the visible destination path only ever appears once it holds the full
+        verified copy.
+        """
+        return self._transfer(source, destination, move=False, on_progress=on_progress)
+
+    def safe_move(self, source: Path, destination: Path) -> TransferResult:
+        """Move *source* to *destination* without ever losing the only copy.
+
+        A same-volume move publishes a second name for the identical content and
+        then drops the old one, so no bytes are copied or reread. A cross-volume
+        move stages, hashes, and commits a verified copy first; the source is
+        removed only afterwards.
+        """
+        return self._transfer(source, destination, move=True, on_progress=None)
+
+    def _transfer(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        move: bool,
+        on_progress: Callable[[int, int], None] | None,
+    ) -> TransferResult:
+        if not source.exists():
+            raise SortingError(f"Source not found: {source}")
+
+        try:
+            result = transfer_path(source, destination, move=move, on_progress=on_progress)
+        except IntegrityTransferError as exc:
+            raise self._translate(exc) from exc
+        except OSError as exc:
+            raise SortingError(f"{'Move' if move else 'Copy'} failed for {source}: {exc}") from exc
+
+        logger.debug(
+            "File moved" if move else "File copied",
+            source=str(source),
+            dest=str(result.destination_path),
+            protocol=result.protocol,
+            commit_method=result.commit_method,
+            warnings=list(result.warnings),
+        )
+        return result
+
+    @staticmethod
+    def _translate(exc: IntegrityTransferError) -> MediaSortException:
+        """Keep the storage-specific HTTP status the API already exposes."""
+        if exc.details.get("reason") == "insufficient_space":
+            return InsufficientStorageError(
+                exc.message,
+                available=int(exc.details.get("available_bytes", 0)),
+                required=int(exc.details.get("required_bytes", 0)),
+            )
+        return SortingError(exc.message, exc.details)
+
+    # ------------------------------------------------------------------ #
+    # Directory helpers                                                     #
+    # ------------------------------------------------------------------ #
+
+    def create_directory_structure(
+        self,
+        base_path: Path,
+        date: datetime,
+        criteria: list[str],
+    ) -> Path:
+        """Return (and create) a date-based subdirectory under *base_path*.
+
+        criteria elements: "year", "month", "day" in any subset.
+        """
+        parts: list[str] = []
+        if "year" in criteria:
+            parts.append(str(date.year))
+        if "month" in criteria:
+            parts.append(f"{date.month:02d}")
+        if "day" in criteria:
+            parts.append(f"{date.day:02d}")
+
+        final = base_path.joinpath(*parts) if parts else base_path
+        final.mkdir(parents=True, exist_ok=True)
+        return final
+
+    def find_available_filename(self, path: Path) -> Path:
+        """Return *path* if it doesn't exist; otherwise append _001, _002, …"""
+        return find_available_filename(path)
+
+    # ------------------------------------------------------------------ #
+    # Disk helpers                                                          #
+    # ------------------------------------------------------------------ #
+
+    def get_available_space(self, path: Path) -> int | None:
+        """Return free bytes on the volume holding *path*'s nearest existing ancestor.
+
+        A destination folder often does not exist yet — it is created during the
+        sort — and may be several levels deep. Resolving to the nearest existing
+        ancestor (the path itself if it exists, else the first existing parent)
+        yields the free space of the volume the new folder will live on.
+
+        Returns ``None`` when no ancestor exists or ``disk_usage`` raises (e.g. a
+        permission denial), so callers can degrade to an "unknown" state rather
+        than mistaking ``0`` for an empty volume.
+        """
+        ancestor: Path | None = None
+        for candidate in (path, *path.parents):
+            try:
+                if candidate.exists():
+                    ancestor = candidate
+                    break
+            except OSError:
+                # Path.exists() can raise (e.g. PermissionError under macOS TCC);
+                # keep walking up — an accessible ancestor may still exist.
+                continue
+        if ancestor is None:
+            logger.warning("No existing ancestor for free-space check", path=str(path))
+            return None
+        try:
+            return shutil.disk_usage(ancestor).free
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Could not read free space",
+                path=str(path),
+                ancestor=str(ancestor),
+                error=str(exc),
+            )
+            return None

@@ -1,0 +1,42 @@
+{
+  "reviewed_modules": [
+    {
+      "owner": "release-integrity",
+      "path": "scripts/release_integrity.py",
+      "rationale": "Package layout, signing, provenance, and smoke verification share one release contract.",
+      "warning_lines": 1050
+    },
+    {
+      "owner": "native-tool-supply-chain",
+      "path": "scripts/fetch_ffmpeg.py",
+      "rationale": "Download, archive validation, provenance, and atomic publication form one fail-closed transaction.",
+      "warning_lines": 450
+    },
+    {
+      "owner": "desktop-navigation",
+      "path": "frontend/src/pages/MainPage.tsx",
+      "rationale": "The page owns top-level stage orchestration; separable panels remain lazy components. Reviewed when the review-surface work pushed it past its point: three things there were not stage orchestration and moved out — root and folder editing to useRootFolders, the saved-recipe library to useRecipes, and the operation-center view-model transform to lib/operationCenter, together 160 lines. What remains is stage state, the two validation gates, the run lifecycle, and the composition of screens and dialogs; those share one answer to 'which stage is the user on and may they leave it', so the point moves rather than the module splitting again.",
+      "warning_lines": 1050
+    },
+    {
+      "owner": "review-execution",
+      "path": "backend/app/services/review_execution.py",
+      "rationale": "Review preflight, execution, and reconciliation share one snapshot contract.",
+      "warning_lines": 450
+    },
+    {
+      "owner": "verified-sort-orchestration",
+      "path": "backend/app/services/sorting_service.py",
+      "rationale": "The service coordinates one verified sorting transaction; transfer, duplicate, conversion, repair, and persistence implementations already live behind injected services. Splitting the transaction coordinator would duplicate rollback and outcome state. Reviewed again when a distinct plan-authorization failure path was added: that path belongs to the same transaction's outcome handling, not to a new responsibility, so the point moves rather than the module splitting.",
+      "warning_lines": 1600
+    }
+  ],
+  "schema_version": 1,
+  "static_catalogue_exemptions": [
+    "backend/app/resources/concepts.json",
+    "frontend/src/i18n/messages.ts",
+    "frontend/package-lock.json",
+    "frontend/src-tauri/Cargo.lock",
+    "backend/uv.lock"
+  ]
+}

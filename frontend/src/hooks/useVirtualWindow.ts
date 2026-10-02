@@ -1,0 +1,227 @@
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type UIEventHandler,
+} from "react";
+
+export interface VirtualItem {
+  index: number;
+  start: number;
+  size: number;
+}
+
+export interface FixedWindow {
+  start: number;
+  end: number;
+  offsetTop: number;
+  totalHeight: number;
+}
+
+/** Constant-time range calculation used by fixed-height lists. */
+export function fixedWindow(
+  total: number,
+  scrollTop: number,
+  viewportHeight: number,
+  rowHeight: number,
+  overscan = 5,
+): FixedWindow {
+  const safeRow = Math.max(rowHeight, 1);
+  const boundedScroll = Math.min(scrollTop, Math.max(0, total * safeRow - viewportHeight));
+  const start = Math.max(0, Math.floor(boundedScroll / safeRow) - overscan);
+  const end = Math.min(total, start + Math.ceil(viewportHeight / safeRow) + overscan * 2);
+  return {
+    start,
+    end,
+    offsetTop: start * safeRow,
+    totalHeight: total * safeRow,
+  };
+}
+
+interface VirtualWindowOptions {
+  count: number;
+  estimateSize: number;
+  maxHeight: number;
+  emptyHeight?: number;
+  overscan?: number;
+  /** Changes when filtering/reordering should preserve the current anchor. */
+  anchorKey?: string | null;
+  /**
+   * Stable identity per row, for callers whose rows change position.
+   *
+   * Measured heights are stored against this rather than against the index.
+   * Keyed by index, inserting one row — expanding a duplicate set, say —
+   * shifts every index below it, so every stored height then describes the
+   * wrong row and the whole map has to be thrown away. That is what made an
+   * expand jump: the list fell back to the estimate for every row at once,
+   * re-laid out, and snapped back a frame later once the observers caught up.
+   */
+  keyForIndex?: (index: number) => string;
+  /** Identity of the ordered rows; invalidates measurements when rows move. */
+  measurementKey?: unknown;
+}
+
+/**
+ * Shared list/grid windowing with optional measured row heights.
+ *
+ * Callers put `data-virtual-index` on a row and pass `measureElement` as its
+ * ref. Fixed-height callers can omit the ref and use the estimate throughout.
+ */
+export function useVirtualWindow({
+  count,
+  estimateSize,
+  maxHeight,
+  emptyHeight = 96,
+  overscan = 6,
+  anchorKey = null,
+  keyForIndex,
+  measurementKey = count,
+}: VirtualWindowOptions) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // A keyed caller keeps its heights across reorders; an index-keyed one still
+  // discards them whenever `measurementKey` changes, which is all it can do.
+  const keyed = keyForIndex !== undefined;
+  const measurement = useMemo(
+    () => ({
+      sizes: new Map<string, number>(),
+      observers: new Map<Element, ResizeObserver>(),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [keyed ? "keyed" : measurementKey],
+  );
+  const keyOf = useCallback(
+    (index: number) => keyForIndex?.(index) ?? String(index),
+    [keyForIndex],
+  );
+  const keyOfRef = useRef(keyOf);
+  keyOfRef.current = keyOf;
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(maxHeight);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [measurementVersion, setMeasurementVersion] = useState(0);
+  const anchorRef = useRef(anchorKey);
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const measure = () => {
+      setViewportHeight(element.clientHeight || maxHeight);
+      setViewportWidth(element.clientWidth);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [maxHeight]);
+
+  useEffect(
+    () => () => {
+      for (const observer of measurement.observers.values()) observer.disconnect();
+      measurement.observers.clear();
+    },
+    [measurement],
+  );
+
+  useEffect(() => {
+    if (anchorRef.current === anchorKey) return;
+    anchorRef.current = anchorKey;
+    const element = scrollRef.current;
+    if (element) setScrollTop(element.scrollTop);
+  }, [anchorKey]);
+
+  const layout = useMemo(() => {
+    if (measurement.sizes.size === 0) {
+      return {
+        starts: [] as number[],
+        sizes: [] as number[],
+        totalSize: count * Math.max(estimateSize, 1),
+        fixed: true,
+      };
+    }
+    const starts = new Array<number>(count);
+    const sizes = new Array<number>(count);
+    let cursor = 0;
+    for (let index = 0; index < count; index += 1) {
+      starts[index] = cursor;
+      const size = measurement.sizes.get(keyOf(index)) ?? estimateSize;
+      sizes[index] = size;
+      cursor += size;
+    }
+    return { starts, sizes, totalSize: cursor, fixed: false };
+    // measurementVersion is the invalidation signal for the mutable size map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count, estimateSize, keyOf, measurement, measurementVersion]);
+
+  const virtualItems = useMemo(() => {
+    if (count === 0) return [];
+    if (layout.fixed) {
+      const range = fixedWindow(count, scrollTop, viewportHeight, estimateSize, overscan);
+      return Array.from({ length: range.end - range.start }, (_, offset) => {
+        const index = range.start + offset;
+        return { index, start: index * Math.max(estimateSize, 1), size: Math.max(estimateSize, 1) };
+      });
+    }
+    const lower = Math.max(0, scrollTop - overscan * estimateSize);
+    const upper = scrollTop + viewportHeight + overscan * estimateSize;
+    let start = 0;
+    while (start < count - 1 && layout.starts[start] + layout.sizes[start] < lower) start += 1;
+    let end = start;
+    while (end < count && layout.starts[end] < upper) end += 1;
+    const items: VirtualItem[] = [];
+    for (let index = start; index < end; index += 1) {
+      items.push({ index, start: layout.starts[index], size: layout.sizes[index] });
+    }
+    return items;
+  }, [count, estimateSize, layout, overscan, scrollTop, viewportHeight]);
+
+  const measureElement = useCallback(
+    (element: HTMLElement | null) => {
+      if (!element || measurement.observers.has(element)) return undefined;
+      const update = () => {
+        const index = Number(element.dataset.virtualIndex);
+        if (!Number.isInteger(index)) return;
+        // One source of truth for the key, shared with the layout pass below:
+        // filing a height under one key and reading it under another silently
+        // discards every measurement, which looks exactly like having none.
+        // Read through a ref because the observer outlives the render that
+        // created it, and a stale closure would file the height under whatever
+        // row used to be at this index.
+        const key = keyOfRef.current(index);
+        const next = element.getBoundingClientRect().height;
+        if (next <= 0 || measurement.sizes.get(key) === next) return;
+        measurement.sizes.set(key, next);
+        setMeasurementVersion((version) => version + 1);
+      };
+      update();
+      if (typeof ResizeObserver === "undefined") return undefined;
+      const observer = new ResizeObserver(update);
+      observer.observe(element);
+      measurement.observers.set(element, observer);
+      return () => {
+        observer.disconnect();
+        measurement.observers.delete(element);
+      };
+    },
+    [measurement],
+  );
+
+  const onScroll = useCallback<UIEventHandler<HTMLDivElement>>((event) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  }, []);
+
+  return {
+    scrollRef,
+    onScroll,
+    scrollTop,
+    viewportHeight,
+    viewportWidth,
+    virtualItems,
+    totalSize: layout.totalSize,
+    containerHeight: count === 0 ? emptyHeight : Math.min(layout.totalSize, maxHeight),
+    measureElement,
+  };
+}

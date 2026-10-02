@@ -1,0 +1,658 @@
+name: Release
+
+# Builds self-contained distributables for every supported OS and (on a v* tag)
+# publishes them to a GitHub Release.  Each distributable bundles the
+# PyInstaller-frozen backend AND static ffmpeg/ffprobe so end users need nothing
+# pre-installed — not Python, not Node, not ffmpeg.
+#
+# Distributables produced:
+#   macOS arm64   → .dmg  (MediaSorter-macos-arm64)
+#   macOS x86_64  → .dmg  (MediaSorter-macos-x64)
+#   Windows x64   → NSIS installer .exe  +  portable .zip  (MediaSorter-windows-x64)
+#
+# Why native-only builds (no cross-compilation)?
+#   PyInstaller freezes the Python backend with native deps (numpy, rawpy/libraw,
+#   pillow-heif) for the host OS only. Each OS therefore gets its own runner.
+#   The Makefile + scripts/fetch_ffmpeg.py are the shared build logic across all.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Cancel any in-flight build for the same ref so re-tagged pushes don't stack.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # A release never trusts that branch CI ran: tags and manual dispatches repeat
+  # every source and dependency gate against the exact commit being packaged.
+  check-ci:
+    name: Verify complete release source gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install release-tool dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify exact release or unpublished candidate source
+        run: |
+          node --test scripts/releaseability.test.cjs
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            node scripts/releaseability.cjs --verify-build-source
+          else
+            node scripts/releaseability.cjs --verify-tag
+          fi
+
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libjpeg-dev libpng-dev
+
+      # The published installer must be frozen from the locked versions, not
+      # from whatever resolved on release day. See the equivalent note in ci.yml.
+      - name: Install the locked dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --locked --all-extras --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
+
+      - name: Verify deterministic branding
+        run: make branding-check
+
+      - name: Report reviewed module growth
+        run: python scripts/check_module_growth.py
+
+      - name: Verify generated frontend contracts
+        run: |
+          python scripts/generate_review_status_contract.py --check
+          python scripts/generate_keeper_golden_vector.py --check
+          python scripts/generate_config_defaults.py --check
+
+      - name: Lint — ruff
+        working-directory: backend
+        run: python -m ruff check app tests
+
+      - name: Format check — ruff
+        working-directory: backend
+        run: python -m ruff format --check app tests
+
+      - name: Type-check — mypy
+        working-directory: backend
+        run: python -m mypy
+
+      - name: Run tests with coverage gate
+        working-directory: backend
+        run: python -m pytest tests/ --cov=app --cov-fail-under=80 -q
+
+      - name: Export shipped Python dependencies
+        working-directory: backend
+        run: >-
+          uv export --locked --all-extras --no-dev --no-emit-project
+          --format requirements-txt
+          --output-file dependency-audit-requirements.txt
+
+      - name: Audit shipped Python dependencies
+        working-directory: backend
+        run: |
+          uvx --from pip-audit==2.9.0 pip-audit --version
+          uvx --from pip-audit==2.9.0 pip-audit \
+            --requirement dependency-audit-requirements.txt --strict
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend format, lint, tests, build, and production audit
+        working-directory: frontend
+        run: |
+          npm run format:check
+          npm run lint
+          npm test
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
+      - name: Validate reviewed dependency suppressions
+        run: python scripts/validate_dependency_suppressions.py --check
+
+      - name: Audit Rust lock
+        working-directory: frontend/src-tauri
+        shell: bash
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          audit_args=()
+          while IFS= read -r advisory; do
+            audit_args+=(--ignore "$advisory")
+          done < <(python ../../scripts/validate_dependency_suppressions.py --ecosystem rust)
+          cargo audit --version
+          cargo audit "${audit_args[@]}"
+
+  # MediaSorter ships its Tauri shell on macOS and Windows. Running this gate on
+  # Ubuntu needlessly couples a release to GTK development packages that are not
+  # part of the product and caused v1.2.0's installer build to stop before
+  # packaging. macOS exercises a shipped target while remaining independent of
+  # the package matrix and its generated resources.
+  check-native:
+    name: Verify native release source on macOS
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          components: rustfmt, clippy
+
+      - name: Verify native source independently of package resources
+        working-directory: frontend/src-tauri
+        env:
+          TAURI_CONFIG: '{"bundle":{"resources":[]}}'
+        run: |
+          cargo fmt --check
+          cargo check --locked
+          cargo test --locked
+          cargo clippy --locked -- -D warnings
+
+  package:
+    name: package (${{ matrix.label }})
+    needs: [check-ci, check-native] # don't build installers until both gates are green
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon runner → arm64 DMG
+            platform: macos
+            label: macOS (Apple Silicon)
+            artifact: MediaSorter-macos-arm64
+            paths: |
+              frontend/src-tauri/target/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-macos.json
+          # macos-13 was RETIRED on 2025-12-04 — that label has no runners left, so
+          # the job queued forever and the release could never finish. macos-15-intel
+          # is GitHub's replacement and the LAST x86_64 image (available until
+          # Aug 2027; Apple/GitHub drop Intel entirely after that).
+          - os: macos-15-intel # Intel runner → x86_64 DMG
+            platform: macos
+            label: macOS (Intel)
+            artifact: MediaSorter-macos-x64
+            paths: |
+              frontend/src-tauri/target/release/bundle/dmg/*.dmg
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-macos.json
+          - os: windows-latest # x64 → NSIS installer .exe + portable .zip
+            platform: windows
+            label: Windows (x64)
+            artifact: MediaSorter-windows-x64
+            paths: |
+              frontend/src-tauri/target/release/bundle/msi/*.msi
+              frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
+              frontend/src-tauri/target/release/bundle/portable/*.zip
+              frontend/src-tauri/target/release/bundle/SHA256SUMS
+              frontend/src-tauri/target/release/bundle/release-signing-state-windows.json
+
+    defaults:
+      run:
+        # Run every step (and therefore `make`) under bash. On Windows this is
+        # Git Bash, which provides /bin/bash + coreutils so the Makefile works.
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Classify release signing credentials
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py preflight \
+            --platform "${{ matrix.platform }}" \
+            --output "$RUNNER_TEMP/release-signing-state.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Import Apple Developer ID certificate
+        if: matrix.platform == 'macos' && steps.signing.outputs.mode == 'signed'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          python -c "import base64, os, pathlib; pathlib.Path(os.environ['RUNNER_TEMP'], 'developer-id.p12').write_bytes(base64.b64decode(os.environ['APPLE_CERTIFICATE']))"
+          keychain="$RUNNER_TEMP/mediasorter-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list \
+            -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+
+      - name: Cache Rust cargo
+        # Swatinem/rust-cache v2.9.2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: frontend/src-tauri
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      - name: Install GNU Make (Windows runner)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
+
+      - name: Install locked packaging dependencies
+        run: make install-release
+
+      - name: Verify optional-model lifecycle on the package host
+        working-directory: backend
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            venv_python=".venv/Scripts/python.exe"
+          else
+            venv_python=".venv/bin/python"
+          fi
+          "$venv_python" -m pytest \
+            tests/test_services/test_ai_model_installation.py \
+            tests/test_workflows.py \
+            -q
+
+      - name: Verify deterministic branding
+        run: make branding-check
+
+      - name: Bundle Python backend (PyInstaller)
+        run: make bundle-backend
+
+      - name: Bundle static ffmpeg + ffprobe
+        # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
+        # the single source of truth shared with local builds so they never drift.
+        run: make bundle-ffmpeg
+
+      - name: Finalize permissions and sign nested native payloads
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py normalize --platform "${{ matrix.platform }}"
+          python scripts/release_integrity.py sign-nested \
+            --state "$RUNNER_TEMP/release-signing-state.json"
+          python scripts/release_integrity.py snapshot \
+            --output "$RUNNER_TEMP/release-payload-snapshot.json"
+
+      - name: Build desktop app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          PYTHONPATH: ${{ github.workspace }}
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          # Tauri fetches platform bundlers (notably NSIS) during packaging.
+          # Retry the build on hosted runners so a transient upstream
+          # 5xx cannot strand an otherwise verified release tag.
+          for attempt in 1 2 3; do
+            if make build-tauri; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning title=Tauri bundling retry::Build attempt $attempt failed; retrying in $((attempt * 15)) seconds"
+            sleep $((attempt * 15))
+          done
+
+      - name: Reject post-sign payload mutation
+        run: |
+          python scripts/release_integrity.py verify-snapshot \
+            --snapshot "$RUNNER_TEMP/release-payload-snapshot.json"
+
+      - name: Sign and verify outer packages
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_SIGN_COMMAND_JSON: ${{ secrets.WINDOWS_SIGN_COMMAND_JSON }}
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          python scripts/release_integrity.py sign-outer \
+            --state "$RUNNER_TEMP/release-signing-state.json"
+
+      - name: Create Windows portable ZIP
+        # Produces a run-in-place archive: extract and double-click MediaSorter.exe,
+        # no installation required. Windows-only; no-op on macOS.
+        if: runner.os == 'Windows'
+        run: make bundle-portable
+
+      - name: Verify package contents, checksums, smoke paths, and signing state
+        env:
+          WINDOWS_VERIFY_COMMAND_JSON: ${{ secrets.WINDOWS_VERIFY_COMMAND_JSON }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          mkdir -p frontend/src-tauri/target/release/bundle
+          cp "$RUNNER_TEMP/release-signing-state.json" \
+            frontend/src-tauri/target/release/bundle/release-signing-state.json
+          python scripts/release_integrity.py verify \
+            --platform "${{ matrix.platform }}" \
+            --state "$RUNNER_TEMP/release-signing-state.json"
+
+      - name: Install, launch, and uninstall MSI on a clean Windows runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = (Get-ChildItem "frontend/src-tauri/target/release/bundle/msi/*.msi").FullName
+          $log = Join-Path $env:RUNNER_TEMP "mediasorter-msi-install.log"
+          $install = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/i", "`"$msi`"", "/quiet", "/norestart", "/l*v", "`"$log`""
+          )
+          if ($install.ExitCode -notin @(0, 3010)) {
+            Get-Content $log -Tail 100
+            throw "MSI installation failed with exit code $($install.ExitCode)"
+          }
+          $programs = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
+          $shortcut = Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File |
+            Select-Object -First 1
+          if (-not $shortcut) {
+            Get-Content $log -Tail 100
+            throw "MSI completed but its MediaSorter Start Menu shortcut was not found"
+          }
+          $shell = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
+          if (
+            [string]::IsNullOrWhiteSpace($shell) -or
+            [IO.Path]::GetExtension($shell) -ine ".exe" -or
+            -not (Test-Path -LiteralPath $shell -PathType Leaf)
+          ) {
+            throw "MSI shortcut does not target an installed executable: $shell"
+          }
+          python scripts/release_integrity.py smoke-webview --path $shell
+          $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/x", "`"$msi`"", "/quiet", "/norestart"
+          )
+          if ($uninstall.ExitCode -notin @(0, 1605, 3010)) {
+            throw "MSI uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+          if (Test-Path -LiteralPath $shell) {
+            throw "MSI uninstall completed but its installed executable still exists: $shell"
+          }
+          if (Test-Path -LiteralPath $shortcut.FullName) {
+            throw "MSI uninstall completed but its Start Menu shortcut still exists"
+          }
+
+      - name: Install, launch, and uninstall NSIS on a clean Windows runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = (
+            Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis/*-setup.exe"
+          ).FullName
+          $install = Start-Process $installer -Wait -PassThru -ArgumentList "/S"
+          if ($install.ExitCode -ne 0) {
+            throw "NSIS installation failed with exit code $($install.ExitCode)"
+          }
+          $programRoots = @(
+            [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs),
+            [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
+          ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
+          $shortcuts = @(
+            foreach ($programs in $programRoots) {
+              Get-ChildItem $programs -Filter "MediaSorter.lnk" -Recurse -File
+            }
+          )
+          $shortcut = $shortcuts | Select-Object -First 1
+          if (-not $shortcut) {
+            throw "NSIS completed but its MediaSorter Start Menu shortcut was not found"
+          }
+          $shell = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut.FullName).TargetPath
+          if (
+            [string]::IsNullOrWhiteSpace($shell) -or
+            [IO.Path]::GetExtension($shell) -ine ".exe" -or
+            -not (Test-Path -LiteralPath $shell -PathType Leaf)
+          ) {
+            throw "NSIS shortcut does not target an installed executable: $shell"
+          }
+          python scripts/release_integrity.py smoke-webview --path $shell
+          $uninstaller = Join-Path (Split-Path $shell) "uninstall.exe"
+          if (-not (Test-Path $uninstaller)) {
+            throw "NSIS uninstaller was not installed"
+          }
+          $uninstall = Start-Process $uninstaller -Wait -PassThru -ArgumentList "/S"
+          if ($uninstall.ExitCode -ne 0) {
+            throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+          if (Test-Path -LiteralPath $shell) {
+            throw "NSIS uninstall completed but its installed executable still exists: $shell"
+          }
+          if (Test-Path -LiteralPath $shortcut.FullName) {
+            throw "NSIS uninstall completed but its Start Menu shortcut still exists"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
+
+  # ── Publish a GitHub Release (only for v* tags) ───────────────────────────────
+  publish:
+    name: Publish GitHub Release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: github-release
+    # Explicit and minimal (`DEC-02`). `id-token: write` mints the OIDC token
+    # the attestation is signed against and `attestations: write` records it;
+    # neither is granted to any other job, and this one publishes nothing that
+    # is not already built and checksummed by `package`.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      # Every platform job produces a file literally named SHA256SUMS, and all
+      # three were uploaded as one release asset of that name. They collided:
+      # v1.1.5 shipped a SHA256SUMS containing a single line, for the arm64 DMG,
+      # so four of the five installers had no published checksum at all — and the
+      # asset-update race is what failed this step.
+      #
+      # The same collision hit release-signing-state-macos.json, which both macOS
+      # jobs emit under one name.
+      - name: Merge per-platform checksums and signing state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          # One SHA256SUMS covering every artifact, which is what a verifier wants.
+          # `tr -d '\r'` because the Windows job writes its SHA256SUMS with CRLF.
+          # Those lines then end in a carriage return, so the completeness check
+          # below matched nothing for the three Windows installers even though
+          # their checksums were present and correct.
+          find artifacts -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 cat \
+            | tr -d '\r' \
+            | sed '/^$/d' \
+            | sort -u > release/SHA256SUMS
+          echo "--- merged checksums:"
+          cat release/SHA256SUMS
+          # Signing state is per-job evidence, so it keeps a per-job name.
+          for state in $(find artifacts -name 'release-signing-state-*.json' | sort); do
+            job="$(basename "$(dirname "$state")")"
+            cp "$state" "release/release-signing-state-${job}.json"
+          done
+          ls -la release/
+          # Every installer must be accounted for in the merged file.
+          missing=0
+          while IFS= read -r artifact; do
+            name="$(basename "$artifact")"
+            grep -q "  ${name}$" release/SHA256SUMS || { echo "::error::no checksum for ${name}"; missing=1; }
+          done < <(find artifacts \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.zip' \) )
+          exit $missing
+
+      # Provenance, not a signature. This records *which workflow, at which
+      # commit, on which runner* produced each installer, so a verifier can
+      # check an artifact came from this repository's release job. It does
+      # **not** sign the binaries: MediaSorter stays unsigned by decision
+      # (`DEC-02`), and an unnotarized DMG is still blocked by default on
+      # current macOS. Attestations do not change that and must not be
+      # described as if they do.
+      - name: Attest build provenance for every installer
+        # `actions/*` stay on a tag by org policy — GitHub-owned, which
+        # `P1-SEC-001` deliberately distinguishes from third-party actions.
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+
+      - name: Publish verified release
+        # softprops/action-gh-release v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+        with:
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+            release/SHA256SUMS
+            release/release-signing-state-*.json

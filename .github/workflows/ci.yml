@@ -1,0 +1,685 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: # allow manually triggering CI checks
+
+# Cancel any in-flight run for the same branch/PR so pushes don't queue up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Backend: lint / typecheck / test ────────────────────────────────────────
+  backend:
+    name: Backend — lint / typecheck / test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libjpeg-dev libpng-dev
+
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
+
+      - name: Verify deterministic branding
+        run: make branding-check
+
+      - name: Report reviewed module growth
+        run: python scripts/check_module_growth.py
+
+      # The frontend's status union is erased at build time, so this generated
+      # artifact is the only thing the two vocabularies can both be compared
+      # against. A backend status added without regenerating fails here.
+      - name: Verify the review-status contract is not stale
+        run: python scripts/generate_review_status_contract.py --check
+
+      # Two implementations pick the keeper — `keeper_policies.py` and
+      # `reviewWorkbench.ts` — and drift between them is invisible, because both
+      # keep returning a keeper. The vector is generated from the backend and
+      # asserted by the frontend suite; this fails when a tie-break changes and
+      # the vector was not regenerated (A-02).
+      - name: Verify the keeper golden vector is not stale
+        run: python scripts/generate_keeper_golden_vector.py --check
+
+      - name: Verify frontend defaults match the backend
+        run: python scripts/generate_config_defaults.py --check
+
+      - name: Lint — ruff
+        working-directory: backend
+        run: python -m ruff check app tests
+
+      - name: Format check — ruff
+        working-directory: backend
+        run: python -m ruff format --check app tests
+
+      - name: Type-check — mypy
+        working-directory: backend
+        run: python -m mypy
+
+      - name: Run tests with coverage
+        working-directory: backend
+        run: |
+          python -m pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-xml
+          path: backend/coverage.xml
+
+  backend-windows:
+    name: Backend — Windows path / DirectML contracts
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
+
+      # `test_root_identity.py` was absent from this list while three of its
+      # contracts are `skipif(os.name != "nt")` — so they were skipped on every
+      # runner and executed on none. A skip is never a pass (`P2-TEST-002`).
+      # `test_catalog.py` holds the future-schema preflight contract: the
+      # catalog must refuse a newer `user_version` *before* a writable open,
+      # leaving the database and any pre-existing `-wal`/`-shm`/hot-journal
+      # sibling byte- and stat-identical. That guarantee is filesystem
+      # behaviour, so proving it on macOS and Linux says nothing about NTFS.
+      # `test_filesystem_capabilities.py` and `test_integrity_contracts.py`
+      # cover the timestamp granularity and metadata preservation that go
+      # through Windows' own `SetFileTime` rather than POSIX `utime`.
+      - name: Run Windows identity and provider tests
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_utils/test_path_utils.py
+          tests/test_services/test_hardware.py
+          tests/test_root_identity.py
+          tests/test_catalog.py
+          tests/test_filesystem_capabilities.py
+          tests/test_integrity_contracts.py
+          tests/test_verified_transfer.py
+          tests/test_source_removal_races.py
+          tests/test_plan_store.py
+          tests/test_quarantine_removal.py
+          -v
+
+  backend-macos:
+    name: Backend — macOS transfer and path semantics
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # `pip install -e ".[dev]"` re-resolved on every run and ignored the
+      # `uv.lock` sitting beside it, so a dependency release could turn `main`
+      # red with no commit pushed — which is exactly what `pillow-heif` 1.6.0
+      # did on 2026-08-31, six days before anyone noticed. Installing the
+      # exported lock makes the tested versions the installed ones. `--system`
+      # keeps them in the `setup-python` interpreter, so every later step still
+      # runs plain `python`.
+      - name: Install the locked dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
+
+      # APFS is case-insensitive and stores filenames decomposed, and the
+      # transfer engine's cross-volume and identity rules behave differently
+      # there than on the Linux runner every other job uses. Running them only
+      # on Linux proved the semantics of a filesystem no user has.
+      # Catalog restoration and non-mutating preflight depend on APFS too.
+      - name: Run transfer, catalog and path-identity suites on APFS
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_verified_transfer.py
+          tests/test_transfer_end_to_end.py
+          tests/test_catalog.py
+          tests/test_path_identity.py
+          tests/test_root_identity.py
+          -v
+
+  backend-types:
+    name: backend-types (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: core
+            extras: --extra dev
+          - profile: shipped-local-ai
+            extras: --extra dev --extra local-ai
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/uv.lock
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+      - name: Install the locked profile
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --locked ${{ matrix.extras }} --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt
+          uv pip install --system -r requirements.ci.txt
+          uv pip install --system -e . --no-deps
+      - name: Type-check the shipped import graph
+        working-directory: backend
+        run: python -m mypy
+
+  archive-security:
+    name: Archive security — ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.14"
+          - os: macos-latest
+            python: "3.11"
+          - os: windows-latest
+            python: "3.11"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the test runner
+        run: python -m pip install pytest
+
+      # Repo root, not backend/: this exercises scripts/fetch_ffmpeg.py with
+      # nothing but pytest installed, and backend/tests/conftest.py imports
+      # FastAPI, so collecting from there failed before a single test ran.
+      - name: Exercise malicious archives on the native filesystem
+        run: python -m pytest tests/test_fetch_ffmpeg.py -v
+
+  # ── Frontend: typecheck / build ──────────────────────────────────────────────
+  build:
+    name: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # No Rust needed here: `tsc --noEmit` and `vite build` are pure TS/JS steps.
+      # Tauri TS types come from the @tauri-apps/api npm package, not Rust compilation.
+      # Rust is only needed for `make build-tauri` (the release jobs).
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test release version synchronization
+        run: node --test scripts/sync-version.test.mjs
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint — ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Format check — Prettier
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Type-check (tsc --noEmit)
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Unit tests (Vitest)
+        working-directory: frontend
+        run: npm test
+
+      - name: Build (Vite — no Tauri binary needed in CI)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Validate tauri.conf.json schema
+        working-directory: frontend
+        run: |
+          pip install jsonschema --quiet --disable-pip-version-check
+          python3 - <<'EOF'
+          import json, jsonschema, sys
+          schema = json.load(open("node_modules/@tauri-apps/cli/config.schema.json"))
+          config = json.load(open("src-tauri/tauri.conf.json"))
+          try:
+              jsonschema.validate(config, schema)
+              print("tauri.conf.json is valid")
+          except jsonschema.ValidationError as e:
+              path = " > ".join(str(p) for p in e.absolute_path)
+              print(f"ERROR in tauri.conf.json at '{path}': {e.message}", file=sys.stderr)
+              sys.exit(1)
+          EOF
+
+  a11y:
+    name: a11y — browser-level WCAG checks
+    # `P2-TEST-001`. The vitest suite already runs axe over every screen; what it
+    # cannot do is contrast, 2.4.11 or 2.5.8, because jsdom has no layout — every
+    # element is 0x0 and no colour is ever composited. Those three need an engine.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # The browser is a fixed binary for a fixed Playwright version, so it is
+      # downloaded once per version rather than once per run. `--with-deps`
+      # still runs: the system libraries it installs are not part of the cache.
+      - name: Cache the pinned browser build
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+      - name: Install the Chromium build Playwright pins
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility suite
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Upload the trace of any failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-traces
+          path: frontend/test-results
+          retention-days: 7
+
+  packaging-smoke:
+    name: packaging — the bundle launches and mounts its UI
+    # `P2-TEST-004`. `scripts/release_integrity.py smoke-webview` has existed all
+    # along, but only the release workflow ever called it — so a packaging break
+    # was discovered while publishing rather than on the pull request that caused
+    # it. This runs the same check against a bundle built from the branch.
+    #
+    # It is deliberately NOT wired into the release job's gate: this proves the
+    # check itself runs green in CI first. Promoting it to a release blocker is a
+    # separate decision, and a launch step that fails every release is worse than
+    # one that runs late.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+
+      - name: Cache the Rust build
+        # Swatinem/rust-cache v2.9.2 — the same revision the release workflow
+        # pins. Both sites said only "v2", so this one sat on v2.7.7 for two
+        # years and nothing could see the difference.
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: frontend/src-tauri
+
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+
+      # The bundle this job smoke-tests must be frozen from the same versions
+      # the backend jobs type-check and test, or it is proving a different
+      # artifact. `pyinstaller` is already in the `dev` extra, so the lock
+      # pins it too.
+      - name: Install the locked dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          (cd backend && uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt)
+          uv pip install --system -r backend/requirements.ci.txt
+          uv pip install --system -e backend --no-deps
+          npm --prefix frontend ci
+
+      - name: Freeze the backend and stage it into the bundle
+        run: make bundle-backend
+
+      - name: Build the desktop bundle
+        working-directory: frontend
+        run: npm run tauri build
+
+      - name: Launch the packaged app and prove the React shell mounts
+        # MEDIASORT_WEBVIEW_SMOKE makes `frontend_ready` exit(0) as soon as the
+        # packaged WebView acknowledges the mounted app, so this asserts the UI
+        # actually came up rather than merely that the process survived.
+        run: |
+          python scripts/release_integrity.py smoke-webview \
+            --path "frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/MacOS/MediaSorter"
+
+      - name: Confirm the GPL notices travelled with the bundle
+        # `P2-SEC-001` acceptance (1), asserted rather than remembered.
+        run: |
+          licenses="frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/licenses"
+          test -s "$licenses/COPYING.GPLv3"
+          test -s "$licenses/FFMPEG-LICENSE-AND-SOURCE-OFFER.md"
+          echo "GPL licence and written offer are present in the bundle"
+
+  native:
+    name: native
+    # MediaSorter ships macOS and Windows bundles. Building the Tauri 1 Linux
+    # GTK graph here would add an unshipped platform and require legacy system
+    # libraries, so exercise the native source on a shipped host instead.
+    runs-on: macos-latest
+    env:
+      # Source compilation must not depend on release-sized generated payloads.
+      # Release jobs use the canonical config after creating every resource.
+      TAURI_CONFIG: '{"bundle":{"resources":[]}}'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        # dtolnay/rust-toolchain stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          components: rustfmt, clippy
+      # Without this the Tauri dependency graph is compiled from nothing on
+      # every run — on the runner class that bills at ten times the Linux rate.
+      # Keyed on the lockfile, so a dependency change invalidates it and
+      # nothing else does; `restore-keys` still gives a partial hit when only
+      # one crate moved.
+      - name: Cache the Cargo registry and build directory
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            frontend/src-tauri/target
+          key: native-${{ runner.os }}-cargo-${{ hashFiles('frontend/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            native-${{ runner.os }}-cargo-
+      - name: Check Rust formatting
+        working-directory: frontend/src-tauri
+        run: cargo fmt --check
+      - name: Compile native source from a clean checkout
+        working-directory: frontend/src-tauri
+        run: cargo check --locked
+      - name: Test native source from a clean checkout
+        working-directory: frontend/src-tauri
+        run: cargo test --locked
+      # Canonical command: maintenance/workflows.py — keep warnings fail-closed.
+      - name: Clippy (warnings denied)
+        working-directory: frontend/src-tauri
+        run: cargo clippy --locked -- -D warnings
+
+  docs-links:
+    name: docs-links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Generated by maintenance/workflows.py — regenerate, do not hand-edit.
+      # Dependency-free on purpose: a link checker that needs a marketplace
+      # action is a link checker that breaks when that action moves.
+      - name: docs-links
+        shell: python
+        run: |
+          import pathlib, re, sys
+
+          link = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+          skip = {
+              ".git", ".venv", "node_modules", "dist", "build", "target",
+              "site-packages", "_internal", "resources", "vendor",
+          }
+          problems = []
+
+          for markdown in pathlib.Path(".").rglob("*.md"):
+              if any(part in skip for part in markdown.parts):
+                  continue
+              for target in link.findall(markdown.read_text(encoding="utf-8", errors="replace")):
+                  if target.startswith(("http://", "https://", "mailto:", "#")):
+                      continue
+                  if not (markdown.parent / target.split("#")[0]).exists():
+                      problems.append(f"{markdown}: {target} does not exist")
+
+          for problem in problems:
+              print(problem)
+          sys.exit(1 if problems else 0)
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # astral-sh/setup-uv v9.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+      # Generated by maintenance/workflows.py — regenerate, do not hand-edit.
+      - name: Export the shipped Python dependency set
+        working-directory: ${{ hashFiles('backend/uv.lock') != '' && 'backend' || '.' }}
+        run: >-
+          uv export --locked --all-extras --no-dev --no-emit-project
+          --format requirements-txt
+          --output-file dependency-audit-requirements.txt
+      - name: Python dependency audit (pip-audit 2.9.0)
+        working-directory: ${{ hashFiles('backend/uv.lock') != '' && 'backend' || '.' }}
+        run: |
+          uvx --from pip-audit==2.9.0 pip-audit --version
+          uvx --from pip-audit==2.9.0 pip-audit \
+            --requirement dependency-audit-requirements.txt --strict
+      - name: Frontend production dependency audit
+        if: hashFiles('frontend/package-lock.json') != ''
+        working-directory: frontend
+        run: |
+          npm --version
+          npm audit --omit=dev --audit-level=high
+      - name: Validate reviewed dependency suppressions
+        if: hashFiles('dependency-audit-suppressions.json') != ''
+        run: python scripts/validate_dependency_suppressions.py --check
+      - name: Rust dependency audit (cargo-audit 0.22.2)
+        if: hashFiles('frontend/src-tauri/Cargo.lock') != ''
+        working-directory: frontend/src-tauri
+        shell: bash
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          audit_args=()
+          if [[ -f ../../dependency-audit-suppressions.json ]]; then
+            while IFS= read -r advisory; do
+              audit_args+=(--ignore "$advisory")
+            done < <(python ../../scripts/validate_dependency_suppressions.py --ecosystem rust)
+          fi
+          cargo audit --version
+          cargo audit "${audit_args[@]}"
+
+  release-integrity:
+    name: release-integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Releaseability compares every material path and reviewed commit
+          # since the latest tag. A shallow checkout would silently erase that
+          # evidence and turn the guard into an availability-dependent check.
+          fetch-depth: 0
+      # Generated by maintenance/workflows.py — regenerate, do not hand-edit.
+      - name: release-integrity
+        shell: python
+        run: |
+          import json, pathlib, re, sys
+
+          found = {}
+
+          package_json = pathlib.Path("frontend/package.json")
+          if package_json.is_file():
+              found["frontend/package.json"] = json.loads(package_json.read_text())["version"]
+
+          package_lock = pathlib.Path("frontend/package-lock.json")
+          if package_lock.is_file():
+              found["frontend/package-lock.json"] = json.loads(package_lock.read_text())["version"]
+
+          tauri = pathlib.Path("frontend/src-tauri/tauri.conf.json")
+          if tauri.is_file():
+              config = json.loads(tauri.read_text())
+              version = config.get("version") or config.get("package", {}).get("version")
+              if version:
+                  found["tauri.conf.json"] = version
+
+          version_py = pathlib.Path("backend/app/_version.py")
+          if version_py.is_file():
+              match = re.search(r'__version__\s*=\s*"([^"]+)"', version_py.read_text())
+              if match:
+                  found["backend/app/_version.py"] = match.group(1)
+
+          cargo_toml = pathlib.Path("frontend/src-tauri/Cargo.toml")
+          if cargo_toml.is_file():
+              match = re.search(
+                  r'\[package\][\s\S]*?\nversion\s*=\s*"([^"]+)"',
+                  cargo_toml.read_text(),
+              )
+              if match:
+                  found["frontend/src-tauri/Cargo.toml"] = match.group(1)
+
+          cargo_lock = pathlib.Path("frontend/src-tauri/Cargo.lock")
+          if cargo_lock.is_file():
+              match = re.search(
+                  r'\[\[package\]\]\nname\s*=\s*"media-sorter"\nversion\s*=\s*"([^"]+)"',
+                  cargo_lock.read_text(),
+              )
+              if match:
+                  found["frontend/src-tauri/Cargo.lock"] = match.group(1)
+
+          changelog = pathlib.Path("CHANGELOG.md")
+          if changelog.is_file():
+              match = re.search(r"(\d+\.\d+\.\d+)", changelog.read_text())
+              if match:
+                  found["CHANGELOG.md"] = match.group(1)
+
+          if not found:
+              print("no version sources found")
+              sys.exit(1)
+
+          for source, version in sorted(found.items()):
+              print(f"{source}: {version}")
+
+          distinct = set(found.values())
+          if len(distinct) > 1:
+              print(f"\nversions disagree: {sorted(distinct)}")
+              sys.exit(1)
+          print("\nevery version source agrees")
+      - name: Set up Node 24 for releaseability policy
+        if: >-
+          github.event.repository.name == 'media-sorter' ||
+          hashFiles('scripts/releaseability.cjs') != ''
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Releaseability policy
+        if: >-
+          github.event.repository.name == 'media-sorter' ||
+          hashFiles('scripts/releaseability.cjs') != ''
+        run: |
+          test -f scripts/releaseability.cjs
+          test -f scripts/releaseability.test.cjs
+          test -f scripts/render-release-changelog.mjs
+          npm ci --ignore-scripts
+          node --test scripts/releaseability.test.cjs
+          node scripts/releaseability.cjs
