@@ -8,6 +8,7 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-10-03 | Portable agent routes and task-time documentation maintenance | Standalone development stays self-contained; docs/routes change with behavior. | [agent guide](../AGENTS.md) |
 | 2026-10-03 | Reviewed runner images and short-lived CI artifacts | Avoid image retirement/migration surprises while keeping required check names and durable releases. | [development](development.md#quality-gates) |
 | 2026-10-03 | Authenticated loopback container health checks | Health uses the same API boundary; Compose requires a launch capability and binds loopback. | [headless](headless.md) |
 | 2026-10-03 | Native cross-platform development entry points | Windows batch files cannot be spawned directly; use npm's JS CLI and the platform's venv interpreter. | [development](development.md#setup) |

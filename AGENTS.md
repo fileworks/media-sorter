@@ -12,11 +12,10 @@ Test mutations with disposable media and real temporary databases.
 
 ## Read only what the task needs
 
-Follow the matching route below; do not load the entire documentation set.
-If `../_local/AGENT-ROUTER.md` exists and the task involves owner-specific,
-security, or cross-repository decisions, follow its relevant route. It is
-optional private context: a standalone clone must work without it. Do not ask
-for private notes to perform ordinary work. Never import them from CLAUDE.md.
+Read only the matching route. Cross-repo choices may use
+`../agent-context/context/ROUTER.md`; owner/security operations may use
+`../_local/AGENT-ROUTER.md` when present. Both are optional: standalone
+work needs neither. Never import private context.
 
 | Working on | First read |
 |---|---|
@@ -30,15 +29,10 @@ for private notes to perform ordinary work. Never import them from CLAUDE.md.
 
 ## Before finishing
 
-- Update the affected user/developer instructions in the same change as behavior.
-- For a lasting decision, update [docs/decisions.md](docs/decisions.md): date,
-  choice, reason, and a link to the owning contract. Replace superseded choices;
-  do not add session transcripts or repeat facts already owned elsewhere.
-- Update this routing table when a new maintained topic needs an entry point.
-- Keep credentials, personal data, security setup and private operational notes
-  out of public commits. If the optional private workspace exists, put those
-  decisions there; otherwise report the missing context only when it blocks work.
-- Run the checks appropriate to the change; report actual output and skips.
-  Documentation-only changes need link/routing checks, not a new product release.
-- Use the owner's configured Git identity; no AI authors/co-author trailers.
-  Keep the README's AI-first disclosure. Publishing requires task authorization.
+- Update affected docs/routes with behavior. For changed lasting decisions, update
+  [docs/decisions.md](docs/decisions.md) with date, reason and owning contract;
+  replace superseded guidance. Keep one TODO per concern, not session logs.
+- Run relevant checks and show output/skips. Doc-only edits need routing/link
+  checks, not a product release. Keep credentials/personal operations out of commits.
+- Preserve concurrent work. Use the configured owner identity, no AI co-authors.
+  Keep the README AI-first disclosure. Remote writes/publication need authorization.

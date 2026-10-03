@@ -13,6 +13,8 @@
 
 ![MediaSorter desktop application](docs/assets/screenshot.png)
 
+*Current source UI with disposable demonstration media. See [capture details](docs/assets/README.md).*
+
 </div>
 
 ## Overview
@@ -53,7 +55,7 @@ publishes checksums, but those checksums do not prove publisher identity.
 ## Quick start
 
 Open MediaSorter, add at least one input and one destination on **Sources**,
-choose a recipe, preview the current settings, resolve any duplicate decisions,
+choose a recipe in **Setup**, calculate the plan, resolve any duplicate decisions,
 and execute only after reviewing the frozen impact summary.
 
 ## Usage
@@ -64,14 +66,12 @@ The application makes every mutation wait behind one reviewed plan:
 
 1. **Sources** — assign input, reference, and destination folders. A whole root
    can be skipped for one run without changing the saved profile.
-2. **Recipe** — choose a safe starting policy.
-3. **Configure** — adjust movement, structure, cleanup, metadata, and AI
-   settings. Changed values and their effects are visible.
-4. **Plan** — calculate the complete read-only impact and verify the destination,
-   available sources, write boundary, and required space.
-5. **Review** — browse planned destinations and resolve every duplicate or
-   similar-media set. Preview and scanning remain read-only.
-6. **Execute** — confirm the frozen impact summary, follow progress, and inspect
+2. **Setup** — choose a recipe, then adjust movement, structure, cleanup, metadata
+   and optional AI settings. Calculate the read-only plan from these settings.
+3. **Review** — inspect the impact summary and planned destinations, verify the
+   destination and space, and resolve every duplicate or similar-media set.
+   Preview and scanning remain read-only.
+4. **Execute** — confirm the frozen impact summary, follow progress, and inspect
    the final report.
 
 Returning to folders or settings invalidates the dependent plan instead of
@@ -120,7 +120,7 @@ The [settings reference](docs/settings-reference.md) documents every option,
 default, compatibility gate, model tier, environment override, and routing
 rule. The in-app descriptions and previews are the primary configuration UI.
 
-Use the in-app **Configure** screen for saved settings and immediate folder and
+Use the in-app **Setup** screen for saved settings and immediate folder and
 filename previews. For headless deployments, the settings reference lists the
 equivalent environment and API controls, including validation and safe
 defaults.

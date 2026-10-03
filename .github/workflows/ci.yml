@@ -666,12 +666,12 @@ jobs:
       - name: docs-links
         shell: python
         run: |
-          import pathlib, re, sys
+          import hashlib, json, os, pathlib, re, subprocess, sys
 
           link = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
           skip = {
               ".git", ".venv", "node_modules", "dist", "build", "target",
-              "site-packages", "_internal", "resources", "vendor",
+              "site-packages", "_internal", "resources", "vendor", ".agent-context-backups",
           }
           problems = []
 
@@ -686,25 +686,85 @@ jobs:
               text = guide.read_text(encoding="utf-8")
               if len(text.splitlines()) > 80:
                   problems.append("AGENTS.md: keep the shared guide within 80 lines")
+              if len(text.encode("utf-8")) > 8192:
+                  problems.append("AGENTS.md: keep startup guidance within 8 KiB")
               for heading in ("## Read only what the task needs", "## Before finishing"):
                   if heading not in text:
                       problems.append(f"AGENTS.md: missing {heading}")
-              if re.search(r"(?m)^\s*@.*(?:_local|planning)", text):
+              if re.search(r"(?m)^\s*@.*(?:_local|planning|agent-context)", text):
                   problems.append("AGENTS.md: private context must not be imported")
+              if re.search(r"[A-Za-z]:[\\/]|/(?:Users|home)/[^/\s]+/", text):
+                  problems.append("AGENTS.md: machine-specific absolute paths are not portable")
+              if "docs/decisions.md" not in text:
+                  problems.append("AGENTS.md: route lasting decisions to docs/decisions.md")
+              if not re.search(r"(?i)update.*(?:docs|documentation)", text):
+                  problems.append("AGENTS.md: require documentation updates with the work")
 
-          for markdown in pathlib.Path(".").rglob("*.md"):
-              if any(part in skip for part in markdown.parts):
-                  continue
-              for target in link.findall(markdown.read_text(encoding="utf-8", errors="replace")):
-                  if target.startswith(("http://", "https://", "mailto:", "#")):
+          unscoped = 0
+          for rule in pathlib.Path(".claude/rules").rglob("*.md"):
+              body = rule.read_text(encoding="utf-8")
+              if not re.match(r"---\s*\n(?:(?!\n---).)*\bpaths:", body, re.S):
+                  unscoped += len(body.splitlines())
+          if unscoped > 50:
+              problems.append(".claude/rules: keep unscoped rules within 50 lines")
+
+          source = pathlib.Path(".claude/skills")
+          manifest = pathlib.Path(".agents/skills/.fileworks-mirror.json")
+          if source.is_dir() and any(source.glob("*/SKILL.md")):
+              if not manifest.is_file():
+                  problems.append(".agents/skills: missing mirror manifest; run skill sync")
+              else:
+                  try:
+                      recorded = json.loads(manifest.read_text(encoding="utf-8"))
+                      observed = {}
+                      for skill in source.iterdir():
+                          if not skill.name.startswith(".") and (skill / "SKILL.md").is_file():
+                              for item in skill.rglob("*"):
+                                  if item.is_file() and "__pycache__" not in item.parts:
+                                      observed[item.relative_to(source).as_posix()] = (
+                                          hashlib.sha256(item.read_bytes()).hexdigest()
+                                      )
+                      if observed != recorded["sources"]:
+                          problems.append(".agents/skills: source drift; run skill sync")
+                      for name, expected in recorded["outputs"].items():
+                          output = (manifest.parent / name).resolve()
+                          if not output.is_relative_to(manifest.parent.resolve()):
+                              raise ValueError("mirror path escapes its directory")
+                          actual = None
+                          if output.is_file():
+                              actual = hashlib.sha256(output.read_bytes()).hexdigest()
+                          if actual != expected:
+                              problems.append(f".agents/skills/{name}: generated mirror drift")
+                  except (KeyError, TypeError, ValueError) as error:
+                      problems.append(f".agents/skills: invalid mirror manifest ({error})")
+
+          if pathlib.Path(".git").exists():
+              ignored = ("CLAUDE.local.md", "AGENTS.override.md", ".claude/settings.local.json",
+                         ".claude/RESUME.md", ".codex-log/probe", ".agent-context-state.json",
+                         ".agent-context-backups/probe", ".agent-context.lock")
+              result = subprocess.run(
+                  ["git", "check-ignore", "--no-index", *ignored], text=True, capture_output=True
+              )
+              for name in set(ignored) - set(result.stdout.splitlines()):
+                  problems.append(f"{name}: local agent state must be ignored")
+
+          for directory, children, names in os.walk("."):
+              children[:] = [name for name in children if name not in skip]
+              for name in names:
+                  if not name.endswith(".md"):
                       continue
-                  resolved = (markdown.parent / target.split("#")[0]).resolve()
-                  if not resolved.is_relative_to(pathlib.Path.cwd()):
-                      problems.append(
-                          f"{markdown}: {target} requires context outside this repository"
-                      )
-                  elif not resolved.exists():
-                      problems.append(f"{markdown}: {target} does not exist")
+                  markdown = pathlib.Path(directory) / name
+                  content = markdown.read_text(encoding="utf-8", errors="replace")
+                  for target in link.findall(content):
+                      if target.startswith(("http://", "https://", "mailto:", "#")):
+                          continue
+                      resolved = (markdown.parent / target.split("#")[0]).resolve()
+                      if not resolved.is_relative_to(pathlib.Path.cwd()):
+                          problems.append(
+                              f"{markdown}: {target} requires context outside this repository"
+                          )
+                      elif not resolved.exists():
+                          problems.append(f"{markdown}: {target} does not exist")
 
           for problem in problems:
               print(problem)

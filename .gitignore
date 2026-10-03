@@ -68,7 +68,11 @@ backend/build/
 *~
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/rules/
+!.claude/agents/
+!.claude/settings.json
 CLAUDE.local.md
 
 # ── Graphify knowledge graph ──────────────────────────────────────────────────
@@ -103,3 +107,12 @@ _corrupted/
 
 # Exported from uv.lock by CI; never committed.
 requirements.ci.txt
+
+# Local agent state; shared instructions/skills remain versioned.
+AGENTS.override.md
+.claude/settings.local.json
+.claude/RESUME.md
+.codex-log/
+.agent-context-state.json
+.agent-context-backups/
+.agent-context.lock
