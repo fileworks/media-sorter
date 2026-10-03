@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ── FastAPI backend ──────────────────────────────────────────────────────────
   backend:
@@ -10,7 +8,7 @@ services:
     container_name: mediasort-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       # Persist config.json and mediasort.db across restarts
       - mediasort-config:/config
@@ -29,16 +27,17 @@ services:
       MEDIASORT_DB_PATH: /config/mediasort.db
       MEDIASORT_LOG_DIR: /config/logs
       MEDIASORT_LOG_LEVEL: "${MEDIASORT_LOG_LEVEL:-INFO}"
+      MEDIASORT_API_CAPABILITY: "${MEDIASORT_API_CAPABILITY:?Set a fresh capability of at least 32 characters}"
       # Uncomment to pre-configure source/dest inside the container:
       # MEDIASORT_SOURCE_DIRECTORY: /media/source
       # MEDIASORT_TARGET_DIRECTORY: /media/dest
     healthcheck:
-      # python:3.11-slim ships no curl — use a Python one-liner instead.
+      # Authenticate using the same capability as the backend; never print it.
       test:
         - "CMD"
         - "python"
-        - "-c"
-        - "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status == 200 else 1)"
+        - "-m"
+        - "app.core.container_health"
       interval: 10s
       timeout: 5s
       retries: 3

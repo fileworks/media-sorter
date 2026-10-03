@@ -78,7 +78,12 @@ class TestRefusals:
         elsewhere = tmp_path / "someone-elses-file.jpg"
         elsewhere.write_bytes(b"not mine to delete")
         held.unlink()
-        held.symlink_to(elsewhere)
+        try:
+            held.symlink_to(elsewhere)
+        except OSError as exc:
+            if os.name == "nt" and getattr(exc, "winerror", None) == 1314:
+                pytest.skip("Windows runner lacks symlink creation permission")
+            raise
 
         outcome = _remove(store, record_id)
 

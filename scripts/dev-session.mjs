@@ -9,8 +9,12 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { npmInvocation } from "./dev-process.mjs";
 
-const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repository = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const frontend = path.join(repository, "frontend");
 const capability = randomBytes(32).toString("base64url");
 const environment = {
@@ -19,7 +23,6 @@ const environment = {
   VITE_MEDIASORT_API_CAPABILITY: capability,
 };
 const backendOnly = process.argv.includes("--backend-only");
-const command = process.platform === "win32" ? "npm.cmd" : "npm";
 const arguments_ = backendOnly
   ? ["run", "dev:backend"]
   : [
@@ -42,17 +45,21 @@ if (backendOnly) {
   );
 }
 
-const child = spawn(command, arguments_, {
+const invocation = npmInvocation(arguments_, { environment });
+const child = spawn(invocation.command, invocation.args, {
   cwd: frontend,
   env: environment,
   stdio: "inherit",
+  windowsHide: true,
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));
 }
 child.on("error", (error) => {
-  process.stderr.write(`Could not start development session: ${error.message}\n`);
+  process.stderr.write(
+    `Could not start development session: ${error.message}\n`,
+  );
   process.exitCode = 1;
 });
 child.on("exit", (code, signal) => {

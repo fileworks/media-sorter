@@ -14,7 +14,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
-    "dev:backend": "cd ../backend && ./.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --timeout-graceful-shutdown 3",
+    "dev:backend": "node ../scripts/dev-backend.mjs",
     "dev:all": "node ../scripts/dev-session.mjs",
     "test:a11y": "playwright test"
   },

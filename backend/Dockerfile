@@ -25,7 +25,6 @@ FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="MediaSorter Backend"
 LABEL org.opencontainers.image.description="FastAPI backend for intelligent media organisation"
-LABEL org.opencontainers.image.version="0.1.0"
 
 WORKDIR /app
 
@@ -62,8 +61,7 @@ ENV MEDIASORT_CONFIG_DIR=/config \
     MEDIASORT_LOG_DIR=/config/logs
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c \
-        "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status == 200 else 1)"
+    CMD python -m app.core.container_health
 
 CMD ["python", "-m", "uvicorn", "app.main:app", \
      "--host", "0.0.0.0", "--port", "8000", \
