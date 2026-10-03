@@ -660,7 +660,13 @@ export async function stubBackend(
       }
       return body(await getConfig());
     }
-    if (url.includes("/api/health")) return body({ status: "ok", version: "e2e" });
+    if (url.includes("/api/health")) {
+      const version =
+        process.env.UPDATE_MEDIA_SORTER_SCREENSHOT === "1"
+          ? (require("../package.json") as { version: string }).version
+          : "e2e";
+      return body({ status: "ok", version });
+    }
     if (url.includes("/api/hardware"))
       return body({
         logical_cpus: 8,
