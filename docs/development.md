@@ -43,6 +43,10 @@ backend interpreter, so Windows does not need a Unix shell or `.venv/bin/python`
 
 ## Quality gates
 
+Linux CI uses Ubuntu 24.04 and the Apple Silicon release build uses macOS 15.
+Existing matrix/check names remain stable; all required gates still run. CI
+artifacts expire after seven days; published release downloads remain available.
+
 The backend uses **Ruff** (lint + format) and **mypy --strict** over `app` *and*
 `tests` — the scope lives in `pyproject.toml`, so `mypy` is invoked without a path. The frontend uses **ESLint** (flat config) + **Prettier**.
 
