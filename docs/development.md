@@ -16,23 +16,30 @@ Makefile    every dev/build command
 
 ## Setup
 
-```bash
-make install      # venv + npm install + Rust toolchain check (one-time)
+Use Python 3.12+ for the full locked development environment, Node 24, uv and
+Rust stable. Core backend metadata permits Python 3.10+, but optional AI/native
+packaging uses the fuller environment. Follow [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+for your OS (Windows needs MSVC build tools/WebView2; macOS Xcode tools; Linux
+WebKit/system libraries). ffmpeg/ffprobe must be on PATH for media work in
+development; installers bundle them. Linux may also need image-library headers.
+
+From a fresh public clone, with these tools available:
+
+```console
+git clone https://github.com/fileworks/media-sorter.git
+cd media-sorter
+uv sync --project backend --locked --all-extras --dev
+npm --prefix frontend ci
+node scripts/dev-session.mjs
 ```
 
-**Prerequisites:** Python 3.10+, Node 24, Rust stable. On Linux you'll also
-need the usual image libraries (`libjpeg`, `libpng`). ffmpeg is bundled in releases —
-you don't need it installed to develop.
-
-## Running
-
-```bash
-make dev          # backend (hot-reload) + Tauri window, one terminal
-
-# or split across two terminals:
-make backend      # FastAPI on :8000
-make frontend     # Tauri dev window
-```
+The last command starts backend and Tauri development together on Windows,
+macOS or Linux. With GNU make and a POSIX shell, `make install` / `make dev`
+are equivalent helpers. `make backend` starts the backend-only session.
+The backend-only development launcher prints the per-launch capability for direct
+API clients; the desktop launcher passes it internally. Never include it in a report.
+The launcher invokes npm's JavaScript CLI on Windows and selects the platform's
+backend interpreter, so Windows does not need a Unix shell or `.venv/bin/python`.
 
 ## Quality gates
 
@@ -48,11 +55,17 @@ make typecheck    # mypy
 # frontend (run inside frontend/)
 npm run lint          # eslint, zero warnings allowed
 npm run format        # prettier --write
+npm run format:check  # prettier --check
+npm test              # Vitest
 npm run build         # tsc + vite build
 ```
 
-`make ci` covers the **backend only**. After any frontend change, run `npm run lint` and
-`npm run build` in `frontend/` — CI checks those in a separate job.
+`make ci` covers the **backend only**. After any frontend change, run lint, format check, tests and
+build in `frontend/` — CI checks those in a separate job.
+The full backend/type gates run on Linux; Windows/macOS CI runs the native
+filesystem suites named in `.github/workflows/ci.yml`. Full-suite fixtures include
+POSIX permissions and symlinks. On Windows, symlink-dependent checks need
+Developer Mode or elevation; use a short scratch path for native filesystem tests.
 
 ## Testing
 
@@ -61,8 +74,8 @@ make test         # all backend tests + coverage summary
 make test-cov     # + HTML report at backend/htmlcov/index.html
 ```
 
-Tests are unit (`test_services/`), integration (`test_api/`), and a few E2E. The gate
-is 80%; `make test` prints the current figure. Image/video tests use
+Tests are unit (`test_services/`), integration (`test_api/`), and a few E2E. `make test-ci`/`make ci` enforce 80%; `make test` prints coverage without
+enforcing that threshold. Image/video tests use
 `pytest.importorskip` for their deps so the suite still runs in a minimal environment.
 
 ## Adding things

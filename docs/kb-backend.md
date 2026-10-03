@@ -1,7 +1,8 @@
 <!-- scope: FastAPI/raw-sqlite3/Pydantic backend rules and patterns AS USED IN THIS REPO -->
 
 ## Project Setup
-- Python 3.10+ (dev venv at `backend/.venv`, created by `make install` — plain pip, not uv/poetry)
+- Python 3.10+ core; locked development environment at `backend/.venv` uses uv.
+  Follow [development setup](development.md#setup) for full/native prerequisites.
 - Ruff is the single linter + formatter; Mypy `--strict`; gate: `make ci` (lint + typecheck + tests ≥80% cov)
 - Layout: `backend/app/{main.py, api/{deps.py, schemas.py, routes/}, core/, services/, background_tasks/, utils/}`
 - Optional extras: `[local-ai]` (fastembed/onnxruntime) — absent in CI; all AI imports are lazy so tests never need it

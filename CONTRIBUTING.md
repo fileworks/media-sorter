@@ -1,30 +1,36 @@
 # Contributing
 
-Open an issue before changing preservation guarantees, the mutation manifest,
-the catalog schema, or anything under `docs/` that a user relies on. Those are
-contracts, and changing one is a decision rather than a refactor.
+Discuss changes to preservation guarantees, the mutation manifest or catalog
+schema before implementation. Routine documentation corrections can be proposed
+directly. Start at [AGENTS.md](AGENTS.md); record lasting decisions in
+[docs/decisions.md](docs/decisions.md) alongside the affected contract.
 
 Use a focused branch and a Conventional Commit subject (`feat:`, `fix:`,
-`refactor:`, `docs:`, `chore:`). `feat:` and `fix:` cut a release; the others
-deliberately do not.
+`refactor:`, `docs:`, `chore:`). `feat:` and `fix:` make a new release eligible;
+the Version Release workflow is dispatched deliberately. Documentation changes
+do not move published tags or replace release assets.
 
 ## The quality gate
 
 ```console
-# backend
-cd backend && uv sync --all-extras --dev
+# backend (start in the repository root)
+cd backend
+uv sync --locked --all-extras --dev
 uv run ruff format --check . && uv run ruff check .
 uv run mypy
 uv run pytest -q
 
-# frontend
-cd frontend && npm ci
+# frontend (return to the repository root first)
+cd ../frontend
+npm ci
 npm run lint      # --max-warnings 0
+npm run format:check
 npm test
 npm run build     # tsc && vite build
 ```
 
-All four frontend commands and all four backend commands must pass. `npm run
+For code changes, run the applicable frontend/backend gates above. Documentation-only
+changes need documentation links/routing and formatting checks. `npm run
 lint` runs with `--max-warnings 0` on purpose.
 
 ## What tests are expected to prove

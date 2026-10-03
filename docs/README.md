@@ -3,6 +3,9 @@
 Two audiences. `kb-*.md` are rules to follow while writing code — terse, one rule
 per line, no prose. Everything else explains a subsystem to a person.
 
+Start at [AGENTS.md](../AGENTS.md) for task routing; [decisions](decisions.md)
+record lasting choices. Read the relevant row, not this entire set.
+
 ## Rules to follow while implementing
 
 | File | Read when |
@@ -30,6 +33,7 @@ per line, no prose. Everything else explains a subsystem to a person.
 | [design.md](design.md) | architecture and the *why* behind each decision |
 | [design-system.md](design-system.md) | semantic UI tokens, component geometry, review row grids, motion, responsiveness, and icon rules |
 | [duplicate-review-redesign.md](duplicate-review-redesign.md) | the proposal behind the current duplicate surface, and the one point of it that was not adopted |
+| [frontend-conventions.md](frontend-conventions.md) | frontend state, errors and test conventions |
 | [development.md](development.md) | setup, running, quality gates, testing, releasing |
 | [architecture-ownership.md](architecture-ownership.md) | the module seams and the growth-review policy |
 
@@ -64,6 +68,8 @@ compatibility but are not used by the desktop interface.
 
 | File | Covers |
 |---|---|
+| [install.md](install.md) | public desktop installer selection, checksums and updates |
+| [headless.md](headless.md) | source-built Docker API and CLI prerequisites |
 | [dependency-security.md](dependency-security.md) | the dependency audit policy and its suppression file |
 | [model-distribution.md](model-distribution.md) | optional CLIP/SigLIP packs, pinned digests, the mirror escape hatch |
 | [release-signing.md](release-signing.md) | signing credentials and the declared signed/unsigned state |

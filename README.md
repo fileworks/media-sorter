@@ -40,6 +40,9 @@ confirm **Open**. On macOS 15 Sequoia and later, after the blocked launch open
 **More info > Run anyway** in SmartScreen only for the verified Fileworks
 download.
 
+See the [installation guide](docs/install.md) for the correct CPU/installer,
+checksum commands and updates. Desktop downloads need no account.
+
 ## Status
 
 The latest verified public release is listed on the
@@ -138,54 +141,36 @@ lowercase state is copied non-destructively on first startup. See
 
 ## Headless and CLI use
 
-Run the backend on a NAS or server with Docker:
-
-```sh
-MEDIA_SOURCE=~/Pictures MEDIA_DEST=~/Sorted docker compose up -d
-docker compose logs -f backend
-```
-
-The API listens at `http://localhost:8000` in this setup. A launch creates a
-fresh capability token; direct CLI/API clients must send it. The packaged app
-passes its token internally and never persists it.
-
-```sh
-backend/.venv/bin/python -m cli.main --help
-backend/.venv/bin/python -m cli.main config set --source ~/Pictures --target ~/Sorted --move
-backend/.venv/bin/python -m cli.main config validate
-backend/.venv/bin/python -m cli.main scan
-backend/.venv/bin/python -m cli.main preview
-backend/.venv/bin/python -m cli.main sort start --watch
-backend/.venv/bin/python -m cli.main sort report <task-id>
-```
-
-Use `--api-url` / `MEDIASORT_API_URL` for another backend and
-`--api-capability` / `MEDIASORT_API_CAPABILITY` for its token. The live OpenAPI
-reference is at `/api/docs`.
+For an advanced source-built API or CLI client, follow
+[headless setup](docs/headless.md). It documents prerequisites, mounted paths,
+loopback access and the per-launch capability. The desktop installer supplies
+its own capability internally. NAS access/setup has not been verified by a release.
 
 ## Development
 
 ```sh
 git clone https://github.com/fileworks/media-sorter.git
 cd media-sorter
-make install
-make dev
-make ci
-cd frontend && npm run lint && npm test && npm run build
+uv sync --project backend --locked --all-extras --dev
+npm --prefix frontend ci
+node scripts/dev-session.mjs
 ```
 
 The desktop shell is Tauri/Rust, the API is FastAPI/Python, and the interface is
 React/TypeScript. Releases bundle the frozen backend plus static ffmpeg and
-ffprobe binaries.
+ffprobe binaries. Follow the [development guide](docs/development.md#setup) for
+Python/Node/Rust/Tauri prerequisites and the applicable quality gates.
 
 Renovate combines routine non-major updates into one Monday `fix(deps)` pull
-request and squash-merges it only after all checks pass. Only one dependency
-branch can exist at a time. Major, replacement, and rollback updates stay on
+request and squash-merges it only after all checks pass. Routine updates use
+one dependency branch. Major, replacement, and rollback updates stay on
 the Dependency Dashboard until explicitly approved and are never auto-merged.
+Urgent vulnerability updates bypass batching and require review.
 
 - [Development guide](docs/development.md)
 - [Architecture](docs/design.md)
 - [Documentation index](docs/README.md)
+- [Agent routes](AGENTS.md) and [maintained decisions](docs/decisions.md)
 - [Contributing](CONTRIBUTING.md)
 - [Release signing](docs/release-signing.md)
 
