@@ -656,6 +656,7 @@ jobs:
           node scripts/releaseability.cjs
 
   docs-links:
+    timeout-minutes: 5
     name: docs-links
     runs-on: ubuntu-24.04
     steps:
