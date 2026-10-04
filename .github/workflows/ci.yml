@@ -164,6 +164,7 @@ jobs:
           tests/test_source_removal_races.py
           tests/test_plan_store.py
           tests/test_quarantine_removal.py
+          tests/test_windows_packaged_startup.py
           -v
 
   backend-macos:

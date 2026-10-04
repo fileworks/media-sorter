@@ -76,7 +76,7 @@ export function I18nProvider({
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    // Storage is optional; the persisted backend config remains authoritative.
+    // Interface language is independent of operational category/folder names.
     writeStored(STORAGE_KEY, next);
   }, []);
 

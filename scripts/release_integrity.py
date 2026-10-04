@@ -641,10 +641,32 @@ def _smoke_launcher(path: Path) -> None:
                 )
 
 
+@contextmanager
+def _webview_smoke_state():
+    """Allow WebView2 to release its isolated profile after launcher shutdown."""
+    temporary = tempfile.TemporaryDirectory(prefix="mediasorter-webview-smoke-")
+    directory = Path(temporary.name).resolve()
+    if directory.parent != Path(tempfile.gettempdir()).resolve():
+        raise ReleaseIntegrityError("WebView smoke state escaped its temporary directory")
+    try:
+        yield directory
+    finally:
+        for attempt in range(41):
+            try:
+                temporary.cleanup()
+                break
+            except PermissionError as error:
+                # WebView2 subprocess shutdown can lag behind the GUI process.
+                # Retry sharing violations only; do not suppress permission or
+                # validation failures or kill unrelated browser processes.
+                if os.name != "nt" or getattr(error, "winerror", None) != 32 or attempt == 40:
+                    raise
+                time.sleep(0.25)
+
+
 def _smoke_packaged_webview(path: Path) -> None:
-    """Prove the packaged native shell reaches the mounted React application."""
-    with tempfile.TemporaryDirectory(prefix="mediasorter-webview-smoke-") as temporary:
-        log_dir = Path(temporary)
+    """Prove React mounting, backend readiness and Blob image rendering under CSP."""
+    with _webview_smoke_state() as log_dir:
         env = os.environ.copy()
         env.update(
             {
@@ -654,6 +676,7 @@ def _smoke_packaged_webview(path: Path) -> None:
                 "MEDIASORT_DB_PATH": str(log_dir / "data" / "mediasort.db"),
                 "MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE": "1",
                 "MEDIASORT_WEBVIEW_SMOKE": "1",
+                "WEBVIEW2_USER_DATA_FOLDER": str(log_dir / "webview"),
             }
         )
         try:
@@ -671,8 +694,16 @@ def _smoke_packaged_webview(path: Path) -> None:
             raise ReleaseIntegrityError(f"packaged WebView exited with {result.returncode}: {path}")
         log_path = log_dir / "mediasort.log"
         _require_file(log_path)
-        if "packaged_webview_frontend_ready" not in log_path.read_text(encoding="utf-8"):
-            raise ReleaseIntegrityError("packaged React shell never acknowledged WebView readiness")
+        log = log_path.read_text(encoding="utf-8")
+        for marker in (
+            "packaged_webview_frontend_mounted",
+            "packaged_webview_media_ready",
+            "packaged_webview_frontend_ready",
+        ):
+            if marker not in log:
+                raise ReleaseIntegrityError(
+                    f"packaged React shell never acknowledged WebView readiness: {marker}"
+                )
 
 
 def _zip_required(zip_path: Path) -> tuple[str, dict[str, str]]:

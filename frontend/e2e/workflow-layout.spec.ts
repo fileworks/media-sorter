@@ -42,14 +42,21 @@ test("Browse retains readable dates and status at compact widths in both languag
   await page.goto("/");
   await openSurface(page, "review");
   await page.locator("[data-file-row]").first().waitFor({ state: "visible" });
+  const configWrites: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/config") && request.method() === "POST") {
+      configWrites.push(request.postData() ?? "");
+    }
+  });
   for (const language of ["en", "de"]) {
-    const saved = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/config") && response.request().method() === "POST",
-    );
     await page.getByRole("combobox", { name: /language|sprache/i }).selectOption(language);
-    await saved;
+    // Changing interface language preserves the live plan; no config POST
+    // can stale its fingerprint or clear the scan/preview/decisions.
+    await expect(page.locator("[data-file-row]").first()).toBeVisible();
+    expect(configWrites).toEqual([]);
+    await expect(page.locator("html")).toHaveAttribute("lang", language);
     await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("lang", language);
     await openSurface(page, "review");
     await page.locator("[data-file-row]").first().waitFor({ state: "visible" });
     for (const width of [360, 768, 1280, 1920]) {
@@ -86,6 +93,70 @@ test("Browse retains readable dates and status at compact widths in both languag
     .getByRole("button", { name: /weiter.*prüf/i })
     .click();
   await expect(page.locator("[data-file-row]").first()).toBeVisible();
+});
+
+test("companion badge glyphs stay inside their box at Windows-style scaling", async ({ page }) => {
+  const result = { ...E2E_PREVIEW_RESULT, items: [E2E_PREVIEW_RESULT.items[0]] };
+  await stubBackend(page, { previewResult: result });
+  await page.route("**/api/review/groups**", (route) =>
+    route.fulfill({
+      json: {
+        groups: [],
+        next_cursor: null,
+        kind: "exact",
+        truncated: false,
+        partial_index: false,
+      },
+    }),
+  );
+  await page.addInitScript(
+    ({ result, analysis }) => {
+      localStorage.setItem(
+        "mediasort_completed_plan",
+        JSON.stringify({
+          schemaVersion: 3,
+          planId: result.plan_id,
+          configFingerprint: result.config_fingerprint,
+          analysis,
+        }),
+      );
+    },
+    { result, analysis: E2E_ANALYSIS },
+  );
+  await page.goto("/");
+  await openSurface(page, "review");
+  const badge = page.locator("[data-file-status]").getByText("moves together", { exact: true });
+  await expect(badge).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  for (const scale of [1, 1.25, 1.5, 2]) {
+    await page.evaluate((scale) => {
+      document.documentElement.style.zoom = String(scale);
+    }, scale);
+    await badge.scrollIntoViewIfNeeded();
+    const clipped = await badge.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const text = element.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) throw new Error("Missing badge text");
+      const failures: string[] = [];
+      for (let i = 0; i < (text.textContent?.length ?? 0); i++) {
+        const range = document.createRange();
+        range.setStart(text, i);
+        range.setEnd(text, i + 1);
+        const glyph = range.getBoundingClientRect();
+        if (
+          glyph.left < box.left ||
+          glyph.right > box.right ||
+          glyph.top < box.top ||
+          glyph.bottom > box.bottom
+        ) {
+          failures.push(text.textContent?.[i] ?? "?");
+        }
+      }
+      return failures;
+    });
+    expect(clipped, `clipped badge letters at ${scale * 100}%`).toEqual([]);
+    await badge.screenshot({ path: test.info().outputPath(`badge-${scale}.png`) });
+  }
 });
 
 test("workspace rails are symmetric and sticky settings meet the scrollport", async ({ page }) => {
@@ -142,12 +213,8 @@ for (const width of [640, 960]) {
       await page.goto("/");
       const language = page.getByRole("combobox", { name: /language|sprache/i });
       if ((await language.inputValue()) !== locale) {
-        const saved = page.waitForResponse(
-          (response) =>
-            response.url().includes("/api/config") && response.request().method() === "POST",
-        );
         await language.selectOption(locale);
-        await saved;
+
         await page.reload();
       }
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
@@ -203,12 +270,8 @@ for (const locked of [false, true]) {
       await page.goto("/");
       const language = page.getByRole("combobox", { name: /language|sprache/i });
       if ((await language.inputValue()) !== locale) {
-        const saved = page.waitForResponse(
-          (response) =>
-            response.url().includes("/api/config") && response.request().method() === "POST",
-        );
         await language.selectOption(locale);
-        await saved;
+
         await page.reload();
       }
       await openSurface(page, "recipe");

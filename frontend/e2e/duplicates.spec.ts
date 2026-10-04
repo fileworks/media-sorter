@@ -69,6 +69,25 @@ test("keeping a copy decides the set and the queue moves on by itself", async ({
   await expect(page.getByText(/1 of 4 decided/)).toBeVisible();
 });
 
+test("collapsed Browse sets offer Compare next to Decide this set in list and grid", async ({
+  page,
+}) => {
+  await openSurface(page, "review");
+  await page.getByRole("searchbox", { name: "Filter by filename…" }).fill("DSC_1001");
+  for (const view of ["List", "Grid"]) {
+    await page.getByRole("button", { name: new RegExp(`^${view}`, "i") }).click();
+    const header = page.locator('[data-browse-set="dup-set-1"]');
+    await expect(
+      header.getByRole("button", { name: "Decide this set", exact: true }),
+    ).toBeVisible();
+    await header.getByRole("button", { name: "Compare copies", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("radio", { name: /^B ·/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
 test("bulk actions apply through the docked strip without moving the workspace", async ({
   page,
 }) => {

@@ -3,6 +3,34 @@
 !include LogicLib.nsh
 !include FileFunc.nsh
 
+; MultiUser restores remembered locations again when the scope page is left.
+; Correct its default before the directory page, without replacing Tauri's UI.
+!define MULTIUSER_PAGE_CUSTOMFUNCTION_LEAVE MediaSorterScopePreflight
+
+Function MediaSorterPrepareDirectory
+  Push $R8
+  Push $R9
+  StrCpy $R8 $INSTDIR
+  ${Do}
+    StrCpy $R9 $R8 1 -1
+    ${If} $R9 != "\"
+    ${AndIf} $R9 != "/"
+      ${ExitDo}
+    ${EndIf}
+    StrCpy $R8 $R8 -1
+  ${Loop}
+  GetKnownFolderPath $R9 {5CD7AEE2-2219-4A67-B85D-6C9CE15660CB} ; UserProgramFiles
+  ${If} $R8 == "$PROGRAMFILES"
+  ${OrIf} $R8 == "$PROGRAMFILES64"
+    StrCpy $INSTDIR "$R8\MediaSorter"
+  ${ElseIf} $R9 != ""
+  ${AndIf} $R8 == $R9
+    StrCpy $INSTDIR "$R8\MediaSorter"
+  ${EndIf}
+  Pop $R9
+  Pop $R8
+FunctionEnd
+
 !macro MediaSorterRequireDirectory DIRECTORY MESSAGE
   Push $R8
   Push $R9
@@ -105,18 +133,22 @@ Function MediaSorterCheckRequestedDirectory
   Pop $R7
 FunctionEnd
 
+Function MediaSorterScopePreflight
+  Call MediaSorterCheckLegacyInstallations
+  Call MediaSorterCheckRequestedDirectory
+  Call MediaSorterPrepareDirectory
+FunctionEnd
+
 ; This hidden section precedes Tauri's WebView2 and payload sections, including
 ; in silent mode where custom pages are skipped. Keep the standard template.
 Section -MediaSorterPreflight
-  Call MediaSorterCheckLegacyInstallations
-  Call MediaSorterCheckRequestedDirectory
+  Call MediaSorterScopePreflight
   !insertmacro MediaSorterCheckDirectory
 SectionEnd
 
 Page custom MediaSorterLegacyPreflight
 Function MediaSorterLegacyPreflight
-  Call MediaSorterCheckLegacyInstallations
-  Call MediaSorterCheckRequestedDirectory
+  Call MediaSorterScopePreflight
   Abort ; No visible page when the preflight succeeds.
 FunctionEnd
 

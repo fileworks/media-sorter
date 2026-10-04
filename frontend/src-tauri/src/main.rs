@@ -24,6 +24,7 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
@@ -32,6 +33,9 @@ use native_dialog::{DialogBuilder, MessageLevel};
 use rand::{distr::Alphanumeric, RngExt};
 use serde::Serialize;
 use tauri::{Manager, State};
+
+mod backend_state;
+use backend_state::BackendStartup;
 
 // ── File logger ───────────────────────────────────────────────────────────────
 //
@@ -328,26 +332,45 @@ fn show_fatal_startup_dialog(error: &StartupError) {
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 struct BackendState {
-    process: Arc<Mutex<Option<Child>>>,
-    api_port: u16,
-    api_capability: String,
+    startup: Arc<BackendStartup>,
+    exit_code: Arc<AtomicI32>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct ApiSession {
     port: u16,
     capability: String,
 }
 
 #[tauri::command]
-fn get_api_session(state: State<BackendState>) -> ApiSession {
-    ApiSession {
-        port: state.api_port,
-        capability: state.api_capability.clone(),
+async fn get_api_session(state: State<'_, BackendState>) -> Result<ApiSession, String> {
+    let startup = Arc::clone(&state.startup);
+    // Readiness includes blocking process and HTTP probes. Never block Tauri's
+    // IPC/event loop or hold a synchronous mutex across an await.
+    tauri::async_runtime::spawn_blocking(move || startup.session())
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.summary)
+}
+
+#[tauri::command]
+fn frontend_mounted() {
+    log_info!("packaged_webview_frontend_mounted");
+}
+
+#[tauri::command]
+fn frontend_failure(app: tauri::AppHandle) {
+    log_error!("packaged_webview_readiness_or_media_rendering_failed");
+    if std::env::var("MEDIASORT_WEBVIEW_SMOKE").as_deref() == Ok("1") {
+        app.state::<BackendState>()
+            .exit_code
+            .store(1, Ordering::Release);
+        kill_backend(app.state::<BackendState>().inner());
+        app.exit(1);
     }
 }
 
-/// The React root calls this after it has mounted inside the WebView.
+/// React calls this after mounting, backend readiness and Blob image rendering.
 ///
 /// Release CI sets `MEDIASORT_WEBVIEW_SMOKE=1`; a successful invocation proves
 /// the packaged shell loaded its bundled frontend (not merely that the native
@@ -355,6 +378,7 @@ fn get_api_session(state: State<BackendState>) -> ApiSession {
 /// launches only record the ready marker and continue.
 #[tauri::command]
 fn frontend_ready(app: tauri::AppHandle) {
+    log_info!("packaged_webview_media_ready");
     log_info!("packaged_webview_frontend_ready");
     if std::env::var("MEDIASORT_WEBVIEW_SMOKE").as_deref() == Ok("1") {
         // app.exit() does not consistently deliver the normal exit callbacks
@@ -381,6 +405,9 @@ fn backend_is_ready(port: u16, capability: &str) -> bool {
     let url = format!("http://127.0.0.1:{}/api/health", port);
     ureq::get(&url)
         .header("X-MediaSorter-Capability", capability)
+        .config()
+        .timeout_global(Some(Duration::from_secs(2)))
+        .build()
         .call()
         .map(|r| r.status().as_u16() == 200)
         .unwrap_or(false)
@@ -413,15 +440,19 @@ fn find_available_port(log_path: &std::path::Path) -> Result<u16, StartupError> 
 }
 
 /// Try to acquire a working port, retrying if another process beats us between
-/// the bind probe and the backend's bind. Returns (port, child).
+/// the bind probe and the backend's bind. The startup state owns the child.
 fn acquire_backend(
     max_tries: u32,
     log_path: &std::path::Path,
     capability: &str,
-) -> Result<(u16, Child), StartupError> {
+    startup: &BackendStartup,
+) -> Result<u16, StartupError> {
     let mut attempted_ports = Vec::new();
     let mut failures = Vec::new();
     for attempt in 1..=max_tries {
+        if startup.is_closed() {
+            return startup.session().map(|session| session.port);
+        }
         let port = find_available_port(log_path)?;
         attempted_ports.push(port);
 
@@ -431,41 +462,39 @@ fn acquire_backend(
             attempt,
             max_tries
         );
-        let mut child = match spawn_backend(port, capability, log_path) {
-            Ok(child) => child,
+        let child_id = match startup.spawn(|| spawn_backend(port, capability, log_path)) {
+            Ok(id) => id,
             Err(error) => {
                 failures.push(error.detail);
-                thread::sleep(Duration::from_millis(100));
+                startup.wait_or_closed(Duration::from_millis(100));
                 continue;
             }
         };
 
         // Quick liveness probe — if the backend can't bind, it dies fast.
-        thread::sleep(Duration::from_millis(500));
-        match child.try_wait() {
+        startup.wait_or_closed(Duration::from_millis(500));
+        match startup.probe() {
             Ok(Some(status)) => {
                 failures.push(format!("port {} exited immediately with {}", port, status));
-                let _ = child.wait();
-                thread::sleep(Duration::from_millis(100));
+                startup.stop_process();
+                startup.wait_or_closed(Duration::from_millis(100));
                 continue;
             }
             Err(error) => {
                 failures.push(format!("port {} liveness check failed: {}", port, error));
-                let _ = child.kill();
-                let _ = child.wait();
+                startup.stop_process();
                 continue;
             }
             Ok(None) => {}
         }
 
-        if let Err(error) = wait_for_backend(port, capability, 30, &mut child, log_path) {
+        if let Err(error) = wait_for_backend(port, capability, 30, startup, child_id, log_path) {
             failures.push(error.detail);
-            let _ = child.kill();
-            let _ = child.wait();
+            startup.stop_process();
             continue;
         }
 
-        return Ok((port, child));
+        return Ok(port);
     }
 
     Err(StartupError::new(
@@ -491,12 +520,13 @@ fn wait_for_backend(
     port: u16,
     capability: &str,
     max_attempts: u32,
-    child: &mut Child,
+    startup: &BackendStartup,
+    child_id: u32,
     log_path: &std::path::Path,
 ) -> Result<(), StartupError> {
     let url = format!("http://127.0.0.1:{}/api/health", port);
     for attempt in 1..=max_attempts {
-        match child.try_wait() {
+        match startup.probe() {
             Ok(Some(status)) => {
                 return Err(StartupError::new(
                     StartupStage::Readiness,
@@ -520,9 +550,12 @@ fn wait_for_backend(
         }
         if let Ok(response) = ureq::get(&url)
             .header("X-MediaSorter-Capability", capability)
+            .config()
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build()
             .call()
         {
-            if response.status().as_u16() == 200 {
+            if response.status().as_u16() == 200 && !startup.is_closed() {
                 log_info!("Backend ready on port {}", port);
                 return Ok(());
             }
@@ -536,7 +569,7 @@ fn wait_for_backend(
         }
         if attempt < max_attempts {
             let delay_ms = (200u64 * attempt as u64).min(2000);
-            thread::sleep(Duration::from_millis(delay_ms));
+            startup.wait_or_closed(Duration::from_millis(delay_ms));
         }
     }
     Err(StartupError::new(
@@ -544,9 +577,7 @@ fn wait_for_backend(
         "The MediaSorter backend did not become ready in time.",
         format!(
             "health_url={} attempts={} child_id={}",
-            url,
-            max_attempts,
-            child.id()
+            url, max_attempts, child_id
         ),
         log_path.to_path_buf(),
     ))
@@ -661,6 +692,13 @@ fn spawn_with_startup_error(
     detail: String,
     log_path: &std::path::Path,
 ) -> Result<Child, StartupError> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // The GUI launcher has no console; its console-subsystem backend must
+        // not create a second visible window either. Diagnostics stay in logs.
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
     command.spawn().map_err(|error| {
         StartupError::new(
             StartupStage::Spawn,
@@ -756,44 +794,19 @@ fn spawn_backend(
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
+fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
     log_info!(
         "=== MediaSorter starting (pid={}) — logs: {} ===",
         std::process::id(),
         log_path.display()
     );
 
-    if std::env::var("MEDIASORT_STARTUP_SMOKE_FAIL").as_deref() == Ok("1") {
-        return Err(StartupError::new(
-            StartupStage::Spawn,
-            "Controlled packaged-startup failure reached the native recovery path.",
-            "MEDIASORT_STARTUP_SMOKE_FAIL=1",
-            log_path.to_path_buf(),
-        ));
-    }
-
-    let api_capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
-        rand::rng()
-            .sample_iter(&Alphanumeric)
-            .take(48)
-            .map(char::from)
-            .collect()
-    });
-    let (api_port, backend_child) =
-        if cfg!(debug_assertions) && backend_is_ready(8000, &api_capability) {
-            log_info!("Found existing backend on port 8000 (hot-reload mode)");
-            (8000, None)
-        } else {
-            // Retry up to 5 times in case another process grabs a port between
-            // our probe and the backend's bind (TOCTOU window).
-            let (port, child) = acquire_backend(5, log_path, &api_capability)?;
-            (port, Some(child))
-        };
-
-    log_info!("Starting Tauri window (backend port {})", api_port);
-
-    let process = Arc::new(Mutex::new(backend_child));
-    let process_on_build_error = Arc::clone(&process);
+    // Create the window before backend initialization so the bundled splash
+    // and React startup screen can paint while Python imports its services.
+    log_info!("Starting Tauri window before backend readiness");
+    let startup = Arc::new(BackendStartup::default());
+    let startup_on_build_error = Arc::clone(&startup);
+    let exit_code = Arc::new(AtomicI32::new(0));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -801,9 +814,8 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(BackendState {
-            process,
-            api_port,
-            api_capability,
+            startup: Arc::clone(&startup),
+            exit_code: Arc::clone(&exit_code),
         })
         .setup(|_app| Ok(()))
         .on_window_event(|window, event| {
@@ -813,12 +825,14 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
         })
         .invoke_handler(tauri::generate_handler![
             frontend_ready,
+            frontend_mounted,
+            frontend_failure,
             get_api_session,
             reveal_path
         ])
         .build(tauri::generate_context!())
         .map_err(|error| {
-            kill_process(&process_on_build_error);
+            startup_on_build_error.close();
             StartupError::new(
                 StartupStage::Readiness,
                 "MediaSorter could not create its desktop window.",
@@ -827,7 +841,17 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
             )
         })?;
 
-    app.run(|app_handle, event| {
+    let backend_log_path = log_path.to_path_buf();
+    let runtime_code = app.run_return(move |app_handle, event| {
+        if let tauri::RunEvent::Ready = event {
+            // Tauri creates configured windows during Ready, after build().
+            // Start the worker only after that desktop initialization finishes.
+            start_backend_in_background(
+                app_handle.clone(),
+                backend_log_path.clone(),
+                Arc::clone(&startup),
+            );
+        }
         // On macOS Cmd-Q (and other clean-exit paths) WindowEvent::Destroyed
         // may not fire before the process exits. RunEvent::Exit fires
         // reliably so we kill the backend there too.
@@ -835,7 +859,36 @@ fn launch(log_path: &std::path::Path) -> Result<(), StartupError> {
             kill_backend(app_handle.state::<BackendState>().inner());
         }
     });
-    Ok(())
+    Ok(exit_code.load(Ordering::Acquire).max(runtime_code))
+}
+
+fn start_backend_in_background(
+    app_handle: tauri::AppHandle,
+    backend_log_path: PathBuf,
+    startup: Arc<BackendStartup>,
+) {
+    thread::spawn(move || {
+        let result = start_backend(&backend_log_path, &startup);
+        startup.finish(result.clone());
+        if let Err(error) = result {
+            if !startup.is_closed() {
+                // Recovery UI must run on the desktop thread, especially on
+                // macOS. Closing the startup window suppresses stale dialogs.
+                let recovery_app = app_handle.clone();
+                let _ = app_handle.run_on_main_thread(move || {
+                    if !recovery_app.state::<BackendState>().startup.is_closed() {
+                        recovery_app
+                            .state::<BackendState>()
+                            .exit_code
+                            .store(1, Ordering::Release);
+                        show_fatal_startup_dialog(&error);
+                        kill_backend(recovery_app.state::<BackendState>().inner());
+                        recovery_app.exit(1);
+                    }
+                });
+            }
+        }
+    });
 }
 
 fn main() {
@@ -847,27 +900,52 @@ fn main() {
             std::process::exit(1);
         }
     };
-    if let Err(error) = launch(&log_path) {
-        show_fatal_startup_dialog(&error);
-        if error.log_path != fallback_log_path {
-            log_error!("fallback_log_path={}", fallback_log_path.display());
+    match launch(&log_path) {
+        Ok(code) => {
+            if code != 0 {
+                std::process::exit(code);
+            }
         }
-        std::process::exit(1);
-    }
-}
-
-fn kill_process(process: &Arc<Mutex<Option<Child>>>) {
-    if let Ok(mut guard) = process.lock() {
-        if let Some(mut child) = guard.take() {
-            log_info!("Shutting down backend process");
-            graceful_kill(&mut child);
-            log_info!("Backend process stopped");
+        Err(error) => {
+            show_fatal_startup_dialog(&error);
+            if error.log_path != fallback_log_path {
+                log_error!("fallback_log_path={}", fallback_log_path.display());
+            }
+            std::process::exit(1);
         }
     }
 }
 
 fn kill_backend(state: &BackendState) {
-    kill_process(&state.process);
+    state.startup.close();
+}
+
+fn start_backend(
+    log_path: &std::path::Path,
+    startup: &BackendStartup,
+) -> Result<ApiSession, StartupError> {
+    if std::env::var("MEDIASORT_STARTUP_SMOKE_FAIL").as_deref() == Ok("1") {
+        return Err(StartupError::new(
+            StartupStage::Spawn,
+            "Controlled packaged-startup failure reached the native recovery path.",
+            "MEDIASORT_STARTUP_SMOKE_FAIL=1",
+            log_path.to_path_buf(),
+        ));
+    }
+    let capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
+        rand::rng()
+            .sample_iter(&Alphanumeric)
+            .take(48)
+            .map(char::from)
+            .collect()
+    });
+    let port = if cfg!(debug_assertions) && backend_is_ready(8000, &capability) {
+        log_info!("Found existing backend on port 8000 (hot-reload mode)");
+        8000
+    } else {
+        acquire_backend(5, log_path, &capability, startup)?
+    };
+    Ok(ApiSession { port, capability })
 }
 
 /// Stop the backend cleanly: SIGTERM so uvicorn can run the FastAPI lifespan
@@ -975,34 +1053,29 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn readiness_failure_reports_early_child_exit() {
-        let mut child = Command::new("sh")
-            .args(["-c", "exit 7"])
-            .spawn()
-            .expect("spawn fixture");
-        let fixture_status = child.wait().expect("wait for fixture");
-        assert_eq!(fixture_status.code(), Some(7));
+        let startup = BackendStartup::default();
+        let id = startup
+            .spawn(|| {
+                let mut child = Command::new("sh")
+                    .args(["-c", "exit 7"])
+                    .spawn()
+                    .expect("spawn fixture");
+                child.wait().expect("wait fixture");
+                Ok(child)
+            })
+            .expect("child");
         let error = wait_for_backend(
             9,
-            "test-capability",
+            "fixture",
             1,
-            &mut child,
+            &startup,
+            id,
             std::path::Path::new("/tmp/mediasort.log"),
         )
         .expect_err("child exit should fail readiness");
         assert_eq!(error.stage, StartupStage::Readiness);
         assert!(error.detail.contains("status"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn process_guard_reaps_a_running_child() {
-        let child = Command::new("sh")
-            .args(["-c", "sleep 30"])
-            .spawn()
-            .expect("spawn fixture");
-        let process = Arc::new(Mutex::new(Some(child)));
-        kill_process(&process);
-        assert!(process.lock().expect("process mutex").is_none());
+        startup.close();
     }
 
     #[test]

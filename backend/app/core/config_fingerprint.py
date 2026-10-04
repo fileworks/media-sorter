@@ -19,8 +19,9 @@ def config_fingerprint(config: Config) -> str:
     """Hash fields that can change a plan or its execution.
 
     Presentation, recipe-library and cache preferences do not affect planned
-    file actions. Including them made a locale switch or cache toggle reject an
-    otherwise unchanged reviewed plan as stale.
+    file actions. Backend ``language`` remains operational because it changes
+    generated category/folder labels; the interface locale is stored separately
+    and never changes this configuration or the plan's identity.
     """
     effective = {
         key: value for key, value in config.to_dict().items() if key not in _NON_OPERATIONAL_FIELDS

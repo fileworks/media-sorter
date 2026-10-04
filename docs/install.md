@@ -50,6 +50,11 @@ updates. The installer, resources and `uninstall.exe` belong inside the applicat
 folder. Never select `C:\Program Files` itself. New builds reject NSIS destinations
 whose final folder name is not `MediaSorter`, including silent `/D=` overrides.
 They also refuse NSIS uninstallation from an unsafe shared folder.
+The directory page preselects the `MediaSorter` subfolder for the chosen scope.
+If an older installer remembered the bare system or per-user Programs directory,
+the new installer appends `MediaSorter` before showing that page, including after
+switching scopes. A valid custom MediaSorter folder remains selected. This does
+not bypass the separate safety check on an actual legacy installation.
 For silent deployment, `/D=` must be the last argument and its absolute path
 must remain unquoted, even with spaces, for example
 `MediaSorter_X.Y.Z_x64-setup.exe /S /D=C:\Program Files\MediaSorter`.
@@ -98,6 +103,18 @@ published assets remain immutable.
 For an update, download and verify the newer installer from the official release;
 close the running app and install it. Keep backups of media and application state.
 Portable installations must keep the whole extracted bundle together.
+
+### Startup and interface language
+
+The desktop window shows a themed loading screen while the local backend starts.
+On Windows, the launcher and backend open without console windows; startup
+diagnostics remain in the logs. If startup fails, use **Reveal Log** in the native
+recovery dialog. Closing the loading window also stops an unfinished backend.
+
+The EN/DE selector changes the interface immediately and remembers the choice on
+this device. It preserves running scan/preview progress, reviewed decisions and
+destinations. It does not change the backend's operational `language` setting,
+which can affect generated category/folder names and requires a new preview.
 
 ### Automatic update checking
 

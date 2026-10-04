@@ -40,9 +40,7 @@ CANONICAL = Path("branding/app-icon.png")
 TILE_RATIO = 824 / 1024
 TILE_TOLERANCE_PX = 4
 CENTER_TOLERANCE_PX = 3
-APPROVED_SOURCE_SHA256 = (
-    "94cc991f8566656602b40148e88f178c40f1f9a03e31284816343d5be6b176ad"
-)
+APPROVED_SOURCE_SHA256 = "94cc991f8566656602b40148e88f178c40f1f9a03e31284816343d5be6b176ad"
 CANONICAL_SIZE = (1024, 1024)
 
 PNG_ICONS = {
@@ -127,9 +125,7 @@ def _validate_geometry(path: Path, image: Image.Image) -> None:
     """
     canvas = image.size[0]
     tile = _bounding_box(image, lambda pixel: pixel[3] > 128)
-    ink = _bounding_box(
-        image, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500
-    )
+    ink = _bounding_box(image, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500)
     expected_edge = round(canvas * TILE_RATIO)
     for axis, low, high in (("width", tile[0], tile[2]), ("height", tile[1], tile[3])):
         edge = high - low + 1
@@ -137,17 +133,14 @@ def _validate_geometry(path: Path, image: Image.Image) -> None:
             raise BrandingError(
                 f"{path}: tile {axis} is {edge}px of {canvas}px, expected "
                 f"{expected_edge}px (TILE_RATIO = {TILE_RATIO:.4f}); this is "
-                "Apple's documented macOS grid and the size Windows and Linux "
-                "are handed unaltered"
+                "Apple's documented macOS grid and the canonical Linux canvas"
             )
     for label, box, container in (
         ("tile", tile, (0, 0, canvas - 1, canvas - 1)),
         ("mark", ink, tile),
     ):
         for axis, index in (("horizontally", 0), ("vertically", 1)):
-            offset = (box[index] + box[index + 2]) - (
-                container[index] + container[index + 2]
-            )
+            offset = (box[index] + box[index + 2]) - (container[index] + container[index + 2])
             if abs(offset / 2) > CENTER_TOLERANCE_PX:
                 raise BrandingError(
                     f"{path}: the {label} sits {abs(offset / 2):.1f}px off centre "
@@ -168,11 +161,7 @@ def _validate_canonical(path: Path) -> Image.Image:
             "APPROVED_SOURCE_SHA256"
         )
     with Image.open(path) as opened:
-        if (
-            opened.format != "PNG"
-            or opened.size != CANONICAL_SIZE
-            or opened.mode != "RGBA"
-        ):
+        if opened.format != "PNG" or opened.size != CANONICAL_SIZE or opened.mode != "RGBA":
             raise BrandingError(
                 f"{path} must be a 1024x1024 RGBA PNG, got "
                 f"{opened.format} {opened.mode} {opened.size}"
@@ -196,9 +185,7 @@ def adopt_source(candidate: Path, destination_root: Path = REPO_ROOT) -> None:
     _atomic_bytes(canonical, candidate.read_bytes())
 
 
-def _atomic_image(
-    path: Path, image: Image.Image, image_format: str, **options: object
-) -> None:
+def _atomic_image(path: Path, image: Image.Image, image_format: str, **options: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
@@ -212,6 +199,17 @@ def _icon(source: Image.Image, size: int) -> Image.Image:
     return source.resize((size, size), Image.Resampling.LANCZOS)
 
 
+def _windows_icon(source: Image.Image) -> Image.Image:
+    """Windows displays ICO pixels directly, without macOS plate normalization."""
+    left, top, right, bottom = _bounding_box(source, lambda pixel: pixel[3] > 128)
+    tile = source.crop((left, top, right + 1, bottom + 1))
+    edge = round(source.width * 0.94)
+    canvas = Image.new("RGBA", source.size, (0, 0, 0, 0))
+    inset = (source.width - edge) // 2
+    canvas.alpha_composite(_icon(tile, edge), (inset, inset))
+    return canvas
+
+
 def _vertical_gradient(
     size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]
 ) -> Image.Image:
@@ -222,16 +220,14 @@ def _vertical_gradient(
     for y in range(height):
         weight = y / denominator
         color = tuple(
-            round(start + (end - start) * weight) for start, end in zip(top, bottom)
+            round(start + (end - start) * weight) for start, end in zip(top, bottom, strict=True)
         )
         for x in range(width):
             pixels[x, y] = color
     return image
 
 
-def _paste_icon(
-    canvas: Image.Image, source: Image.Image, box: tuple[int, int, int, int]
-) -> None:
+def _paste_icon(canvas: Image.Image, source: Image.Image, box: tuple[int, int, int, int]) -> None:
     left, top, right, bottom = box
     size = min(right - left, bottom - top)
     icon = _icon(source, size)
@@ -292,12 +288,10 @@ def _dmg_background(source: Image.Image) -> Image.Image:
 
 def _generate_into(destination_root: Path, source: Image.Image) -> None:
     for relative, size in PNG_ICONS.items():
-        _atomic_image(
-            destination_root / relative, _icon(source, size), "PNG", optimize=False
-        )
+        _atomic_image(destination_root / relative, _icon(source, size), "PNG", optimize=False)
 
     icon_dir = destination_root / "frontend/src-tauri/icons"
-    _atomic_image(icon_dir / "icon.ico", source, "ICO", sizes=ICO_SIZES)
+    _atomic_image(icon_dir / "icon.ico", _windows_icon(source), "ICO", sizes=ICO_SIZES)
     icns_images = [_icon(source, size) for size in ICNS_SIZES]
     _atomic_image(
         icon_dir / "icon.icns",
@@ -329,26 +323,19 @@ def _validate_generated(
     try:
         with Image.open(path) as image:
             if image.format != expected_format:
-                raise BrandingError(
-                    f"{path} has format {image.format}, expected {expected_format}"
-                )
+                raise BrandingError(f"{path} has format {image.format}, expected {expected_format}")
             if expected_size is not None and image.size != expected_size:
-                raise BrandingError(
-                    f"{path} has size {image.size}, expected {expected_size}"
-                )
+                raise BrandingError(f"{path} has size {image.size}, expected {expected_size}")
             if expected_format == "BMP" and image.mode != "RGB":
                 raise BrandingError(f"{path} must be an RGB bitmap, got {image.mode}")
             if expected_format == "ICO":
                 sizes = image.ico.sizes()
                 if sizes != set(ICO_SIZES):
                     raise BrandingError(
-                        f"{path} contains ICO sizes {sorted(sizes)}, "
-                        f"expected {list(ICO_SIZES)}"
+                        f"{path} contains ICO sizes {sorted(sizes)}, expected {list(ICO_SIZES)}"
                     )
     except (OSError, SyntaxError) as error:
-        raise BrandingError(
-            f"cannot read generated branding asset {path}: {error}"
-        ) from error
+        raise BrandingError(f"cannot read generated branding asset {path}: {error}") from error
 
 
 def _same_image_content(actual_path: Path, expected_path: Path) -> bool:
@@ -410,9 +397,7 @@ def check_assets(source_root: Path = REPO_ROOT) -> None:
     for relative, size in PNG_ICONS.items():
         _validate_generated(source_root / relative, "PNG", (size, size))
     _validate_generated(source_root / "frontend/src-tauri/icons/icon.ico", "ICO", None)
-    _validate_generated(
-        source_root / "frontend/src-tauri/icons/icon.icns", "ICNS", None
-    )
+    _validate_generated(source_root / "frontend/src-tauri/icons/icon.icns", "ICNS", None)
     for relative, (image_format, size) in INSTALLER_IMAGES.items():
         _validate_generated(source_root / relative, image_format, size)
 
