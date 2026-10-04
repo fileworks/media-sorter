@@ -61,6 +61,13 @@ Function RestorePreviousInstallLocation
   ${{GetOptions}} $CMDLINE "/REMEMBER_USERPROGRAMS" $0
   ${{IfNot}} ${{Errors}}
     GetKnownFolderPath $INSTDIR {{5CD7AEE2-2219-4A67-B85D-6C9CE15660CB}}
+    ${{If}} $INSTDIR == ""
+      StrCpy $INSTDIR "$LOCALAPPDATA\\Programs"
+    ${{EndIf}}
+  ${{EndIf}}
+  ${{GetOptions}} $CMDLINE "/REMEMBER_FALLBACKPROGRAMS" $0
+  ${{IfNot}} ${{Errors}}
+    StrCpy $INSTDIR "$LOCALAPPDATA\\Programs"
   ${{EndIf}}
   ${{GetOptions}} $CMDLINE "/REMEMBER_SAFE" $0
   ${{IfNot}} ${{Errors}}
@@ -108,6 +115,7 @@ SectionEnd
             ("C:MediaSorter", 2),
             (os.environ["PROGRAMFILES"], 2),
             (os.environ["PROGRAMFILES"] + "\\", 2),
+            (os.environ["LOCALAPPDATA"] + "\\Programs", 2),
             (str(directory / "shared folder"), 2),
             (str(directory / "folder with spaces ü" / "MediaSorter"), 0),
             (str(directory / "MediaSorter") + "\\", 0),
@@ -163,6 +171,11 @@ SectionEnd
             (["/REMEMBER_PROGRAMFILES"], "CurrentUser", expected),
             (["/ALLUSERS", "/REMEMBER_PROGRAMFILES"], "AllUsers", expected),
             (["/REMEMBER_USERPROGRAMS"], "CurrentUser", None),
+            (
+                ["/REMEMBER_FALLBACKPROGRAMS"],
+                "CurrentUser",
+                Path(os.environ["LOCALAPPDATA"]) / "Programs/MediaSorter",
+            ),
             (["/REMEMBER_SAFE"], "CurrentUser", directory / "custom/MediaSorter"),
             (
                 ["/ALLUSERS", "/REMEMBER_SAFE"],
