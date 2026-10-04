@@ -23,6 +23,9 @@ Function MediaSorterPrepareDirectory
   ${If} $R8 == "$PROGRAMFILES"
   ${OrIf} $R8 == "$PROGRAMFILES64"
     StrCpy $INSTDIR "$R8\MediaSorter"
+  ${ElseIf} $R8 == "$LOCALAPPDATA\Programs"
+    ; Match MultiUser's fallback when UserProgramFiles is unavailable.
+    StrCpy $INSTDIR "$R8\MediaSorter"
   ${ElseIf} $R9 != ""
   ${AndIf} $R8 == $R9
     StrCpy $INSTDIR "$R8\MediaSorter"

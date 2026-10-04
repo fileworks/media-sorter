@@ -190,7 +190,9 @@ no application payload or product registry keys. It also drives the real scope a
 directory pages, reads the displayed directory control, and verifies clean,
 remembered Programs-root and custom-folder defaults for both scopes. The hook uses
 MultiUser's page-leave callback because changing scope restores the remembered
-directory again. A manual `release.yml` dispatch
+directory again. Model MultiUser's `%LOCALAPPDATA%\Programs` fallback when
+UserProgramFiles is unavailable; a fresh CI profile may not have that known folder.
+A manual `release.yml` dispatch
 on `main` repeats the full gates and builds unpublished candidate artifacts;
 after a source fix, dispatch the new commit rather than rerunning the old SHA.
 Tag publication continues through Version Release.

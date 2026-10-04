@@ -55,6 +55,8 @@ If an older installer remembered the bare system or per-user Programs directory,
 the new installer appends `MediaSorter` before showing that page, including after
 switching scopes. A valid custom MediaSorter folder remains selected. This does
 not bypass the separate safety check on an actual legacy installation.
+The per-user default also supports NSIS's `%LOCALAPPDATA%\Programs` fallback
+when Windows cannot resolve the UserProgramFiles known folder on a fresh profile.
 For silent deployment, `/D=` must be the last argument and its absolute path
 must remain unquoted, even with spaces, for example
 `MediaSorter_X.Y.Z_x64-setup.exe /S /D=C:\Program Files\MediaSorter`.
