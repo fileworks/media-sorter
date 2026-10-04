@@ -171,6 +171,17 @@ checklist; do not describe a heuristic block as a proven false positive.
 Packaged smoke checks isolate configuration, data, database and logs, including
 any inherited database override; they must not migrate or modify operator state.
 
+The Windows release job also compiles a disposable NSIS fixture using Tauri's
+cached compiler and runs `scripts/check_nsis_guard.py --makensis <makensis.exe>`.
+It exercises the actual MultiUser initialization: NSIS strips `/D=` from
+`$CMDLINE`, and MultiUser replaces `$INSTDIR`. The hook reads the original native
+command line, rejects shared-root requests in an early hidden section, and
+restores valid silent destinations before Tauri copies files. The fixture writes
+no application payload or product registry keys. A manual `release.yml` dispatch
+on `main` repeats the full gates and builds unpublished candidate artifacts;
+after a source fix, dispatch the new commit rather than rerunning the old SHA.
+Tag publication continues through Version Release.
+
 The backend version is single-sourced from `backend/app/_version.py` (pyproject reads it
 via hatchling's dynamic-version hook), so the running app always reports the released
 version.

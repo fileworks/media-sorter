@@ -49,6 +49,12 @@ updates. The installer, resources and `uninstall.exe` belong inside the applicat
 folder. Never select `C:\Program Files` itself. New builds reject NSIS destinations
 whose final folder name is not `MediaSorter`, including silent `/D=` overrides.
 They also refuse NSIS uninstallation from an unsafe shared folder.
+For silent deployment, `/D=` must be the last argument and its absolute path
+must remain unquoted, even with spaces, for example
+`MediaSorter_X.Y.Z_x64-setup.exe /S /D=C:\Program Files\MediaSorter`.
+New builds validate that original request before WebView2 or payload installation
+and retain a valid silent target after the scope defaults initialize. Interactive
+installations use the scope and directory pages to choose the final destination.
 Before its maintenance page can run an older NSIS uninstaller, the new installer
 checks registered locations and uninstall commands. An unsafe or unknown legacy
 location requires a reviewed cleanup first; it is never silently migrated.
