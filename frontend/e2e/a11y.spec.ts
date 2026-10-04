@@ -680,23 +680,15 @@ test.describe("later stages", () => {
         reducedMotion: item.motion,
       });
       // Each scenario gets the normal test deadline. Start in the other locale
-      // so the target selection must save a real change, including English.
+      // so the target selection must persist an interface change, including English.
       const language = page.getByRole("combobox", { name: /Language|Sprache/ });
       const initialLocale = item.locale === "de" ? "en" : "de";
       if ((await language.inputValue()) !== initialLocale) {
-        const initialSaved = page.waitForResponse(
-          (response) =>
-            response.url().includes("/api/config") && response.request().method() === "POST",
-        );
         await language.selectOption(initialLocale);
-        await initialSaved;
       }
-      const languageSaved = page.waitForResponse(
-        (response) =>
-          response.url().includes("/api/config") && response.request().method() === "POST",
-      );
+
       await language.selectOption(item.locale);
-      await languageSaved;
+
       await page.evaluate(({ theme }) => {
         localStorage.setItem("mediasort_theme", theme);
       }, item);

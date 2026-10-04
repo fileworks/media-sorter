@@ -13,6 +13,7 @@ import { FiActivity, FiChevronDown } from "react-icons/fi";
 import { CompanionEvidencePanel } from "@/components/CompanionEvidencePanel";
 import { StatusMessage } from "@/components/StatusMessage";
 import { Button } from "@/components/ui/button";
+import { ProgressBar } from "@/components/ui/progress";
 import { useI18n } from "@/i18n/I18nContext";
 import { cn } from "@/lib/utils";
 import { formatBytesShort } from "@/lib/formatters";
@@ -103,9 +104,13 @@ export function OperationCenter({
           </p>
           {message && <p className="text-xs text-muted-foreground">{message.message}</p>}
           {view?.determinate && view.percentage !== null && (
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full bg-primary" style={{ width: `${view.percentage}%` }} />
-            </div>
+            <ProgressBar
+              value={view.percentage}
+              label={t("operations.inProgress", {
+                kind: t(`operations.kind.${state.active.kind}`),
+              })}
+              className="mt-1 h-1.5 bg-muted"
+            />
           )}
         </div>
       )}

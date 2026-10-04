@@ -170,6 +170,15 @@ antivirus acceptance and both interactive install scopes still require the
 checklist; do not describe a heuristic block as a proven false positive.
 Packaged smoke checks isolate configuration, data, database and logs, including
 any inherited database override; they must not migrate or modify operator state.
+Windows WebView smoke also isolates its browser profile. The window is created
+before the backend starts on a worker thread. `get_api_session` waits for the
+authenticated health probe without blocking the UI; pending startup owns its child
+so window shutdown cancels retries and reaps the process. Windows backend creation
+uses `CREATE_NO_WINDOW`. The packaged acknowledgement requires a mounted React root,
+a ready session and a successfully loaded Blob image under the packaged CSP.
+`img-src` and `media-src` allow `blob:` because media is fetched with the launch
+capability and exposed through short-lived object URLs; script/network policies
+remain restricted. Test previews in the packaged WebView, not just Vite.
 
 The Windows release job also compiles a disposable NSIS fixture using Tauri's
 cached compiler and runs `scripts/check_nsis_guard.py --makensis <makensis.exe>`.
@@ -177,7 +186,11 @@ It exercises the actual MultiUser initialization: NSIS strips `/D=` from
 `$CMDLINE`, and MultiUser replaces `$INSTDIR`. The hook reads the original native
 command line, rejects shared-root requests in an early hidden section, and
 restores valid silent destinations before Tauri copies files. The fixture writes
-no application payload or product registry keys. A manual `release.yml` dispatch
+no application payload or product registry keys. It also drives the real scope and
+directory pages, reads the displayed directory control, and verifies clean,
+remembered Programs-root and custom-folder defaults for both scopes. The hook uses
+MultiUser's page-leave callback because changing scope restores the remembered
+directory again. A manual `release.yml` dispatch
 on `main` repeats the full gates and builds unpublished candidate artifacts;
 after a source fix, dispatch the new commit rather than rerunning the old SHA.
 Tag publication continues through Version Release.

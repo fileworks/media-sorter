@@ -53,6 +53,8 @@ Complete every item for each package form in a fresh Windows VM:
 - NSIS current-user and all-users routes put every executable/resource in a
   dedicated MediaSorter subfolder. A shared-root `/D=` override fails with code 2
   before payload writes. MSI shortcut/resource paths also use that subfolder.
+  Inspect the preselected directory after changing scope, with a remembered bare
+  Programs directory and with a valid custom MediaSorter directory.
 - A registered legacy shared-root NSIS installation is refused before the
   maintenance page can launch its uninstaller, including passive mode. An unknown
   install location or nonstandard old uninstall command also requires review.
@@ -62,7 +64,13 @@ Complete every item for each package form in a fresh Windows VM:
   the downloaded ZIP and each installer; record the provider and any blocked
   file/detection. A hosted startup check alone is not antivirus acceptance proof.
 - Double-click launch opens no console and starts the backend without a system
-  Python or ffmpeg.
+  Python or ffmpeg. The loading screen appears before backend readiness; closing
+  it stops pending startup. Record first-window and backend-ready times separately.
+- Windows taskbar/Explorer icons have readable artwork at 16/32/48px. Image
+  thumbnails, full-screen previews and comparisons render; video uses the
+  authenticated Blob path or reports an honest codec fallback. Compare opens from
+  collapsed Browse sets in both list and grid. Companion badges remain readable
+  at normal and scaled DPI. EN/DE preserves active progress and reviewed decisions.
 - Native startup recovery reaches Reveal Log/Quit and records the full log path.
 - Current paths, migration conflict backup, repeat-run idempotence, and upgrade
   preservation match the macOS migration checks.

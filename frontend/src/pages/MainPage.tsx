@@ -54,7 +54,7 @@ import { useSorting } from "@/hooks/useSorting";
 import { useStartupProgress } from "@/hooks/useStartupProgress";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
-import { useI18n, type Locale } from "@/i18n/I18nContext";
+import { useI18n } from "@/i18n/I18nContext";
 import { splitValidation } from "@/lib/configGates";
 import { dropScopedExcept, readStored, writeStored } from "@/lib/storage";
 import { sampleFiles } from "@/lib/configSummary";
@@ -158,10 +158,6 @@ export default function MainPage() {
     enabled: health?.status === "ok",
     refetchInterval: 10_000,
   });
-
-  useEffect(() => {
-    if (config?.language) setLocale(config.language);
-  }, [config?.language, setLocale]);
 
   /**
    * A new plan invalidates the acknowledgement it was going to be run under,
@@ -663,10 +659,7 @@ export default function MainPage() {
       theme={theme}
       onToggleTheme={toggleTheme}
       locale={locale}
-      onLocaleChange={(next: Locale) => {
-        setLocale(next);
-        handleConfigSave({ language: next });
-      }}
+      onLocaleChange={setLocale}
       historyCount={historyMeta?.total ?? 0}
       onOpenHistory={() => setHistoryOpen(true)}
       busy={isAnyRunning || loaderActive}

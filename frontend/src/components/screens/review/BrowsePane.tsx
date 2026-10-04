@@ -284,6 +284,7 @@ export function BrowsePane({
                   onToggle={() => onToggleSet(line.entry.id)}
                   onToggleSelection={() => onToggleSetSelection(line.entry.id)}
                   onResolve={() => onResolveSet(line.entry.id)}
+                  onCompare={() => onCompare(line.entry)}
                   locale={locale}
                 />
               ) : line.kind === "setBody" ? (
@@ -296,7 +297,6 @@ export function BrowsePane({
                   onEnlarge={onEnlarge}
                   onKeep={onKeep}
                   onKeepAll={onKeepAll}
-                  onCompare={onCompare}
                   locale={locale}
                 />
               ) : (
@@ -418,6 +418,7 @@ function SetHeader({
   onToggle,
   onToggleSelection,
   onResolve,
+  onCompare,
   locale,
 }: {
   entry: SetEntry;
@@ -426,6 +427,7 @@ function SetHeader({
   onToggle: () => void;
   onToggleSelection: () => void;
   onResolve: () => void;
+  onCompare: () => void;
   locale: string;
 }) {
   const { t } = useI18n();
@@ -562,11 +564,19 @@ function SetHeader({
         )}
       </span>
 
-      {/* Offer sequential resolution without blocking inline decisions. The
-          only control in this row now looks like the only control in this row. */}
-      <Button size="sm" variant="outline" className="shrink-0" onClick={onResolve}>
-        {t(settled ? "review.browse.openResult" : "review.browse.openInResolve")}
-      </Button>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={t("review.compare.title")}
+          onClick={onCompare}
+        >
+          {t("review.compare")}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onResolve}>
+          {t(settled ? "review.browse.openResult" : "review.browse.openInResolve")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -581,7 +591,6 @@ function SetCopies({
   onEnlarge,
   onKeep,
   onKeepAll,
-  onCompare,
   locale,
 }: {
   entry: SetEntry;
@@ -592,7 +601,6 @@ function SetCopies({
   onEnlarge: (source: string) => void;
   onKeep: (setId: string, source: string) => void;
   onKeepAll: (setId: string) => void;
-  onCompare: (entry: SetEntry) => void;
   locale: string;
 }) {
   const { t } = useI18n();
@@ -747,9 +755,6 @@ function SetCopies({
             {t("review.resolve.keepAll")}
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={() => onCompare(entry)}>
-          {t("review.compare.title")}
-        </Button>
         {entry.hasBaseline && (
           <p className="text-3xs text-muted-foreground">{t("review.resolve.baselineWins")}</p>
         )}
@@ -801,6 +806,7 @@ function SetBlock({
         onToggle={onToggleExpand}
         onToggleSelection={onToggleSetSelection}
         onResolve={onResolve}
+        onCompare={() => onCompare(entry)}
         locale={locale}
       />
       {expanded && (
@@ -813,7 +819,6 @@ function SetBlock({
           onEnlarge={onEnlarge}
           onKeep={onKeep}
           onKeepAll={onKeepAll}
-          onCompare={onCompare}
           locale={locale}
         />
       )}
@@ -929,7 +934,7 @@ function FileLine({
           >
             <span
               tabIndex={0}
-              className="inline-flex min-h-6 items-center whitespace-nowrap rounded-control border border-border px-2 py-0.5 text-3xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex min-h-6 shrink-0 items-center whitespace-nowrap rounded-control border border-border px-2 py-0.5 text-2xs font-medium leading-normal text-muted-foreground [font-feature-settings:normal] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {t(`review.flag.${row.flags[0]}`)}
             </span>

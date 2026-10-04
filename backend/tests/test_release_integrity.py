@@ -274,8 +274,10 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
         assert Path(env["MEDIASORT_CONFIG_DIR"]) == log_dir / "config"
         assert Path(env["MEDIASORT_DATA_DIR"]) == log_dir / "data"
         assert Path(env["MEDIASORT_DB_PATH"]) == log_dir / "data" / "mediasort.db"
+        assert Path(env["WEBVIEW2_USER_DATA_FOLDER"]) == log_dir / "webview"
         (log_dir / "mediasort.log").write_text(
-            "backend ready\npackaged_webview_frontend_ready\n",
+            "packaged_webview_frontend_mounted\nbackend ready\n"
+            "packaged_webview_media_ready\npackaged_webview_frontend_ready\n",
             encoding="utf-8",
         )
         return subprocess.CompletedProcess(command, 0)

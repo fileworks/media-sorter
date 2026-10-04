@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import IcoImagePlugin, Image
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "generate_branding.py"
 REPO_ROOT = SCRIPT_PATH.parents[1]
@@ -29,8 +29,8 @@ def test_canonical_geometry_is_a_contract_not_a_hash() -> None:
 
     The tile is drawn on Apple's documented 824/1024 macOS grid. macOS 26
     normalises a legacy `.icns` onto that plate itself, so this is no longer
-    what decides the icon's size there — but it is what Windows and Linux are
-    handed unaltered, and what keeps macOS from upscaling to reach the grid.
+    what decides the icon's size there. Linux retains this canvas; the Windows
+    ICO gets its own optical size. It keeps macOS from upscaling to reach the grid.
     It has shipped wrong more than once because the geometry lived only inside
     an approved blob.
     """
@@ -76,6 +76,20 @@ def test_macos_bundle_ships_the_verified_icns() -> None:
 
     assert "icons/icon.icns" in config["bundle"]["icon"]
     assert 1024 in generate_branding.ICNS_SIZES
+
+
+def test_windows_ico_fills_its_canvas_without_changing_macos_padding() -> None:
+    with Image.open(REPO_ROOT / "frontend/src-tauri/icons/icon.ico") as image:
+        assert isinstance(image, IcoImagePlugin.IcoImageFile)
+        assert image.ico.sizes() == set(generate_branding.ICO_SIZES)
+        for size in (32, 48, 256):
+            frame = image.ico.getimage((size, size)).convert("RGBA")
+            left, _, right, _ = generate_branding._bounding_box(frame, lambda pixel: pixel[3] > 128)
+            assert 0.92 <= (right - left + 1) / size <= 0.97
+    with Image.open(REPO_ROOT / "frontend/src-tauri/icons/icon.icns") as image:
+        frame = image.convert("RGBA")
+        left, _, right, _ = generate_branding._bounding_box(frame, lambda pixel: pixel[3] > 128)
+        assert abs((right - left + 1) / frame.width - 824 / 1024) < 0.01
 
 
 def test_generated_branding_formats_and_dimensions() -> None:

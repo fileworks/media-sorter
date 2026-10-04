@@ -80,8 +80,11 @@ banner at the top of the screen scrolls away.
   whatever they were authored at, so on macOS the tile ratio changes nothing and
   only the mark's share of the plate reads as large or small. (Verified with
   `NSWorkspace.icon(forFile:)` on 26.6: this app, Mail, Notes, Terminal and VS
-  Code all render their plate at exactly 412px of 512.) Windows and Linux do not
-  normalise and are handed the tile ratio verbatim. An earlier revision inset the
+   Code all render their plate at exactly 412px of 512.) Linux retains that canvas.
+   Windows does not normalize the plate: the generator crops the canonical tile
+   and centres it at **94%** of the ICO canvas, with every 16–256px frame derived
+   from that Windows source. The ICNS and other canonical assets keep their macOS
+   padding. An earlier revision inset the
   tile to 744/1024 to look smaller in the dock, which that normalisation now
   undoes; all it bought was an upscale on macOS and an undersized icon
   everywhere else. All three numbers (tile ratio, tile centring, mark centring)
@@ -173,6 +176,10 @@ cannot. A duplicate set is a list of copies, not a table of facts: a copy row le
 the folder, follows with date · size · destination in one quiet line, and puts keep and
 compare on the copy they act on.
 
+Collapsed Browse set headers offer **Compare** beside **Decide this set** in both
+list and grid views. Companion status badges use 11px medium text, ordinary glyph
+shaping and nonshrinking boxes; never squeeze their text to fit a narrow column.
+
 Rows quote destinations relative to the library root and folders by their leaf name
 (`relativeDestination`, `folderLeaf` in `lib/reviewRows.ts`). Absolute paths repeat one
 machine-specific prefix down the whole column and truncate away the part that differs;
@@ -219,8 +226,8 @@ maintenance/.venv/bin/python -m maintenance.identity.social_previews
 GitHub's social-preview setting still requires uploading the resulting PNG.
 
 MediaSorter additionally uses the tight glyph as `frontend/public/icon.svg`. Desktop
-bundle artwork uses `branding/app-icon.svg`, where the glyph is optically inset for macOS
-and Windows icon masks. Never hand-edit generated PNG, ICO, ICNS, BMP, or DMG artwork;
+bundle artwork uses `branding/app-icon.svg`; the generator applies the platform
+geometry described above. Never hand-edit generated PNG, ICO, ICNS, BMP, or DMG artwork;
 change the canonical SVG/generator and run:
 
 ```bash
