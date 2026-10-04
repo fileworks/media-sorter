@@ -134,7 +134,7 @@ export default function MainPage() {
   const sorting = useSorting();
   const loaderActive = useGlobalLoader();
   const { logs } = useLogs();
-  const { data: updateInfo } = useUpdateCheck();
+  const { data: updateInfo } = useUpdateCheck(config?.update_check_enabled === true);
 
   const {
     data: health,

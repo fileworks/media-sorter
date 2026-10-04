@@ -59,8 +59,11 @@ export function useConfig() {
     // exponential backoff before giving up.
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000),
-    onSuccess: (updated) => {
+    onSuccess: (updated, patch) => {
       queryClient.setQueryData(CONFIG_KEY, updated);
+      if (patch.update_check_enabled !== undefined) {
+        void queryClient.invalidateQueries({ queryKey: ["update"] });
+      }
       void queryClient.invalidateQueries({ queryKey: ["config", "validate"] });
     },
   });

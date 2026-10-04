@@ -4,13 +4,14 @@ import type { UpdateInfo } from "@/services/api";
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
-export function useUpdateCheck(): {
+export function useUpdateCheck(enabled = true): {
   data: UpdateInfo | undefined;
   isLoading: boolean;
 } {
   const { data, isLoading } = useQuery<UpdateInfo>({
     queryKey: ["update"],
     queryFn: () => api.checkUpdate(),
+    enabled,
     staleTime: SIX_HOURS,
     refetchInterval: SIX_HOURS,
     retry: 1,
@@ -18,5 +19,5 @@ export function useUpdateCheck(): {
     throwOnError: false,
   });
 
-  return { data, isLoading };
+  return { data: enabled ? data : undefined, isLoading };
 }

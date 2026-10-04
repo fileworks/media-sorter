@@ -1,8 +1,8 @@
 """Update checker: queries the GitHub Releases API and caches the result.
 
 Best-effort — a network failure, rate-limit, or parse error never raises; it
-yields update_available=False with a logged reason so a failed check is
-invisible to the user and never breaks a sort.
+returns a previous cached result or update_available=False with a logged reason,
+so a failed check never breaks a sort.
 """
 
 import asyncio
@@ -38,8 +38,8 @@ class UpdateInfo:
 
 def _parse_semver(tag: str) -> tuple[int, int, int] | None:
     """Strip leading 'v', return (major, minor, patch) or None on failure."""
-    cleaned = tag.lstrip("v")
-    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", cleaned)
+    cleaned = tag.removeprefix("v")
+    m = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", cleaned)
     if not m:
         return None
     return int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -59,20 +59,37 @@ def _is_newer(latest_tag: str, current: str) -> bool:
     return parsed_latest > parsed_current
 
 
-def _pick_asset(assets: list[dict[str, str]], system: str) -> str | None:
+def _pick_asset(
+    assets: list[dict[str, str]], system: str, tag: str, machine: str | None = None
+) -> str | None:
     """Pick the best download URL for this OS from the release assets list."""
     sys_lower = system.lower()
+    architecture = (machine or platform.machine()).lower()
+    if architecture in {"arm64", "aarch64"}:
+        arch_token = "aarch64"
+    elif architecture in {"amd64", "x86_64", "x64"}:
+        arch_token = "x64"
+    else:
+        return None
     suffixes: tuple[str, ...]
     if sys_lower == "darwin":
         suffixes = (".dmg",)
     elif sys_lower == "windows":
-        suffixes = (".msi", ".exe")
+        if arch_token != "x64":
+            return None
+        suffixes = ("-setup.exe", ".msi")
     else:
         suffixes = (".appimage", ".deb", ".tar.gz")
-    for asset in assets:
-        name = asset.get("name", "").lower()
-        if any(name.endswith(s) for s in suffixes):
-            return asset.get("browser_download_url")
+    for suffix in suffixes:
+        for asset in assets:
+            name = asset.get("name", "").lower()
+            url = asset.get("browser_download_url", "")
+            if (
+                name.endswith(suffix)
+                and f"_{arch_token}" in name
+                and url.startswith(f"https://github.com/{_REPO}/releases/download/{tag}/")
+            ):
+                return url
     return None
 
 
@@ -88,12 +105,14 @@ class UpdateService:
         self._enabled = enabled
         self._cache: UpdateInfo | None = None
         self._cache_time: datetime | None = None
+        self._generation = 0
 
     def set_enabled(self, enabled: bool) -> None:
         """Apply a live configuration change without rebuilding the service."""
         if self._enabled == enabled:
             return
         self._enabled = enabled
+        self._generation += 1
         self._cache = None
         self._cache_time = None
 
@@ -126,12 +145,16 @@ class UpdateService:
             if cached is not None:
                 return cached
 
+        generation = self._generation
         try:
             result = await asyncio.to_thread(self._fetch_sync)
         except Exception as exc:
             logger.warning("Update check failed", error=str(exc))
             # Return stale cache if available, else unavailable
             return self._cache or self._make_unavailable()
+
+        if not self._enabled or generation != self._generation:
+            return self._make_unavailable()
 
         self._cache = result
         self._cache_time = datetime.now(timezone.utc)
@@ -156,13 +179,20 @@ class UpdateService:
         assets: list[dict[str, str]] = data.get("assets", [])
 
         # Validate that the release URL belongs to our repo (supply-chain hygiene).
-        if html_url and not html_url.startswith(f"https://github.com/{_REPO}"):
-            logger.warning("Unexpected release URL; ignoring", url=html_url)
+        if html_url != f"https://github.com/{_REPO}/releases/tag/{tag}":
+            if html_url:
+                logger.warning("Unexpected release URL; ignoring", url=html_url)
             html_url = None
 
-        available = bool(tag) and _is_newer(tag, self._current)
+        available = (
+            bool(tag)
+            and _is_newer(tag, self._current)
+            and not data.get("draft", False)
+            and not data.get("prerelease", False)
+            and html_url is not None
+        )
         latest = tag.lstrip("v") if tag else None
-        asset_url = _pick_asset(assets, platform.system()) if available else None
+        asset_url = _pick_asset(assets, platform.system(), tag) if available else None
 
         # Truncate release notes to avoid storing huge payloads.
         if body and len(body) > 4000:

@@ -24,13 +24,14 @@ function setDismissedVersion(version: string): void {
 export function UpdateBanner({ info }: UpdateBannerProps) {
   const { t } = useI18n();
   const [showNotes, setShowNotes] = useState(false);
-  const [dismissed, setDismissed] = useState(() => getDismissedVersion() === info.latest_version);
+  const [dismissedVersion, setDismissedVersionState] = useState(getDismissedVersion);
 
-  if (!info.update_available || dismissed || !info.latest_version) return null;
+  if (!info.update_available || dismissedVersion === info.latest_version || !info.latest_version)
+    return null;
 
   function handleDismiss() {
     if (info.latest_version) setDismissedVersion(info.latest_version);
-    setDismissed(true);
+    setDismissedVersionState(info.latest_version);
   }
 
   function handleDownload() {
@@ -65,6 +66,7 @@ export function UpdateBanner({ info }: UpdateBannerProps) {
           <button
             type="button"
             onClick={handleDownload}
+            disabled={!info.release_url}
             className={cn(
               "flex items-center gap-2 rounded-panel border border-info/40",
               "bg-info/10 px-3 py-1 text-xs font-medium text-info hover:bg-info/20",
