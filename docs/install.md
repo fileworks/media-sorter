@@ -2,15 +2,16 @@
 
 Source and installers are public. No account, Python, Node or ffmpeg installation
 is required for desktop use. Download from [official releases](https://github.com/fileworks/media-sorter/releases).
-The v1.0.0 assets are:
+Use the version shown on the chosen release. `X.Y.Z` below is a placeholder;
+the assets use these filename patterns:
 
 | Device | File | Use |
 |---|---|---|
-| Windows x64 | `MediaSorter_1.0.0_x64-setup.exe` | Normal installer |
-| Windows x64 | `MediaSorter_1.0.0_x64_en-US.msi` | MSI deployment |
+| Windows x64 | `MediaSorter_X.Y.Z_x64-setup.exe` | Normal installer |
+| Windows x64 | `MediaSorter_X.Y.Z_x64_en-US.msi` | MSI deployment |
 | Windows x64 | `MediaSorter-portable.zip` | Extract the entire ZIP; run the app in that folder |
-| macOS 12+, Apple Silicon | `MediaSorter_1.0.0_aarch64.dmg` | Open DMG; drag the app into Applications |
-| macOS 12+, Intel | `MediaSorter_1.0.0_x64.dmg` | Open DMG; drag the app into Applications |
+| macOS 12+, Apple Silicon | `MediaSorter_X.Y.Z_aarch64.dmg` | Open DMG; drag the app into Applications |
+| macOS 12+, Intel | `MediaSorter_X.Y.Z_x64.dmg` | Open DMG; drag the app into Applications |
 
 On a Mac, **About This Mac** identifies Apple Silicon versus Intel. Native
 Windows ARM and Linux desktop installers are not provided by this release.
@@ -22,13 +23,13 @@ compare it with its filename's entry before opening:
 
 ```powershell
 # Windows PowerShell, from Downloads; substitute your chosen filename.
-Get-FileHash .\MediaSorter_1.0.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\MediaSorter_X.Y.Z_x64-setup.exe -Algorithm SHA256
 Get-Content .\SHA256SUMS
 ```
 
 ```sh
 # macOS Terminal, from Downloads; substitute your chosen filename.
-shasum -a 256 MediaSorter_1.0.0_aarch64.dmg
+shasum -a 256 MediaSorter_X.Y.Z_aarch64.dmg
 cat SHA256SUMS
 ```
 
