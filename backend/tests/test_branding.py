@@ -119,6 +119,7 @@ def test_tauri_installer_visuals_reference_generated_assets() -> None:
     assert config["mainBinaryName"] == config["productName"] == "MediaSorter"
     assert windows["nsis"] == {
         "installMode": "both",
+        "installerHooks": "installer/path-guard.nsh",
         "installerIcon": "icons/icon.ico",
         "headerImage": "installer/nsis-header.bmp",
         "sidebarImage": "installer/nsis-sidebar.bmp",

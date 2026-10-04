@@ -39,6 +39,55 @@ Open MediaSorter, select **Copy** on 20 disposable photos and review the result.
 
 ## Updates and other modes
 
+### Windows installation directory
+
+Use a dedicated application folder: normally `%LOCALAPPDATA%\MediaSorter`
+for the user installation or `C:\Program Files\MediaSorter` for all users.
+The NSIS installer offers both scopes (its scope selector requires elevation).
+MSI is the machine deployment route. Choose one installer type for subsequent
+updates. The installer, resources and `uninstall.exe` belong inside the application
+folder. Never select `C:\Program Files` itself. New builds reject NSIS destinations
+whose final folder name is not `MediaSorter`, including silent `/D=` overrides.
+They also refuse NSIS uninstallation from an unsafe shared folder.
+Before its maintenance page can run an older NSIS uninstaller, the new installer
+checks registered locations and uninstall commands. An unsafe or unknown legacy
+location requires a reviewed cleanup first; it is never silently migrated.
+
+For a historical loose installation, close the app and back up its state using
+[state and recovery](state-and-recovery.md). Identify its version and installed
+file list before removing anything. Do not recursively delete Program Files or
+run an old shared-root uninstaller without inspecting its removal scope. A new
+installer cannot safely guess which shared files belong to that old release.
+The version reset means a historical `1.0.x` installation may compare as newer
+than the current baseline; inspect it before attempting a downgrade.
+
+### Antivirus blocks versus SmartScreen
+
+“The file contains a virus or potentially unwanted software” (including the
+German “Die Datei enthält einen Virus oder möglicherweise unerwünschte Software”)
+is an antivirus block. The SmartScreen **More info / Run anyway** instructions
+do not resolve it. Preserve the blocked filename, detection name, antivirus
+provider/version, release and SHA-256. Verify the downloaded ZIP against its
+release checksums; do not execute a quarantined file or disable protection.
+
+The portable and installed app share the frozen backend and native libraries.
+An unsigned Python bundle is a plausible heuristic/reputation trigger, but this
+does not establish a false positive or identify which file was detected. New
+builds keep the existing directory bundle and disable automatic UPX compression
+with `--noupx`; that removes a build-host-dependent binary transformation,
+not a guarantee of antivirus acceptance.
+[PyInstaller documents UPX behavior](https://pyinstaller.org/en/stable/usage.html#using-upx).
+
+Report a verified official binary to the detecting vendor for review. Microsoft
+provides its [sample submission portal](https://www.microsoft.com/en-us/wdsi/filesubmission).
+G DATA provides [file/app review](https://www.gdata.de/help-en/general/GeneralInformation/submitFileAppURL/)
+for its detections.
+Do not submit personal media, databases or logs containing secrets. Publisher
+signing is a separate improvement requiring enrollment; see
+[signing](release-signing.md). A checksum or signature cannot prove that a file
+is harmless. A changed package needs a new version and clean-host testing;
+published assets remain immutable.
+
 For an update, download and verify the newer installer from the official release;
 close the running app and install it. Keep backups of media and application state.
 Portable installations must keep the whole extracted bundle together.

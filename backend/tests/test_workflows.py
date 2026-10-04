@@ -164,6 +164,15 @@ def test_green_tag_pipeline_publishes_through_the_release_environment() -> None:
     assert "smoke_evidence" not in release
 
 
+def test_windows_install_proof_rejects_shared_roots_and_checks_child_failures() -> None:
+    release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    assert "$rejected.ExitCode -ne 2" in release
+    assert release.count("Split-Path (Split-Path $shell) -Leaf") == 2
+    assert 'throw "Installed MSI startup failed"' in release
+    assert 'throw "Installed NSIS startup failed"' in release
+    assert 'throw "Reinstalled NSIS startup failed"' in release
+
+
 def test_release_native_gate_runs_on_a_shipped_platform() -> None:
     release = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
 

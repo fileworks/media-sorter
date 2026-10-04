@@ -50,6 +50,17 @@ Complete every item for each package form in a fresh Windows VM:
 
 - Approved installer branding is present without clipping or scaling defects.
 - Install/run/uninstall and upgrade behavior succeeds where applicable.
+- NSIS current-user and all-users routes put every executable/resource in a
+  dedicated MediaSorter subfolder. A shared-root `/D=` override fails with code 2
+  before payload writes. MSI shortcut/resource paths also use that subfolder.
+- A registered legacy shared-root NSIS installation is refused before the
+  maintenance page can launch its uninstaller, including passive mode. An unknown
+  install location or nonstandard old uninstall command also requires review.
+- Same-version reinstall/MSI repair and next-version upgrade preserve seeded
+  user configuration/history. An unrelated neighboring file survives uninstall.
+- With current antivirus definitions and protection enabled, extract/scan/launch
+  the downloaded ZIP and each installer; record the provider and any blocked
+  file/detection. A hosted startup check alone is not antivirus acceptance proof.
 - Double-click launch opens no console and starts the backend without a system
   Python or ffmpeg.
 - Native startup recovery reaches Reveal Log/Quit and records the full log path.
@@ -59,6 +70,9 @@ Complete every item for each package form in a fresh Windows VM:
   payload signatures use SHA-256 and contain a valid trusted timestamp.
 - Unsigned mode: the SmartScreen flow is recorded and release metadata says
   unsigned without making verification claims.
+- Automatic checks: equal/older stable release gives no banner; a newer release
+  appears; disable/re-enable changes network policy immediately; dismissing one
+  release does not hide the next. Downloads open the verified release page.
 
 Treat a hash mismatch, signing-state mismatch, or clean-host regression as a release
 incident. Stop further distribution updates, preserve the evidence, and use the

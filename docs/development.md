@@ -162,6 +162,15 @@ confidence and regression procedure; it is not a routine publication gate. Signi
 optional but a partial credential set fails before packaging; see
 [release-signing.md](release-signing.md).
 
+Windows package checks validate the application subfolder and installed runtime
+resources, fail on nonzero startup smoke codes, exercise MSI repair/NSIS reinstall,
+and reject shared-root NSIS destinations. Backend packaging uses `--onedir
+--noupx` so ambient UPX never rewrites collected native libraries. Clean-host
+antivirus acceptance and both interactive install scopes still require the
+checklist; do not describe a heuristic block as a proven false positive.
+Packaged smoke checks isolate configuration, data, database and logs, including
+any inherited database override; they must not migrate or modify operator state.
+
 The backend version is single-sourced from `backend/app/_version.py` (pyproject reads it
 via hatchling's dynamic-version hook), so the running app always reports the released
 version.

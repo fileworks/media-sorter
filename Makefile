@@ -297,6 +297,7 @@ bundle-backend:
 	@echo "==> Freezing Python backend with PyInstaller …"
 	cd $(BACKEND) && $(PYTHON) -m PyInstaller \
 		--onedir \
+		--noupx \
 		--name mediasort-backend \
 		--noconfirm \
 		--hidden-import=uvicorn.logging \
@@ -365,13 +366,13 @@ bundle-ffmpeg:
 # ── Windows portable ZIP (run-in-place, no install required) ─────────────────
 #
 # Creates a self-contained ZIP that end users can extract and run directly
-# without running an installer. The exe is placed in app/ so the Rust shell's
-# path resolution (app_dir + "../resources/resources/*") resolves correctly:
+# without running an installer. Resources sit beside the exe under app/resources,
+# matching the Rust shell's Windows path resolution (app_dir + "resources/*"):
 #
 #   MediaSorter-portable/
 #     app/MediaSorter.exe            ← launch this
-#     resources/resources/backend/   ← frozen Python backend
-#     resources/resources/ffmpeg/    ← bundled ffmpeg + ffprobe
+#     app/resources/backend/         ← frozen Python backend
+#     app/resources/ffmpeg/          ← bundled ffmpeg + ffprobe
 #
 # This target is a no-op on non-Windows systems (macOS/Linux don't need it).
 # It requires build-tauri to have run first (the exe must already exist).

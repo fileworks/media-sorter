@@ -62,6 +62,7 @@
       "signCommand": "python -m scripts.release_integrity sign-windows-file --file %1",
       "nsis": {
         "installMode": "both",
+        "installerHooks": "installer/path-guard.nsh",
         "installerIcon": "icons/icon.ico",
         "headerImage": "installer/nsis-header.bmp",
         "sidebarImage": "installer/nsis-sidebar.bmp"

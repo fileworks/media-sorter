@@ -492,7 +492,20 @@ jobs:
           ) {
             throw "MSI shortcut does not target an installed executable: $shell"
           }
+          if ((Split-Path (Split-Path $shell) -Leaf) -ine "MediaSorter") {
+            throw "MSI installed into a shared directory instead of a MediaSorter subfolder"
+          }
+          foreach ($relative in @("resources/backend/mediasort-backend.exe", "resources/ffmpeg/ffmpeg.exe", "resources/ffmpeg/ffprobe.exe")) {
+            if (-not (Test-Path -LiteralPath (Join-Path (Split-Path $shell) $relative) -PathType Leaf)) {
+              throw "MSI installed payload missing: $relative"
+            }
+          }
           python scripts/release_integrity.py smoke-webview --path $shell
+          if ($LASTEXITCODE -ne 0) { throw "Installed MSI startup failed" }
+          $repair = Start-Process msiexec.exe -WindowStyle Hidden -Wait -PassThru -ArgumentList @(
+            "/fa", "`"$msi`"", "/quiet", "/norestart"
+          )
+          if ($repair.ExitCode -notin @(0, 3010)) { throw "MSI repair failed" }
           $uninstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
             "/x", "`"$msi`"", "/quiet", "/norestart"
           )
@@ -514,7 +527,10 @@ jobs:
           $installer = (
             Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis/*-setup.exe"
           ).FullName
-          $install = Start-Process $installer -Wait -PassThru -ArgumentList "/S"
+          # An explicit shared-root destination must fail before copying payloads.
+          $rejected = Start-Process $installer -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S /D=$env:ProgramFiles"
+          if ($rejected.ExitCode -ne 2) { throw "NSIS accepted an unsafe installation directory" }
+          $install = Start-Process $installer -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S"
           if ($install.ExitCode -ne 0) {
             throw "NSIS installation failed with exit code $($install.ExitCode)"
           }
@@ -539,14 +555,32 @@ jobs:
           ) {
             throw "NSIS shortcut does not target an installed executable: $shell"
           }
+          if ((Split-Path (Split-Path $shell) -Leaf) -ine "MediaSorter") {
+            throw "NSIS installed into a shared directory instead of a MediaSorter subfolder"
+          }
+          foreach ($relative in @("resources/backend/mediasort-backend.exe", "resources/ffmpeg/ffmpeg.exe", "resources/ffmpeg/ffprobe.exe")) {
+            if (-not (Test-Path -LiteralPath (Join-Path (Split-Path $shell) $relative) -PathType Leaf)) {
+              throw "NSIS installed payload missing: $relative"
+            }
+          }
           python scripts/release_integrity.py smoke-webview --path $shell
+          if ($LASTEXITCODE -ne 0) { throw "Installed NSIS startup failed" }
+          $reinstall = Start-Process $installer -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S"
+          if ($reinstall.ExitCode -ne 0) { throw "NSIS reinstall failed" }
+          python scripts/release_integrity.py smoke-webview --path $shell
+          if ($LASTEXITCODE -ne 0) { throw "Reinstalled NSIS startup failed" }
           $uninstaller = Join-Path (Split-Path $shell) "uninstall.exe"
           if (-not (Test-Path $uninstaller)) {
             throw "NSIS uninstaller was not installed"
           }
-          $uninstall = Start-Process $uninstaller -Wait -PassThru -ArgumentList "/S"
+          $uninstall = Start-Process $uninstaller -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S"
           if ($uninstall.ExitCode -ne 0) {
             throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)"
+          }
+          # NSIS can hand off to a temporary process before the parent exits.
+          $deadline = [DateTime]::UtcNow.AddSeconds(30)
+          while ((Test-Path -LiteralPath $shell) -and [DateTime]::UtcNow -lt $deadline) {
+            Start-Sleep -Milliseconds 250
           }
           if (Test-Path -LiteralPath $shell) {
             throw "NSIS uninstall completed but its installed executable still exists: $shell"
