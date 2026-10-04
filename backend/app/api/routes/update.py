@@ -23,8 +23,8 @@ class UpdateResponse(BaseModel):
 async def get_update(container: ContainerDep, force: bool = False) -> UpdateResponse:
     """Return the latest available version from GitHub Releases.
 
-    Best-effort: on any network/parse failure the response has
-    ``update_available=False`` and the app continues normally.
+    Best-effort: a network/parse failure returns cached information if available,
+    otherwise ``update_available=False``. The app continues normally.
     """
     info = await container.update_service.check(force=force)
     return UpdateResponse(

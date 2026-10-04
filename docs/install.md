@@ -43,6 +43,22 @@ For an update, download and verify the newer installer from the official release
 close the running app and install it. Keep backups of media and application state.
 Portable installations must keep the whole extracted bundle together.
 
+### Automatic update checking
+
+When **Check for updates** is enabled, the app checks the public stable GitHub
+Release after settings load, then about every six hours while open. It sends
+the application version as a User-Agent; media is not uploaded. Turning the
+setting off stops new checks and hides cached banners; turning it back on checks
+again. Dismissing a release hides that version only, so a later release can appear
+in the same session. Offline/rate-limited checks do not block sorting.
+
+The checker offers strictly newer stable versions, validates the release link,
+and selects architecture-matching assets. Unknown/unsupported architectures use
+the release page for manual selection. An equal latest/current version correctly
+produces no banner. This is a notification/download-page feature; it does not
+install updates automatically or repair an app that cannot start. Verify the
+new package's checksum and signing state before manually updating.
+
 For source development use [development setup](development.md#setup), including
 Windows commands. [Headless/CLI setup](headless.md) is an advanced source mode,
 not a prebuilt NAS package or a substitute for the desktop installation.
