@@ -566,6 +566,7 @@ def _smoke_backend(path: Path) -> None:
                 "MEDIASORT_PORT": str(port),
                 "MEDIASORT_CONFIG_DIR": str(temp / "config"),
                 "MEDIASORT_DATA_DIR": str(temp / "data"),
+                "MEDIASORT_DB_PATH": str(temp / "data" / "mediasort.db"),
                 "MEDIASORT_LOG_DIR": str(temp / "logs"),
                 "MEDIASORT_API_CAPABILITY": capability,
             }
@@ -610,6 +611,9 @@ def _smoke_launcher(path: Path) -> None:
         env.update(
             {
                 "MEDIASORT_LOG_DIR": str(log_dir),
+                "MEDIASORT_CONFIG_DIR": str(log_dir / "config"),
+                "MEDIASORT_DATA_DIR": str(log_dir / "data"),
+                "MEDIASORT_DB_PATH": str(log_dir / "data" / "mediasort.db"),
                 "MEDIASORT_STARTUP_SMOKE_FAIL": "1",
                 "MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE": "1",
             }
@@ -645,6 +649,9 @@ def _smoke_packaged_webview(path: Path) -> None:
         env.update(
             {
                 "MEDIASORT_LOG_DIR": str(log_dir),
+                "MEDIASORT_CONFIG_DIR": str(log_dir / "config"),
+                "MEDIASORT_DATA_DIR": str(log_dir / "data"),
+                "MEDIASORT_DB_PATH": str(log_dir / "data" / "mediasort.db"),
                 "MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE": "1",
                 "MEDIASORT_WEBVIEW_SMOKE": "1",
             }

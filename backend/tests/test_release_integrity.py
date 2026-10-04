@@ -179,6 +179,7 @@ def test_packaged_backend_smoke_uses_launch_capability(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     observed: dict[str, object] = {}
+    monkeypatch.setenv("MEDIASORT_DB_PATH", str(tmp_path / "existing-user.db"))
 
     class Listener:
         def __enter__(self) -> Listener:
@@ -222,6 +223,8 @@ def test_packaged_backend_smoke_uses_launch_capability(
     ) -> Process:
         observed["command"] = command
         observed["capability"] = env["MEDIASORT_API_CAPABILITY"]
+        assert Path(env["MEDIASORT_DB_PATH"]).parent == Path(env["MEDIASORT_DATA_DIR"])
+        assert Path(env["MEDIASORT_DB_PATH"]).name == "mediasort.db"
         assert stdout is subprocess.DEVNULL
         assert stderr is subprocess.DEVNULL
         return Process()
@@ -249,6 +252,7 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     launcher = tmp_path / "MediaSorter"
+    monkeypatch.setenv("MEDIASORT_DB_PATH", str(tmp_path / "existing-user.db"))
 
     def run(
         command: list[str],
@@ -267,6 +271,9 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
         assert check is False
         assert timeout == 60
         log_dir = Path(env["MEDIASORT_LOG_DIR"])
+        assert Path(env["MEDIASORT_CONFIG_DIR"]) == log_dir / "config"
+        assert Path(env["MEDIASORT_DATA_DIR"]) == log_dir / "data"
+        assert Path(env["MEDIASORT_DB_PATH"]) == log_dir / "data" / "mediasort.db"
         (log_dir / "mediasort.log").write_text(
             "backend ready\npackaged_webview_frontend_ready\n",
             encoding="utf-8",
@@ -276,6 +283,31 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
     monkeypatch.setattr(release_integrity.subprocess, "run", run)
 
     release_integrity._smoke_packaged_webview(launcher)
+
+
+def test_launcher_recovery_smoke_isolates_user_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launcher = tmp_path / "MediaSorter"
+    monkeypatch.setenv("MEDIASORT_DB_PATH", str(tmp_path / "existing-user.db"))
+
+    def run(
+        command: list[str], *, env: dict[str, str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert command == [str(launcher)]
+        log_dir = Path(env["MEDIASORT_LOG_DIR"])
+        assert Path(env["MEDIASORT_CONFIG_DIR"]) == log_dir / "config"
+        assert Path(env["MEDIASORT_DATA_DIR"]) == log_dir / "data"
+        assert Path(env["MEDIASORT_DB_PATH"]) == log_dir / "data" / "mediasort.db"
+        (log_dir / "mediasort.log").write_text(
+            "MEDIASORT_STARTUP_SMOKE_FAIL=1\nnative_dialog_recovery_reached\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 1)
+
+    monkeypatch.setattr(release_integrity.subprocess, "run", run)
+
+    release_integrity._smoke_launcher(launcher)
 
 
 def test_packaged_webview_smoke_reaps_backend_before_exit() -> None:
