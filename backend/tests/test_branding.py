@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import IcoImagePlugin, Image
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "generate_branding.py"
 REPO_ROOT = SCRIPT_PATH.parents[1]
@@ -80,6 +80,7 @@ def test_macos_bundle_ships_the_verified_icns() -> None:
 
 def test_windows_ico_fills_its_canvas_without_changing_macos_padding() -> None:
     with Image.open(REPO_ROOT / "frontend/src-tauri/icons/icon.ico") as image:
+        assert isinstance(image, IcoImagePlugin.IcoImageFile)
         assert image.ico.sizes() == set(generate_branding.ICO_SIZES)
         for size in (32, 48, 256):
             frame = image.ico.getimage((size, size)).convert("RGBA")
