@@ -463,6 +463,18 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --state "$RUNNER_TEMP/release-signing-state.json"
 
+      - name: Verify compiled NSIS directory guard after MultiUser initialization
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $nsis = Join-Path $env:LOCALAPPDATA "tauri/NSIS/makensis.exe"
+          if (-not (Test-Path -LiteralPath $nsis -PathType Leaf)) {
+            throw "Tauri's NSIS compiler was not found: $nsis"
+          }
+          python scripts/check_nsis_guard.py --makensis $nsis
+          if ($LASTEXITCODE -ne 0) { throw "Compiled NSIS directory guard failed" }
+
       - name: Install, launch, and uninstall MSI on a clean Windows runner
         if: runner.os == 'Windows'
         shell: pwsh
@@ -529,7 +541,9 @@ jobs:
           ).FullName
           # An explicit shared-root destination must fail before copying payloads.
           $rejected = Start-Process $installer -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S /D=$env:ProgramFiles"
-          if ($rejected.ExitCode -ne 2) { throw "NSIS accepted an unsafe installation directory" }
+          if ($rejected.ExitCode -ne 2) {
+            throw "NSIS unsafe-directory probe exited $($rejected.ExitCode); expected refusal code 2"
+          }
           $install = Start-Process $installer -WindowStyle Hidden -Wait -PassThru -ArgumentList "/S"
           if ($install.ExitCode -ne 0) {
             throw "NSIS installation failed with exit code $($install.ExitCode)"

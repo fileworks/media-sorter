@@ -73,9 +73,50 @@ Function MediaSorterCheckLegacyInstallations
   Pop $R7
 FunctionEnd
 
+Function MediaSorterCheckRequestedDirectory
+  Push $R7
+  Push $R8
+  ; NSIS removes /D= from $CMDLINE, and MultiUser initialization replaces
+  ; $INSTDIR. Read the original request before checking the effective directory.
+  System::Call 'kernel32::GetCommandLineW() w .r17'
+  ${GetOptionsS} $R7 "/D=" $R8
+  ${IfNot} ${Errors}
+    ; Only absolute drive or UNC paths are valid NSIS /D= destinations.
+    ${GetRoot} $R8 $R7
+    ${If} $R7 == ""
+      StrCpy $R8 ""
+    ${Else}
+      StrCpy $R7 $R7 2
+      ${If} $R7 != "\\"
+        StrCpy $R7 $R8 1 2
+        ${If} $R7 != "\"
+          StrCpy $R8 ""
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    !insertmacro MediaSorterRequireDirectory "$R8" "The /D= destination must be a dedicated folder named MediaSorter. Installing into a shared folder is unsafe."
+    ; Silent deployments have no directory page. Restore their explicit target
+    ; after MultiUser initialization, before Tauri sets its output directory.
+    ${If} ${Silent}
+      StrCpy $INSTDIR $R8
+    ${EndIf}
+  ${EndIf}
+  Pop $R8
+  Pop $R7
+FunctionEnd
+
+; This hidden section precedes Tauri's WebView2 and payload sections, including
+; in silent mode where custom pages are skipped. Keep the standard template.
+Section -MediaSorterPreflight
+  Call MediaSorterCheckLegacyInstallations
+  Call MediaSorterCheckRequestedDirectory
+  !insertmacro MediaSorterCheckDirectory
+SectionEnd
+
 Page custom MediaSorterLegacyPreflight
 Function MediaSorterLegacyPreflight
   Call MediaSorterCheckLegacyInstallations
+  Call MediaSorterCheckRequestedDirectory
   Abort ; No visible page when the preflight succeeds.
 FunctionEnd
 
