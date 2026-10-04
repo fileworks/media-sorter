@@ -41,7 +41,7 @@ Open MediaSorter, select **Copy** on 20 disposable photos and review the result.
 
 ### Windows installation directory
 
-Use a dedicated application folder: normally `%LOCALAPPDATA%\MediaSorter`
+Use a dedicated application folder: normally `%LOCALAPPDATA%\Programs\MediaSorter`
 for the user installation or `C:\Program Files\MediaSorter` for all users.
 The NSIS installer offers both scopes (its scope selector requires elevation).
 MSI is the machine deployment route. Choose one installer type for subsequent
