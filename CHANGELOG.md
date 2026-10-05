@@ -3,6 +3,13 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.0.4](https://github.com/fileworks/media-sorter/compare/v1.0.3...v1.0.4) (2026-10-05)
+
+### Bug Fixes
+
+* **ci:** retry mapped WebView2 metrics cleanup ([04bedc0](https://github.com/fileworks/media-sorter/commit/04bedc05799ffc854b356e55a0d6a9d4a54276ee))
+* explain associated files and preview confirmed copies in their folders ([5d3b1ec](https://github.com/fileworks/media-sorter/commit/5d3b1ec15589ac630dde508249660b20e2089c19))
+
 ## [1.0.3](https://github.com/fileworks/media-sorter/compare/v1.0.2...v1.0.3) (2026-10-05)
 
 ### Bug Fixes
