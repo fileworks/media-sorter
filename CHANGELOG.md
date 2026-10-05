@@ -3,6 +3,12 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.0.3](https://github.com/fileworks/media-sorter/compare/v1.0.2...v1.0.3) (2026-10-05)
+
+### Bug Fixes
+
+* reviewed duplicate destinations and complete desktop shutdown ([dd708ee](https://github.com/fileworks/media-sorter/commit/dd708ee392d03a56fd79d17fd2c3d124ab9182cd))
+
 ## [1.0.2](https://github.com/fileworks/media-sorter/compare/v1.0.1...v1.0.2) (2026-10-05)
 
 ### Bug Fixes
