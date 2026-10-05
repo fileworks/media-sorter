@@ -14,6 +14,8 @@ the first status snapshot of a reattached task. Keep the startup screen until
 these settle and their navigation is applied. Initialize StageShell from the
 allowed recovered stage; native `frontend_ready` must follow this startup gate.
 Readiness latches so later polling cannot restart the loading screen.
+`useInitialProgressRestoration` owns task reattachment and this one-time gate;
+MainPage composes it after recovered-plan navigation.
 
 The interface locale belongs to `I18nProvider` and device storage. The title-bar
 selector must not save `Config.language`, discard workflow artifacts, restart task

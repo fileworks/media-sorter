@@ -12,7 +12,7 @@
  * and then "preview" as two separate acts was asking them to know why.
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiActivity, FiArrowLeft } from "react-icons/fi";
 
@@ -44,6 +44,7 @@ import { planImpactFingerprint, usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
+import { useInitialProgressRestoration } from "@/hooks/useInitialProgressRestoration";
 import { useReviewDurability } from "@/hooks/useReviewDurability";
 import { useLogs } from "@/hooks/useLogs";
 import { useRecipes } from "@/hooks/useRecipes";
@@ -129,8 +130,6 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
-  const resumedTaskRef = useRef<string | null>(null);
-  const [initialProgressRestored, setInitialProgressRestored] = useState(false);
 
   const configDefaults = useConfigDefaults();
   const analysis = useAnalysis();
@@ -204,64 +203,14 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
   const recoveryOperations = useMemo(() => diagnostics?.recovery_operations ?? [], [diagnostics]);
   const recoveryBlock = startBlock(recoveryOperations);
 
-  // Background work belongs to the backend process, not this component. A UI
-  // reload reattaches to the task identity reported by diagnostics and resumes
-  // the ordinary status transport instead of presenting a fresh, executable
-  // workflow over work that is still running.
-  useEffect(() => {
-    // Recovery must settle before a live task can replace the recovered plan.
-    if (!preview.rehydrated) return;
-    if (!activeTask) {
-      resumedTaskRef.current = null;
-      return;
-    }
-    if (
-      resumedTaskRef.current === activeTask.task_id ||
-      analysis.taskId === activeTask.task_id ||
-      preview.taskId === activeTask.task_id ||
-      sorting.taskId === activeTask.task_id ||
-      analysis.loading ||
-      preview.loading ||
-      isSorting
-    ) {
-      return;
-    }
-    if (activeTask.operation_kind === "analysis") {
-      resumedTaskRef.current = activeTask.task_id;
-      analysis.resumeAnalysis(activeTask.task_id);
-      setRequestedStage("review");
-    } else if (activeTask.operation_kind === "preview") {
-      resumedTaskRef.current = activeTask.task_id;
-      preview.resumePreview(activeTask.task_id);
-      setRequestedStage("review");
-    } else if (activeTask.operation_kind === "sort") {
-      resumedTaskRef.current = activeTask.task_id;
-      sorting.resumeSorting(activeTask.task_id, activeTask.status);
-      setRequestedStage("execute");
-    }
-  }, [activeTask, analysis, analysis.loading, isSorting, preview, preview.loading, sorting]);
-
-  const activeTaskRestored =
-    activeTask === null ||
-    externalTaskActive ||
-    (activeTask.operation_kind === "analysis" &&
-      analysis.taskId === activeTask.task_id &&
-      analysis.statusSettled) ||
-    (activeTask.operation_kind === "preview" &&
-      preview.taskId === activeTask.task_id &&
-      preview.statusSettled) ||
-    (activeTask.operation_kind === "sort" &&
-      sorting.taskId === activeTask.task_id &&
-      sorting.statusSettled);
-
-  // Registered after the recovery/reattachment effects so the first exposed
-  // render already has its navigation, recovered result and progress snapshot.
-  // Latch once: later diagnostics polling must not reopen the startup screen.
-  useEffect(() => {
-    if (preview.rehydrated && diagnostics !== undefined && activeTaskRestored) {
-      setInitialProgressRestored(true);
-    }
-  }, [activeTaskRestored, diagnostics, preview.rehydrated]);
+  const initialProgressRestored = useInitialProgressRestoration({
+    diagnosticsReady: diagnostics !== undefined,
+    activeTask,
+    analysis,
+    preview,
+    sorting,
+    onRecoveredStage: setRequestedStage,
+  });
 
   const configuredCards = useMemo(
     () => rootCards(config, scanned, scan?.by_root),
