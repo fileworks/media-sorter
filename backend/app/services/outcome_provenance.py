@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from app.core.config import Config
+from app.core.destination_paths import CONTEXTUAL_COPY_FOLDER, QUARANTINE_FOLDERS
 from app.core.provenance import (
     CategorizationProvenance,
     DateCandidateProvenance,
@@ -177,7 +178,18 @@ def _path_segments(
     if destination is None:
         return ()
     segments: list[PathSegmentProvenance] = []
-    quarantine = next((part for part in destination.parts if part.startswith("_")), None)
+    # Only a real review branch at the library root is quarantine. An underscore
+    # in an ancestor, event folder or fallback category says nothing about safety.
+    try:
+        relative_parts = destination.relative_to(Path(config.target_directory)).parts
+    except ValueError:
+        relative_parts = ()
+    root_folder = relative_parts[0] if len(relative_parts) > 1 else None
+    quarantine = (
+        root_folder
+        if root_folder in {*QUARANTINE_FOLDERS.values(), CONTEXTUAL_COPY_FOLDER}
+        else None
+    )
     if quarantine is not None:
         segments.append(
             PathSegmentProvenance(

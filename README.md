@@ -88,8 +88,9 @@ startup before new work is allowed.
   use Copy mode for transfers between volumes on those platforms.
 - Existing destination content is indexed before execution. Exact matches are
   reported without another write.
-- Duplicate losers are never silently deleted. They follow the selected keeper
-  into that folder's `_copies/` leaf, with provenance retained in the report.
+- Extra duplicate copies are never silently deleted. They go to root-level
+  `_copies/`, mirroring the selected file's folders (`_copies/Y/M/D/…`). Their
+  own metadata and original paths remain in the report.
 - XMP/AAE edits, Live Photo motion, RAW siblings, thumbnails, and audio notes
   travel as bounded media units by default. Unsafe splits block execution.
 - Reference roots are immutable and enforced by the executor.

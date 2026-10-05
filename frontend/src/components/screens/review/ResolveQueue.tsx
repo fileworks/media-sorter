@@ -132,6 +132,7 @@ interface ResolveQueueProps {
   onKeepAllMany?: (setIds: readonly string[]) => void;
   onReset?: (setId: string) => void;
   onResetAll?: () => void;
+  onResetMany?: (ids: readonly string[]) => void;
   /** Compare any two copies, from the pair of rows that named them. */
   onComparePair: (a: ReviewRow, b: ReviewRow) => void;
   onOpenDetail: (source: string) => void;
@@ -167,6 +168,7 @@ export function ResolveQueue({
   onKeepAllMany,
   onReset,
   onResetAll,
+  onResetMany,
   onComparePair,
   onOpenDetail,
   onEnlarge,
@@ -419,7 +421,8 @@ export function ResolveQueue({
         onAcceptAllProposals={() => setBulkScope("recommendations")}
         selectableSetIds={selectableSetIds}
         onSelectSets={onSelectSets}
-        selectedCount={selectedSets.length}
+        selectedSets={selectedSets}
+        onClearDecisions={onResetMany}
         onOpenBulk={() => setBulkScope("selection")}
         onClearSelection={onClearSetSelection}
       />
@@ -479,6 +482,7 @@ export function ResolveQueue({
         description={tCount("review.resolve.resetAll.description", decidedCount)}
         confirmLabel={t("review.resolve.resetAll.confirm")}
         cancelLabel={t("common.cancel")}
+        variant="default"
         onClose={() => setResetAllAsked(false)}
         onConfirm={() => {
           setResetAllAsked(false);

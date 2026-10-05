@@ -127,7 +127,7 @@ export const E2E_PREVIEW_RESULT: PreviewResult = {
     },
     {
       source: "/tmp/e2e-input/IMG_0001-copy.jpg",
-      destination: "/tmp/e2e-output/_duplicates/IMG_0001-copy.jpg",
+      destination: "/tmp/e2e-output/_copies/2026/08/IMG_0001 — from e2e-input.jpg",
       would_be_destination: "/tmp/e2e-output/2026/08/IMG_0001-copy.jpg",
       extracted_date: "2026-08-21T10:00:00Z",
       metadata_source: "filesystem",
@@ -263,6 +263,7 @@ export function duplicatePlan(sets = 3) {
   const items = groups.flatMap((group) =>
     group.members.map((member, index) => ({
       source: member.observed_path,
+      would_be_destination: `/tmp/e2e-output/2026/08/${member.relative_path}`,
       destination:
         index === 0
           ? `/tmp/e2e-output/2026/08/${member.relative_path}`
@@ -730,7 +731,7 @@ export async function stubBackend(
             "/tmp/e2e-output"
           ).replace(/[/\\][^/\\]+$/, "");
           const destination = keeper
-            ? `${folder}/_copies/${item.source.split(/[\\/]/).pop()}`
+            ? `/tmp/e2e-output/_copies${folder.slice("/tmp/e2e-output".length)}/${item.source.split(/[\\/]/).pop()}`
             : own;
           if (destination === null) return [];
           const placement = {

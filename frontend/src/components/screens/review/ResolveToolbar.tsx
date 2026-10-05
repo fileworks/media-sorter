@@ -40,6 +40,8 @@
 import { FiCheckCircle } from "react-icons/fi";
 
 import { Button } from "@/components/ui/button";
+import { SelectedSetActions } from "@/components/screens/review/SelectedSetActions";
+import type { SetEntry } from "@/lib/reviewBrowse";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
@@ -66,7 +68,8 @@ export function ResolveToolbar({
   onAcceptAllProposals,
   selectableSetIds,
   onSelectSets,
-  selectedCount,
+  selectedSets,
+  onClearDecisions,
   onOpenBulk,
   onClearSelection,
 }: {
@@ -81,12 +84,13 @@ export function ResolveToolbar({
   selectableSetIds: readonly string[];
   onSelectSets: (ids: readonly string[]) => void;
   /** Above zero, the strip becomes the way into the bulk actions. */
-  selectedCount: number;
+  selectedSets: readonly SetEntry[];
+  onClearDecisions?: (ids: readonly string[]) => void;
   onOpenBulk: () => void;
   onClearSelection: () => void;
 }) {
   const { t, tCount } = useI18n();
-  const selecting = selectedCount > 0;
+  const selecting = selectedSets.length > 0;
 
   return (
     <div
@@ -149,23 +153,12 @@ export function ResolveToolbar({
       </div>
 
       <div className={cn(STATE_CLASS, !selecting && "invisible")} inert={!selecting || undefined}>
-        {/* Announced on its own: wrapping the controls in a live region
-            re-reads every label on each selection change. */}
-        <span
-          role="status"
-          aria-live="polite"
-          className="shrink-0 text-xs font-semibold text-foreground"
-        >
-          {tCount("review.setSelection.count", selectedCount)}
-        </span>
-
-        <Button size="sm" onClick={onOpenBulk}>
-          {t("review.bulk.open")}
-        </Button>
-
-        <Button size="sm" variant="ghost" className="ml-auto" onClick={onClearSelection}>
-          {t("review.setSelection.clear")}
-        </Button>
+        <SelectedSetActions
+          sets={selectedSets}
+          onDecide={onOpenBulk}
+          onClearDecisions={onClearDecisions}
+          onClearSelection={onClearSelection}
+        />
       </div>
 
       {/* How far the whole screen has got, which is not a fact about the

@@ -294,7 +294,7 @@ class FrozenSortPlan(BaseModel):
         `FrozenPlanGuard` would abort it as an unplanned action. This therefore
         rewrites the complete set into exactly what a run seeded with the same
         decision will compute: the chosen copy takes its own predicted outcome,
-        every other member follows it into an adjacent ``_copies`` leaf, and
+        every other member follows its relative folder under root-level ``_copies``, and
         companions follow their primary.
 
         The stored plan is never mutated. Decisions belong to one run.
@@ -538,22 +538,21 @@ def _rewrite_reviewed_set(
     for loser_index in loser_indices:
         loser = actions[loser_index]
         loser_root = Path(loser.source_root or source_root)
+        recorded_root = selected.destination_root or loser.destination_root
+        destination_root = Path(recorded_root) if recorded_root else None
         proposed = copy_destination(
             keeper_destination,
             Path(selected.source_path),
             Path(loser.source_path),
             loser_root,
+            destination_root=destination_root,
         )
         copy_path = reserve_destination(proposed, reserved)
         provenance = (
             contextualize_copy(
                 loser.provenance,
                 destination=copy_path,
-                destination_root=Path(
-                    loser.destination_root
-                    or selected.destination_root
-                    or _destination_root(keeper_destination)
-                ),
+                destination_root=destination_root or _destination_root(keeper_destination),
                 keeper=Path(selected.source_path),
             )
             if loser.provenance is not None

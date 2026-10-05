@@ -286,8 +286,12 @@ class TestPreviewParity:
         copy_item = by_source["b-copy.jpg"]
 
         assert copy_item["extracted_date"] == "2021-06-11"
-        assert copy_item["would_be_destination"].endswith("2021/06/11/b-copy.jpg")
-        assert "/2019/01/04/_copies/" in copy_item["destination"]
+        assert Path(copy_item["would_be_destination"]) == (
+            Path(cfg.target_directory) / "2021" / "06" / "11" / "b-copy.jpg"
+        )
+        assert Path(copy_item["destination"]).parent == (
+            Path(cfg.target_directory) / "_copies" / "2019" / "01" / "04"
+        )
 
         plan = previewer.frozen_plan(preview["plan_id"])
         assert plan is not None
@@ -313,7 +317,7 @@ class TestPreviewParity:
         assert recorded["would_be_destination_path"] == copy_item["would_be_destination"]
         assert recorded["keeper_path"] == str(keeper)
 
-    def test_undated_keeper_keeps_its_copy_under_undated(self, tmp_path: Path) -> None:
+    def test_undated_keeper_mirrors_its_copy_under_root_copies(self, tmp_path: Path) -> None:
         cfg = _config(tmp_path, remove_duplicates=True, duplicate_perceptual_enabled=False)
         keeper = _photo(tmp_path / "source" / "a-keeper.jpg", seed=22)
         copy = tmp_path / "source" / "b-copy.jpg"
@@ -325,8 +329,12 @@ class TestPreviewParity:
             preview = asyncio.run(previewer.preview(cfg))
         by_source = {Path(item["source"]).name: item for item in preview["items"]}
 
-        assert by_source["a-keeper.jpg"]["destination"].endswith("_undated/a-keeper.jpg")
-        assert "/_undated/_copies/" in by_source["b-copy.jpg"]["destination"]
+        assert Path(by_source["a-keeper.jpg"]["destination"]) == (
+            Path(cfg.target_directory) / "_undated" / "a-keeper.jpg"
+        )
+        assert Path(by_source["b-copy.jpg"]["destination"]).parent == (
+            Path(cfg.target_directory) / "_copies" / "_undated"
+        )
 
         plan = previewer.frozen_plan(preview["plan_id"])
         assert plan is not None

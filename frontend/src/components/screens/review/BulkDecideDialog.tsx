@@ -375,6 +375,7 @@ export function SelectionDecisionsDialog({
       choices={[
         {
           id: "rule",
+          tone: "suggest",
           label: t("review.bulk.applyRule"),
           description: t("review.bulk.applyRule.help", { rule: ruleLabel }),
           operand: <RuleOperand rule={rule} onRule={onRule} />,

@@ -150,8 +150,8 @@ decision queue at all.
 
 Browse decisions update both the plan and folder preview as soon as the backend
 resolves the reviewed placements. Outstanding sets stay together; confirmed sets
-show only the copies that belong in each actual folder, including contextual
-`_copies/` subfolders. Each file appears once, with the local and whole-set counts
+show only the copies that belong in each actual folder, including root-level
+`_copies/` with the keeper's relative hierarchy beneath it. Each file appears once, with the local and whole-set counts
 distinguished. A pending path is labeled as pending rather than guessed. Compare
 and decision controls still resolve the complete set from any projected folder.
 If decisions empty the selected branch, Browse returns to the whole result after
@@ -160,6 +160,17 @@ Recommended and Kept are independent labels. Compare
 stays open after Apply, with Next available and saving/retry feedback in place.
 Recipe previews likewise never apply themselves: Setup names the current settings
 separately and places optional adjustments below the recipe workspace.
+
+`SelectedSetActions` owns the identical selection scope and actions in Browse and
+duplicate review. “Remove selected decisions” and “Clear set selection” are separate:
+the former resets only editable explicit choices and confirms the exact scope;
+the latter never changes decisions. Decision resets use neutral confirmation styling
+because no file is deleted; focus returns to the selection's Decide action when
+resetting disables its trigger. Accepting a rule's recommendation uses `suggest`
+styling, including the selected-set dialog. German duplicate terminology is “Gruppe”; label
+the main photo/video and actual associated file types rather than internal units.
+Preflight uses `StateView` to show the actual localized blocker and its severity;
+calculating impact is a loading state, not a recovery error or a preservation claim.
 
 Use the shared `Button`, `Select`, `Input`, `Toggle`, `Modal`, `Tooltip`, `SettingRow`,
 and `StateView` before adding local control chrome. A component owns its layout; global
@@ -196,6 +207,8 @@ Associated-file badges name detected types (for example, “with XMP”), with a
 filenames and placement behavior in the explanation. Standalone photos with an
 internal unit ID do not receive that badge. Companion status badges use 11px medium text, ordinary glyph
 shaping and nonshrinking boxes; never squeeze their text to fit a narrow column.
+Collapsed set filenames keep their own space: local/whole-set counts wrap beneath
+them when needed instead of shrinking the filename to zero on narrow screens.
 
 Rows quote destinations relative to the library root and folders by their leaf name
 (`relativeDestination`, `folderLeaf` in `lib/reviewRows.ts`). Absolute paths repeat one

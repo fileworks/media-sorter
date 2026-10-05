@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
+from app.core.destination_paths import contextualize_copy
 from app.core.exceptions import ConfigError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
@@ -631,7 +632,7 @@ class PreviewService:
 
         # Classify cheaply up front, but defer the outcome until after duplicate
         # identity. A junk/thumbnail file may be the kept member of a set; its
-        # copies must follow it under `_junk/_copies` rather than fragmenting.
+        # copies must mirror it under root-level `_copies/_junk` rather than fragmenting.
         junk_reason = classify_junk(file_path, config)
 
         try:
@@ -802,6 +803,7 @@ class PreviewService:
                         Path(dup_of),
                         file_path,
                         source_root,
+                        destination_root=dest_root,
                     )
                 )
             logger.info(
@@ -934,7 +936,6 @@ class PreviewService:
                 camera=camera,
             )
         if status == "duplicate" and dest is not None and dup_of is not None:
-            from app.core.destination_paths import contextualize_copy
             from app.core.provenance import OutcomeProvenance
 
             item["provenance"] = contextualize_copy(

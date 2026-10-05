@@ -153,11 +153,7 @@ describe("folder preview tree", () => {
     expect(dates).toMatchObject({ name: "2025", kind: "folder" });
     const month = dates.children?.[0];
     expect(month).toMatchObject({ name: "07 — July", kind: "folder" });
-    expect(month?.children?.map((node) => node.name)).toEqual([
-      "IMG_4382.JPG",
-      "VID_0042.mp4",
-      "_copies",
-    ]);
+    expect(month?.children?.map((node) => node.name)).toEqual(["IMG_4382.JPG", "VID_0042.mp4"]);
   });
 
   it("draws the review folders beside the date hierarchy, never inside it", () => {
@@ -167,17 +163,21 @@ describe("folder preview tree", () => {
     expect(nodes[0]).toMatchObject({ name: "2025", kind: "folder" });
     expect(review).toContain("_undated");
     expect(review).toContain("_corrupted");
-    expect(review).not.toContain("_copies");
+    expect(review).toContain("_copies");
+    expect(nodes.find((node) => node.name === "_copies")?.children).toMatchObject([
+      { name: "2025", kind: "folder" },
+    ]);
   });
 
   it("offers only the review folders the settings can actually produce", () => {
-    expect(possibleReviewFolders(BASE)).not.toContain("_copies");
+    expect(possibleReviewFolders(BASE)).toContain("_copies");
+    expect(possibleReviewFolders({ ...BASE, remove_duplicates: false })).not.toContain("_copies");
     expect(possibleReviewFolders({ ...BASE, junk_filter_enabled: true })).toContain("_junk");
     // A file can always defeat a read, whatever the settings say.
     expect(possibleReviewFolders(BASE)).toContain("_corrupted");
   });
 
-  it("shows only the review folders in deduplicate-only, because nothing is placed", () => {
+  it("shows only review branches in deduplicate-only, because normal files stay at source", () => {
     const nodes = folderPreviewTree({ ...BASE, run_mode: "deduplicate_only" }, t, "en", invented);
 
     expect(nodes.every((node) => node.kind === "review")).toBe(true);

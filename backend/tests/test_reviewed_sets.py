@@ -223,6 +223,41 @@ class TestTheDefectThisChangeRemoves:
 
 
 class TestTheRewrittenPlanDescribesTheRun:
+    def test_existing_frozen_adjacent_copy_path_is_preserved_and_honored_by_execution(
+        self, tmp_path: Path, two_copies: tuple[Path, Path]
+    ) -> None:
+        first, second = two_copies
+        config = _config(tmp_path)
+        service = _service(config)
+        items = _preview(service, config, tmp_path, [first, second])
+        keeper_destination = Path(items[0]["destination"])
+        legacy_destination = keeper_destination.parent / "_copies" / "legacy-copy.jpg"
+        items[1]["destination"] = str(legacy_destination)
+        stored = build_frozen_sort_plan(items, config)
+        # Exercise persistence, then accepting the already selected keeper.
+        restored = type(stored).model_validate_json(stored.model_dump_json())
+        reviewed = restored.with_reviewed_sets(
+            [ReviewedSet(keep=str(first), demote=(str(second),))],
+            source_root=config.source_directory,
+        )
+        assert reviewed.actions[1].reviewed_destination_path == str(legacy_destination)
+        registry = DuplicateRegistry()
+        registry.exact[hashlib.sha256(first.read_bytes()).hexdigest()] = str(first)
+        record = service._process_file(
+            file_path=second,
+            source_root=tmp_path / "source",
+            dest_root=tmp_path / "sorted",
+            config=config,
+            dry_run=False,
+            registry=registry,
+            operation_id="legacy-run",
+            planned_destinations={str(first): keeper_destination, str(second): legacy_destination},
+            execution=None,
+        )
+        assert record["dest_path"] == str(legacy_destination)
+        assert legacy_destination.read_bytes() == second.read_bytes()
+        assert not (tmp_path / "sorted" / "_copies").exists()
+
     def test_catalogue_only_duplicates_demote_the_other_sortable_file(
         self, tmp_path: Path, two_copies: tuple[Path, Path]
     ) -> None:
@@ -244,7 +279,12 @@ class TestTheRewrittenPlanDescribesTheRun:
         actions = {action.source_path: action for action in derived.actions}
         assert actions[str(first)].disposition == "sort"
         assert actions[str(second)].keeper_path == str(first)
-        assert Path(actions[str(second)].reviewed_destination_path).parent.name == "_copies"
+        keeper_folder = Path(actions[str(first)].reviewed_destination_path).parent.relative_to(
+            Path(config.target_directory)
+        )
+        assert Path(actions[str(second)].reviewed_destination_path).parent == (
+            Path(config.target_directory) / "_copies" / keeper_folder
+        )
         assert all(action.keeper_path is None for action in plan.actions)
         run = _seeded_run(service, config, tmp_path, [first, second], keeper=first)
         assert all(

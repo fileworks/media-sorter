@@ -161,7 +161,10 @@ async def test_deduplicate_only_keeps_keeper_in_place_and_plans_copy_folder(
     by_status = {item["status"]: item for item in result["items"]}
     assert by_status["keep_in_place"]["destination"] is None
     assert by_status["duplicate"]["duplicate_of"] == by_status["keep_in_place"]["source"]
-    assert Path(by_status["duplicate"]["destination"]).parent.name == "_copies"
+    assert (
+        Path(by_status["duplicate"]["destination"]).parent
+        == target / "_copies" / "2024" / "01" / "01"
+    )
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,7 @@ import { useState } from "react";
 import { FiActivity, FiChevronDown } from "react-icons/fi";
 
 import { CompanionEvidencePanel } from "@/components/CompanionEvidencePanel";
-import { StatusMessage } from "@/components/StatusMessage";
+import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress";
 import { useI18n } from "@/i18n/I18nContext";
@@ -263,10 +263,17 @@ export function ExecutePreflight({
 
         <div className="mt-3 space-y-2">
           {result.blocking.map((line) => (
-            <StatusMessage
+            <StateView
               key={line.text}
-              code={line.tone === "error" ? "reconciliation_required" : "metadata_limitation"}
-              detail={lineText(line)}
+              variant={
+                line.messageKey === "preflight.blocking.impactLoading"
+                  ? "loading"
+                  : line.tone === "error"
+                    ? "error"
+                    : "warning"
+              }
+              title={lineText(line)}
+              compact
             />
           ))}
         </div>

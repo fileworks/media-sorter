@@ -154,7 +154,7 @@ describe("run scope in reports", () => {
         }),
       ),
     ).toBeTruthy();
-    expect(screen.getAllByText(/Primary: IMG_0001\.jpg/)).toHaveLength(2);
+    expect(screen.getAllByText(/Main photo\/video: IMG_0001\.jpg/)).toHaveLength(2);
     expect(screen.getByText("The primary changed; this sidecar was retained.")).toBeTruthy();
     expect(screen.getByText("/library/sorted/2026/IMG_0001.xmp")).toBeTruthy();
     expect(screen.getByText(translate("en", "report.status.incompleteUnit"))).toBeTruthy();

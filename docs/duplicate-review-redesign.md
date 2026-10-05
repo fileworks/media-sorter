@@ -7,7 +7,7 @@
 > Adopted: stacks are embedded in the destination browser and decidable there;
 > one run-local decision model backs every surface; recommendations are visibly
 > non-binding and never unlock Execute; ruled-out copies centralize under
-> `_copies/` beside their keeper.
+> root-level `_copies/`, mirroring their keeper's relative folders.
 >
 > **Not adopted: point 3 below, "remove or demote the separate Resolve mode."**
 > The Open Design reference `mediasorter-final.html` keeps two tabs — a
@@ -190,4 +190,3 @@ behavior:
 - recommendations are visible but never silently accepted;
 - one confirmation is used for bulk changes, with no additional preview;
 - ruled-out files are centralized under `Target/_duplicates/`.
-

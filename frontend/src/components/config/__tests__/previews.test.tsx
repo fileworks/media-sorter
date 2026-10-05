@@ -78,17 +78,19 @@ describe("folder tree preview", () => {
   it("draws the date hierarchy with the review folders as its siblings", () => {
     renderTree(ORGANIZE);
 
-    expect(screen.getByText("2025/")).toBeTruthy();
-    expect(screen.getByText("07 — July/")).toBeTruthy();
+    expect(screen.getAllByText("2025/")).toHaveLength(2);
+    expect(screen.getAllByText("07 — July/")).toHaveLength(2);
     expect(screen.getByText("_copies/")).toBeTruthy();
     expect(screen.getByText("_undated/")).toBeTruthy();
 
-    // Copies sit with the keeper; conditions with no library location stay at
-    // the root as siblings of the dated hierarchy.
-    const year = screen.getByText("2025/").closest("li");
+    // The root-level copies branch mirrors the normal folder hierarchy.
+    const year = screen.getAllByText("2025/")[0].closest("li");
     expect(year).not.toBeNull();
-    expect(within(year as HTMLElement).getByText("_copies/")).toBeTruthy();
+    expect(within(year as HTMLElement).queryByText("_copies/")).toBeNull();
     expect(within(year as HTMLElement).queryByText("_undated/")).toBeNull();
+    const copies = screen.getByText("_copies/").closest("li") as HTMLElement;
+    expect(within(copies).getByText("2025/")).toBeTruthy();
+    expect(within(copies).getByText("07 — July/")).toBeTruthy();
   });
 
   it("follows each setting that feeds it", () => {
@@ -105,7 +107,7 @@ describe("folder tree preview", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByText("Pixel 9 Pro/")).toBeTruthy();
+    expect(screen.getAllByText("Pixel 9 Pro/")).toHaveLength(2);
     // TYPE_YYYY-MM-DD, the shipped pattern, applied to the sample. Renaming
     // owns the whole filename, so the extension is lowercased with the stem.
     expect(screen.getByText("IMG_2025-07-14.jpg")).toBeTruthy();
@@ -114,7 +116,9 @@ describe("folder tree preview", () => {
   it("shows only the review folders in deduplicate-only, and says why", () => {
     renderTree({ ...ORGANIZE, run_mode: "deduplicate_only" });
 
-    expect(screen.queryByText("2025/")).toBeNull();
+    const copies = screen.getByText("_copies/").closest("li") as HTMLElement;
+    expect(within(copies).getByText("2025/")).toBeTruthy();
+    expect(screen.queryByText("IMG_4382.JPG")).toBeNull();
     expect(screen.getByText("_corrupted/")).toBeTruthy();
     expect(
       screen.getByText(/Files that are not duplicates stay in their source folders/),

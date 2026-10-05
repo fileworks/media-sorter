@@ -1778,7 +1778,7 @@ async def test_copy_mode_duplicate_does_not_delete_source(tmp_path: Path) -> Non
     assert record["status"] == "duplicate"
     # Source file must still exist (copy mode never touches source)
     assert img_path.exists(), "Source file was deleted in copy mode — bug!"
-    # Duplicate copy is placed beside its keeper under _copies/ (not moved).
+    # Duplicate copy mirrors the keeper's folders under root-level _copies/ (not moved).
     assert record["dest_path"] is not None
     assert "_copies" in record["dest_path"]
 

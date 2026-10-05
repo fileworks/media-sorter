@@ -20,6 +20,7 @@ import {
   SelectionDecisionsDialog,
 } from "@/components/screens/review/BulkDecideDialog";
 import { Button } from "@/components/ui/button";
+import { SelectedSetActions } from "@/components/screens/review/SelectedSetActions";
 import { useI18n } from "@/i18n/I18nContext";
 import type { SetEntry } from "@/lib/reviewBrowse";
 import type { KeeperPolicyId } from "@/types/api";
@@ -38,6 +39,7 @@ export function BrowseDecisionBar({
   onKeepAllMany,
   onReviewSelected,
   onClearSelection,
+  onClearDecisions,
 }: {
   /** Sets with no binding decision, whether or not the rule can rank them. */
   openSets: readonly SetEntry[];
@@ -57,6 +59,7 @@ export function BrowseDecisionBar({
   onKeepAllMany: (setIds: readonly string[]) => void;
   onReviewSelected: () => void;
   onClearSelection: () => void;
+  onClearDecisions: (ids: readonly string[]) => void;
 }) {
   const { t, tCount } = useI18n();
   const [bulkScope, setBulkScope] = useState<"selection" | "recommendations" | null>(null);
@@ -104,18 +107,13 @@ export function BrowseDecisionBar({
           aria-label={tCount("review.setSelection.count", selectedSets.length)}
           className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-primary/40 bg-tint-primary px-3 py-2"
         >
-          <span className="mr-auto text-xs font-semibold text-foreground">
-            {tCount("review.setSelection.count", selectedSets.length)}
-          </span>
-          <Button size="sm" onClick={() => setBulkScope("selection")}>
-            {t("review.bulk.open")}
-          </Button>
-          <Button size="sm" variant="outline" onClick={onReviewSelected}>
-            {t("review.setSelection.review")}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onClearSelection}>
-            {t("review.setSelection.clear")}
-          </Button>
+          <SelectedSetActions
+            sets={selectedSets}
+            onDecide={() => setBulkScope("selection")}
+            onClearDecisions={onClearDecisions}
+            onReview={onReviewSelected}
+            onClearSelection={onClearSelection}
+          />
         </div>
       )}
 

@@ -129,7 +129,7 @@ const DIAGNOSTICS: Record<string, KnownDiagnostic> = {
   reconciliation_required: {
     tone: "warning",
     headline: "An interrupted operation needs review",
-    impact: "At least one verified copy of every affected file exists. Nothing was lost.",
+    impact: "Review the recovery record to check which files completed before resuming.",
     actions: ["review_recovery", "open_report"],
   },
 };
@@ -138,7 +138,8 @@ const SAFETY_TEXT: Record<SourceSafety, string> = {
   source_verified: "Your original was verified before anything else happened.",
   source_retained: "Your original is untouched and still in its original location.",
   destination_verified: "The copy at the destination was verified byte for byte.",
-  redundant_verified_copies: "Two verified copies exist — the original is in quarantine.",
+  redundant_verified_copies:
+    "Two verified copies exist — the original is still in its source location.",
   ambiguous: "This one needs review: which copy is authoritative could not be determined.",
 };
 
@@ -172,7 +173,7 @@ export function presentStatus(input: StatusInput): StatusPresentation {
     input.retriesPerformed && input.retriesPerformed > 0
       ? ` Retried automatically ${input.retriesPerformed} time${input.retriesPerformed === 1 ? "" : "s"} first.`
       : "";
-  const safety = SAFETY_TEXT[input.safety ?? "source_retained"];
+  const safety = SAFETY_TEXT[input.safety ?? "ambiguous"];
   const actions = (known?.actions ?? ["open_logs"]).map((id) => ({ id, label: ACTION_LABELS[id] }));
 
   return {

@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { E2E_ANALYSIS, duplicatePlan, stubBackend, openSurface } from "./support";
+import { translate } from "../src/i18n/I18nContext";
+import type { PlanReviewState } from "../src/services/api";
 
 /**
  * The duplicate workflow, driven the way a person drives it.
@@ -113,10 +115,89 @@ test("Browse accepts a suggestion directly and Details shows the extra copy unde
   await header.getByRole("button", { expanded: false }).first().click();
   await expect(
     page.locator('[data-copy-card="/tmp/e2e-input/DSC_1001-copy.jpg"] [data-copy-destination]'),
-  ).toContainText("/_copies/");
+  ).toContainText("/tmp/e2e-output/_copies/2026/08/");
   await page.getByRole("button", { name: "DSC_1001-copy.jpg", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("/_copies/");
 });
+
+for (const locale of ["en", "de"] as const) {
+  test(`selected decision reset keeps its scope in both views (${locale})`, async ({
+    page,
+  }, testInfo) => {
+    const t = (key: string, params?: Record<string, string | number>) =>
+      translate(locale, key, params);
+    let saved: PlanReviewState | null = null;
+    page.on("request", (request) => {
+      if (request.url().endsWith("/review-state") && request.method() === "PUT") {
+        saved = request.postDataJSON() as PlanReviewState;
+      }
+    });
+    await page.getByRole("combobox", { name: /language|sprache/i }).selectOption(locale);
+    await page.emulateMedia({ colorScheme: locale === "de" ? "dark" : "light" });
+    await openSurface(page, "review");
+    const firstSet = page.locator('[data-browse-set="dup-set-1"]');
+    await firstSet.getByRole("checkbox").check();
+    await firstSet
+      .getByRole("button", { name: t("review.browse.acceptProposal"), exact: true })
+      .click();
+    await page
+      .locator('[data-browse-set="dup-set-2"]')
+      .getByRole("button", { name: t("review.browse.acceptProposal"), exact: true })
+      .click();
+    await expect.poll(() => saved?.decisions.length).toBe(2);
+
+    for (const width of [360, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const reset = page.getByRole("button", { name: t("review.setSelection.reset"), exact: true });
+      await reset.scrollIntoViewIfNeeded();
+      await expect(reset).toBeVisible();
+      const filename = page.locator('[data-browse-set="dup-set-1"] [data-browse-set-name]').first();
+      await filename.scrollIntoViewIfNeeded();
+      expect(
+        await filename.evaluate((element) => ({
+          visible: element.clientWidth > 0,
+          clipped: element.scrollWidth > element.clientWidth,
+        })),
+        "the copy count must not squeeze out the filename",
+      ).toEqual({ visible: true, clipped: false });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({ path: testInfo.outputPath(`selected-${locale}-${width}.png`) });
+    }
+    await page.getByRole("button", { name: t("review.setSelection.reset"), exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: t("review.setSelection.reset.title") });
+    await expect(dialog).toContainText(t("review.setSelection.reset.description.one"));
+    await dialog.getByRole("button", { name: t("common.cancel"), exact: true }).click();
+    expect(saved?.decisions).toHaveLength(2);
+    await page.getByRole("button", { name: t("review.setSelection.reset"), exact: true }).click();
+    await dialog
+      .getByRole("button", { name: t("review.setSelection.reset.confirm"), exact: true })
+      .click();
+    await expect
+      .poll(() => saved?.decisions.map((decision) => decision.group_id))
+      .toEqual(["dup-set-2"]);
+    await expect(
+      page.getByRole("button", { name: t("review.bulk.open"), exact: true }),
+    ).toBeFocused();
+    expect(saved?.selected_set_ids).toEqual(["dup-set-1"]);
+
+    await page.locator('[data-browse-set="dup-set-2"]').first().getByRole("checkbox").check();
+    await page.getByRole("tab", { name: t("review.mode.resolve") }).click();
+    await page.getByRole("button", { name: t("review.setSelection.reset"), exact: true }).click();
+    await dialog
+      .getByRole("button", { name: t("review.setSelection.reset.confirm"), exact: true })
+      .click();
+    await expect.poll(() => saved?.decisions).toEqual([]);
+    await expect(
+      page.getByRole("button", { name: t("review.bulk.open"), exact: true }),
+    ).toBeFocused();
+    expect(saved?.selected_set_ids.sort()).toEqual(["dup-set-1", "dup-set-2"]);
+    await expect(
+      page.getByRole("button", { name: t("review.setSelection.reset"), exact: true }),
+    ).toBeDisabled();
+  });
+}
 
 test("closing a pointer-opened preview resets tooltip and zoom overlay while restoring focus", async ({
   page,

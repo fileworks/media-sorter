@@ -58,6 +58,20 @@ describe("presentStatus", () => {
     expect(status.actions.map((action) => action.id)).toContain("review_recovery");
   });
 
+  it("does not claim an untouched original without recorded safety evidence", () => {
+    const status = presentStatus({ code: "reconciliation_required" });
+    expect(status.safety).toMatch(/needs review/i);
+    expect(status.impact).not.toMatch(/nothing was lost/i);
+  });
+
+  it("keeps a redundant original at its source rather than claiming it was quarantined", () => {
+    const status = presentStatus({
+      code: "reconciliation_required",
+      safety: "redundant_verified_copies",
+    });
+    expect(status.safety).toMatch(/still in its source location/i);
+  });
+
   it("never hands back an empty technical detail", () => {
     expect(presentStatus({ code: "encoder_failed", detail: "   " }).technicalDetail).toBeNull();
   });

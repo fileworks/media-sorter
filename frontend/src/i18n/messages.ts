@@ -47,8 +47,8 @@ export const en = {
     "The plan summary, destination tree, and decision queue will appear when the catalog has answered.",
   "review.detail.infoLoading": "Loading file information…",
   "review.detail.infoFailed": "The file information could not be loaded.",
-  "review.detail.provenanceLoading": "Loading the preview's recorded reasoning…",
-  "review.detail.provenanceFailed": "The preview's recorded reasoning could not be loaded.",
+  "review.detail.provenanceLoading": "Loading the destination explanation…",
+  "review.detail.provenanceFailed": "The destination explanation could not be loaded.",
   // The chip names itself: without this the tooltip supplies the accessible
   // name, so the visible "Junk 2" was announced as its help text instead —
   // WCAG 2.5.3 wants the visible label inside the accessible one.
@@ -65,6 +65,16 @@ export const en = {
   "review.state.notDuplicates": "decided — not duplicates",
   "review.setSelection.count.one": "1 set selected",
   "review.setSelection.count": "{count} sets selected",
+  "config.duplicates.folderOfChosenFile": "selected file’s folders",
+  "review.setSelection.decided": "{count} decided",
+  "review.setSelection.decided.one": "1 decided",
+  "review.setSelection.reset": "Remove selected decisions",
+  "review.setSelection.reset.title": "Remove decisions from the selection?",
+  "review.setSelection.reset.description":
+    "Removes {count} decisions from the selected sets only. Other decisions and all files stay unchanged. These sets return to review; recommendations remain available.",
+  "review.setSelection.reset.description.one":
+    "Removes the decision from the selected set only. Other decisions and all files stay unchanged. This set returns to review; its recommendation remains available.",
+  "review.setSelection.reset.confirm": "Remove selected decisions",
   "review.setSelection.clear": "Clear set selection",
   "review.setSelection.review": "Review selected sets",
   "review.setSelection.selectAll.one": "Select this set",
@@ -137,9 +147,9 @@ export const en = {
   "review.reason.duplicatePending": "Still being compared — the run will not move it until it is.",
   "review.reason.duplicatePlain": "A duplicate of a file already in this run.",
   "review.reason.duplicateKeeper":
-    "Selected for sorting out of {count} copies. The other copies are preserved beside it in _copies/.",
+    "Selected for sorting out of {count} copies. The others are preserved beneath root-level _copies/, using this file’s folder structure.",
   "review.reason.duplicateCopy":
-    "Extra copy of {kept}: preserved in the keeper’s _copies/ subfolder, not in the normal sorting folder.",
+    "Extra copy of {kept}: preserved beneath root-level _copies/, using the selected file’s folder structure.",
   "review.reason.duplicateUndecided":
     "One of {count} copies awaiting your choice. No sorting or _copies/ placement until you decide.",
   "review.reason.duplicateProposed":
@@ -443,13 +453,13 @@ export const en = {
   "report.column.date": "Date",
   "report.column.dateSource": "Date source",
   "report.column.status": "Status",
-  "report.column.mediaUnit": "Media unit",
+  "report.column.mediaUnit": "Associated files",
   "report.column.tags": "Tags",
-  "report.unit.primary": "Primary file",
+  "report.unit.primary": "Main photo/video",
   "report.unit.companion": "Companion: {role}",
   "report.unit.unknownRole": "Companion role unknown",
-  "report.unit.primaryFile": "Primary: {file}",
-  "report.unit.primaryUnknown": "Primary file unknown",
+  "report.unit.primaryFile": "Main photo/video: {file}",
+  "report.unit.primaryUnknown": "Main photo/video unknown",
   "report.unit.id": "Unit {id}",
   "report.noFilterMatch": "No files match the current filter.",
   "report.status.sorted": "✓ sorted",
@@ -927,7 +937,7 @@ export const en = {
     "The plan is frozen for review. Continue to inspect destinations and duplicate decisions.",
   "footer.toReview": "Continue to Review",
   "footer.review":
-    "Duplicate copies stay with their keeper under _copies/; junk goes to _junk/. Nothing is silently deleted.",
+    "Extra copies go under root-level _copies/; junk under _junk/. Files are preserved and verified.",
   "footer.toExecute": "Continue to Execute",
   "sources.change": "Change…",
   "sources.remove": "Remove",
@@ -1063,7 +1073,7 @@ export const en = {
     "Only a default — override any group, or all of them, in Review.",
   "config.duplicates.setAside": "Set-aside location",
   "config.duplicates.setAsideHelp":
-    "Losing copies are verified under _copies/ beside the keeper they belong to.",
+    "Extra copies are verified under _copies/ at the destination root, mirroring the selected file’s folders, for example _copies/2025/07/14/.",
   "config.keeper.newest": "Keep the newest",
   "config.keeper.oldest": "Keep the oldest",
   "config.keeper.largest": "Keep the largest",
@@ -1223,12 +1233,12 @@ export const en = {
   "review.resolve.scopeChip.one": "Stepping through 1 selected set",
   "review.resolve.scopeClear": "Step through all sets again",
   "review.resolve.nothingOpenInSelection": "Every selected set has been decided.",
-  "review.resolve.resetAll.title": "Clear all decisions?",
+  "review.resolve.resetAll.title": "Remove all decisions?",
   "review.resolve.resetAll.description":
-    "This clears the {count} decisions you have made and puts every set back to undecided. It changes nothing on disk \u2014 no file has been moved yet \u2014 but the choices themselves cannot be brought back.",
+    "Returns {count} decided sets to review. No files change. You will need to choose again or accept their recommendations.",
   "review.resolve.resetAll.description.one":
-    "This clears the one decision you have made and puts that set back to undecided. It changes nothing on disk \u2014 no file has been moved yet \u2014 but the choice itself cannot be brought back.",
-  "review.resolve.resetAll.confirm": "Clear decisions",
+    "Returns the decided set to review. No files change. You will need to choose again or accept its recommendation.",
+  "review.resolve.resetAll.confirm": "Remove decisions",
   "review.resolve.decidedCount": "{decided} of {total} decided",
   "review.resolve.allSets": "All sets",
   "review.resolve.openCount": "{count} open",
@@ -1367,8 +1377,8 @@ export const en = {
     "Confirmed · {count} other copies will be placed under _copies/. The set remains visible here.",
   "review.resolve.resolvedAllHelp":
     "Confirmed · These files are treated as distinct and each keeps its planned destination.",
-  "review.resolve.resetOne": "Clear this decision",
-  "review.resolve.resetAll": "Clear all decisions",
+  "review.resolve.resetOne": "Remove this decision",
+  "review.resolve.resetAll": "Remove all decisions",
   "review.resolve.notConfirmed": "No copy chosen yet.",
   "review.resolve.chooseHelp":
     "Keep one copy, or say these are not duplicates. Nothing here is final \u2014 a decision can be cleared from this band.",
@@ -1445,13 +1455,13 @@ export const en = {
   "review.detail.companions": "Companions",
   "review.detail.duration": "Duration",
   "review.detail.codec": "Video codec",
-  "review.viewer.videoLoading": "Loading authenticated video…",
+  "review.viewer.videoLoading": "Loading video…",
   "review.viewer.videoUnavailable":
     "Video playback is unavailable; the thumbnail and metadata remain available.",
   "review.detail.provenanceUnavailable":
     "No recorded explanation is available for this planned file; its other facts remain valid.",
   "review.detail.provenanceSuperseded":
-    "The preview that recorded this explanation has been superseded. Build a new preview to recover the working.",
+    "This explanation belongs to an older preview. Build a new preview to see how the destination was chosen.",
   "review.detail.rebuildExplanation": "Build new preview",
   "review.detail.rejected.absent": "not present",
   "review.detail.rejected.unparseable": "could not be read as a date",
@@ -1632,10 +1642,10 @@ export const de: Record<MessageKey, string> = {
   "review.selected": "{count} ausgewählt",
   "review.clearSelection": "Auswahl aufheben",
   "review.keepOnlyThis": "Nur diese behalten",
-  "review.selection.reason.notInSet": "Diese Datei gehört nicht zu einem Duplikatsatz.",
+  "review.selection.reason.notInSet": "Diese Datei gehört nicht zu einer Duplikatgruppe.",
   "review.selection.reason.selectOne": "Wähle genau eine Kopie aus.",
   "review.selection.reason.baselineProtected":
-    "Dieser Satz enthält eine geschützte Referenz, die immer beibehalten wird.",
+    "Diese Gruppe enthält eine geschützte Referenz, die immer beibehalten wird.",
   "review.selection.reason.selectTwo": "Wähle genau zwei Dateien zum Vergleichen aus.",
   "review.browse.clearSearch": "Suche löschen",
   "review.browse.folderEmpty": "Dieser Ordner enthält im aktuellen Plan nichts.",
@@ -1650,25 +1660,34 @@ export const de: Record<MessageKey, string> = {
     "Planzusammenfassung, Zielordnerbaum und Entscheidungswarteschlange erscheinen, sobald der Katalog geantwortet hat.",
   "review.detail.infoLoading": "Dateiinformationen werden geladen…",
   "review.detail.infoFailed": "Die Dateiinformationen konnten nicht geladen werden.",
-  "review.detail.provenanceLoading": "Die aufgezeichnete Begründung der Vorschau wird geladen…",
-  "review.detail.provenanceFailed":
-    "Die aufgezeichnete Begründung der Vorschau konnte nicht geladen werden.",
+  "review.detail.provenanceLoading": "Zielerklärung wird geladen…",
+  "review.detail.provenanceFailed": "Die Zielerklärung konnte nicht geladen werden.",
   "review.view.grid": "Rasteransicht",
   "review.keepRule.scope":
     "Gilt nur für diesen Durchlauf; deine Einstellungen bleiben unverändert.",
-  "review.keepRule.applyToOpen.one": "Auf 1 offenen Satz anwenden\u2026",
-  "review.keepRule.applyToOpen": "Auf {count} offene S\u00e4tze anwenden\u2026",
+  "review.keepRule.applyToOpen.one": "Auf 1 offene Gruppe anwenden…",
+  "review.keepRule.applyToOpen": "Auf {count} offene Gruppen anwenden…",
   "review.keepRule.howItDecides": "Wie die Regel entscheidet",
   "review.keepRule.explains":
-    "Die Regel bewertet die Kopien in jedem Satz und markiert eine als Empfehlung. Entschieden ist nichts, bis du sie anwendest, sie in einem Satz \u00fcbernimmst oder selbst eine Kopie w\u00e4hlst.",
+    "Die Regel bewertet die Kopien in jeder Gruppe und markiert eine als Empfehlung. Entschieden ist nichts, bis du sie anwendest, sie in einer Gruppe übernimmst oder selbst eine Kopie wählst.",
   "review.state.notDuplicates": "entschieden — keine Duplikate",
-  "review.setSelection.count.one": "1 Satz ausgewählt",
-  "review.setSelection.count": "{count} Sätze ausgewählt",
-  "review.setSelection.clear": "Satzauswahl aufheben",
-  "review.setSelection.review": "Ausgewählte Sätze prüfen",
-  "review.setSelection.selectAll.one": "Diesen Satz auswählen",
+  "review.setSelection.count.one": "1 Gruppe ausgewählt",
+  "review.setSelection.count": "{count} Gruppen ausgewählt",
+  "config.duplicates.folderOfChosenFile": "Ordner der gewählten Datei",
+  "review.setSelection.decided": "{count} entschieden",
+  "review.setSelection.decided.one": "1 entschieden",
+  "review.setSelection.reset": "Entscheidungen zurücknehmen",
+  "review.setSelection.reset.title": "Ausgewählte Entscheidungen zurücknehmen?",
+  "review.setSelection.reset.description":
+    "Nimmt nur die {count} Entscheidungen in der Auswahl zurück. Andere Entscheidungen und alle Dateien bleiben unverändert. Diese Gruppen sind wieder offen; Vorschläge bleiben verfügbar.",
+  "review.setSelection.reset.description.one":
+    "Nimmt nur die Entscheidung in der ausgewählten Gruppe zurück. Andere Entscheidungen und alle Dateien bleiben unverändert. Diese Gruppe ist wieder offen; ihr Vorschlag bleibt verfügbar.",
+  "review.setSelection.reset.confirm": "Ausgewählte Entscheidungen zurücknehmen",
+  "review.setSelection.clear": "Gruppenauswahl aufheben",
+  "review.setSelection.review": "Ausgewählte Gruppen prüfen",
+  "review.setSelection.selectAll.one": "Diese Gruppe auswählen",
   "review.setSelection.selectAll": "Alle {count} auswählen",
-  "review.setSelection.toggle": "Duplikatsatz mit {name} auswählen",
+  "review.setSelection.toggle": "Duplikatgruppe mit {name} auswählen",
   "review.setSelection.forBulk": "Für Sammelaktionen auswählen",
   "review.setSelection.noFolders": "Die Auswahl enthält keine geeigneten Quellordner.",
   "review.bulk.applyRule": "Regel auf Auswahl anwenden",
@@ -1676,43 +1695,43 @@ export const de: Record<MessageKey, string> = {
   "review.bulk.notDuplicates": "Als keine Duplikate markieren",
   "review.partialIndex.title": "Beim Indizieren konnten nicht alle Dateien gelesen werden",
   "review.partialIndex.detail":
-    "Der letzte Scan eines Ordners hat nicht alles darin gelesen. Einem Stapel unten k\u00f6nnen daher Kopien fehlen, die auf der Festplatte vorhanden sind. F\u00fchren Sie einen neuen Scan durch, bevor Sie Unersetzliches l\u00f6schen.",
-  "review.truncated.title": "Die ersten {count} Stapel werden angezeigt",
+    "Der letzte Scan konnte diesen Ordner nicht vollständig lesen. Den Duplikatgruppen können daher Dateien fehlen. Prüfe die Scanprobleme und scanne erneut, bevor du Entscheidungen triffst.",
+  "review.truncated.title": "Die ersten {count} Duplikatgruppen werden angezeigt",
   "review.truncated.detail":
-    "Diese Bibliothek enthält mehr Duplikat-Stapel, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",
+    "Diese Bibliothek enthält mehr Duplikatgruppen, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",
   "review.bulk.consequence.keep":
     "Eine Datei je Duplikatgruppe wird zum Einsortieren gewählt. {setAside} weitere Kopien ({bytes}) bleiben unter _copies/ erhalten. Es wird nichts gelöscht.",
   "review.bulk.consequence.keepAll":
     "Jede Datei erhält ihr eigenes Sortierziel. Keine wird als Duplikat behandelt.",
   "review.bulk.consequence.keepFromFolder":
     "Die Datei aus {folder} wird zum Einsortieren gewählt. {setAside} weitere Kopien ({bytes}) bleiben unter _copies/ erhalten. Es wird nichts gelöscht.",
-  "review.bulk.open": "Diese S\u00e4tze entscheiden\u2026",
-  "review.bulk.selectionTitle": "Die ausgew\u00e4hlten S\u00e4tze entscheiden",
+  "review.bulk.open": "Diese Gruppen entscheiden…",
+  "review.bulk.selectionTitle": "Die ausgewählten Gruppen entscheiden",
   "review.bulk.recommendTitle": "Die empfohlenen Kopien \u00fcbernehmen",
-  "review.bulk.recommendScope.one": "1 Satz in diesem Plan ist noch offen.",
-  "review.bulk.recommendScope": "{count} S\u00e4tze in diesem Plan sind noch offen.",
+  "review.bulk.recommendScope.one": "1 Gruppe in diesem Plan ist noch offen.",
+  "review.bulk.recommendScope": "{count} Gruppen in diesem Plan sind noch offen.",
   "review.bulk.acceptRecommendations": "Empfehlungen \u00fcbernehmen",
   "review.bulk.acceptRecommendations.help":
-    "Beh\u00e4lt in jedem noch offenen Satz die Kopie, die \u201e{rule}\u201c an erste Stelle setzt. Selbst getroffene Entscheidungen bleiben unangetastet, und eine Referenzkopie gewinnt ihren Satz immer.",
+    "Wählt in jeder noch offenen Gruppe die von „{rule}“ empfohlene Datei zum Einsortieren. Weitere Kopien bleiben unter _copies/ erhalten. Bereits bestätigte Entscheidungen bleiben bestehen; Referenzdateien werden nie verändert.",
   "review.bulk.applyRule.help":
-    "Beh\u00e4lt in jedem ausgew\u00e4hlten Satz die Kopie, die \u201e{rule}\u201c an erste Stelle setzt. Jedes Ergebnis bleibt danach \u00e4nderbar.",
+    "Wählt in jeder ausgewählten Gruppe die von „{rule}“ empfohlene Datei zum Einsortieren. Weitere Kopien bleiben unter _copies/ erhalten. Du kannst die Entscheidung danach ändern.",
   "review.bulk.notDuplicates.help":
-    "Behandelt jeden ausgew\u00e4hlten Satz als Gruppe eigenst\u00e4ndiger Dateien. Jede Kopie wird dann f\u00fcr sich geplant, keine wird beiseitegelegt.",
+    "Plant alle Dateien in den ausgewählten Gruppen als eigenständige Dateien. Jede erhält ihr eigenes Sortierziel; keine kommt allein wegen dieser Gruppe nach _copies/.",
   "review.bulk.keepFromFolder.help":
-    "Beh\u00e4lt die Kopie aus einem gew\u00e4hlten Quellordner. Ein Satz wird nur entschieden, wenn genau eine seiner Kopien in diesem Ordner liegt \u2014 bei keiner oder mehreren bleibt er unver\u00e4ndert.",
+    "Wählt die Datei aus dem gewählten Quellordner zum Einsortieren. Eine Gruppe wird nur entschieden, wenn genau eine ihrer Kopien dort liegt. Die anderen bleiben unter _copies/ erhalten.",
   "review.bulk.folder": "Bevorzugter Ordner",
   "review.bulk.keepFromFolder": "Aus Ordner behalten",
   "review.bulk.impactShort": "{decide} von {total}",
   "review.bulk.impact":
-    "Entscheidet {decide} der ausgewählten Sätze und lässt {skip} davon unverändert.",
+    "Entscheidet {decide} der ausgewählten Gruppen und lässt {skip} davon unverändert.",
   "review.bulk.cannotRule.one":
-    "Die Regel kann den ausgewählten Satz nicht einordnen, weil Vergleichsdaten fehlen.",
+    "Die Regel kann die ausgewählte Gruppe nicht einordnen, weil Vergleichsdaten fehlen.",
   "review.bulk.cannotRule":
-    "Die Regel kann {count} ausgewählte Sätze nicht einordnen, weil Vergleichsdaten fehlen.",
+    "Die Regel kann {count} ausgewählte Gruppen nicht einordnen, weil Vergleichsdaten fehlen.",
   "review.bulk.cannotFolder.one":
-    "Der ausgewählte Satz enthält nicht genau eine Kopie aus diesem Ordner.",
+    "Die ausgewählte Gruppe enthält nicht genau eine Kopie aus diesem Ordner.",
   "review.bulk.cannotFolder":
-    "{count} ausgewählte Sätze enthalten nicht genau eine Kopie aus diesem Ordner.",
+    "{count} ausgewählte Gruppen enthalten nicht genau eine Kopie aus diesem Ordner.",
   "review.stack.copies": "{count} Kopien",
   "review.stack.kind.exact": "identisch",
   "review.stack.kind.similar": "ähnlich",
@@ -1737,13 +1756,13 @@ export const de: Record<MessageKey, string> = {
     "Wird noch verglichen — bis dahin verschiebt der Durchlauf sie nicht.",
   "review.reason.duplicatePlain": "Ein Duplikat einer Datei aus diesem Durchlauf.",
   "review.reason.duplicateKeeper":
-    "Aus {count} Kopien zum Einsortieren gewählt. Die anderen bleiben daneben im Unterordner _copies/ erhalten.",
+    "Aus {count} Kopien zum Einsortieren gewählt. Die anderen bleiben unter _copies/ im Ziel erhalten, mit derselben Ordnerstruktur wie diese Datei.",
   "review.reason.duplicateCopy":
-    "Weitere Kopie von {kept}: bleibt im Unterordner _copies/ der gewählten Datei erhalten, nicht im normalen Sortierordner.",
+    "Weitere Kopie von {kept}: bleibt unter _copies/ im Ziel erhalten, mit derselben Ordnerstruktur wie die gewählte Datei.",
   "review.reason.duplicateUndecided":
-    "Eine von {count} Kopien, zwischen denen Sie wählen müssen. Keine Einsortierung oder Ablage in _copies/, bis Sie entscheiden.",
+    "Eine von {count} Kopien, zwischen denen du wählen musst. Keine Einsortierung oder Ablage in _copies/, bis du entscheidest.",
   "review.reason.duplicateProposed":
-    "Eine von {count} Kopien mit Vorschlag. Nehmen Sie ihn an oder wählen Sie eine Datei, bevor die Einsortierung oder Ablage in _copies/ erfolgt.",
+    "Eine von {count} Kopien mit Vorschlag. Nimm ihn an oder wähle eine Datei, bevor die Einsortierung oder Ablage in _copies/ erfolgt.",
   "review.reason.notDuplicates":
     "Als unterschiedliche Dateien markiert; jede folgt ihrem eigenen geplanten Ziel.",
   "review.reason.keepInPlace": "Keine Dateiaktion geplant: diese Datei bleibt an ihrem Quellort.",
@@ -1792,7 +1811,7 @@ export const de: Record<MessageKey, string> = {
   "review.unit.left":
     "{files} bleiben am Quellort, weil sie in diesem Durchlauf nicht mitgenommen werden.",
   "review.unit.unknown": "Die geplante Aktion für {files} ist unbekannt; prüfe die Dateidetails.",
-  "review.browse.copiesHere": "{count} hier · {total} im Duplikatsatz",
+  "review.browse.copiesHere": "{count} hier · {total} in der Duplikatgruppe",
   "review.browse.stays.pending": "Ziele werden berechnet",
   "review.browse.stays.pending.rule":
     "Deine Entscheidung ist erfasst. Die genauen Zielpfade des geprüften Plans werden berechnet; diese Vorschau verschiebt keine Dateien.",
@@ -1824,7 +1843,7 @@ export const de: Record<MessageKey, string> = {
     "Behält den längsten Dateinamen, der meist die meisten Angaben enthält.",
   "config.keeper.shortest_filename.help":
     "Behält den kürzesten Dateinamen — oft den ohne „Kopie“-Zusatz.",
-  "config.keeper.manual.help": "Wählt nichts aus. Jeder Satz wartet in der Prüfung auf dich.",
+  "config.keeper.manual.help": "Wählt nichts aus. Jede Gruppe wartet in der Prüfung auf dich.",
   "config.keeper.smart": "Vermutliches Original behalten (empfohlen)",
   "config.keeper.smart.short": "Vermutl. Original",
   "config.keeper.best_quality": "Beste Qualität behalten",
@@ -2055,13 +2074,13 @@ export const de: Record<MessageKey, string> = {
   "report.column.date": "Datum",
   "report.column.dateSource": "Datumsquelle",
   "report.column.status": "Status",
-  "report.column.mediaUnit": "Medieneinheit",
+  "report.column.mediaUnit": "Zugehörige Dateien",
   "report.column.tags": "Tags",
-  "report.unit.primary": "Primärdatei",
+  "report.unit.primary": "Hauptfoto/-video",
   "report.unit.companion": "Begleitdatei: {role}",
   "report.unit.unknownRole": "Rolle der Begleitdatei unbekannt",
-  "report.unit.primaryFile": "Primärdatei: {file}",
-  "report.unit.primaryUnknown": "Primärdatei unbekannt",
+  "report.unit.primaryFile": "Hauptfoto/-video: {file}",
+  "report.unit.primaryUnknown": "Hauptfoto/-video unbekannt",
   "report.unit.id": "Einheit {id}",
   "report.noFilterMatch": "Keine Dateien entsprechen dem aktuellen Filter.",
   "report.status.sorted": "✓ sortiert",
@@ -2148,7 +2167,7 @@ export const de: Record<MessageKey, string> = {
   "config.bursts.window": "Maximale Sekunden zwischen Bildern",
   "config.bursts.distance": "Maximale perzeptuelle Distanz",
   "config.bursts.reviewFirst":
-    "Standardmäßig aus. Jede Gruppe muss geprüft werden; nicht ausgewählte Medieneinheiten kommen in Quarantäne und werden nie gelöscht.",
+    "Standardmäßig aus. Jede Gruppe muss geprüft werden. Nicht ausgewählte Fotos/Videos und ihre zugehörigen Dateien bleiben in Quarantäne erhalten; sie werden nie gelöscht.",
   "config.duplicates.threshold": "Ähnlichkeitsschwelle",
   "config.filters.recursive": "Unterordner durchsuchen",
   "config.filters.minSize": "Minimale Dateigröße (KB)",
@@ -2168,7 +2187,7 @@ export const de: Record<MessageKey, string> = {
   "config.other.repair": "Beschädigte Dateien reparieren",
   "config.indexWorkers.label": "Threads f\u00fcr die Indizierung",
   "config.indexWorkers.help":
-    "Wie viele Dateien beim Indizieren gleichzeitig gelesen und dekodiert werden. Leer gelassen richtet sich der Wert nach Ihrem Rechner. Verringern Sie ihn, damit der Rechner f\u00fcr andere Arbeiten reaktionsf\u00e4hig bleibt; erh\u00f6hen Sie ihn nur, wenn sonst nichts l\u00e4uft.",
+    "Wie viele Dateien beim Indizieren gleichzeitig gelesen werden. Leer gelassen richtet sich der Wert nach deinem Rechner. Verringere ihn, damit der Rechner für andere Arbeiten reaktionsfähig bleibt; erhöhe ihn nur, wenn sonst nichts läuft.",
   "config.indexWorkers.auto": "Automatisch",
   "config.thumbnailCache.label": "Vorschaubilder zwischenspeichern",
   "config.thumbnailCache.help":
@@ -2357,9 +2376,9 @@ export const de: Record<MessageKey, string> = {
   "preflight.irreversible.conversion":
     "{count} Originaldateien werden nach der Konvertierung nicht aufbewahrt.",
   "preflight.irreversible.companions.one":
-    "1 Begleitdatei bleibt in der Eingabe und ihre Medieneinheit wird getrennt.",
+    "1 zugehörige Datei bleibt im Quellordner und wird nicht zusammen mit ihrem Foto/Video einsortiert.",
   "preflight.irreversible.companions":
-    "{count} Begleitdateien bleiben in der Eingabe und ihre Medieneinheiten werden getrennt.",
+    "{count} zugehörige Dateien bleiben in ihren Quellordnern und werden nicht zusammen mit ihren Fotos/Videos einsortiert.",
   "preflight.irreversible.tags.one":
     "In bis zu 1 Datei werden Tags eingebettet; dadurch ändert sich ihr Inhalt.",
   "preflight.irreversible.tags":
@@ -2384,8 +2403,8 @@ export const de: Record<MessageKey, string> = {
   "plan.recalculate": "Neu berechnen",
   "plan.complete": "Plan vollständig",
   "plan.summary.title": "{count} Dateien sind bereit zur Prüfung",
-  "plan.summary.detail.one": "1 Duplikatstapel wird in der Prüfoberfläche sichtbar.",
-  "plan.summary.detail": "{count} Duplikatstapel werden in der Prüfoberfläche sichtbar.",
+  "plan.summary.detail.one": "1 Duplikatgruppe wird in der Prüfoberfläche sichtbar.",
+  "plan.summary.detail": "{count} Duplikatgruppen werden in der Prüfoberfläche sichtbar.",
   "plan.metric.files": "Dateien",
   "plan.metric.files.help":
     "Alle Dateien, die der Scan in den gewählten Ordnern gefunden hat. Der Plan wurde über alle davon berechnet.",
@@ -2418,9 +2437,9 @@ export const de: Record<MessageKey, string> = {
   "plan.sequence.organize.detail": "{count} ausführbare Dateigruppen für ihre Ziele vorbereiten.",
   "plan.sequence.duplicates.title": "Duplikate entscheiden",
   "plan.sequence.duplicates.detail.one":
-    "1 Duplikatstapel für eine bewusste Entscheidung sichtbar halten.",
+    "1 Duplikatgruppe für eine bewusste Entscheidung sichtbar halten.",
   "plan.sequence.duplicates.detail":
-    "{count} Duplikatstapel für eine bewusste Entscheidung sichtbar halten.",
+    "{count} Duplikatgruppen für eine bewusste Entscheidung sichtbar halten.",
   "plan.sequence.write.title": "In ein Ziel schreiben",
   "plan.sequence.write.detail.one":
     "Nach der Freigabe 1 geplante Datei übertragen und verifizieren.",
@@ -2557,7 +2576,7 @@ export const de: Record<MessageKey, string> = {
     "Der Plan ist für die Prüfung eingefroren. Prüfe als Nächstes Zielstruktur und Duplikatentscheidungen.",
   "footer.toReview": "Weiter zu Prüfen",
   "footer.review":
-    "Duplikatkopien bleiben unter _copies/ bei ihrem Original; Ausschuss kommt nach _junk/. Nichts wird stillschweigend gelöscht.",
+    "Weitere Kopien kommen nach _copies/ im Ziel; Ausschuss nach _junk/. Die Dateien bleiben erhalten und werden geprüft.",
   "footer.toExecute": "Weiter zu Ausführen",
   "sources.change": "Ändern…",
   "sources.remove": "Entfernen",
@@ -2698,7 +2717,7 @@ export const de: Record<MessageKey, string> = {
     "Nur eine Voreinstellung — in der Prüfung einzeln oder gesammelt änderbar.",
   "config.duplicates.setAside": "Ablageort",
   "config.duplicates.setAsideHelp":
-    "Unterlegene Kopien werden geprüft unter _copies/ neben dem zugehörigen Original abgelegt.",
+    "Weitere Kopien werden geprüft unter _copies/ im Ziel abgelegt. Darunter folgt die Ordnerstruktur der gewählten Datei, zum Beispiel _copies/2025/07/14/.",
   "config.keeper.newest": "Neueste behalten",
   "config.keeper.oldest": "Älteste behalten",
   "config.keeper.largest": "Größte behalten",
@@ -2772,18 +2791,18 @@ export const de: Record<MessageKey, string> = {
   "review.subtitle": "Bisher ist nichts passiert — dies ist ein Probelauf aller Änderungen.",
   "review.tree.title": "Vorschau des Zielordners",
   "review.tree.root": "Zielordner",
-  "review.tree.undecidedHere.one": "1 Duplikatstapel hier braucht noch eine Entscheidung",
-  "review.tree.undecidedHere": "{count} Duplikatstapel hier brauchen noch eine Entscheidung",
+  "review.tree.undecidedHere.one": "1 Duplikatgruppe hier braucht noch eine Entscheidung",
+  "review.tree.undecidedHere": "{count} Duplikatgruppen hier brauchen noch eine Entscheidung",
   "review.mode": "Was du hier tust",
   "review.mode.browse": "Ergebnis durchsehen",
   "review.mode.resolve": "Duplikate entscheiden",
   "review.browse.stays": "Keine Dateiaktion geplant",
-  "review.browse.stays.undecided": "Zu prüfende Sätze",
+  "review.browse.stays.undecided": "Zu prüfende Gruppen",
   "review.browse.stays.undecided.rule":
-    "In diesen Gruppen wird keine Datei einsortiert oder unter _copies/ abgelegt, bis Sie eine Datei wählen oder alle behalten.",
+    "In diesen Gruppen wird keine Datei einsortiert oder unter _copies/ abgelegt, bis du eine Datei wählst oder alle behältst.",
   "review.browse.stays.proposed": "Vorgeschlagene Auswahl",
   "review.browse.stays.proposed.rule":
-    "Diese Vorschläge sind noch nicht angenommen. Alle Dateien bleiben am Quellort, bis Sie einen Vorschlag annehmen oder anders entscheiden.",
+    "Diese Vorschläge sind noch nicht angenommen. Alle Dateien bleiben am Quellort, bis du einen Vorschlag annimmst oder anders entscheidest.",
   "review.browse.stays.baseline": "Referenzordner",
   "review.browse.stays.baseline.rule":
     "Referenzordner dienen nur zum Vergleich und werden nie beschrieben.",
@@ -2793,7 +2812,7 @@ export const de: Record<MessageKey, string> = {
   "review.browse.expand": "{folder} öffnen oder schließen",
   "review.browse.showContents": "Inhalt von {folder} anzeigen",
   "review.impactRefused":
-    "Diese Entscheidung lässt sich nicht auf den Plan anwenden. Prüfe den Stapel erneut oder schließe eine der Kopien aus.",
+    "Diese Entscheidung lässt sich nicht auf den Plan anwenden. Prüfe die Gruppe erneut oder schließe eine der Kopien aus.",
   "review.persistence.title": "Prüfung konnte nicht gespeichert werden",
   "review.persistence.saving": "Geprüfter Plan und Entscheidungen werden gespeichert…",
   "review.persistence.pointerFailed":
@@ -2804,9 +2823,9 @@ export const de: Record<MessageKey, string> = {
     "Der gespeicherte geprüfte Plan kann nicht mehr wiederhergestellt werden. Erstelle eine neue Vorschau.",
   "review.persistence.stale":
     "Der gespeicherte geprüfte Plan passt nicht mehr zu Konfiguration oder Nachweisen. Erstelle eine neue Vorschau.",
-  "review.destination.pending": "Ziel für Ihre Entscheidung wird berechnet…",
+  "review.destination.pending": "Ziel für deine Entscheidung wird berechnet…",
   "review.browse.awaitingChoice":
-    "Keine Dateiaktion, bis Sie eine Datei wählen oder den Vorschlag annehmen.",
+    "Keine Dateiaktion, bis du eine Datei wählst oder den Vorschlag annimmst.",
   "review.browse.acceptProposal": "Vorschlag annehmen",
   "review.browse.columnName": "Name",
   "review.browse.columnDate": "Datum",
@@ -2816,12 +2835,12 @@ export const de: Record<MessageKey, string> = {
   "review.browse.openInResolve": "Im Duplikat-Tab prüfen",
   "review.browse.openResult": "Duplikate prüfen",
   "review.browse.decisions": "Duplikat-Entscheidungen",
-  "review.browse.openSets.one": "1 Duplikatsatz wartet auf eine Entscheidung",
-  "review.browse.openSets": "{count} Duplikats\u00e4tze warten auf eine Entscheidung",
+  "review.browse.openSets.one": "1 Duplikatgruppe wartet auf eine Entscheidung",
+  "review.browse.openSets": "{count} Duplikatgruppen warten auf eine Entscheidung",
   "review.browse.recommendedBy": "Bei {count} davon empfiehlt \u201e{rule}\u201c eine Kopie",
   "review.browse.noRecommendations": "Die Behaltregel kann keinen davon einordnen",
-  "review.browse.needAPerson.one": "1 braucht Ihre Wahl",
-  "review.browse.needAPerson": "{count} brauchen Ihre Wahl",
+  "review.browse.needAPerson.one": "1 braucht deine Wahl",
+  "review.browse.needAPerson": "{count} brauchen deine Wahl",
   "review.browse.setUndecided": "Prüfung nötig",
   "review.stack.state.open": "offen",
   "review.stack.state.proposed": "vorgeschlagen",
@@ -2847,61 +2866,62 @@ export const de: Record<MessageKey, string> = {
   "review.viewer.fitToWindow": "An Fenster anpassen",
   "review.viewer.fit": "Angepasst",
   "review.browse.alsoInLibrary":
-    "{count} Sätze enthalten auch Dateien außerhalb der gewählten Quellen",
-  "review.browse.alsoInLibrary.one": "1 Satz enthält auch Dateien außerhalb der gewählten Quellen",
+    "{count} Gruppen enthalten auch Dateien außerhalb der gewählten Quellen",
+  "review.browse.alsoInLibrary.one":
+    "1 Gruppe enthält auch Dateien außerhalb der gewählten Quellen",
   "review.browse.alsoInLibrary.rule":
     "Die Prüfung vergleicht nur die unter Quellen gewählten Ordner. MediaSorter kennt verwandte Kopien aus dem Sammlungsindex, liest, vergleicht, verschiebt oder entfernt diese externen Dateien aber nicht. Füge ihre Ordner nur dann als Quellen hinzu und erstelle die Vorschau neu, wenn du sie einbeziehen möchtest.",
   "review.browse.openSources": "Quellen öffnen",
-  "review.resolve.position": "Satz {index} von {total}",
-  "review.resolve.previous": "Vorheriger Satz",
-  "review.resolve.next": "Nächster Satz",
-  "review.resolve.nextOpen": "Nächster offener",
-  "review.resolve.nextInSelection": "N\u00e4chster in Auswahl",
+  "review.resolve.position": "Gruppe {index} von {total}",
+  "review.resolve.previous": "Vorherige Gruppe",
+  "review.resolve.next": "Nächste Gruppe",
+  "review.resolve.nextOpen": "Nächste offene Gruppe",
+  "review.resolve.nextInSelection": "Nächste in Auswahl",
   "review.resolve.scopeChip": "Schrittweise durch {count} ausgew\u00e4hlte",
-  "review.resolve.scopeChip.one": "Schrittweise durch 1 ausgew\u00e4hlten Satz",
-  "review.resolve.scopeClear": "Wieder durch alle S\u00e4tze gehen",
-  "review.resolve.nothingOpenInSelection": "Jeder ausgew\u00e4hlte Satz ist entschieden.",
-  "review.resolve.resetAll.title": "Alle Entscheidungen l\u00f6schen?",
+  "review.resolve.scopeChip.one": "Schrittweise durch 1 ausgewählte Gruppe",
+  "review.resolve.scopeClear": "Wieder durch alle Gruppen gehen",
+  "review.resolve.nothingOpenInSelection": "Jede ausgewählte Gruppe ist entschieden.",
+  "review.resolve.resetAll.title": "Alle Entscheidungen zurücknehmen?",
   "review.resolve.resetAll.description":
-    "Das l\u00f6scht die {count} getroffenen Entscheidungen und setzt jeden Satz auf unentschieden zur\u00fcck. Auf der Festplatte \u00e4ndert sich nichts \u2014 es wurde noch keine Datei bewegt \u2014 aber die Entscheidungen selbst sind nicht wiederherstellbar.",
+    "Setzt {count} entschiedene Gruppen zurück auf offen. Keine Datei wird verändert. Wähle anschließend erneut oder nimm die Vorschläge an.",
   "review.resolve.resetAll.description.one":
-    "Das l\u00f6scht die eine getroffene Entscheidung und setzt diesen Satz auf unentschieden zur\u00fcck. Auf der Festplatte \u00e4ndert sich nichts \u2014 es wurde noch keine Datei bewegt \u2014 aber die Entscheidung selbst ist nicht wiederherstellbar.",
-  "review.resolve.resetAll.confirm": "Entscheidungen l\u00f6schen",
+    "Setzt die entschiedene Gruppe zurück auf offen. Keine Datei wird verändert. Wähle anschließend erneut oder nimm den Vorschlag an.",
+  "review.resolve.resetAll.confirm": "Entscheidungen zurücknehmen",
   "review.resolve.decidedCount": "{decided} von {total} entschieden",
-  "review.resolve.allSets": "Alle Sätze",
+  "review.resolve.allSets": "Alle Gruppen",
   "review.resolve.openCount": "{count} offen",
   "review.resolve.queueDecided": "bestätigt",
   "review.resolve.queueProposed": "Vorschlag wartet",
   "review.resolve.openStatesHelp":
-    "Zu prüfende Sätze haben noch keine bestätigte Auswahl. Bei „Vorschlag wartet“ gibt es bereits eine regelbasierte Empfehlung, die bis zur Bestätigung nichts ändert.",
+    "Zu prüfende Gruppen haben noch keine bestätigte Auswahl. Bei „Vorschlag wartet“ gibt es bereits eine regelbasierte Empfehlung, die bis zur Bestätigung nichts ändert.",
   "review.resolve.keepThis": "{name} behalten — Taste {number}",
   "review.resolve.kept": "behalten",
   "review.resolve.protected": "geschützt",
   "review.resolve.keepShort": "Diese behalten",
   "review.resolve.noProposals": "Die Behaltregel hat in diesem Plan nichts mehr zu empfehlen.",
   "review.resolve.nothingDecided":
-    "Es wurde noch kein Satz entschieden, es gibt nichts zur\u00fcckzusetzen.",
-  "review.resolve.nothingOpen": "Jeder Satz in diesem Plan ist entschieden.",
+    "Es wurde noch keine Gruppe entschieden. Es gibt nichts zurückzunehmen.",
+  "review.resolve.nothingOpen": "Jede Gruppe in diesem Plan ist entschieden.",
   "review.resolve.keepAll": "Das sind keine Duplikate",
   "review.resolve.noDate": "kein Datum gelesen",
   "review.resolve.dated": "{date} · {source}",
   "review.resolve.keyboardHelp":
-    "Zifferntasten behalten eine Kopie · ← und → wechseln den Satz · nichts hier braucht die Maus.",
+    "Zifferntasten wählen eine Datei · ← und → wechseln zwischen Gruppen.",
   "review.resolve.individualOnly.one":
-    "1 Satz wird einzeln entschieden: eine visuelle Ähnlichkeit ist kein Beweis, dass zwei Dateien dieselbe sind, deshalb löst keine Regel ihn gesammelt auf.",
+    "1 Gruppe enthält ähnliche Fotos/Videos und braucht deine Einzelentscheidung. Ähnlichkeit beweist keine identischen Inhalte.",
   "review.resolve.individualOnly":
-    "{count} Sätze werden einzeln entschieden: eine visuelle Ähnlichkeit ist kein Beweis, dass zwei Dateien dieselbe sind, deshalb löst keine Regel sie gesammelt auf.",
+    "{count} Gruppen enthalten ähnliche Fotos/Videos und brauchen deine Einzelentscheidung. Ähnlichkeit beweist keine identischen Inhalte.",
   "review.resolve.unmeasuredOnly.one":
-    "1 Satz hat dieser Durchlauf selbst gefunden, nicht dein Sammlungskatalog. Es gibt keine gemessenen Fakten, nach denen eine Regel die Kopien einordnen könnte — entscheide ihn einzeln, die Kopien stehen nebeneinander.",
+    "1 Gruppe wurde in dieser Vorschau erkannt. Für einen verlässlichen Vorschlag fehlen Vergleichsdaten. Vergleiche die Dateien und entscheide selbst.",
   "review.resolve.unmeasuredOnly":
-    "{count} Sätze hat dieser Durchlauf selbst gefunden, nicht dein Sammlungskatalog. Es gibt keine gemessenen Fakten, nach denen eine Regel die Kopien einordnen könnte — entscheide jeden einzeln, die Kopien stehen nebeneinander.",
-  "review.resolve.doneTitle": "Jeder Satz ist entschieden",
-  "review.resolve.emptyTitle": "Keine Duplikatsätze in diesem Plan",
+    "{count} Gruppen wurden in dieser Vorschau erkannt. Für einen verlässlichen Vorschlag fehlen Vergleichsdaten. Vergleiche die Dateien und entscheide selbst.",
+  "review.resolve.doneTitle": "Jede Gruppe ist entschieden",
+  "review.resolve.emptyTitle": "Keine Duplikatgruppen in diesem Plan",
   "review.resolve.doneHelp":
     "Alles bereit — fahre fort oder prüfe eine Auswahl vor dem Durchlauf erneut.",
   "review.resolve.backToBrowse": "Zurück zum Durchsehen",
   "review.resolve.baselineWins":
-    "Dieser Satz enthält eine Referenzkopie und ist damit entschieden: die Referenz wird behalten und nie beschrieben, die Kopien daneben würden beiseitegelegt.",
+    "Diese Gruppe enthält eine Referenzkopie und ist damit entschieden: die Referenz wird behalten und nie beschrieben, die Kopien daneben würden beiseitegelegt.",
   "review.resolve.recommended": "Empfohlen: {name}",
   "review.resolve.recommendationHelp":
     "Basiert auf {rule}. Die Empfehlung ist unabhängig von deiner Auswahl und wird nie automatisch bestätigt.",
@@ -2960,7 +2980,7 @@ export const de: Record<MessageKey, string> = {
   "review.browse.unit.companion":
     "{file} ({role}): {status}, Ziel {destination}, Warnung {warning}",
   "review.browse.unit.noWarning": "keine",
-  "companionEvidence.summary": "Nachweise zu Medieneinheiten ({count})",
+  "companionEvidence.summary": "Zugehörige Dateien ({count})",
   "companion.role.editSidecar": "Bearbeitungs-Sidecar",
   "companion.role.motionPart": "Bewegungskomponente",
   "companion.role.rawSibling": "RAW-Original",
@@ -2985,7 +3005,7 @@ export const de: Record<MessageKey, string> = {
   "review.plannedStatus.baseline": "Geschützte Referenzkopie",
   "review.plannedStatus.unknown": "Geplantes Ergebnis unbekannt",
   "review.plannedStatus.unknownValue": "Geplantes Ergebnis unbekannt ({value})",
-  "companionEvidence.membership.unknown": "Zugehörigkeit zur Medieneinheit unbekannt",
+  "companionEvidence.membership.unknown": "Zugehöriges Foto/Video unbekannt",
   "companionEvidence.membership.primary":
     "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
   "companionEvidence.membership.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
@@ -3000,21 +3020,21 @@ export const de: Record<MessageKey, string> = {
   "review.resolve.resolvedKeeping": "{name} wird behalten",
   "review.resolve.resolvedAll": "Alle Kopien werden behalten",
   "review.resolve.resolvedHelp.one":
-    "Bestätigt · 1 weitere Kopie wird unter _copies/ abgelegt. Der Satz bleibt hier sichtbar.",
+    "Bestätigt · 1 weitere Kopie wird unter _copies/ abgelegt. Die Gruppe bleibt hier sichtbar.",
   "review.resolve.resolvedHelp":
-    "Bestätigt · {count} weitere Kopien werden unter _copies/ abgelegt. Der Satz bleibt hier sichtbar.",
+    "Bestätigt · {count} weitere Kopien werden unter _copies/ abgelegt. Die Gruppe bleibt hier sichtbar.",
   "review.resolve.resolvedAllHelp":
     "Bestätigt · Diese Dateien gelten als verschieden und behalten jeweils ihr geplantes Ziel.",
-  "review.resolve.resetOne": "Diese Entscheidung löschen",
-  "review.resolve.resetAll": "Alle Entscheidungen löschen",
+  "review.resolve.resetOne": "Diese Entscheidung zurücknehmen",
+  "review.resolve.resetAll": "Alle Entscheidungen zurücknehmen",
   "review.resolve.notConfirmed": "Noch keine Kopie gewählt.",
   "review.resolve.chooseHelp":
-    "Behalten Sie eine Kopie, oder erklären Sie sie zu eigenständigen Dateien. Nichts davon ist endgültig \u2014 jede Entscheidung lässt sich hier wieder löschen.",
+    "Wähle eine Datei zum Einsortieren, oder plane alle als eigenständige Dateien. Du kannst jede Entscheidung hier wieder zurücknehmen.",
   "review.resolve.recommendation": "Empfehlung",
   "review.resolve.recommendationLabel": "Begründung der Empfehlung",
-  "review.resolve.note.largest": "Größte Datei in diesem Stapel.",
-  "review.resolve.note.newest": "Neueste Datei in diesem Stapel.",
-  "review.resolve.note.largestAndNewest": "Größte und neueste Datei in diesem Stapel.",
+  "review.resolve.note.largest": "Größte Datei in dieser Gruppe.",
+  "review.resolve.note.newest": "Neueste Datei in dieser Gruppe.",
+  "review.resolve.note.largestAndNewest": "Größte und neueste Datei in dieser Gruppe.",
   "review.resolve.note.smallerBy": "{amount} kleiner als die größte Datei.",
   "review.sort.label": "Sortieren",
   "review.sort.name": "Name A–Z",
@@ -3033,7 +3053,7 @@ export const de: Record<MessageKey, string> = {
   "review.detail.reason": "Weil",
   "review.detail.category": "Kategorie",
   "review.detail.tags": "Schlagwörter",
-  "review.detail.set": "Duplikatsatz",
+  "review.detail.set": "Duplikatgruppe",
   "review.detail.setMembership": "eine von {count} Kopien ({kind})",
   "review.detail.destinationWorking": "Warum dieses Ziel",
   "review.detail.settingCost":
@@ -3060,7 +3080,7 @@ export const de: Record<MessageKey, string> = {
   "review.detail.evidence.category": "Kategorisierung",
   "review.detail.evidence.rules": "Regeln",
   "review.detail.evidence.duplicate": "Duplikatprüfung",
-  "review.detail.evidence.unit": "Medieneinheit",
+  "review.detail.evidence.unit": "Zugehörige Dateien",
   "review.detail.dateWinner": "{date} aus {source} hat gewonnen.",
   "review.detail.categoryDisabled": "Die Kategorisierung war für diesen Plan ausgeschaltet.",
   "review.detail.categoryPassed":
@@ -3080,19 +3100,19 @@ export const de: Record<MessageKey, string> = {
   "review.detail.duplicateKind": "Art der Übereinstimmung: {kind}.",
   "review.detail.duplicateMatch": "Übereinstimmung mit: {path}",
   "review.detail.duplicateDistance": "Wahrnehmungsabstand: {distance}.",
-  "review.detail.mediaUnit": "Rolle in der Medieneinheit: {role}.",
+  "review.detail.mediaUnit": "Zusammenhang mit dem Foto/Video: {role}.",
   "review.detail.protection": "Schutz",
   "review.detail.mutable": "Eingabe — für geplante Aktion geeignet",
   "review.detail.companions": "Begleitdateien",
   "review.detail.duration": "Dauer",
   "review.detail.codec": "Videocodec",
-  "review.viewer.videoLoading": "Authentifiziertes Video wird geladen …",
+  "review.viewer.videoLoading": "Video wird geladen…",
   "review.viewer.videoUnavailable":
     "Videowiedergabe ist nicht verfügbar; Vorschaubild und Metadaten bleiben verfügbar.",
   "review.detail.provenanceUnavailable":
     "Für diese geplante Datei ist keine aufgezeichnete Erklärung verfügbar; die übrigen Fakten bleiben gültig.",
   "review.detail.provenanceSuperseded":
-    "Die Vorschau mit dieser Erklärung ist überholt. Eine neue Vorschau stellt die Herleitung wieder her.",
+    "Diese Erklärung gehört zu einer älteren Vorschau. Erstelle eine neue Vorschau, um die aktuelle Zielentscheidung zu sehen.",
   "review.detail.rebuildExplanation": "Neue Vorschau erstellen",
   "review.detail.rejected.absent": "nicht vorhanden",
   "review.detail.rejected.unparseable": "nicht als Datum lesbar",
@@ -3101,14 +3121,14 @@ export const de: Record<MessageKey, string> = {
   "review.detail.rejected.overridden": "eine stärkere Quelle hat gewonnen",
   "review.detail.previous": "Vorherige Datei",
   "review.detail.next": "Nächste Datei",
-  "review.detail.withinSet": "Kopie {index} von {total} in diesem Satz",
+  "review.detail.withinSet": "Kopie {index} von {total} in dieser Gruppe",
   "review.detail.withinFolder": "Datei {index} von {total} in diesem Ordner",
-  "review.detail.onlyOne": "die einzige Kopie in diesem Satz",
+  "review.detail.onlyOne": "die einzige Kopie in dieser Gruppe",
   "review.detail.makeKeeper": "Diese behalten",
   "review.compare.notOneSet":
-    "Diese beiden bilden keinen Duplikatsatz, es gibt also nichts zwischen ihnen zu wählen.",
+    "Diese beiden bilden keine Duplikatgruppe, es gibt also nichts zwischen ihnen zu wählen.",
   "review.compare.noPartner":
-    "In diesem Satz ist nur noch eine Kopie da — es gibt nichts danebenzustellen.",
+    "In dieser Gruppe ist nur noch eine Kopie da — es gibt nichts danebenzustellen.",
   "review.tree.collapseAll": "alle einklappen",
   "review.tree.filter": "Ordner filtern…",
   "review.tree.empty": "Noch keine Ordner — der Plan legt nichts ab.",
@@ -3186,8 +3206,8 @@ export const de: Record<MessageKey, string> = {
   "review.compare.selectToKeep": "Zu behaltende Datei auswählen",
   "review.compare.confirmSelection": "Auswahl bestätigen",
   "review.compare.back": "Zurück",
-  "review.compare.previousSet": "Vorheriger Satz",
-  "review.compare.nextSet": "Nächster Satz",
+  "review.compare.previousSet": "Vorherige Gruppe",
+  "review.compare.nextSet": "Nächste Gruppe",
   "review.compare.previousCopy": "Vorheriges Paar",
   "review.compare.nextCopy": "Nächstes Paar",
   "review.compare.copyPosition": "Paar {index} von {total}",

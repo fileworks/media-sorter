@@ -122,7 +122,7 @@ export function CleanGroup({ config, updateConfig, onReset }: SectionProps) {
             label={t("config.duplicates.setAside")}
             description={t("config.duplicates.setAsideHelp")}
           >
-            <MonoValue>&lt;keeper&gt;/_copies/</MonoValue>
+            <MonoValue>_copies/&lt;{t("config.duplicates.folderOfChosenFile")}&gt;/</MonoValue>
           </SettingRow>
         </>
       )}

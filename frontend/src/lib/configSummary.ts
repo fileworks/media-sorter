@@ -241,9 +241,7 @@ export function exampleFilename(config: Config, sample: SampleFile): string {
 export function possibleReviewFolders(config: Config): string[] {
   const placing = config.run_mode !== "deduplicate_only";
   return CURRENT_REVIEW_FOLDER_NAMES.filter((folder) => {
-    // Copies are contextual leaves, rendered beside the example keeper below,
-    // never a top-level review branch.
-    if (folder === "_copies") return false;
+    if (folder === "_copies") return config.remove_duplicates;
     if (folder === "_junk") return config.junk_filter_enabled;
     if (folder === "_undated") return placing;
     return true; // _corrupted: a file can always defeat a read.
@@ -254,6 +252,16 @@ export interface FolderPreviewNode {
   name: string;
   kind: "folder" | "review" | "file";
   children?: FolderPreviewNode[];
+}
+
+function nestPreviewFolders(
+  segments: readonly string[],
+  contents: FolderPreviewNode[],
+): FolderPreviewNode[] {
+  return segments.reduceRight<FolderPreviewNode[]>(
+    (children, name) => [{ name, kind: "folder", children }],
+    contents,
+  );
 }
 
 /**
@@ -276,10 +284,13 @@ export function folderPreviewTree(
   const review: FolderPreviewNode[] = possibleReviewFolders(config).map((name) => ({
     name,
     kind: "review",
+    ...(name === "_copies"
+      ? { children: nestPreviewFolders(exampleSegments(config, t, locale), []) }
+      : {}),
   }));
 
-  // Nothing is placed in this mode, so there is no hierarchy to draw — only
-  // the folders the run adds beside the library it leaves alone.
+  // Normal files stay at their sources in this mode; only review branches
+  // are added to the destination.
   if (config.run_mode === "deduplicate_only") return review;
 
   const files: FolderPreviewNode[] = samples.map((sample) => ({
@@ -287,13 +298,7 @@ export function folderPreviewTree(
     kind: "file",
   }));
 
-  const contextualContents: FolderPreviewNode[] = config.remove_duplicates
-    ? [...files, { name: "_copies", kind: "review" }]
-    : files;
-  const nested = exampleSegments(config, t, locale).reduceRight<FolderPreviewNode[]>(
-    (children, name) => [{ name, kind: "folder", children }],
-    contextualContents,
-  );
+  const nested = nestPreviewFolders(exampleSegments(config, t, locale), files);
 
   return [...nested, ...review];
 }

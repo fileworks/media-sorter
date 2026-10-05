@@ -128,8 +128,9 @@ describe("the confirmation policy", () => {
     expect(filesMatching(/<ConfirmDialog\b/)).toEqual([
       // 1 · discarding a computed plan by moving back a stage
       "src/components/StageShell.tsx",
-      // 7 · clearing every duplicate decision at once
+      // 7 · clearing all or selected duplicate decisions
       "src/components/screens/review/ResolveQueue.tsx",
+      "src/components/screens/review/SelectedSetActions.tsx",
       // 3 · a configuration reset · 4 · cancelling a running operation
       "src/pages/MainPage.tsx",
     ]);
@@ -148,21 +149,25 @@ describe("the confirmation policy", () => {
     // Exclude, include, dissolve, change a keeper, switch a filter or a view.
     // If any of these ever grows a dialog it will show up as a new file here.
     //
-    // The decision queue is the one review surface allowed a dialog, and only
-    // for "clear all decisions": every other act in Review states itself where
-    // it was taken and is undone by repeating it, but clearing all of them is
-    // undone only by finding and re-deciding every set by hand. That is the
+    // Only decision resets may confirm in Review: restoring cleared choices
+    // requires finding and re-deciding those sets by hand. That is the
     // policy's own test — not "is this in Review", but "would a second press
     // undo it" — so the exception is named rather than the rule loosened.
     const reviewSurfaces = filesMatching(/<ConfirmDialog\b/).filter((path) =>
       path.includes("/review"),
     );
-    expect(reviewSurfaces).toEqual(["src/components/screens/review/ResolveQueue.tsx"]);
+    expect(reviewSurfaces).toEqual([
+      "src/components/screens/review/ResolveQueue.tsx",
+      "src/components/screens/review/SelectedSetActions.tsx",
+    ]);
 
     const queue = sourceOf("src/components/screens/review/ResolveQueue.tsx");
     // One dialog, and it is that one. A keeper choice must never grow one.
     expect(queue.match(/<ConfirmDialog\b/g)).toHaveLength(1);
     expect(queue).toContain('t("review.resolve.resetAll.title")');
+    const selected = sourceOf("src/components/screens/review/SelectedSetActions.tsx");
+    expect(selected.match(/<ConfirmDialog\b/g)).toHaveLength(1);
+    expect(selected).toContain('t("review.setSelection.reset.title")');
   });
 });
 
