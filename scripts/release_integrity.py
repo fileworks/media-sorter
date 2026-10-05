@@ -652,8 +652,7 @@ def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) ->
         path = Path(error.filename).resolve()
         return (
             path.suffix.casefold() == ".pma"
-            and path.parent
-            == (directory / "webview/EBWebView/BrowserMetrics").resolve()
+            and path.parent == (directory / "webview/EBWebView/BrowserMetrics").resolve()
         )
     except OSError:
         return False
