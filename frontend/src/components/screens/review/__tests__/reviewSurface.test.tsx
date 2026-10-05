@@ -540,6 +540,87 @@ describe("the stays branch", () => {
   });
 });
 
+describe("confirmed folder destinations", () => {
+  it("accepts a recommendation and projects copies into the real contextual folder immediately", async () => {
+    const pending = deferred<Awaited<ReturnType<typeof api.planPlacements>>>();
+    vi.mocked(api.planPlacements).mockReturnValue(pending.promise);
+    vi.mocked(api.listReviewGroups).mockImplementation(async (kind) => ({
+      groups:
+        kind === "exact"
+          ? [
+              group("one", [
+                { path: "/in/a.jpg", size: 4000 },
+                { path: "/in/b.jpg", size: 1000 },
+              ]),
+            ]
+          : [],
+      next_cursor: null,
+      truncated: false,
+      partial_index: false,
+      kind: kind ?? "exact",
+    }));
+    renderReview(
+      previewResult(item({ source: "/in/a.jpg" }), item({ source: "/in/b.jpg" })),
+      {
+        ...TEST_CONFIG,
+        duplicate_keeper_policy: "largest",
+      },
+      {
+        recoveredState: durableReviewState({
+          tree_path: "_stays/proposed",
+          keep_policy: "largest",
+        }),
+      },
+    );
+    const accept = await screen.findByRole("button", { name: en("review.browse.acceptProposal") });
+    expect(accept.className).toContain("text-suggest");
+    fireEvent.click(accept);
+    expect(screen.queryByRole("button", { name: "Refresh locations" })).toBeNull();
+    await waitFor(() => expect(api.planPlacements).toHaveBeenCalled());
+    expect(document.body.textContent).toContain(en("review.browse.stays.pending"));
+    expect(document.body.textContent).not.toContain("_copies/a-copy.jpg");
+    await act(async () =>
+      pending.resolve([
+        {
+          source: "/in/a.jpg",
+          destination: "/out/2025/07/a.jpg",
+          disposition: "sort",
+          keeper: null,
+          companion_role: null,
+          provenance: null,
+        },
+        {
+          source: "/in/b.jpg",
+          destination: "/out/2025/07/_copies/a-copy.jpg",
+          disposition: "quarantine",
+          keeper: "/in/a.jpg",
+          companion_role: null,
+          provenance: null,
+        },
+      ]),
+    );
+    await waitFor(() => expect(document.body.textContent).toContain("b.jpg"));
+    const copyHeader = [...document.querySelectorAll<HTMLElement>('[data-browse-set="one"]')].find(
+      (header) => header.textContent?.includes("b.jpg"),
+    )!;
+    expect(copyHeader.textContent).toContain(
+      en("review.browse.copiesHere", { count: 1, total: 2 }),
+    );
+    fireEvent.click(within(copyHeader).getByRole("button", { expanded: false }));
+    const copies = [...document.querySelectorAll<HTMLElement>("[data-copy-card]")];
+    expect(copies).toHaveLength(2);
+    const extra = copies.find((card) => card.dataset.copyCard === "/in/b.jpg")!;
+    expect(extra.textContent).toContain("/out/2025/07/_copies/a-copy.jpg");
+    expect(extra.textContent).not.toContain("/out/2025/07/b.jpg");
+    // A folder contains only one projected member, but Compare still opens the full set.
+    fireEvent.click(within(copyHeader).getByRole("button", { name: en("review.compare.title") }));
+    const compare = await screen.findByRole("dialog");
+    expect(compare.textContent).toContain("a.jpg");
+    expect(compare.textContent).toContain("b.jpg");
+    expect(compare.textContent).toContain("/out/2025/07/_copies/a-copy.jpg");
+  });
+});
+
 describe("resolve", () => {
   const result = previewResult(
     item({ source: "/in/a.jpg", destination: "/out/2025/07/a.jpg" }),
@@ -1292,9 +1373,9 @@ describe("a baseline decides its own set", () => {
     await waitForReview();
 
     fireEvent.click(
-      screen.getByRole("button", {
-        name: new RegExp(en("review.stack.copies", { count: 2 })),
-      }),
+      screen.getAllByRole("button", {
+        name: new RegExp(en("review.browse.copiesHere", { count: 1, total: 2 })),
+      })[0],
     );
     expect(screen.queryByRole("button", { name: en("review.detail.makeKeeper") })).toBeNull();
 
@@ -1304,7 +1385,7 @@ describe("a baseline decides its own set", () => {
         .disabled,
     ).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: en("review.compare.title") }));
+    fireEvent.click(screen.getAllByRole("button", { name: en("review.compare.title") })[0]);
     const dialog = screen.getByRole("dialog");
     expect(
       within(dialog).queryByRole("button", {

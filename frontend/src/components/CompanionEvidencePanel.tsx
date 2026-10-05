@@ -16,11 +16,9 @@ export function CompanionEvidencePanel({
   const units = items
     .filter(
       (item) =>
-        // `!= null` on purpose: JSON carries an absent unit as `null` as often
-        // as it omits the key, and `null !== undefined` is true — so a strict
-        // check listed every file that belongs to no unit at all, then rendered
-        // its membership as "Primary in unit null".
-        item.unit_id != null ||
+        // Standalone photos also have an internal unit ID. Only expose actual
+        // associated files, their membership, or a warning worth reviewing.
+        item.unit_primary === false ||
         (item.companions?.length ?? 0) > 0 ||
         (item.unit_warnings?.length ?? 0) > 0,
     )

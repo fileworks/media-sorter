@@ -3,10 +3,9 @@
  *
  * Two ideas live here, both of which the flat list could not express.
  *
- * **A duplicate set sits where its keeper sits.** Rendering the set anywhere
- * else would break the folder's count — the count and the contents beneath it
- * have to be the same arithmetic or neither is trustworthy. So a set is one
- * entry, in the keeper's folder, and each copy states its own destination.
+ * **Decided copies sit in their real planned folders.** Outstanding sets stay
+ * together; confirmed sets are projected into each resolved destination folder,
+ * including the keeper's contextual `_copies` subfolder. Each file occurs once.
  *
  * **"Stays where it is" is a branch, not a badge.** Undecided sets, baselines,
  * and files already at the destination are different reasons for the same
@@ -30,13 +29,16 @@ export const STAYS_PATH = "_stays";
  *  builder and the tree below it read them, and the builder comes first. */
 const REVIEW_FOLDERS: readonly string[] = REVIEW_FOLDER_NAMES;
 
-export type StaysDivision = "undecided" | "proposed" | "baseline" | "already_there";
+export type StaysDivision =
+  "undecided" | "proposed" | "baseline" | "already_there" | "pending" | "no_action";
 
 export const STAYS_DIVISIONS: readonly StaysDivision[] = [
   "undecided",
   "proposed",
   "baseline",
   "already_there",
+  "pending",
+  "no_action",
 ] as const;
 
 /**
@@ -48,6 +50,8 @@ export const STAYS_DIVISIONS: readonly StaysDivision[] = [
 export function staysDivisionOf(row: ReviewRow): StaysDivision | null {
   if (row.status === "baseline") return "baseline";
   if (row.status === "already_there") return "already_there";
+  if (row.destinationPending) return "pending";
+  if (row.status === "keep_in_place") return "no_action";
   // A set nobody has decided is skipped whole — including its would-be keeper.
   if (row.stack !== null && isOutstandingState(row.stack.decisionState) && !row.stack.hasBaseline) {
     return isProposedState(row.stack.decisionState) ? "proposed" : "undecided";
@@ -77,6 +81,8 @@ export interface SetEntry {
    */
   origin: "catalog" | "plan";
   rows: ReviewRow[];
+  /** Full set size when Browse shows only the members landing in this folder. */
+  setSize?: number;
   keeper: ReviewRow | null;
   hasBaseline: boolean;
   decisionState: import("@/lib/duplicateDecisions").DuplicateDecisionState;
@@ -125,11 +131,9 @@ function staysFolder(division: StaysDivision): string {
 }
 
 /**
- * One entry per placed file and one per duplicate set, each with its folder.
- *
- * A set's folder is its keeper's — that is the whole reason the entry exists
- * rather than four rows scattered between a keeper folder and a root quarantine.
- * A set the run will not place at all goes to the undecided division, whole.
+ * Full duplicate sets for the decision queue and Compare. Their keeper folder
+ * provides an ordering hint; Browse separately projects their members into
+ * actual resolved folders. An outstanding set stays together for review.
  */
 export function duplicateSetEntries(rows: readonly ReviewRow[], root = ""): SetEntry[] {
   const entries: SetEntry[] = [];
@@ -185,7 +189,8 @@ export function duplicateSetEntries(rows: readonly ReviewRow[], root = ""): SetE
 }
 
 /**
- * One entry per placed file and one per active duplicate stack.
+ * One entry per placed file and one per outstanding stack. Confirmed stacks
+ * retain their decision controls but list only the members in each real folder.
  *
  * A set explicitly marked "not duplicates" is expanded back into its files:
  * its members may now land in unrelated folders, so keeping the old stack under
@@ -210,7 +215,28 @@ export function browseEntries(rows: readonly ReviewRow[], root = ""): BrowseEntr
     }
     if (emitted.has(row.stack.id)) continue;
     const entry = sets.get(row.stack.id);
-    if (entry !== undefined) entries.push(entry);
+    if (entry !== undefined) {
+      if (isOutstandingState(entry.decisionState) && !entry.hasBaseline) entries.push(entry);
+      else {
+        const byFolder = new Map<string, ReviewRow[]>();
+        for (const member of entry.rows) {
+          const stays = staysDivisionOf(member);
+          const folder = stays === null ? folderOf(member, root) : staysFolder(stays);
+          const members = byFolder.get(folder) ?? [];
+          members.push(member);
+          byFolder.set(folder, members);
+        }
+        for (const [folder, members] of byFolder) {
+          entries.push({
+            ...entry,
+            key: `${entry.key}:${folder}`,
+            folder,
+            rows: members,
+            setSize: entry.rows.length,
+          });
+        }
+      }
+    }
     emitted.add(row.stack.id);
   }
 
@@ -407,8 +433,7 @@ export interface ReviewStats {
 
 /** Whether an entry lands in one of the folders a person has to look at. */
 function isSetAside(entry: BrowseEntry): boolean {
-  const first = entry.folder.split("/")[0] ?? "";
-  return REVIEW_FOLDERS.includes(first);
+  return isReviewFolder(entry.folder);
 }
 
 /**
@@ -477,11 +502,7 @@ export function reviewStats(
     const rowCount = entry.kind === "set" ? entry.rows.length : 1;
     if (isStaysPath(entry.folder)) staysPut += rowCount;
     else if (isSetAside(entry)) setAside += rowCount;
-    else if (entry.kind === "set") {
-      // The keeper is placed normally; its copies are set aside beside it.
-      organized += 1;
-      setAside += entry.rows.length - 1;
-    } else organized += 1;
+    else organized += rowCount;
   }
 
   for (const entry of duplicateSetEntries(rows)) {

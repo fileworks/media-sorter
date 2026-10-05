@@ -17,6 +17,7 @@ import { formatDate } from "@/lib/dateFormatters";
 import { formatBytes } from "@/lib/formatters";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { getBasename } from "@/lib/pathUtils";
+import { mediaUnitExplanation } from "@/lib/mediaUnitLabels";
 import { cn } from "@/lib/utils";
 import { orderFacts, REVIEW_FACT_LABELS, type ReviewFactId } from "@/lib/reviewFacts";
 import type { SetEntry } from "@/lib/reviewBrowse";
@@ -252,18 +253,10 @@ export function DetailView({
                     ? t("review.referenceProtected")
                     : t("review.detail.mutable"),
                 },
-                row.unitId
+                mediaUnitExplanation(row, t)
                   ? {
                       id: "mediaUnit",
-                      value:
-                        row.unitPrimary === null
-                          ? t("review.detail.mediaUnit.unknown", { id: row.unitId })
-                          : t(
-                              row.unitPrimary
-                                ? "review.detail.mediaUnit.primary"
-                                : "review.detail.mediaUnit.member",
-                              { id: row.unitId },
-                            ),
+                      value: mediaUnitExplanation(row, t)!,
                       unknown: row.unitPrimary === null,
                     }
                   : null,

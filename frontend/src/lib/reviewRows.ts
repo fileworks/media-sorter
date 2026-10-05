@@ -170,7 +170,9 @@ function flagsOf(item: PreviewItem, nameCounts: Map<string, number>): RowFlag[] 
     flags.push("name_clash");
   }
   if (item.duplicate_evaluation === "unknown") flags.push("duplicate_pending");
-  if (item.unit_id) flags.push("unit_member");
+  if ((item.companions?.length ?? 0) > 0 || item.unit_primary === false) {
+    flags.push("unit_member");
+  }
   return flags;
 }
 

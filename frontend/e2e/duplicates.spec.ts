@@ -110,7 +110,7 @@ test("Browse accepts a suggestion directly and Details shows the extra copy unde
   await expect(header.getByRole("button", { name: "Accept suggestion", exact: true })).toHaveCount(
     0,
   );
-  await header.getByRole("button", { expanded: false }).click();
+  await header.getByRole("button", { expanded: false }).first().click();
   await expect(
     page.locator('[data-copy-card="/tmp/e2e-input/DSC_1001-copy.jpg"] [data-copy-destination]'),
   ).toContainText("/_copies/");
@@ -265,7 +265,7 @@ test("the pinned decision band is never painted over by the copies behind it", a
   expect(painted.covering, "something is painted over the decision band's status").toBeNull();
 });
 
-test("Browse keeps decided copies in place, preserves recommendation, and searches filenames", async ({
+test("Browse projects decided copies into their folders, preserves recommendation, and searches filenames", async ({
   page,
 }) => {
   await openResolve(page);
@@ -277,25 +277,21 @@ test("Browse keeps decided copies in place, preserves recommendation, and search
   const card = page.locator('[data-copy-card="/tmp/e2e-input/DSC_1001.jpg"]');
   await expect(card.locator("[data-copy-recommended]")).toBeVisible();
   await card.getByRole("button", { name: "Keep this one", exact: true }).scrollIntoViewIfNeeded();
-  const before = await card.boundingBox();
   await card.getByRole("button", { name: "Keep this one", exact: true }).click();
   await expect(card.getByRole("button", { name: "kept", exact: true })).toBeDisabled();
   await expect(card.locator("[data-copy-recommended]")).toBeVisible();
-  expect((await card.boundingBox())?.y).toBe(before?.y);
-  const actions = await page
-    .locator("[data-copy-actions]")
-    .evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().bottom));
-  expect(actions).toHaveLength(2);
-  expect(actions[0]).toBe(actions[1]);
+  const extra = page.locator('[data-copy-card="/tmp/e2e-input/DSC_1001-copy.jpg"]');
+  await expect(extra.locator("[data-copy-destination]")).toContainText("/_copies/");
+  await expect(card.locator("[data-copy-destination]")).not.toContainText("/_copies/");
+  await expect(page.getByRole("button", { name: "Refresh locations" })).toHaveCount(0);
+  await expect(page.locator('[data-browse-set="dup-set-1"]')).toHaveCount(2);
   await card.getByRole("checkbox").check();
   await expect(search).toBeVisible();
   await search.fill("no-such-photo");
   await expect(page.locator("[data-copy-card]")).toHaveCount(0);
 });
 
-test("keeping every copy retains the live Browse card until Refresh locations", async ({
-  page,
-}) => {
+test("keeping every copy immediately shows the files in their own folders", async ({ page }) => {
   await openResolve(page);
   await page.getByRole("tab", { name: /browse the result/i }).click();
   await page.getByRole("searchbox", { name: "Filter by filename…" }).fill("DSC_1001");
@@ -304,10 +300,7 @@ test("keeping every copy retains the live Browse card until Refresh locations", 
     .getByRole("button", { expanded: false })
     .click();
   await page.getByRole("button", { name: "These are not duplicates", exact: true }).click();
-  await expect(page.locator('[data-browse-set="dup-set-1"]')).toContainText("decided");
-  await expect(page.locator("[data-copy-card]")).toHaveCount(2);
-  await expect(page.locator("[data-file-row]")).toHaveCount(0);
-  await page.getByRole("button", { name: "Refresh locations" }).click();
+  await expect(page.locator('[data-browse-set="dup-set-1"]')).toHaveCount(0);
   await expect(page.locator("[data-copy-card]")).toHaveCount(0);
   await expect(page.locator("[data-file-row]")).toHaveCount(2);
 });

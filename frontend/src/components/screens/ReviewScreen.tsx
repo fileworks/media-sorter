@@ -15,7 +15,6 @@ import { ScreenHeader } from "@/components/screens/ScreenHeader";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
-import { useBrowsePlacement } from "@/hooks/useBrowsePlacement";
 import { useReviewGroups } from "@/hooks/useReviewGroups";
 import { useReviewSurface, type ReviewMode } from "@/hooks/useReviewSurface";
 import { useI18n } from "@/i18n/I18nContext";
@@ -160,12 +159,20 @@ export function ReviewScreen({
       sortSets(duplicateSetEntries(surface.rows, config.target_directory), surface.sort, locale),
     [config.target_directory, locale, surface.rows, surface.sort],
   );
-  const browsePlacement = useBrowsePlacement(
-    liveEntries,
-    allSets,
-    JSON.stringify([result.plan_id, surface.mode, surface.treePath, surface.sort, surface.search]),
-  );
-  const entries = browsePlacement.entries;
+  const entries = liveEntries;
+  useEffect(() => {
+    // A confirmed choice can empty the selected branch. Once its destinations
+    // resolve, show the whole result rather than a stale suggestion folder.
+    if (
+      surface.mode !== "browse" ||
+      !surface.treePath ||
+      groups.isLoading ||
+      groups.isError ||
+      surface.rows.some((row) => row.destinationPending)
+    )
+      return;
+    if (entriesIn(liveEntries, surface.treePath).length === 0) surface.setTreePath(null);
+  }, [groups.isError, groups.isLoading, liveEntries, surface]);
   const stats = useMemo(() => reviewStats(surface.rows, liveEntries), [liveEntries, surface.rows]);
   // Only Browse draws the tree; queue decisions need not rebuild a hidden tree.
   const tree = useMemo(
@@ -265,17 +272,15 @@ export function ReviewScreen({
     (setId: string, source: string) => {
       const memberId = memberIdBySetSource.get(`${setId}\0${source}`);
       if (memberId) {
-        if (surface.mode === "browse") browsePlacement.pin();
         surface.chooseKeeper(setId, memberId);
       }
     },
-    [memberIdBySetSource, surface, browsePlacement],
+    [memberIdBySetSource, surface],
   );
 
   /** The bulk form of the same choice, resolved through one member lookup. */
   const keepManyBySource = useCallback(
     (choices: readonly { setId: string; source: string }[]) => {
-      if (surface.mode === "browse") browsePlacement.pin();
       surface.chooseKeepers(
         choices.flatMap((choice) => {
           const memberId = memberIdBySetSource.get(`${choice.setId}\0${choice.source}`);
@@ -283,7 +288,7 @@ export function ReviewScreen({
         }),
       );
     },
-    [memberIdBySetSource, surface, browsePlacement],
+    [memberIdBySetSource, surface],
   );
 
   const groupFor = useCallback(
@@ -324,10 +329,9 @@ export function ReviewScreen({
   /** "These are not duplicates": every copy is kept and placed on its own. */
   const keepAll = useCallback(
     (setId: string) => {
-      if (surface.mode === "browse") browsePlacement.pin();
       surface.markNotDuplicates(setId);
     },
-    [surface, browsePlacement],
+    [surface],
   );
 
   const comparableFor = useCallback(
@@ -426,16 +430,17 @@ export function ReviewScreen({
   /** Compare a set's members independently of the current filter. */
   const compareSet = useCallback(
     (entry: SetEntry) => {
-      const comparable = entry.rows.filter((row) => row.status !== "baseline");
-      const first = entry.keeper ?? comparable[0] ?? entry.rows[0];
-      const second = entry.rows.find((row) => row.source !== first?.source);
+      const complete = allSets.find((set) => set.id === entry.id) ?? entry;
+      const comparable = complete.rows.filter((row) => row.status !== "baseline");
+      const first = complete.keeper ?? comparable[0] ?? complete.rows[0];
+      const second = complete.rows.find((row) => row.source !== first?.source);
       if (first === undefined || second === undefined) {
         setCompareRefusal(t("review.compare.noPartner"));
         return;
       }
       openCompare([first, second]);
     },
-    [openCompare, t],
+    [allSets, openCompare, t],
   );
 
   /**
@@ -974,16 +979,8 @@ export function ReviewScreen({
                     data-browse-placement
                   >
                     <p className="min-w-0 flex-1 text-3xs text-muted-foreground">
-                      {t("review.browse.stablePlacement")}
+                      {t("review.browse.livePlacement")}
                     </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!browsePlacement.pinned}
-                      onClick={browsePlacement.refresh}
-                    >
-                      {t("review.browse.refreshPlacement")}
-                    </Button>
                   </div>
                   <BrowseDecisionBar
                     openSets={openSets}
@@ -993,14 +990,12 @@ export function ReviewScreen({
                     ruleLabel={t(`config.keeper.${surface.keepPolicy}`)}
                     onRule={surface.setKeepPolicy}
                     onAcceptAll={() => {
-                      browsePlacement.pin();
                       surface.acceptAllProposals();
                     }}
                     selectedSets={selectedSets}
                     keepSourceByRule={keepSourceByRule}
                     onKeepMany={keepManyBySource}
                     onKeepAllMany={(ids) => {
-                      browsePlacement.pin();
                       surface.markManyNotDuplicates(ids);
                     }}
                     onReviewSelected={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
@@ -1120,7 +1115,6 @@ export function ReviewScreen({
           saveError={surface.persistenceError}
           onRetrySave={surface.retryPersistence}
           onKeep={(memberId) => {
-            if (surface.mode === "browse") browsePlacement.pin();
             if (comparing.setId) surface.chooseKeeper(comparing.setId, memberId);
             setComparing((current) => (current ? { ...current, keeperId: memberId } : null));
           }}
