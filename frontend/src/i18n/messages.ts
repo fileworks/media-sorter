@@ -272,6 +272,10 @@ export const en = {
     "A first launch is slower: the engine is being unpacked and read from disk for the first time.",
   "startup.step.config": "Loading your settings",
   "startup.step.config.detail": "Folders, recipes and preferences from the last session.",
+  "startup.step.restore": "Restoring previous progress",
+  "startup.step.restore.detail": "Checking the saved plan and reconnecting to any running task.",
+  "startup.configFailed": "Your settings could not be loaded. Reload to try again.",
+  "startup.restoreFailed": "Previous progress could not be checked. Reload to try again.",
   "startup.state.pending": "not started",
   "startup.state.running": "in progress",
   "startup.state.done": "done",
@@ -1874,6 +1878,13 @@ export const de: Record<MessageKey, string> = {
     "Der erste Start dauert länger: Die Engine wird entpackt und zum ersten Mal von der Festplatte gelesen.",
   "startup.step.config": "Einstellungen werden geladen",
   "startup.step.config.detail": "Ordner, Rezepte und Vorlieben aus der letzten Sitzung.",
+  "startup.step.restore": "Bisheriger Fortschritt wird wiederhergestellt",
+  "startup.step.restore.detail":
+    "Der gespeicherte Plan wird geprüft und laufende Aufgaben werden wieder verbunden.",
+  "startup.configFailed":
+    "Deine Einstellungen konnten nicht geladen werden. Versuche es mit Neu laden erneut.",
+  "startup.restoreFailed":
+    "Der bisherige Fortschritt konnte nicht geprüft werden. Versuche es mit Neu laden erneut.",
   "startup.state.pending": "noch nicht begonnen",
   "startup.state.running": "läuft",
   "startup.state.done": "fertig",

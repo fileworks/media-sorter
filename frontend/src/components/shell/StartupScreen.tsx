@@ -4,8 +4,8 @@
  *
  * Starting MediaSorter is not one act. The Tauri shell picks a free port and
  * launches the Python backend, the client asks the shell which port that was,
- * the backend answers a health check, and only then is there a configuration
- * to draw a screen from. On a warm machine that is under a second; on a cold
+ * the backend answers a health check, settings load, and saved progress is
+ * restored before the workflow is shown. On a warm machine that is under a second; on a cold
  * one — a first launch, a slow disk, a virus scanner reading a freshly
  * unpacked binary — it is comfortably long enough to look like a hang.
  *

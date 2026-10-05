@@ -18,11 +18,12 @@ export interface StartupProgress {
 /**
  * Whether the application has finished starting, and what it is doing if not.
  *
- * Starting is three steps, not one. The Tauri shell picks a free port at launch
+ * Starting includes session, health, settings and previous progress. The shell picks a free port at launch
  * and spawns the Python backend on it; the client asks the shell for that port
  * over IPC before it can address a single request; the backend then has to
  * answer a health check; and only then is there a configuration to draw a
- * screen from. The first of those happens *before* the first health request can
+ * screen from. Recovery then restores the saved plan or reattaches to a running
+ * task before exposing the workflow. The first step happens *before* the health request can
  * even be sent, which is why watching `health` alone left the longest part of a
  * cold start unexplained.
  *
@@ -38,8 +39,11 @@ export interface StartupProgress {
  */
 export function useStartupProgress(input: {
   configReady: boolean;
+  configFailed: boolean;
   backendReady: boolean;
   backendFailed: boolean;
+  restoreReady: boolean;
+  restoreFailed: boolean;
 }): StartupProgress {
   const { t } = useI18n();
   const [sessionReady, setSessionReady] = useState(() => api.isReady);
@@ -64,7 +68,7 @@ export function useStartupProgress(input: {
   }, [sessionFailure, sessionReady, t]);
 
   const startedRef = useRef(false);
-  if (input.configReady && input.backendReady) startedRef.current = true;
+  if (input.configReady && input.backendReady && input.restoreReady) startedRef.current = true;
 
   return {
     started: startedRef.current,
@@ -75,12 +79,20 @@ export function useStartupProgress(input: {
         backendReady: input.backendReady,
         backendFailed: input.backendFailed,
         configReady: input.configReady,
-        configFailed: false,
+        configFailed: input.configFailed,
+        restoreReady: input.restoreReady,
+        restoreFailed: input.restoreFailed,
       },
       t,
     ),
     failure:
       sessionFailure ??
-      (input.backendFailed ? t(isTauri ? "backend.lost" : "backend.browserLost") : null),
+      (input.backendFailed
+        ? t(isTauri ? "backend.lost" : "backend.browserLost")
+        : input.configFailed
+          ? t("startup.configFailed")
+          : input.restoreFailed
+            ? t("startup.restoreFailed")
+            : null),
   };
 }

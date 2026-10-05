@@ -9,7 +9,7 @@ the assets use these filename patterns:
 |---|---|---|
 | Windows x64 | `MediaSorter_X.Y.Z_x64-setup.exe` | Normal installer |
 | Windows x64 | `MediaSorter_X.Y.Z_x64_en-US.msi` | MSI deployment |
-| Windows x64 | `MediaSorter-portable.zip` | Extract the entire ZIP; run the app in that folder |
+| Windows x64 | `MediaSorter_X.Y.Z_x64-portable.zip` | Extract the entire ZIP; run the app in that folder |
 | macOS 12+, Apple Silicon | `MediaSorter_X.Y.Z_aarch64.dmg` | Open DMG; drag the app into Applications |
 | macOS 12+, Intel | `MediaSorter_X.Y.Z_x64.dmg` | Open DMG; drag the app into Applications |
 
@@ -122,10 +122,17 @@ close uses the durable journal described in [state and recovery](state-and-recov
 For an update, download and verify the newer installer from the official release;
 close the running app and install it. Keep backups of media and application state.
 Portable installations must keep the whole extracted bundle together.
+The portable ZIP and its top-level folder include the application version;
+older releases used `MediaSorter-portable.zip`. The launcher stays named
+`MediaSorter.exe` inside the `app` folder.
 
 ### Startup and interface language
 
-The desktop window shows a themed loading screen while the local backend starts.
+The desktop window shows a themed loading screen while the local backend starts,
+initial settings load and saved progress is restored. It opens directly on the
+recovered Plan/Review screen or running task, without briefly showing Sources.
+An initial session-check failure offers **Reload**; it does not expose a fresh
+workflow over progress that has not been checked.
 On Windows, the launcher and backend open without console windows; startup
 diagnostics remain in the logs. If startup fails, use **Reveal Log** in the native
 recovery dialog. Closing the loading window also stops an unfinished backend.

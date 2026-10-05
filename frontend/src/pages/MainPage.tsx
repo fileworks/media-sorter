@@ -12,7 +12,7 @@
  * and then "preview" as two separate acts was asking them to know why.
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiActivity, FiArrowLeft } from "react-icons/fi";
 
@@ -44,6 +44,7 @@ import { planImpactFingerprint, usePlanImpact } from "@/hooks/usePlanImpact";
 import { useConfig } from "@/hooks/useConfig";
 import { useConfigDefaults } from "@/hooks/useConfigDefaults";
 import { useGlobalLoader } from "@/hooks/useGlobalLoader";
+import { useInitialProgressRestoration } from "@/hooks/useInitialProgressRestoration";
 import { useReviewDurability } from "@/hooks/useReviewDurability";
 import { useLogs } from "@/hooks/useLogs";
 import { useRecipes } from "@/hooks/useRecipes";
@@ -103,10 +104,17 @@ function storeReviewStop(planId: string, view: "plan" | "review"): void {
   dropScopedExcept(REVIEW_STOP_PREFIX, planId);
 }
 
-export default function MainPage() {
+export default function MainPage({ onReady }: { onReady?: () => void }) {
   const { toast } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
-  const { config, validationErrors, updateConfig, saveError, retrySave } = useConfig();
+  const {
+    config,
+    error: configError,
+    validationErrors,
+    updateConfig,
+    saveError,
+    retrySave,
+  } = useConfig();
   const { setLocale, locale, t, tCount } = useI18n();
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,7 +130,6 @@ export default function MainPage() {
   // What Review decided for this run. Lifted here so Execute sends it, and so
   // the preflight can ask the plan what those decisions leave.
   const [runDecisions, setRunDecisions] = useState<RunDecisions>(EMPTY_RUN_DECISIONS);
-  const resumedTaskRef = useRef<string | null>(null);
 
   const configDefaults = useConfigDefaults();
   const analysis = useAnalysis();
@@ -152,7 +159,7 @@ export default function MainPage() {
     enabled: health?.status === "ok",
     staleTime: 30_000,
   });
-  const { data: diagnostics } = useQuery({
+  const { data: diagnostics, isError: diagnosticsError } = useQuery({
     queryKey: ["diagnostics"],
     queryFn: () => api.diagnostics(),
     enabled: health?.status === "ok",
@@ -196,40 +203,14 @@ export default function MainPage() {
   const recoveryOperations = useMemo(() => diagnostics?.recovery_operations ?? [], [diagnostics]);
   const recoveryBlock = startBlock(recoveryOperations);
 
-  // Background work belongs to the backend process, not this component. A UI
-  // reload reattaches to the task identity reported by diagnostics and resumes
-  // the ordinary status transport instead of presenting a fresh, executable
-  // workflow over work that is still running.
-  useEffect(() => {
-    if (!activeTask) {
-      resumedTaskRef.current = null;
-      return;
-    }
-    if (
-      resumedTaskRef.current === activeTask.task_id ||
-      analysis.taskId === activeTask.task_id ||
-      preview.taskId === activeTask.task_id ||
-      sorting.taskId === activeTask.task_id ||
-      analysis.loading ||
-      preview.loading ||
-      isSorting
-    ) {
-      return;
-    }
-    if (activeTask.operation_kind === "analysis") {
-      resumedTaskRef.current = activeTask.task_id;
-      analysis.resumeAnalysis(activeTask.task_id);
-      setRequestedStage("review");
-    } else if (activeTask.operation_kind === "preview") {
-      resumedTaskRef.current = activeTask.task_id;
-      preview.resumePreview(activeTask.task_id);
-      setRequestedStage("review");
-    } else if (activeTask.operation_kind === "sort") {
-      resumedTaskRef.current = activeTask.task_id;
-      sorting.resumeSorting(activeTask.task_id, activeTask.status);
-      setRequestedStage("execute");
-    }
-  }, [activeTask, analysis, analysis.loading, isSorting, preview, preview.loading, sorting]);
+  const initialProgressRestored = useInitialProgressRestoration({
+    diagnosticsReady: diagnostics !== undefined,
+    activeTask,
+    analysis,
+    preview,
+    sorting,
+    onRecoveredStage: setRequestedStage,
+  });
 
   const configuredCards = useMemo(
     () => rootCards(config, scanned, scan?.by_root),
@@ -631,9 +612,16 @@ export default function MainPage() {
 
   const startup = useStartupProgress({
     configReady: config !== undefined,
+    configFailed: Boolean(configError),
     backendReady: health?.status === "ok",
     backendFailed: Boolean(healthError),
+    restoreReady: initialProgressRestored,
+    restoreFailed: diagnostics === undefined && diagnosticsError,
   });
+
+  useEffect(() => {
+    if (startup.started) onReady?.();
+  }, [onReady, startup.started]);
 
   // Reports provide completed runs; diagnostics provides the one task that may
   // still be running. Combining them makes the operation center available from

@@ -405,6 +405,7 @@ export function usePreview(scan: AnalysisResult | null = null) {
     result,
     elapsed,
     progress,
+    statusSettled: status !== undefined || Boolean(statusError),
     rehydrated,
     recovered,
     recoveredScan,

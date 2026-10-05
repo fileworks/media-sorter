@@ -363,6 +363,7 @@ export function useSorting() {
   return {
     taskId,
     progress,
+    statusSettled: progress !== undefined || Boolean(progressError),
     report,
     operationId,
     status: uiStatus,

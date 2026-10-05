@@ -1,5 +1,5 @@
 /**
- * The order in which starting actually happens, as three answerable states.
+ * The order in which starting actually happens, as four answerable states.
  *
  * Kept out of the component so the sequencing rule — at most one step running,
  * nothing running behind a failure, nothing after an unmet precondition — is
@@ -16,7 +16,7 @@ export interface StartupStep {
 }
 
 /**
- * Resolve the three steps from what is observable, in order.
+ * Resolve the four steps from what is observable, in order.
  *
  * Order matters and is not cosmetic: each step is a precondition for the next,
  * so at most one is ever `running` and nothing after a failure claims to be in
@@ -30,6 +30,8 @@ export function startupSteps(
     backendFailed: boolean;
     configReady: boolean;
     configFailed: boolean;
+    restoreReady: boolean;
+    restoreFailed: boolean;
   },
   t: (key: string) => string,
 ): StartupStep[] {
@@ -54,6 +56,14 @@ export function startupSteps(
         : input.configReady
           ? "done"
           : "running";
+  const restore: StartupStepState =
+    config !== "done"
+      ? "pending"
+      : input.restoreFailed
+        ? "failed"
+        : input.restoreReady
+          ? "done"
+          : "running";
 
   return [
     {
@@ -73,6 +83,12 @@ export function startupSteps(
       label: t("startup.step.config"),
       detail: t("startup.step.config.detail"),
       state: config,
+    },
+    {
+      id: "restore",
+      label: t("startup.step.restore"),
+      detail: t("startup.step.restore.detail"),
+      state: restore,
     },
   ];
 }

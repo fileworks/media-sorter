@@ -1,12 +1,11 @@
 import "./index.css";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import MainPage from "@/pages/MainPage";
 import { ToastProvider } from "@/context/ToastContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useTheme } from "@/hooks/useTheme";
 import { isTauri } from "@/lib/utils";
-import { api } from "@/services/api";
 import { verifyMediaRendering } from "@/lib/mediaRendering";
 
 export default function App() {
@@ -15,22 +14,20 @@ export default function App() {
   useEffect(() => {
     if (isTauri) {
       void invoke("frontend_mounted").catch(() => undefined);
-      // A mounted loading screen is useful immediately, but release smoke
-      // must also prove readiness and actual image rendering under the CSP.
-      void api.whenReady().then(
-        () =>
-          verifyMediaRendering()
-            .then(() => invoke("frontend_ready"))
-            .catch(() => invoke("frontend_failure").catch(() => undefined)),
-        // The launcher owns the native recovery dialog for backend failures.
-        () => undefined,
-      );
     }
+  }, []);
+  const onReady = useCallback(() => {
+    if (!isTauri) return;
+    // Native smoke readiness includes initial settings/session restoration,
+    // followed by actual authenticated image rendering under the packaged CSP.
+    void verifyMediaRendering()
+      .then(() => invoke("frontend_ready"))
+      .catch(() => invoke("frontend_failure").catch(() => undefined));
   }, []);
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <MainPage />
+        <MainPage onReady={onReady} />
       </ToastProvider>
     </ErrorBoundary>
   );
