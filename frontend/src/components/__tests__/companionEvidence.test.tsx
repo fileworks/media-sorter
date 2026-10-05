@@ -31,6 +31,14 @@ const ITEM = {
 afterEach(cleanup);
 
 describe("companion evidence shared by Plan, preflight, and Execute", () => {
+  it("does not list a standalone photo just because it has an internal unit ID", () => {
+    const { container } = render(
+      <I18nProvider initialLocale="de">
+        <CompanionEvidencePanel items={[{ ...ITEM, companions: [], unit_warnings: [] }]} />
+      </I18nProvider>,
+    );
+    expect(container.textContent).toBe("");
+  });
   it("never lists a file that belongs to no unit, or names the unit 'null'", () => {
     // JSON carries an absent unit as `null` as readily as it omits the key, and
     // `null !== undefined` is true — so the strict filter admitted every file

@@ -494,11 +494,13 @@ function assertPlanInvariants(seed: number): void {
     allSetEntries.filter((entry) => plan.decisions.has(entry.id) && !entry.hasBaseline).length,
   );
 
-  // A set is one entry, in the placement represented by its keeper or in the
-  // one stays division that explains why no placement will happen. A keep-all
-  // decision retires the set entry and restores each member as an ordinary file.
+  // Outstanding sets stay whole. Confirmed sets project once per real folder;
+  // each member still occurs exactly once and controls retain the full set ID.
+  // Keep-all retires the set card and restores each member as an ordinary file.
   for (const entry of allSetEntries) {
-    const matchingSets = entries.filter((candidate) => candidate.key === entry.key);
+    const matchingSets = entries.filter(
+      (candidate): candidate is SetEntry => candidate.kind === "set" && candidate.id === entry.id,
+    );
     if (entry.decisionKind === "keep_all") {
       expect(matchingSets).toEqual([]);
       expect(
@@ -508,9 +510,26 @@ function assertPlanInvariants(seed: number): void {
       ).toHaveLength(entry.rows.length);
       continue;
     }
-    expect(matchingSets).toHaveLength(1);
-    if (entry.folder.startsWith("_stays")) continue;
-    expect(entry.keeper).not.toBeNull();
+    if (isOutstandingState(entry.decisionState) && !entry.hasBaseline) {
+      expect(matchingSets).toHaveLength(1);
+      expect(matchingSets[0].rows).toEqual(entry.rows);
+    } else {
+      expect(matchingSets.length).toBeGreaterThan(0);
+      expect(new Set(matchingSets.map((projection) => projection.folder)).size).toBe(
+        matchingSets.length,
+      );
+      expect(matchingSets.flatMap((projection) => projection.rows)).toHaveLength(entry.rows.length);
+      for (const projection of matchingSets) {
+        expect(projection.setSize).toBe(entry.rows.length);
+        if (projection.folder.startsWith("_stays")) continue;
+        for (const member of projection.rows) {
+          expect(member.destination?.replace(/^\/destination\//, "").replace(/\/[^/]+$/, "")).toBe(
+            projection.folder,
+          );
+          expect(member.destinationPending).not.toBe(true);
+        }
+      }
+    }
   }
 
   // Pure derivations are idempotent.

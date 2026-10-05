@@ -42,9 +42,12 @@ new cleanup mechanism.
 
 ### Reading duplicate decisions
 
-A **file with companions** is one main photo/video and its associated files,
-such as an XMP sidecar or Live Photo video. Those companions follow that main
-file's destination; they are not competing duplicate copies.
+An associated file belongs to a photo/video: an XMP file can store metadata and
+editing instructions; a Live Photo pairs a still image with a short video. Review
+names the actual detected types and filenames instead of labeling every internal
+media unit as a “file with companions.” Included associated files follow the main
+file's destination; excluded files are explicitly left at their source. They are
+not competing duplicate copies.
 
 In an organizing run, the copy you select as the keeper goes to its own planned
 sorting destination. The other copies go under **that keeper folder's `_copies/`**,
@@ -54,6 +57,12 @@ set-aside category, the displayed final path states that outcome explicitly.
 Browse's expanded cards, Details and Compare show the reviewed destinations from
 the same plan as execution, including any collision suffix. Accepting a suggestion
 directly from Browse is the same keeper decision as selecting it in the duplicate tab.
+The folder preview also updates automatically: confirmed extra copies appear in
+their actual contextual `_copies/` folder, and a set's cards list only the members
+landing in that folder. Compare and the duplicate tab still show the complete set.
+Pending destination calculations remain labeled pending. No transfer occurs in
+the preview; changing the keeper, undoing a decision, or choosing “Not duplicates”
+rebuilds it from the reviewed plan.
 
 A suggestion alone authorizes nothing. Every outstanding duplicate set must be
 resolved before execution. “Not duplicates” keeps each member at its own planned

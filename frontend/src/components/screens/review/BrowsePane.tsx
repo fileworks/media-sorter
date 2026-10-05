@@ -32,6 +32,7 @@ import {
 } from "@/lib/reviewBrowse";
 import { sortEntries, sortRows, type ReviewSort } from "@/lib/reviewSort";
 import { relativeDestination, type ReviewRow } from "@/lib/reviewRows";
+import { mediaUnitExplanation, mediaUnitLabel } from "@/lib/mediaUnitLabels";
 
 export type ViewMode = "grid" | "list";
 
@@ -378,7 +379,7 @@ function FolderTile({
   const faces = useMemo(() => {
     const paths: string[] = [];
     for (const entry of group.entries) {
-      const row = entry.kind === "file" ? entry.row : (entry.keeper ?? entry.rows[0]);
+      const row = entry.kind === "file" ? entry.row : entry.rows[0];
       if (row) paths.push(row.source);
       if (paths.length === 4) break;
     }
@@ -443,7 +444,10 @@ function SetHeader({
   const bytes = entry.rows.every((row) => row.sizeBytes !== null)
     ? entry.rows.reduce((sum, row) => sum + (row.sizeBytes ?? 0), 0)
     : null;
-  const name = entry.keeper?.name ?? entry.rows[0]?.name ?? entry.id;
+  const name =
+    entry.rows.find((row) => row.source === entry.keeper?.source)?.name ??
+    entry.rows[0]?.name ??
+    entry.id;
 
   return (
     <div
@@ -492,7 +496,10 @@ function SetHeader({
             <FiLayers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate text-xs font-semibold text-foreground">{name}</span>
             <span className="shrink-0 text-xs text-muted-foreground">
-              · {t("review.stack.copies", { count: entry.rows.length })}
+              ·{" "}
+              {entry.setSize !== undefined && entry.setSize !== entry.rows.length
+                ? t("review.browse.copiesHere", { count: entry.rows.length, total: entry.setSize })
+                : t("review.stack.copies", { count: entry.rows.length })}
             </span>
           </span>
           <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-3xs text-muted-foreground">
@@ -572,7 +579,7 @@ function SetHeader({
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {!settled && proposed && !entry.hasBaseline && (
-          <Button size="sm" onClick={onAccept}>
+          <Button size="sm" variant="suggest" onClick={onAccept}>
             {t("review.browse.acceptProposal")}
           </Button>
         )}
@@ -963,7 +970,9 @@ function FileLine({
               tabIndex={0}
               className="inline-flex min-h-6 shrink-0 items-center whitespace-nowrap rounded-control border border-border px-2 py-0.5 text-2xs font-medium leading-normal text-muted-foreground [font-feature-settings:normal] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {t(`review.flag.${row.flags[0]}`)}
+              {row.flags[0] === "unit_member"
+                ? mediaUnitLabel(row, t)
+                : t(`review.flag.${row.flags[0]}`)}
             </span>
           </Tooltip>
         ) : (
@@ -1004,17 +1013,11 @@ function mediaUnitSummary(
   row: ReviewRow,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string | null {
-  if (!row.unitId) return null;
-  const membership = t(
-    row.unitPrimary === null
-      ? "review.browse.unit.unknown"
-      : row.unitPrimary
-        ? "review.browse.unit.primary"
-        : "review.browse.unit.member",
-    { id: row.unitId },
-  );
+  const membership = mediaUnitExplanation(row, t);
+  if (!membership) return null;
   const companions = (row.companions ?? []).map((companion) =>
     t("review.browse.unit.companion", {
+      file: companion.source.split(/[\\/]/).pop() ?? companion.source,
       role: companionRoleLabel(companion.role, t),
       status: companionStatusLabel(companion.status, t),
       destination: companion.destination ?? t("review.destination.none"),

@@ -174,6 +174,27 @@ export const en = {
   "review.flag.unit_member": "file group",
   "review.flag.unit_member.help":
     "This photo/video and its associated files (such as an XMP or Live Photo video) are handled as one group. This does not select the duplicate keeper.",
+  "review.unit.withTypes": "with {types}",
+  "review.unit.withFiles": "with {count} other files",
+  "review.unit.attachedFile": "belongs to a photo/video",
+  "review.unit.attachedFile.help":
+    "This file stores information or another part of a photo/video; it follows that photo/video's planned destination rather than competing as a duplicate copy.",
+  "review.unit.files": "Files that belong together: {files}.",
+  "review.unit.xmp": "An XMP file stores metadata or editing instructions for the photo/video.",
+  "review.unit.motion":
+    "The paired video contains the moving part of the photo, such as a Live Photo.",
+  "review.unit.follow":
+    "{files} follow {file} into its sorting folder or its _copies/ folder. These are associated files, not extra duplicate copies.",
+  "review.unit.left":
+    "{files} remain at their source paths because this run does not include them.",
+  "review.unit.unknown": "The planned action for {files} is unknown; check the file details.",
+  "review.browse.copiesHere": "{count} here · {total} in the set",
+  "review.browse.stays.pending": "Calculating destinations",
+  "review.browse.stays.pending.rule":
+    "Your decision is recorded. Waiting for the reviewed plan's exact destination paths; no files are moved by this preview.",
+  "review.browse.stays.no_action": "Retained at the source",
+  "review.browse.stays.no_action.rule":
+    "This run plans no file action for these files; they remain at their source paths.",
   "config.runMode": "Run mode",
   "config.runMode.help": "What this run is for.",
   "config.runMode.organize": "Organise into folders",
@@ -1291,16 +1312,11 @@ export const en = {
   "review.compare.unitWarnings.none": "none",
   "review.detail.result": "Planned result",
   "review.detail.mediaUnitLabel": "Associated files",
-  "review.detail.mediaUnit.primary": "Main photo/video: associated files follow its destination.",
-  "review.detail.mediaUnit.member": "Associated file: follows its main photo/video.",
-  "review.detail.mediaUnit.unknown": "Role in unit {id} is unknown",
   "review.detail.companionEvidence":
     "{file} · {role} · {status} · destination: {destination} · warning: {warning}",
   "review.detail.companionNoWarning": "none",
-  "review.browse.unit.primary": "Main photo/video: associated files follow its destination.",
-  "review.browse.unit.member": "Associated file: follows its main photo/video.",
-  "review.browse.unit.unknown": "Role in unit {id} is unknown",
-  "review.browse.unit.companion": "{role}: {status}, destination {destination}, warning {warning}",
+  "review.browse.unit.companion":
+    "{file} ({role}): {status}, destination {destination}, warning {warning}",
   "review.browse.unit.noWarning": "none",
   "companionEvidence.summary": "Media-unit evidence ({count})",
   "companion.role.editSidecar": "Edit sidecar",
@@ -1459,9 +1475,8 @@ export const en = {
   // the tree's own "jump to folder" wording — two fields both offering to find
   // folders is what made the pair read as duplicates of each other.
   "review.search": "Filter by filename…",
-  "review.browse.stablePlacement":
-    "Decisions update the plan. Groups stay here until you refresh locations or change folders.",
-  "review.browse.refreshPlacement": "Refresh locations",
+  "review.browse.livePlacement":
+    "Confirmed copies appear in their planned folders, including _copies/. Files move or copy only when you execute the plan. You can change a decision in the duplicate tab.",
   "review.compare.applied": "Applied",
   "setup.optionalHelp":
     "Optional: fine-tune folder structure, filenames, duplicate rules and local tagging.",
@@ -1759,6 +1774,27 @@ export const de: Record<MessageKey, string> = {
   "review.flag.unit_member": "Datei mit Begleitdateien",
   "review.flag.unit_member.help":
     "Dieses Foto/Video und zugehörige Dateien (z. B. XMP oder Live-Photo-Video) werden zusammen behandelt. Das bestimmt nicht, welche Duplikatkopie einsortiert wird.",
+  "review.unit.withTypes": "mit {types}",
+  "review.unit.withFiles": "mit {count} weiteren Dateien",
+  "review.unit.attachedFile": "gehört zu einem Foto/Video",
+  "review.unit.attachedFile.help":
+    "Diese Datei enthält Informationen oder einen weiteren Teil eines Fotos/Videos. Sie folgt dessen geplantem Ziel und ist keine zusätzliche Duplikatkopie.",
+  "review.unit.files": "Diese Dateien gehören zusammen: {files}.",
+  "review.unit.xmp": "Eine XMP-Datei speichert Metadaten oder Bearbeitungsangaben zum Foto/Video.",
+  "review.unit.motion":
+    "Das zugehörige Video enthält den bewegten Teil des Fotos, zum Beispiel bei einem Live Photo.",
+  "review.unit.follow":
+    "{files} werden zusammen mit {file} in dessen Sortierordner oder _copies/-Ordner abgelegt. Das sind zugehörige Dateien, keine zusätzlichen Duplikatkopien.",
+  "review.unit.left":
+    "{files} bleiben am Quellort, weil sie in diesem Durchlauf nicht mitgenommen werden.",
+  "review.unit.unknown": "Die geplante Aktion für {files} ist unbekannt; prüfe die Dateidetails.",
+  "review.browse.copiesHere": "{count} hier · {total} im Duplikatsatz",
+  "review.browse.stays.pending": "Ziele werden berechnet",
+  "review.browse.stays.pending.rule":
+    "Deine Entscheidung ist erfasst. Die genauen Zielpfade des geprüften Plans werden berechnet; diese Vorschau verschiebt keine Dateien.",
+  "review.browse.stays.no_action": "Bleibt am Quellort",
+  "review.browse.stays.no_action.rule":
+    "Für diese Dateien plant der Durchlauf keine Dateiaktion. Sie bleiben an ihren Quellpfaden.",
   "config.runMode": "Modus",
   "config.runMode.help": "Wofür dieser Durchlauf gedacht ist.",
   "config.runMode.organize": "In Ordner einsortieren",
@@ -2906,18 +2942,12 @@ export const de: Record<MessageKey, string> = {
   "review.compare.unitWarnings": "Warnungen der Einheit",
   "review.compare.unitWarnings.none": "keine",
   "review.detail.result": "Geplantes Ergebnis",
-  "review.detail.mediaUnitLabel": "Datei und Begleitdateien",
-  "review.detail.mediaUnit.primary":
-    "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
-  "review.detail.mediaUnit.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
-  "review.detail.mediaUnit.unknown": "Rolle in Einheit {id} ist unbekannt",
+  "review.detail.mediaUnitLabel": "Zusammengehörende Dateien",
   "review.detail.companionEvidence":
     "{file} · {role} · {status} · Ziel: {destination} · Warnung: {warning}",
   "review.detail.companionNoWarning": "keine",
-  "review.browse.unit.primary": "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
-  "review.browse.unit.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
-  "review.browse.unit.unknown": "Rolle in Einheit {id} ist unbekannt",
-  "review.browse.unit.companion": "{role}: {status}, Ziel {destination}, Warnung {warning}",
+  "review.browse.unit.companion":
+    "{file} ({role}): {status}, Ziel {destination}, Warnung {warning}",
   "review.browse.unit.noWarning": "keine",
   "companionEvidence.summary": "Nachweise zu Medieneinheiten ({count})",
   "companion.role.editSidecar": "Bearbeitungs-Sidecar",
@@ -3076,9 +3106,8 @@ export const de: Record<MessageKey, string> = {
   "review.view.cards": "Karten",
   "review.view.list": "Liste",
   "review.search": "Nach Dateiname filtern…",
-  "review.browse.stablePlacement":
-    "Entscheidungen ändern den Plan. Gruppen bleiben hier, bis du die Zuordnung aktualisierst oder den Ordner wechselst.",
-  "review.browse.refreshPlacement": "Zuordnung aktualisieren",
+  "review.browse.livePlacement":
+    "Bestätigte Kopien erscheinen in ihren geplanten Ordnern, auch unter _copies/. Erst beim Ausführen werden Dateien kopiert oder verschoben. Im Duplikat-Tab kannst du Entscheidungen ändern.",
   "review.compare.applied": "Übernommen",
   "setup.optionalHelp":
     "Optional: Ordnerstruktur, Dateinamen, Duplikatregeln und lokale Tags anpassen.",

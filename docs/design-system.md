@@ -148,9 +148,15 @@ and dashed; a settled keeper is `success` and solid. Either mode can decide a se
 in bulk as well as one at a time, so a run can be finished without opening the
 decision queue at all.
 
-Browse decisions update the plan immediately but keep the current cards in place
-until Refresh locations or browse-context navigation. Recommended and Kept are
-independent labels; copy-card actions align at the bottom of each row. Compare
+Browse decisions update both the plan and folder preview as soon as the backend
+resolves the reviewed placements. Outstanding sets stay together; confirmed sets
+show only the copies that belong in each actual folder, including contextual
+`_copies/` subfolders. Each file appears once, with the local and whole-set counts
+distinguished. A pending path is labeled as pending rather than guessed. Compare
+and decision controls still resolve the complete set from any projected folder.
+If decisions empty the selected branch, Browse returns to the whole result after
+the destination calculation completes.
+Recommended and Kept are independent labels. Compare
 stays open after Apply, with Next available and saving/retry feedback in place.
 Recipe previews likewise never apply themselves: Setup names the current settings
 separately and places optional adjustments below the recipe workspace.
@@ -185,7 +191,10 @@ the folder, follows with date · size · destination in one quiet line, and puts
 compare on the copy they act on.
 
 Collapsed Browse set headers offer **Compare** beside **Decide this set** in both
-list and grid views. Companion status badges use 11px medium text, ordinary glyph
+list and grid views; **Accept recommendation** uses the shared `suggest` variant.
+Associated-file badges name detected types (for example, “with XMP”), with actual
+filenames and placement behavior in the explanation. Standalone photos with an
+internal unit ID do not receive that badge. Companion status badges use 11px medium text, ordinary glyph
 shaping and nonshrinking boxes; never squeeze their text to fit a narrow column.
 
 Rows quote destinations relative to the library root and folders by their leaf name

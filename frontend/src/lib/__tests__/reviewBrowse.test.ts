@@ -115,24 +115,36 @@ function fixture(overrides: { decided?: boolean } = {}) {
     group("set-base", [{ path: "/ref/base.jpg", role: "reference" }, { path: "/in/solo2.jpg" }]),
   ];
   const overridesMap = overrides.decided ? new Map([["set-1", "set-1:0"]]) : new Map();
-  const rows = toReviewRows(
-    result(...items),
-    groups,
-    overridesMap,
-    new Map(),
-    overrides.decided
+  const rows = toReviewRows(result(...items), groups, overridesMap, new Map(), [
+    {
+      source: "/in/solo2.jpg",
+      destination: "/out/_copies/solo2.jpg",
+      disposition: "quarantine",
+      keeper: "/ref/base.jpg",
+      companion_role: null,
+      provenance: null,
+    },
+    ...(overrides.decided
       ? [
           {
             source: "/in/dup-a.jpg",
             destination: "/out/2025/07/dup-a.jpg",
-            disposition: "sort",
+            disposition: "sort" as const,
             keeper: null,
             companion_role: null,
             provenance: null,
           },
+          {
+            source: "/in/dup-b.jpg",
+            destination: "/out/2025/07/_copies/dup-b.jpg",
+            disposition: "quarantine" as const,
+            keeper: "/in/dup-a.jpg",
+            companion_role: null,
+            provenance: null,
+          },
         ]
-      : [],
-  );
+      : []),
+  ]);
   return { rows, entries: browseEntries(rows) };
 }
 
@@ -155,11 +167,38 @@ describe("what stays where it is", () => {
       ),
       [group("cross-date", [{ path: "/in/a.jpg" }, { path: "/in/b.jpg" }])],
       new Map([["cross-date", "cross-date:1"]]),
+      new Map(),
+      [
+        {
+          source: "/in/b.jpg",
+          destination: "/out/2021/06/b.jpg",
+          disposition: "sort",
+          keeper: null,
+          companion_role: null,
+          provenance: null,
+        },
+        {
+          source: "/in/a.jpg",
+          destination: "/out/2021/06/_copies/a — from phone.jpg",
+          disposition: "quarantine",
+          keeper: "/in/b.jpg",
+          companion_role: null,
+          provenance: null,
+        },
+      ],
     );
-    const [entry] = browseEntries(rows);
+    const entries = browseEntries(rows);
 
-    expect(entry.kind).toBe("set");
-    expect(entry.folder).toBe("out/2021/06");
+    expect(entries.map((entry) => entry.folder).sort()).toEqual([
+      "out/2021/06",
+      "out/2021/06/_copies",
+    ]);
+    expect(
+      entries
+        .flatMap((entry) => (entry.kind === "set" ? entry.rows : [entry.row]))
+        .map((row) => row.source)
+        .sort(),
+    ).toEqual(["/in/a.jpg", "/in/b.jpg"]);
     expect(rows.find((row) => row.source === "/in/a.jpg")?.setAsideCategory).toBe("copy");
     expect(rows.find((row) => row.source === "/in/b.jpg")?.setAsideCategory).toBeNull();
   });
@@ -186,7 +225,8 @@ describe("what stays where it is", () => {
 
     expect(entriesIn(decided.entries, `${STAYS_PATH}/undecided`)).toEqual([]);
     const dated = entriesIn(decided.entries, "out/2025/07").map((entry) => entry.key);
-    expect(dated).toContain("set:set-1");
+    expect(dated).toContain("set:set-1:out/2025/07");
+    expect(dated).toContain("set:set-1:out/2025/07/_copies");
   });
 
   it("names the division a row belongs to", () => {

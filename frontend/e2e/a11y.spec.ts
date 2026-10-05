@@ -494,7 +494,9 @@ test.describe("later stages", () => {
 
     await openDetail(page, "IMG_0001.jpg");
     await expect(
-      page.getByText("Main photo/video: associated files follow its destination."),
+      page.getByText(
+        /IMG_0001\.xmp, IMG_0001\.mov follow IMG_0001\.jpg into its sorting folder or its _copies\/ folder/,
+      ),
     ).toBeVisible();
     await expect(page.getByText(/IMG_0001\.xmp.*edit sidecar/i)).toBeVisible();
     await expectTargetsAndFocus(page, "Detail");

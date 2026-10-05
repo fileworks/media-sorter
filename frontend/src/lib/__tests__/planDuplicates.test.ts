@@ -32,6 +32,7 @@ import {
 import { duplicateTally } from "@/lib/reviewPlan";
 import { planDuplicateSets, reviewedSetsFrom, toReviewRows } from "@/lib/reviewRows";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
+import type { ReviewedPlacement } from "@/services/api";
 import type { PreviewItem, PreviewResult } from "@/types/api";
 
 /** The sets still open, read through the predicate the screen itself uses. */
@@ -86,6 +87,23 @@ function reportedPlan(): PreviewResult {
     }),
     item({ source: "/hdd-a/IMG_9000.jpg", destination: "/out/2025/08/IMG_9000.jpg" }),
   );
+}
+
+/** Exact resolved paths supplied by the backend, including contextual copies. */
+function placementsFor(keep: string): ReviewedPlacement[] {
+  return reportedPlan()
+    .items.filter((entry) => entry.source.includes("IMG_0031"))
+    .map((entry, index) => ({
+      source: entry.source,
+      destination:
+        entry.source === keep
+          ? "/out/2025/07/IMG_0031.jpg"
+          : `/out/2025/07/_copies/copy-${index}.jpg`,
+      disposition: entry.source === keep ? "sort" : "quarantine",
+      keeper: entry.source === keep ? null : keep,
+      companion_role: null,
+      provenance: null,
+    }));
 }
 
 /** Six catalog sets whose other copies are not in this run — the "6 sets". */
@@ -170,7 +188,7 @@ describe("a decision on a set the run found", () => {
 
   it("moves the set out of stays and places the chosen copy", () => {
     const chosen = new Map([["plan:/hdd-a/IMG_0031.jpg", "/phone/IMG_0031.jpg"]]);
-    const rows = toReviewRows(plan, [], chosen);
+    const rows = toReviewRows(plan, [], chosen, new Map(), placementsFor("/phone/IMG_0031.jpg"));
     const entries = browseEntries(rows);
     const stats = reviewStats(rows, entries);
 
@@ -188,19 +206,13 @@ describe("a decision on a set the run found", () => {
     // one place it certainly does not go.
     const chosen = new Map([["plan:/hdd-a/IMG_0031.jpg", "/phone/IMG_0031.jpg"]]);
     const entries = browseEntries(
-      toReviewRows(plan, [], chosen, new Map(), [
-        {
-          source: "/phone/IMG_0031.jpg",
-          destination: "/out/2025/07/IMG_0031.jpg",
-          disposition: "sort",
-          keeper: null,
-          companion_role: null,
-          provenance: null,
-        },
-      ]),
+      toReviewRows(plan, [], chosen, new Map(), placementsFor("/phone/IMG_0031.jpg")),
     );
-    const set = entries.find((entry) => entry.kind === "set");
+    const set = entries.find(
+      (entry) => entry.kind === "set" && entry.rows.some((row) => row.stack?.isKeeper),
+    );
     expect(set?.folder).toBe("out/2025/07");
+    expect(entries.some((entry) => entry.folder === "out/2025/07/_copies")).toBe(true);
   });
 
   it("names the chosen copy as the keeper and the rest as copies of it", () => {
@@ -235,6 +247,8 @@ describe("the destination root is stripped from planned paths", () => {
       plan,
       [],
       new Map([["plan:/hdd-a/IMG_0031.jpg", "/hdd-a/IMG_0031.jpg"]]),
+      new Map(),
+      placementsFor("/hdd-a/IMG_0031.jpg"),
     );
     const stats = reviewStats(decided, browseEntries(decided, "/out"));
     expect(stats.setAside).toBe(3);
