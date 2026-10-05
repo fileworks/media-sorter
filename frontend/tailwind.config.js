@@ -104,7 +104,7 @@ export default {
         window: "var(--radius-window)",
       },
       fontFamily: {
-        sans: ["Geist Sans", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        sans: ["var(--font-ui)"],
         mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       // Shell geometry.

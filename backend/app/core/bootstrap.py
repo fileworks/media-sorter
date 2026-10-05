@@ -96,6 +96,23 @@ class ServiceContainer:
         self._burst_detection_service: BurstDetectionService | None = None
         self._destination_reconciliation_service: DestinationReconciliationService | None = None
         self._ai_model_store: AiModelStore | None = None
+        self.shutdown_callback: Callable[[], None] | None = None
+
+    def request_shutdown(self) -> None:
+        """Do not instantiate lazy task managers merely to stop them."""
+        for manager in (self._task_manager, self._model_task_manager):
+            if manager is not None:
+                manager.request_shutdown()
+
+    async def drain_tasks(self) -> None:
+        self.request_shutdown()
+        await asyncio.gather(
+            *(
+                manager.drain()
+                for manager in (self._task_manager, self._model_task_manager)
+                if manager is not None
+            )
+        )
 
     @property
     def config(self) -> Config:
@@ -560,11 +577,10 @@ def _make_lifespan(
             # property is lazy, so touching it here would otherwise create a
             # brand-new manager just to shut it down. Shutdown must never raise,
             # or uvicorn reports an error on an otherwise clean exit.
-            if container._task_manager is not None:
-                try:
-                    container._task_manager.shutdown()
-                except Exception:  # pragma: no cover - shutdown is best-effort
-                    logger.warning("Error during task manager shutdown", exc_info=True)
+            try:
+                await container.drain_tasks()
+            except Exception:  # pragma: no cover - shutdown is best-effort
+                logger.warning("Error during task manager shutdown", exc_info=True)
             container.close()
 
     return lifespan

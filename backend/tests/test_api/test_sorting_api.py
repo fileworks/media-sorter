@@ -316,6 +316,10 @@ def test_not_duplicates_survives_the_start_wire_and_real_sort(tmp_path: Path) ->
         assert sum(item["status"] == "duplicate" for item in preview["items"]) == 1
         decision = {"keep": members[0], "demote": [members[1]], "keep_all": True}
 
+        placements = local.post(
+            "/api/sorting/placements",
+            json={"plan_id": preview["plan_id"], "reviewed_sets": [decision]},
+        )
         impact = local.post(
             "/api/sorting/impact",
             json={"plan_id": preview["plan_id"], "reviewed_sets": [decision]},
@@ -337,6 +341,10 @@ def test_not_duplicates_survives_the_start_wire_and_real_sort(tmp_path: Path) ->
             status = local.get(f"/api/sorting/{task_id}").json()
 
     assert impact.status_code == 200
+    assert placements.status_code == 200
+    assert {entry["source"] for entry in placements.json()["placements"]} == set(members)
+    assert all(entry["keeper"] is None for entry in placements.json()["placements"])
+    assert all(Path(entry["destination"]).is_file() for entry in placements.json()["placements"])
     assert impact.json()["copy_count"] == 2
     assert impact.json()["quarantine_count"] == 0
     assert status["status"] == "completed"
@@ -345,6 +353,56 @@ def test_not_duplicates_survives_the_start_wire_and_real_sort(tmp_path: Path) ->
     placed = list(destination.rglob("*.jpg"))
     assert {path.name for path in placed} == {first.name, second.name}
     assert all("_copies" not in path.parts for path in placed)
+
+
+def test_reviewed_placements_follow_the_selected_copy_and_its_companions(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    first = source / "2024-01-02-a.jpg"
+    second = source / "2024-01-02-b.jpg"
+    Image.new("RGB", (16, 16), "navy").save(first)
+    second.write_bytes(first.read_bytes())
+    first.with_suffix(".xmp").write_text("<xmp>first</xmp>", encoding="utf-8")
+    second.with_suffix(".xmp").write_text("<xmp>second</xmp>", encoding="utf-8")
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(target),
+            copy_instead_of_move=True,
+            remove_duplicates=True,
+            duplicate_exact_enabled=True,
+        )
+    )
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        keeper = next(item for item in preview["items"] if item["status"] == "duplicate")
+        other = next(item for item in preview["items"] if item["source"] != keeper["source"])
+        body = {
+            "plan_id": preview["plan_id"],
+            "reviewed_sets": [{"keep": keeper["source"], "demote": [other["source"]]}],
+        }
+        response = local.post("/api/sorting/placements", json=body)
+        assert response.status_code == 200, response.text
+        placements = {entry["source"]: entry for entry in response.json()["placements"]}
+        assert placements[keeper["source"]]["destination"] == keeper["would_be_destination"]
+        copy_path = Path(placements[other["source"]]["destination"])
+        assert "_copies" in copy_path.parts
+        assert placements[other["source"]]["keeper"] == keeper["source"]
+        assert placements[str(Path(other["source"]).with_suffix(".xmp"))]["destination"] == str(
+            copy_path.with_suffix(".xmp")
+        )
+        assert not list(target.rglob("*.jpg"))
+        original = local.post("/api/sorting/placements", json={"plan_id": preview["plan_id"]})
+        assert original.status_code == 200
+        assert {entry["source"]: entry["destination"] for entry in original.json()["placements"]}[
+            other["source"]
+        ] == other["destination"]
+        local.post("/api/config", json={"copy_instead_of_move": False})
+        stale = local.post("/api/sorting/placements", json=body)
+        assert stale.status_code == 409
+        assert stale.json()["details"]["reason"] == "stale_plan_scope"
 
 
 # ------------------------------------------------------------------ #

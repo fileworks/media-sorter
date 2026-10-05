@@ -80,12 +80,68 @@ test("collapsed Browse sets offer Compare next to Decide this set in list and gr
     await expect(
       header.getByRole("button", { name: "Decide this set", exact: true }),
     ).toBeVisible();
+    await expect(
+      header.getByRole("button", { name: "Accept suggestion", exact: true }),
+    ).toBeVisible();
     await header.getByRole("button", { name: "Compare copies", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("radio", { name: /^B ·/ })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   }
+});
+
+test("Browse accepts a suggestion directly and Details shows the extra copy under _copies", async ({
+  page,
+}) => {
+  await openSurface(page, "review");
+  await page.getByRole("searchbox", { name: "Filter by filename…" }).fill("DSC_1001");
+  const header = page.locator('[data-browse-set="dup-set-1"]');
+  await expect(
+    header.getByRole("button", { name: "Accept suggestion", exact: true }),
+  ).toBeVisible();
+  const placements = page.waitForResponse("**/api/sorting/placements");
+  await header.getByRole("button", { name: "Accept suggestion", exact: true }).click();
+  await placements;
+  await expect(page.getByRole("tab", { name: "Browse the result" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(header.getByRole("button", { name: "Accept suggestion", exact: true })).toHaveCount(
+    0,
+  );
+  await header.getByRole("button", { expanded: false }).click();
+  await expect(
+    page.locator('[data-copy-card="/tmp/e2e-input/DSC_1001-copy.jpg"] [data-copy-destination]'),
+  ).toContainText("/_copies/");
+  await page.getByRole("button", { name: "DSC_1001-copy.jpg", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("/_copies/");
+});
+
+test("closing a pointer-opened preview resets tooltip and zoom overlay while restoring focus", async ({
+  page,
+}) => {
+  await openSurface(page, "review");
+  await page.getByRole("searchbox", { name: "Filter by filename…" }).fill("DSC_1001");
+  const header = page.locator('[data-browse-set="dup-set-1"]');
+  await header.getByRole("button", { expanded: false }).click();
+  const trigger = page
+    .locator("[data-copy-card]")
+    .first()
+    .getByRole("button", { name: /^Look at .* full screen$/ });
+  const overlay = trigger.locator("[data-preview-affordance]");
+  await trigger.hover();
+  await expect(overlay).toHaveCSS("opacity", "1");
+  await trigger.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.mouse.move(1, 1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(overlay).toHaveCSS("opacity", "0");
+  await expect(page.locator("[data-tooltip]")).toHaveCount(0);
+  await trigger.hover();
+  await expect(overlay).toHaveCSS("opacity", "1");
 });
 
 test("bulk actions apply through the docked strip without moving the workspace", async ({
@@ -169,6 +225,7 @@ test("comparing two copies keeps one, and the decision survives a restart", asyn
   await expect(page.getByText(/saving this reviewed plan/i)).toHaveCount(0);
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Applied", exact: true })).toBeDisabled();
+  await expect(dialog).toContainText("/_copies/");
   await dialog.getByRole("button", { name: "Next set", exact: true }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("radio", { name: /^B ·/ })).not.toBeChecked();

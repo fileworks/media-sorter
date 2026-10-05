@@ -935,6 +935,15 @@ export interface PreviewResult {
   }>;
 }
 
+export interface ReviewedPlacement {
+  source: string;
+  destination: string;
+  disposition: "sort" | "quarantine";
+  keeper: string | null;
+  companion_role: string | null;
+  provenance: OutcomeProvenance | null;
+}
+
 export interface PlanRecoveryResponse {
   plan_id: string;
   config_fingerprint: string;
@@ -1708,6 +1717,19 @@ export class MediaSorterApiClient {
       reviewed_sets: reviewedSets,
     });
     return data;
+  }
+
+  async planPlacements(planId: string, excludedRoots: string[], reviewedSets: ReviewedSet[]) {
+    await this.ensureReady();
+    const { data } = await this.http.post<{ placements: ReviewedPlacement[] }>(
+      "/api/sorting/placements",
+      {
+        plan_id: planId,
+        excluded_roots: excludedRoots,
+        reviewed_sets: reviewedSets,
+      },
+    );
+    return data.placements;
   }
 
   // ── Duplicate review ──────────────────────────────────────────────────────────

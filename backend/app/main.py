@@ -37,14 +37,7 @@ if __name__ == "__main__":
     # "app.main:app" as a string module path (no filesystem module lookup).
     # Detect the frozen context and pass the app object directly instead.
     # reload=True is also incompatible with frozen mode, so it's omitted there.
-    if getattr(sys, "frozen", False):
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=port,
-            log_level=log_level,
-        )
-    else:
+    if debug and not getattr(sys, "frozen", False):
         uvicorn.run(
             "app.main:app",
             host="127.0.0.1",
@@ -52,3 +45,16 @@ if __name__ == "__main__":
             log_level=log_level,
             reload=debug,
         )
+    else:
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host="127.0.0.1",
+                port=port,
+                log_level=log_level,
+                timeout_graceful_shutdown=2,
+            )
+        )
+        if os.getenv("MEDIASORT_API_CAPABILITY"):
+            app.state.container.shutdown_callback = lambda: setattr(server, "should_exit", True)
+        server.run()

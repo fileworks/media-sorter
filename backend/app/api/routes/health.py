@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app._version import __version__
 from app.api.deps import ContainerDep
+from app.core.exceptions import ConflictError
 from app.core.logging_config import logging_health
 from app.core.paths import resolve_app_paths
 from app.core.rollout import active_gates
@@ -33,6 +34,16 @@ class HardwareResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", version=__version__)
+
+
+@router.post("/health/shutdown", response_model=HealthResponse)
+async def shutdown(container: ContainerDep) -> HealthResponse:
+    """Authenticated launcher shutdown; unavailable on a shared dev server."""
+    if container.shutdown_callback is None:
+        raise ConflictError("This backend is not owned by a desktop launcher.")
+    container.request_shutdown()
+    container.shutdown_callback()
+    return HealthResponse(status="stopping", version=__version__)
 
 
 @router.get("/hardware", response_model=HardwareResponse)

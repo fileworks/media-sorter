@@ -12,6 +12,26 @@ afterEach(() => {
 });
 
 describe("useful, accessible tooltip interactions", () => {
+  it("keeps restored modal focus but dismisses its tooltip until a fresh interaction", () => {
+    render(
+      <Tooltip label="Open preview">
+        <button>Preview</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole("button", { name: "Preview" });
+    fireEvent.focus(trigger);
+    expect(document.querySelector("[data-tooltip]")).not.toBeNull();
+    fireEvent.blur(trigger);
+    act(() =>
+      trigger.dispatchEvent(new CustomEvent("mediasorter:restore-focus", { bubbles: true })),
+    );
+    fireEvent.focus(trigger);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(document.querySelector("[data-tooltip]")).toBeNull();
+    fireEvent.blur(trigger);
+    fireEvent.focus(trigger);
+    expect(document.querySelector("[data-tooltip]")).not.toBeNull();
+  });
   it("preserves the visible action name when its hint explains the consequence", () => {
     render(
       <Tooltip label="Copies the selected files and retains the originals.">

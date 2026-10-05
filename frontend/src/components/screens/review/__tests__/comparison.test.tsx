@@ -432,17 +432,19 @@ describe("duplicate comparison", () => {
 
     renderComparison(primary, standalone);
 
-    expect(screen.getByText("Primary in unit unit-1")).toBeTruthy();
+    expect(
+      screen.getByText("Main photo/video: associated files follow its destination."),
+    ).toBeTruthy();
     expect(screen.getByText("Standalone file")).toBeTruthy();
     expect(
       screen.getByText(
-        /Edit sidecar.*Planned with the primary file.*primary\.xmp.*metadata was unreadable/,
+        /Edit sidecar.*Follows the main file.*primary\.xmp.*metadata was unreadable/,
       ),
     ).toBeTruthy();
     expect(screen.getByText("/sorted/2026/primary.jpg")).toBeTruthy();
     expect(screen.getByText("One companion needs review.")).toBeTruthy();
     expect(screen.getByText("Will be organized")).toBeTruthy();
-    expect(screen.getByText("Will remain in place")).toBeTruthy();
+    expect(screen.getByText("No action: retained at the source path")).toBeTruthy();
   });
 
   it("opens either side full screen without dismissing the comparison", () => {

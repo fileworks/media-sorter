@@ -82,6 +82,29 @@ async def test_uncancelled_task_completes_normally() -> None:
     assert task.result == {"ok": 1}
 
 
+async def test_graceful_shutdown_keeps_the_partial_result() -> None:
+    manager = TaskManager()
+    task = manager.create_task(_cooperative_coro)
+    await asyncio.sleep(0.03)
+    await manager.drain(timeout=0.5)
+    assert task.status == "cancelled"
+    assert task.result is not None
+    assert 0 < task.result["processed"] < 50
+
+
+async def test_shutdown_timeout_hard_cancels_an_unresponsive_coroutine() -> None:
+    manager = TaskManager()
+
+    async def stuck(task: Task) -> None:
+        await asyncio.sleep(60)
+
+    task = manager.create_task(stuck)
+    await asyncio.sleep(0)
+    await manager.drain(timeout=0.01)
+    assert task.cancel_event.is_set()
+    assert task.status == "cancelled"
+
+
 async def test_shutdown_hard_cancels_running_tasks() -> None:
     manager = TaskManager()
 
@@ -96,6 +119,32 @@ async def test_shutdown_hard_cancels_running_tasks() -> None:
             break
         await asyncio.sleep(0.01)
     assert task.status == "cancelled"
+
+
+async def test_shutdown_signals_the_worker_thread_before_cancelling_its_wrapper() -> None:
+    manager = TaskManager()
+    started = threading.Event()
+    stopped = threading.Event()
+
+    def worker(task: Task) -> None:
+        started.set()
+        task.cancel_event.wait(timeout=3)
+        if task.cancel_event.is_set():
+            stopped.set()
+
+    async def operation(task: Task) -> None:
+        await asyncio.to_thread(worker, task)
+
+    task = manager.create_task(operation)
+    assert await asyncio.to_thread(started.wait, 2)
+    try:
+        manager.shutdown()
+        assert task.cancel_event.is_set()
+        assert await asyncio.to_thread(stopped.wait, 1)
+    finally:
+        # Always release this disposable worker, including on the regression.
+        task.cancel_event.set()
+        await asyncio.to_thread(stopped.wait, 2)
 
 
 def test_phase_progress_events_are_local_monotonic_and_bounded() -> None:

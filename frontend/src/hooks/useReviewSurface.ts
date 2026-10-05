@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import type { ViewMode } from "@/components/screens/review/ReviewToolbar";
 import {
@@ -276,9 +276,22 @@ export function useReviewSurface(
     writeStored(SORT_KEY, next);
   }, []);
 
-  const rows = useMemo(
+  const baseRows = useMemo(
     () => toReviewRows(result, stacks, decisions, recommendations),
     [decisions, recommendations, result, stacks],
+  );
+
+  const reviewedSets = useMemo(() => reviewedSetsFrom(baseRows, decisions), [decisions, baseRows]);
+  const needsPlacements = baseRows.some((row) => row.destinationPending);
+  const placements = useQuery({
+    queryKey: ["reviewed-placements", result.plan_id, result.excluded_roots ?? [], reviewedSets],
+    queryFn: () => api.planPlacements(result.plan_id, result.excluded_roots ?? [], reviewedSets),
+    enabled: needsPlacements,
+    retry: false,
+  });
+  const rows = useMemo(
+    () => toReviewRows(result, stacks, decisions, recommendations, placements.data ?? []),
+    [decisions, recommendations, result, stacks, placements.data],
   );
 
   const selectedRows = useMemo(
@@ -497,8 +510,6 @@ export function useReviewSurface(
   const clearSetSelection = useCallback(() => setSelectedSetIds(new Set()), []);
 
   /** What the run is told, derived in a module that can be tested without a DOM. */
-  const reviewedSets = useMemo(() => reviewedSetsFrom(rows, decisions), [decisions, rows]);
-
   const decidedSetIds = useMemo(() => new Set(decisions.keys()), [decisions]);
 
   return {
@@ -543,8 +554,15 @@ export function useReviewSurface(
     setSort,
     keepPolicy,
     setKeepPolicy,
-    persistenceState,
-    persistenceError,
-    retryPersistence,
+    persistenceState: placements.isError
+      ? ("error" as const)
+      : needsPlacements && placements.isPending
+        ? ("saving" as const)
+        : persistenceState,
+    persistenceError: placements.isError ? String(placements.error) : persistenceError,
+    retryPersistence: () => {
+      retryPersistence();
+      if (needsPlacements) void placements.refetch();
+    },
   };
 }

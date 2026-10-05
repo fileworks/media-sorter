@@ -96,6 +96,9 @@ test("Browse retains readable dates and status at compact widths in both languag
 });
 
 test("companion badge glyphs stay inside their box at Windows-style scaling", async ({ page }) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "platform", { get: () => "Win32" }),
+  );
   const result = { ...E2E_PREVIEW_RESULT, items: [E2E_PREVIEW_RESULT.items[0]] };
   await stubBackend(page, { previewResult: result });
   await page.route("**/api/review/groups**", (route) =>
@@ -125,9 +128,11 @@ test("companion badge glyphs stay inside their box at Windows-style scaling", as
   );
   await page.goto("/");
   await openSurface(page, "review");
-  const badge = page.locator("[data-file-status]").getByText("moves together", { exact: true });
+  const badge = page.locator("[data-file-status]").getByText("file group", { exact: true });
   await expect(badge).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
+  await expect(badge).toHaveCSS("font-size", "11px");
+  await expect(badge).toHaveCSS("font-family", /Segoe UI/);
   for (const scale of [1, 1.25, 1.5, 2]) {
     await page.evaluate((scale) => {
       document.documentElement.style.zoom = String(scale);

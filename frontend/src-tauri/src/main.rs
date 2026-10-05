@@ -3,7 +3,7 @@
 //
 // ┌─────────────────────────────────────────────────────────────────┐
 // │  Dev mode  (npm run tauri dev)                                  │
-// │    Spawns: python3 -m uvicorn app.main:app …                   │
+// │    Spawns: python3 -m app.main                                 │
 // │    Backend dir resolved relative to CARGO_MANIFEST_DIR          │
 // │                                                                  │
 // │  Release mode  (npm run tauri build)                            │
@@ -23,7 +23,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::Command;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -35,7 +35,9 @@ use serde::Serialize;
 use tauri::{Manager, State};
 
 mod backend_state;
+mod owned_backend;
 use backend_state::BackendStartup;
+use owned_backend::OwnedBackend;
 
 // ── File logger ───────────────────────────────────────────────────────────────
 //
@@ -462,7 +464,11 @@ fn acquire_backend(
             attempt,
             max_tries
         );
-        let child_id = match startup.spawn(|| spawn_backend(port, capability, log_path)) {
+        let child_id = match startup.spawn(|| {
+            let mut child = spawn_backend(port, capability, log_path)?;
+            child.set_session(port, capability);
+            Ok(child)
+        }) {
             Ok(id) => id,
             Err(error) => {
                 failures.push(error.detail);
@@ -691,15 +697,8 @@ fn spawn_with_startup_error(
     summary: &str,
     detail: String,
     log_path: &std::path::Path,
-) -> Result<Child, StartupError> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        // The GUI launcher has no console; its console-subsystem backend must
-        // not create a second visible window either. Diagnostics stay in logs.
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    command.spawn().map_err(|error| {
+) -> Result<OwnedBackend, StartupError> {
+    OwnedBackend::spawn(command).map_err(|error| {
         StartupError::new(
             StartupStage::Spawn,
             summary,
@@ -713,7 +712,7 @@ fn spawn_backend(
     port: u16,
     capability: &str,
     log_path: &std::path::Path,
-) -> Result<Child, StartupError> {
+) -> Result<OwnedBackend, StartupError> {
     let path_env = build_path_with_ffmpeg();
     let log_dir = log_path
         .parent()
@@ -730,15 +729,7 @@ fn spawn_backend(
 
         let mut command = Command::new(python);
         command
-            .args([
-                "-m",
-                "uvicorn",
-                "app.main:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                &port.to_string(),
-            ])
+            .args(["-m", "app.main"])
             .env("MEDIASORT_PORT", port.to_string())
             .env("MEDIASORT_LOG_LEVEL", "info")
             .env("MEDIASORT_LOG_DIR", log_dir)
@@ -946,35 +937,6 @@ fn start_backend(
         acquire_backend(5, log_path, &capability, startup)?
     };
     Ok(ApiSession { port, capability })
-}
-
-/// Stop the backend cleanly: SIGTERM so uvicorn can run the FastAPI lifespan
-/// shutdown (cancel tasks, flush logs), then force-kill after a grace window.
-#[cfg(unix)]
-fn graceful_kill(child: &mut Child) {
-    let _ = Command::new("kill")
-        .arg("-TERM")
-        .arg(child.id().to_string())
-        .status();
-
-    for _ in 0..30 {
-        match child.try_wait() {
-            Ok(Some(_)) => return,
-            Ok(None) => thread::sleep(Duration::from_millis(100)),
-            Err(_) => break,
-        }
-    }
-
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-/// On non-Unix platforms there's no portable graceful signal, so terminate
-/// directly and reap.
-#[cfg(not(unix))]
-fn graceful_kill(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 #[cfg(test)]

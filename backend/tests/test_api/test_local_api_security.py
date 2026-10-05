@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -101,3 +103,26 @@ def test_websocket_rejects_missing_capability() -> None:
             with client.websocket_connect("/api/logs"):
                 pass
     assert captured.value.code == 1008
+
+
+def test_shutdown_requires_capability_and_a_launcher_owned_server() -> None:
+    app = AppFactory.create(config=Config.defaults())
+    stop = Mock()
+    with TestClient(app) as client:
+        assert client.post("/api/health/shutdown").status_code == 409
+        app.state.container.shutdown_callback = stop
+        capability = client.headers.pop("x-mediasorter-capability")
+        assert client.post("/api/health/shutdown").status_code == 401
+        stop.assert_not_called()
+        client.headers["x-mediasorter-capability"] = capability
+        assert (
+            client.post(
+                "/api/health/shutdown", headers={"Origin": "https://unrelated.example"}
+            ).status_code
+            == 403
+        )
+        stop.assert_not_called()
+        response = client.post("/api/health/shutdown")
+        assert response.status_code == 200
+        assert response.json()["status"] == "stopping"
+        stop.assert_called_once_with()

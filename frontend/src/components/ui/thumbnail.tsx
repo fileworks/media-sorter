@@ -120,6 +120,7 @@ export function Thumbnail({
         className={cn(
           "group/thumb relative block cursor-zoom-in overflow-hidden bg-muted",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "[&[data-restored-focus=pointer]_[data-preview-affordance]]:opacity-0",
           className,
         )}
       >
@@ -128,6 +129,7 @@ export function Thumbnail({
         </span>
         <span
           aria-hidden
+          data-preview-affordance
           className={cn(
             "pointer-events-none absolute inset-0 flex items-center justify-center bg-foreground/25 opacity-0 transition-opacity",
             "group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100",

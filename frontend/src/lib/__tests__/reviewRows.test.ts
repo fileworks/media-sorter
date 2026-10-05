@@ -112,6 +112,88 @@ function stack(overrides: Partial<DuplicateGroup> = {}): DuplicateGroup {
 }
 
 describe("toReviewRows", () => {
+  it("retains a no-action keeper and deliberately left companions at source", () => {
+    const rows = toReviewRows(
+      result(
+        item({ source: "/in/a.jpg", status: "keep_in_place", destination: null }),
+        item({
+          source: "/in/b.jpg",
+          companions: [
+            {
+              source: "/in/b.xmp",
+              destination: null,
+              status: "left_in_place",
+              role: "edit_sidecar",
+              warning: null,
+            },
+          ],
+        }),
+      ),
+      [stack()],
+      new Map([["g1", "m1"]]),
+    );
+    expect(rows[0].destination).toBeNull();
+    expect(rows[0].destinationPending).toBe(false);
+    expect(rows[0].status).toBe("keep_in_place");
+    expect(rows[0].reason.key).toBe("review.reason.keepInPlace");
+    expect(rows[1].companions?.[0].destination).toBeNull();
+    expect(rows[1].companions?.[0].status).toBe("left_in_place");
+  });
+  it("shows reviewed keeper and companion destinations from the executor resolver", () => {
+    const preview = result(
+      item({ source: "/in/a.jpg" }),
+      item({
+        source: "/in/b.jpg",
+        companions: [
+          {
+            source: "/in/b.xmp",
+            destination: "/out/old/b.xmp",
+            role: "edit_sidecar",
+            status: "attached",
+            warning: null,
+          },
+        ],
+      }),
+    );
+    const decision = new Map([["g1", "m1"]]);
+    const pending = toReviewRows(preview, [stack()], decision);
+    expect(pending[1].destination).toBeNull();
+    expect(pending[1].destinationPending).toBe(true);
+    const rows = toReviewRows(preview, [stack()], decision, new Map(), [
+      {
+        source: "/in/a.jpg",
+        destination: "/out/2025/a.jpg",
+        disposition: "sort",
+        keeper: null,
+        companion_role: null,
+        provenance: null,
+      },
+      {
+        source: "/in/b.jpg",
+        destination: "/out/2025/_copies/a — from in.jpg",
+        disposition: "quarantine",
+        keeper: "/in/a.jpg",
+        companion_role: null,
+        provenance: null,
+      },
+      {
+        source: "/in/b.xmp",
+        destination: "/out/2025/_copies/a — from in.xmp",
+        disposition: "quarantine",
+        keeper: "/in/a.jpg",
+        companion_role: "edit_sidecar",
+        provenance: null,
+      },
+    ]);
+    expect(rows[0].destination).toBe("/out/2025/a.jpg");
+    expect(rows[1]).toMatchObject({
+      status: "duplicate",
+      destinationPending: false,
+      destination: "/out/2025/_copies/a — from in.jpg",
+    });
+    expect(rows[1].companions?.[0].destination).toBe("/out/2025/_copies/a — from in.xmp");
+    expect(preview.items[1].companions?.[0].destination).toBe("/out/old/b.xmp");
+  });
   it("derives every row from the plan without a per-row fetch", () => {
     const rows = toReviewRows(result(item(), item({ source: "/in/b.jpg" })));
 

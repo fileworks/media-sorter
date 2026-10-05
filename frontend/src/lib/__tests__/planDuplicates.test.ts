@@ -187,7 +187,18 @@ describe("a decision on a set the run found", () => {
     // the chosen keeper's own destination would file the whole set there — the
     // one place it certainly does not go.
     const chosen = new Map([["plan:/hdd-a/IMG_0031.jpg", "/phone/IMG_0031.jpg"]]);
-    const entries = browseEntries(toReviewRows(plan, [], chosen));
+    const entries = browseEntries(
+      toReviewRows(plan, [], chosen, new Map(), [
+        {
+          source: "/phone/IMG_0031.jpg",
+          destination: "/out/2025/07/IMG_0031.jpg",
+          disposition: "sort",
+          keeper: null,
+          companion_role: null,
+          provenance: null,
+        },
+      ]),
+    );
     const set = entries.find((entry) => entry.kind === "set");
     expect(set?.folder).toBe("out/2025/07");
   });

@@ -24,6 +24,7 @@ import {
 } from "@/lib/duplicateDecisions";
 import type { DuplicateGroup } from "@/lib/reviewWorkbench";
 import type { OutcomeProvenance, PreviewItem, PreviewResult } from "@/types/api";
+import type { ReviewedPlacement } from "@/services/api";
 
 export type RowStatus =
   "organize" | "keep_in_place" | "duplicate" | "junk" | "already_there" | "baseline" | "unreadable";
@@ -82,6 +83,7 @@ export interface ReviewRow {
   name: string;
   folder: string;
   destination: string | null;
+  destinationPending?: boolean;
   /** This member's own path before a duplicate decision makes it follow a keeper. */
   wouldBeDestination: string | null;
   status: RowStatus;
@@ -225,6 +227,9 @@ function reasonOf(item: PreviewItem, stack: RowStack | null): RowReason {
       return stack.keptInstead === null
         ? { key: "review.reason.duplicatePlain" }
         : { key: "review.reason.duplicateCopy", params: { kept: basename(stack.keptInstead) } };
+    }
+    if (item.status === "keep_in_place" || item.status === "review_only") {
+      return { key: "review.reason.keepInPlace" };
     }
     return { key: "review.reason.duplicateKeeper", params: { count: stack.size } };
   }
@@ -478,7 +483,9 @@ export function toReviewRows(
   stacks: DuplicateGroup[] = [],
   decisionInput: DecisionInput = new Map(),
   recommendations: ReadonlyMap<string, KeeperProposal> = new Map(),
+  placements: readonly ReviewedPlacement[] = [],
 ): ReviewRow[] {
+  const placementBySource = new Map(placements.map((placement) => [placement.source, placement]));
   const decisions = normalizeDecisions(decisionInput);
   const nameCounts = new Map<string, number>();
   for (const item of result.items) {
@@ -547,14 +554,36 @@ export function toReviewRows(
     const stack = stackBySource.get(item.source) ?? null;
     const baseline = stack?.hasBaseline === true && stack.isKeeper;
     const distinct = stack?.decisionKind === "keep_all";
+    const reviewed =
+      !baseline &&
+      item.status !== "keep_in_place" &&
+      item.status !== "review_only" &&
+      stack !== null &&
+      (stack.hasBaseline || stack.decisionKind !== null);
+    const placement = reviewed ? placementBySource.get(item.source) : undefined;
+    const destination = reviewed ? (placement?.destination ?? null) : item.destination;
     const base = distinct && item.status === "duplicate" ? "organize" : statusOf(item);
+    const reasonItem = placement?.keeper
+      ? { ...item, status: "duplicate" as const }
+      : placement?.disposition === "sort"
+        ? { ...item, status: "sort" as const, provenance: placement.provenance ?? undefined }
+        : item;
     return {
       source: item.source,
       name: basename(item.source),
       folder: dirname(item.source),
-      destination: distinct ? (item.would_be_destination ?? item.destination) : item.destination,
+      destination,
+      destinationPending: reviewed && placement === undefined,
       wouldBeDestination: item.would_be_destination ?? null,
-      status: baseline ? "baseline" : base,
+      status: baseline
+        ? "baseline"
+        : placement?.keeper
+          ? "duplicate"
+          : placement?.disposition === "sort"
+            ? "organize"
+            : reviewed && !distinct && !stack?.isKeeper
+              ? "duplicate"
+              : base,
       flags: flagsOf(item, nameCounts),
       sizeBytes: item.file_size ?? null,
       date: item.extracted_date,
@@ -564,12 +593,17 @@ export function toReviewRows(
       unitId: item.unit_id ?? null,
       unitPrimary: item.unit_primary ?? null,
       companionCount: item.companions?.length ?? 0,
-      companions: item.companions ?? [],
+      companions: (item.companions ?? []).map((companion) => {
+        const resolved = placementBySource.get(companion.source);
+        return reviewed && companion.status !== "left_in_place"
+          ? { ...companion, destination: resolved?.destination ?? null }
+          : companion;
+      }),
       unitWarnings: item.unit_warnings ?? [],
       protected: stack?.protected ?? false,
-      provenance: item.provenance ?? null,
+      provenance: reviewed ? (placement?.provenance ?? null) : (item.provenance ?? null),
       stack,
-      reason: reasonOf(item, stack),
+      reason: reasonOf(reasonItem, stack),
       undated: item.status === "unknown_date" || item.extracted_date === null,
       suspiciousDate: item.status === "suspicious_date",
       futureDate: item.status === "future_date",

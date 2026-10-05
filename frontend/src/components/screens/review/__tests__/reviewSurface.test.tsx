@@ -260,6 +260,7 @@ function showContents(folder: string) {
 }
 
 beforeEach(() => {
+  vi.spyOn(api, "planPlacements").mockResolvedValue([]);
   // Give every test a fresh browser profile. Node versions differ on whether
   // jsdom's localStorage is available, so relying on the runner's
   // implementation made this file pass locally and fail in CI.

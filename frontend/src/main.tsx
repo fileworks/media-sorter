@@ -118,6 +118,8 @@ const queryClient = new QueryClient({
 
 // ── Mount ─────────────────────────────────────────────────────────────────────
 
+document.documentElement.dataset.platform = /Win/i.test(navigator.platform) ? "windows" : "other";
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>

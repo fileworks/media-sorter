@@ -50,6 +50,31 @@ Video preview items can report `duplicate_evaluation: "unknown"` with
 `duplicate_unknown_reason: "video_perceptual_not_computed"`. Their final destination is
 deliberately omitted because the real sort performs the authoritative frame comparison.
 
+## Reviewed placements
+
+`POST /sorting/placements` accepts the same `plan_id`, `excluded_roots` and
+`reviewed_sets` as `/sorting/impact`. Its typed response contains `placements`,
+each with `source`, final `destination`, `disposition`, `keeper`, `companion_role`
+and recorded `provenance`. These are actions from the exact derived frozen plan
+used by execution, including companions and collision suffixes. The stored plan
+and filesystem are unchanged. Missing plans and changed source/config scope
+return the same 409 conflicts as impact. Execution still enforces its additional
+source, destination, space and mutation-authorization gates.
+
+The frontend query is keyed by plan, scope and decisions. It clears old reviewed
+destinations while resolving a new choice, blocks execution on pending/error
+resolution, and refreshes open comparisons without changing their pair order.
+No-action/reference rows retain their source and never invent a placement.
+
+## Desktop shutdown
+
+`POST /health/shutdown` has the normal capability and exact-origin protections.
+Only a shell-owned uvicorn server installs a shutdown callback; a shared/external
+server returns 409 instead of being stopped. An authorized request signals both
+operation/model task managers before stopping the server and returns the typed
+`HealthResponse` with `status: "stopping"`. Lifespan cleanup drains workers with a
+bounded grace period before hard cancellation and service cleanup.
+
 ## Pagination
 `GET /reports` uses bounded limit/offset — SQLite reads `LIMIT -1` as unbounded, so
 bounds live at the query layer:

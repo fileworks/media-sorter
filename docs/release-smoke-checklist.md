@@ -66,11 +66,21 @@ Complete every item for each package form in a fresh Windows VM:
 - Double-click launch opens no console and starts the backend without a system
   Python or ffmpeg. The loading screen appears before backend readiness; closing
   it stops pending startup. Record first-window and backend-ready times separately.
+- Ordinary window close stops the backend, active workers and spawned tools.
+  Retain handles to fixture-owned processes to verify their exit; leave an unrelated
+  control process running. Repeat early close and a forced shell exit on Windows
+  to exercise Job Object cleanup. Do not use process-name-wide termination.
 - Windows taskbar/Explorer icons have readable artwork at 16/32/48px. Image
   thumbnails, full-screen previews and comparisons render; video uses the
   authenticated Blob path or reports an honest codec fallback. Compare opens from
   collapsed Browse sets in both list and grid. Companion badges remain readable
   at normal and scaled DPI. EN/DE preserves active progress and reviewed decisions.
+- Close an enlarged preview by mouse and Escape: focus returns to its trigger,
+  its tooltip/zoom overlay remains hidden until fresh interaction, and keyboard
+  focus remains visible. Accept a Browse suggestion in list/grid; the kept file
+  and extra copies show their actual distinct destinations in cards, Details and
+  an already-open Compare dialog. Associated files follow each main file, and
+  preserving `_copies/` is never described as freeing disk space.
 - Native startup recovery reaches Reveal Log/Quit and records the full log path.
 - Current paths, migration conflict backup, repeat-run idempotence, and upgrade
   preservation match the macOS migration checks.

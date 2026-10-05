@@ -47,6 +47,7 @@
 /* Near-neutral themes with WCAG AA text contrast. */
 @layer base {
   :root {
+    --font-ui: "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     color-scheme: light;
     --background: 30 14% 98%;
     --foreground: 24 10% 12%;
@@ -227,10 +228,8 @@
     min-height: 100vh;
     font-size: 13px;
     line-height: 1.45;
-    font-feature-settings:
-      "rlig" 1,
-      "calt" 1;
-    text-rendering: optimizeLegibility;
+    font-feature-settings: normal;
+    text-rendering: auto;
     -webkit-font-smoothing: antialiased;
   }
   button,
@@ -250,6 +249,16 @@
   ::selection {
     background: hsl(var(--primary) / 0.2);
   }
+}
+
+/* Use Windows' native UI font for compact labels. Avoid 10px rasterization in
+   WebView2: curved letters such as s lose detail at that size. */
+:root[data-platform="windows"] {
+  --font-ui: "Segoe UI", system-ui, sans-serif;
+}
+:root[data-platform="windows"] .text-3xs {
+  font-size: 0.6875rem;
+  line-height: 1rem;
 }
 
 /* Shared responsive grids keep review headers aligned with rows. */

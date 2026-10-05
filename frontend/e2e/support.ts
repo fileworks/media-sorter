@@ -711,6 +711,50 @@ export async function stubBackend(
     if (url.includes("/api/sorting/plans/e2e-plan/recovery"))
       return body({ ...E2E_RECOVERY, preview_result: previewResult, review_state: reviewState });
     if (url.includes("/api/sorting/impact")) return body(E2E_PREVIEW_RESULT.impact);
+    if (url.includes("/api/sorting/placements")) {
+      const request = route.request().postDataJSON() as {
+        reviewed_sets: Array<{ keep: string; demote: string[]; keep_all?: boolean }>;
+      };
+      return body({
+        placements: previewResult.items.flatMap((item) => {
+          const decision = request.reviewed_sets.find(
+            (set) => set.keep === item.source || set.demote.includes(item.source),
+          );
+          const keeper =
+            decision && !decision.keep_all && decision.keep !== item.source ? decision.keep : null;
+          const keptItem = previewResult.items.find((row) => row.source === decision?.keep);
+          const own = item.would_be_destination ?? item.destination;
+          const folder = (
+            keptItem?.would_be_destination ??
+            keptItem?.destination ??
+            "/tmp/e2e-output"
+          ).replace(/[/\\][^/\\]+$/, "");
+          const destination = keeper
+            ? `${folder}/_copies/${item.source.split(/[\\/]/).pop()}`
+            : own;
+          if (destination === null) return [];
+          const placement = {
+            source: item.source,
+            destination,
+            disposition: keeper ? "quarantine" : "sort",
+            keeper,
+            companion_role: null,
+            provenance: item.provenance ?? null,
+          };
+          return [
+            placement,
+            ...(item.companions ?? [])
+              .filter((companion) => companion.destination !== null)
+              .map((companion) => ({
+                ...placement,
+                source: companion.source,
+                destination: companion.destination!,
+                companion_role: companion.role,
+              })),
+          ];
+        }),
+      });
+    }
     if (url.includes("/api/sorting/start")) return body({ task_id: "e2e-sort" });
     if (url.includes("/api/sorting/e2e-sort"))
       return body({
