@@ -62,11 +62,13 @@ banner at the top of the screen scrolls away.
 
 ## Geometry and typography
 
-- Geist Sans is the UI family; Geist Mono is reserved for paths, filenames, values,
-  ordinals, and shortcuts. Both are bundled locally.
+- Geist Sans is the UI family outside Windows; Windows uses its native Segoe UI
+  through `--font-ui` for readable compact text in WebView2. Geist Mono is reserved
+  for paths, filenames, values, ordinals, and shortcuts. Geist fonts are bundled
+  locally. UI text uses normal font features and browser text rendering.
 - The body is 13px. Screen headings are 22px on a full viewport and remain at least
   20px on compact viewports. Section headings are 14–18px; metadata never drops below
-  10px.
+  10px outside Windows and 11px on Windows, with at least a 16px line box there.
 - Spacing follows a 4px base: 4 / 8 / 12 / 16 / 20 / 24px, with 8 / 12 / 16 dominant.
   Padding, margins and gaps use whole steps. The 2px sub-step is reserved for the
   optical inset inside a chip and for a baseline nudge between two lines of text;
@@ -83,7 +85,13 @@ banner at the top of the screen scrolls away.
    Code all render their plate at exactly 412px of 512.) Linux retains that canvas.
    Windows does not normalize the plate: the generator crops the canonical tile
    and centres it at **94%** of the ICO canvas, with every 16–256px frame derived
-   from that Windows source. The ICNS and other canonical assets keep their macOS
+    from that Windows source. Its folder/arrow mark is enlarged separately to
+    89% of the tile (about 84% of the canvas), rather than enlarging only the
+    background plate. At native `Ready`, the shell also sets `ICON_BIG` from
+    the executable's shared 256px ICO resource: Tauri's normal window-icon path
+    only sets the small title-bar icon, which otherwise becomes the taskbar fallback.
+    Windows owns that shared handle for the process lifetime and scales it for DPI.
+    The ICNS and other canonical assets keep their macOS
    padding. An earlier revision inset the
   tile to 744/1024 to look smaller in the dock, which that normalisation now
   undoes; all it bought was an upscale on macOS and an undersized icon

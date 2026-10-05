@@ -28,9 +28,11 @@ from app.core.plan_store import (
     PlanStoreError,
     UnsupportedPlanStoreVersionError,
 )
+from app.core.provenance import OutcomeProvenance
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import (
     FrozenSortImpact,
+    FrozenSortPlan,
     ReviewedSet,
     destination_fingerprint,
     source_fingerprint,
@@ -117,6 +119,19 @@ class PlanImpactRequest(TaskStartRequest):
     plan_id: str
     excluded_roots: list[str] = Field(default_factory=list)
     reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
+
+
+class ReviewedPlacement(BaseModel):
+    source: str
+    destination: str
+    disposition: Literal["sort", "quarantine"]
+    keeper: str | None
+    companion_role: str | None
+    provenance: OutcomeProvenance | None
+
+
+class PlanPlacementsResponse(BaseModel):
+    placements: list[ReviewedPlacement]
 
 
 ReviewSetId = Annotated[str, Field(min_length=1, max_length=512)]
@@ -307,7 +322,11 @@ async def save_plan_review_state(
 @router.post("/sorting/impact", response_model=FrozenSortImpact)
 async def plan_impact(container: ContainerDep, body: PlanImpactRequest) -> FrozenSortImpact:
     """What a run carrying these duplicate decisions would actually do."""
-    plan = container.preview_service.frozen_plan(body.plan_id)
+    return (await asyncio.to_thread(_resolved_review_plan, container, body)).impact
+
+
+def _resolved_review_plan(container: Any, body: PlanImpactRequest) -> FrozenSortPlan:
+    plan: FrozenSortPlan | None = container.preview_service.frozen_plan(body.plan_id)
     if plan is None:
         raise ConflictError(
             "The reviewed plan is no longer available; generate preview again.",
@@ -322,7 +341,28 @@ async def plan_impact(container: ContainerDep, body: PlanImpactRequest) -> Froze
     return plan.with_reviewed_sets(
         body.reviewed_sets,
         source_root=scoped.config.source_directory,
-    ).impact
+    )
+
+
+@router.post("/sorting/placements", response_model=PlanPlacementsResponse)
+async def plan_placements(
+    container: ContainerDep, body: PlanImpactRequest
+) -> PlanPlacementsResponse:
+    """Review and execution use the same collision-resolved destinations."""
+    plan = await asyncio.to_thread(_resolved_review_plan, container, body)
+    return PlanPlacementsResponse(
+        placements=[
+            ReviewedPlacement(
+                source=action.source_path,
+                destination=action.reviewed_destination_path,
+                disposition=action.disposition,
+                keeper=action.keeper_path,
+                companion_role=action.companion_role,
+                provenance=action.provenance,
+            )
+            for action in plan.actions
+        ]
+    )
 
 
 @router.post("/sorting/start", response_model=TaskStartResponse)

@@ -228,7 +228,13 @@ export function DetailView({
                 },
                 {
                   id: "destination",
-                  value: row.destination ?? t("review.destination.none"),
+                  value:
+                    row.destination ??
+                    t(
+                      row.destinationPending
+                        ? "review.destination.pending"
+                        : "review.destination.none",
+                    ),
                   unknown: row.destination === null,
                   path: row.destination !== null,
                 },

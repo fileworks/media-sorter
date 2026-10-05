@@ -40,6 +40,33 @@ source is retained in Move mode, and the report names an `incomplete_unit`. A cr
 between members uses the existing manifest/journal reconciliation; it does not rely on a
 new cleanup mechanism.
 
+### Reading duplicate decisions
+
+A **file with companions** is one main photo/video and its associated files,
+such as an XMP sidecar or Live Photo video. Those companions follow that main
+file's destination; they are not competing duplicate copies.
+
+In an organizing run, the copy you select as the keeper goes to its own planned
+sorting destination. The other copies go under **that keeper folder's `_copies/`**,
+with their associated files following them. This is a contextual subfolder, not
+one global `_copies` directory. If the keeper belongs under `_undated/` or another
+set-aside category, the displayed final path states that outcome explicitly.
+Browse's expanded cards, Details and Compare show the reviewed destinations from
+the same plan as execution, including any collision suffix. Accepting a suggestion
+directly from Browse is the same keeper decision as selecting it in the duplicate tab.
+
+A suggestion alone authorizes nothing. Every outstanding duplicate set must be
+resolved before execution. “Not duplicates” keeps each member at its own planned
+destination. A protected reference remains at its source path. **No file action
+planned** means there is no transfer for that file; deduplicate-only mode also
+leaves unique files at their source. Unsupported decisions are refused rather than
+silently turning a no-action file into a sorting operation.
+
+Extra copies are preserved, so moving them into `_copies/` on the same disk does
+not free their bytes. Copy mode also retains input originals; Move mode removes an
+input only after the destination is verified and durably recorded. `_copies/`
+describes the output placement, independently of that source-retention choice.
+
 ## The limits, stated plainly
 
 **Timestamps are best-effort by filesystem.** Not every filesystem can store a

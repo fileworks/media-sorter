@@ -447,12 +447,19 @@ export function ReviewScreen({
    */
   const comparedPair = useMemo(() => {
     if (comparing === null) return null;
+    // Keep the pair order and letters stable, but resolve outcomes from the
+    // current rows. A keeper decision must also update an already-open dialog.
+    const currentRows = new Map(surface.rows.map((row) => [row.source, row]));
+    const members = comparing.members.map((member) => {
+      const row = currentRows.get(member.path);
+      return row ? comparableFor(row) : member;
+    });
     const pairs = pairsOf(comparing.members.length);
     const index = Math.min(comparing.pairIndex, pairs.length - 1);
     const [first, second] = pairs[index] ?? [0, 1];
     return {
-      a: comparing.members[first],
-      b: comparing.members[second] ?? comparing.members[first],
+      a: members[first],
+      b: members[second] ?? members[first],
       letterA: memberLetter(first),
       letterB: memberLetter(second),
       total: pairs.length,
@@ -464,7 +471,7 @@ export function ReviewScreen({
         nameB: comparing.members[right]?.label ?? "",
       })),
     };
-  }, [comparing]);
+  }, [comparing, comparableFor, surface.rows]);
 
   const comparisonNavigation = useMemo(() => {
     if (comparing?.setId === null || comparing?.setId === undefined) {

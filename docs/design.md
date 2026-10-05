@@ -47,11 +47,20 @@ on its own.
 ## Port negotiation and process lifecycle
 
 The shell asks the OS for a free loopback port (bind to port 0, read the assigned port,
-release it), spawns the backend process with that port, waits for `/api/health` to
-respond 200, then loads the UI. It retries up to five times to handle the TOCTOU window
-where another process might grab the port between the release and the backend's bind. On
-window close it sends SIGTERM so uvicorn can flush its logs, then force-kills after a
-short grace period.
+release it) and spawns the backend with that port in the background. The window paints
+its loading state first; API-dependent screens await the exact ready session. It retries
+up to five times if another process grabs the released port. Closing during startup
+atomically prevents further spawns and stops any child already acquired.
+
+On close, the shell requests authenticated `POST /api/health/shutdown`. The backend
+signals thread-safe worker cancellation, drains task results for a bounded grace period,
+and stops uvicorn before closing services. The shell then terminates any remaining owned
+descendants. Windows creates the backend atomically inside a non-inherited Job Object
+with `KILL_ON_JOB_CLOSE`, so a shell crash also ends the tree; no console is allocated.
+Unix launches a separate process group and sends TERM, then KILL after a bounded wait.
+Only shell-owned processes are stopped: an externally started development server is
+never acquired for termination. Forced termination still relies on the durable transfer
+journal for recovery; it cannot guarantee every in-flight task finishes.
 
 The frontend never assumes a port: it calls the `get_api_session` Tauri command and
 receives both the selected port and a per-launch capability. HTTP sends the capability

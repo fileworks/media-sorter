@@ -553,6 +553,23 @@ class TaskManager:
         return True
 
     def shutdown(self) -> None:
+        self.request_shutdown()
         for asyncio_task in self._asyncio_tasks.values():
             asyncio_task.cancel()
         logger.info("TaskManager shutdown, cancelled all tasks")
+
+    def request_shutdown(self) -> None:
+        """Signal threads before cancelling the asyncio wrappers that await them."""
+        for task_id in tuple(self._tasks):
+            self.cancel_task(task_id)
+
+    async def drain(self, timeout: float = 3.0) -> None:
+        """Give cooperative workers time to finish their journal/report writes."""
+        self.request_shutdown()
+        pending = [task for task in self._asyncio_tasks.values() if not task.done()]
+        if pending:
+            _, remaining = await asyncio.wait(pending, timeout=timeout)
+            for task in remaining:
+                task.cancel()
+            if remaining:
+                await asyncio.wait(remaining, timeout=0.25)

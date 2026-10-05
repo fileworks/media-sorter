@@ -115,7 +115,24 @@ function fixture(overrides: { decided?: boolean } = {}) {
     group("set-base", [{ path: "/ref/base.jpg", role: "reference" }, { path: "/in/solo2.jpg" }]),
   ];
   const overridesMap = overrides.decided ? new Map([["set-1", "set-1:0"]]) : new Map();
-  const rows = toReviewRows(result(...items), groups, overridesMap);
+  const rows = toReviewRows(
+    result(...items),
+    groups,
+    overridesMap,
+    new Map(),
+    overrides.decided
+      ? [
+          {
+            source: "/in/dup-a.jpg",
+            destination: "/out/2025/07/dup-a.jpg",
+            disposition: "sort",
+            keeper: null,
+            companion_role: null,
+            provenance: null,
+          },
+        ]
+      : [],
+  );
   return { rows, entries: browseEntries(rows) };
 }
 

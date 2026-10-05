@@ -203,6 +203,21 @@ def _windows_icon(source: Image.Image) -> Image.Image:
     """Windows displays ICO pixels directly, without macOS plate normalization."""
     left, top, right, bottom = _bounding_box(source, lambda pixel: pixel[3] > 128)
     tile = source.crop((left, top, right + 1, bottom + 1))
+    # The tile was already large, but its folder/arrow mark remained only ~71%
+    # of the Windows canvas. Enlarge that mark separately; Apple's artwork and
+    # every macOS derivative continue to use the approved canonical source.
+    mark_box = _bounding_box(tile, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500)
+    mark = tile.crop((mark_box[0] - 2, mark_box[1] - 2, mark_box[2] + 3, mark_box[3] + 3))
+    mark.putdata([
+        (r, g, b, alpha if max(abs(r - 239), abs(g - 234), abs(b - 226)) > 2 else 0)
+        for r, g, b, alpha in mark.getdata()
+    ])
+    draw = ImageDraw.Draw(tile)
+    draw.rectangle((mark_box[0] - 2, mark_box[1] - 2, mark_box[2] + 2, mark_box[3] + 2), fill=(239, 234, 226, 255))
+    mark_edge = round(tile.width * 0.89)
+    ratio = mark_edge / max(mark.size)
+    mark = mark.resize((round(mark.width * ratio), round(mark.height * ratio)), Image.Resampling.LANCZOS)
+    tile.alpha_composite(mark, ((tile.width - mark.width) // 2, (tile.height - mark.height) // 2))
     edge = round(source.width * 0.94)
     canvas = Image.new("RGBA", source.size, (0, 0, 0, 0))
     inset = (source.width - edge) // 2

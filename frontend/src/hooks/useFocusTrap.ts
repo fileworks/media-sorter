@@ -33,6 +33,7 @@ export function useFocusTrap(
   useEffect(() => {
     if (!active) return;
     restoreRef.current = restoreTarget ?? (document.activeElement as HTMLElement | null);
+    const keyboardTrigger = restoreRef.current?.matches(":focus-visible") ?? false;
     // A parent trap may re-evaluate when a child layer closes. If focus has
     // already been restored to the child's exact trigger inside that parent,
     // keep it there instead of replacing it with the parent panel itself.
@@ -70,16 +71,20 @@ export function useFocusTrap(
       document.removeEventListener("keydown", onKey);
       const restore = restoreRef.current;
       if (restore === null) return;
+      const restoreFocus = () => {
+        if (!restore.isConnected) return;
+        restore.dataset.restoredFocus = keyboardTrigger ? "keyboard" : "pointer";
+        restore.dispatchEvent(new CustomEvent("mediasorter:restore-focus", { bubbles: true }));
+        restore.focus({ preventScroll: true });
+      };
       // While a nested layer is being removed, its trigger still sits inside
       // the parent's inert subtree. Browsers correctly refuse that synchronous
       // focus call. Retry in the next microtask, after React has made the
       // parent topmost again; ordinary non-nested traps still restore now.
       if (restore.closest("[inert]")) {
-        queueMicrotask(() => {
-          if (restore.isConnected) restore.focus();
-        });
+        queueMicrotask(restoreFocus);
       } else {
-        restore.focus();
+        restoreFocus();
       }
     };
   }, [ref, active, restoreTarget, shouldHandle]);

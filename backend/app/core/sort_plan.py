@@ -322,7 +322,13 @@ class FrozenSortPlan(BaseModel):
                 continue
 
             planned_index = _planned_keeper_index(rewritten, by_source, reviewed)
-            if planned_index is None or planned_index == keeper_index:
+            if planned_index is None or (
+                planned_index == keeper_index
+                and all(
+                    index == keeper_index or rewritten[index].keeper_path == reviewed.keep
+                    for index in group_indices
+                )
+            ):
                 # Already the keeper, or the set holds nothing else to demote.
                 continue
             promoted = rewritten[keeper_index]

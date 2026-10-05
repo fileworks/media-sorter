@@ -102,6 +102,23 @@ signing is a separate improvement requiring enrollment; see
 is harmless. A changed package needs a new version and clean-host testing;
 published assets remain immutable.
 
+The Windows message “Windows cannot access the specified device, path, or file”
+can occur before application logging begins. It does not identify a security
+provider or prove that the package is corrupt. Check the exact executable path,
+release checksum and protection history. If there is no quarantine/detection and
+the ZIP verifies, extract the **complete** portable folder into a new ordinary
+user-writable location and try that copy; retain `app/resources` beside the launcher.
+Matching bytes that start from a fresh location but fail in the original location
+indicate a location-specific launch restriction, not an application crash.
+Record both results for investigation; do not change ACLs, disable protection or
+add antivirus exclusions as a workaround.
+
+Closing MediaSorter stops its owned backend and workers, including closing the
+loading window before startup finishes. Normal close requests cooperative task
+cancellation first; a bounded fallback terminates remaining owned descendants.
+Allow an active file operation to finish when possible. Recovery after a forced
+close uses the durable journal described in [state and recovery](state-and-recovery.md).
+
 For an update, download and verify the newer installer from the official release;
 close the running app and install it. Keep backups of media and application state.
 Portable installations must keep the whole extracted bundle together.

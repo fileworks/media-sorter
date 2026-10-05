@@ -86,6 +86,10 @@ def test_windows_ico_fills_its_canvas_without_changing_macos_padding() -> None:
             frame = image.ico.getimage((size, size)).convert("RGBA")
             left, _, right, _ = generate_branding._bounding_box(frame, lambda pixel: pixel[3] > 128)
             assert 0.92 <= (right - left + 1) / size <= 0.97
+            mark = generate_branding._bounding_box(
+                frame, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500
+            )
+            assert 0.80 <= (mark[2] - mark[0] + 1) / size <= 0.89
     with Image.open(REPO_ROOT / "frontend/src-tauri/icons/icon.icns") as image:
         frame = image.convert("RGBA")
         left, _, right, _ = generate_branding._bounding_box(frame, lambda pixel: pixel[3] > 128)

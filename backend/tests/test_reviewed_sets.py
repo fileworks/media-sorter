@@ -223,6 +223,35 @@ class TestTheDefectThisChangeRemoves:
 
 
 class TestTheRewrittenPlanDescribesTheRun:
+    def test_catalogue_only_duplicates_demote_the_other_sortable_file(
+        self, tmp_path: Path, two_copies: tuple[Path, Path]
+    ) -> None:
+        first, second = two_copies
+        config = _config(tmp_path)
+        service = _service(config)
+        preview = _preview(service, config, tmp_path, [first, second])
+        for item in preview:
+            item.update(
+                status="sort",
+                destination=item.get("would_be_destination") or item["destination"],
+                duplicate_of=None,
+            )
+        plan = build_frozen_sort_plan(preview, config)
+        derived = plan.with_reviewed_sets(
+            [ReviewedSet(keep=str(first), demote=(str(second),))],
+            source_root=config.source_directory,
+        )
+        actions = {action.source_path: action for action in derived.actions}
+        assert actions[str(first)].disposition == "sort"
+        assert actions[str(second)].keeper_path == str(first)
+        assert Path(actions[str(second)].reviewed_destination_path).parent.name == "_copies"
+        assert all(action.keeper_path is None for action in plan.actions)
+        run = _seeded_run(service, config, tmp_path, [first, second], keeper=first)
+        assert all(
+            actions[str(source)].reviewed_destination_path == run[source.name][1]
+            for source in (first, second)
+        )
+
     def _rewritten(
         self, tmp_path: Path, sources: list[Path], keeper: Path, **overrides: Any
     ) -> tuple[dict[str, FrozenSortAction], dict[str, tuple[str, str]]]:
@@ -500,7 +529,7 @@ class TestRefusals:
         run = _seeded_run(service, config, tmp_path, [first, second], keeper=second)
         actions = {Path(action.source_path).name: action for action in derived.actions}
 
-        assert "/two/" in actions["b.jpg"].destination_path
+        assert "two" in Path(actions["b.jpg"].destination_path).parts
         assert actions["b.jpg"].destination_path == run["b.jpg"][1]
         assert actions["a.jpg"].destination_path == run["a.jpg"][1]
 

@@ -91,6 +91,17 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
+  useEffect(() => {
+    const onRestore = (event: Event) => {
+      if (!(event.target instanceof Node) || !wrapperRef.current?.contains(event.target)) return;
+      hoveredRef.current = false;
+      dismissedRef.current = true;
+      hide();
+    };
+    document.addEventListener("mediasorter:restore-focus", onRestore);
+    return () => document.removeEventListener("mediasorter:restore-focus", onRestore);
+  }, [hide]);
+
   useLayoutEffect(() => {
     if (!open) return;
     const trigger = wrapperRef.current?.firstElementChild ?? wrapperRef.current;
@@ -177,12 +188,18 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
         onPointerEnter={(event) => {
           if (event.pointerType !== "mouse") return;
           hoveredRef.current = true;
+          const trigger = wrapperRef.current?.firstElementChild;
+          if (trigger instanceof HTMLElement) delete trigger.dataset.restoredFocus;
           dismissedRef.current = false;
           show(false);
         }}
         onPointerLeave={() => {
           hoveredRef.current = false;
           scheduleClose();
+        }}
+        onKeyDown={() => {
+          const trigger = wrapperRef.current?.firstElementChild;
+          if (trigger instanceof HTMLElement) delete trigger.dataset.restoredFocus;
         }}
         onPointerDown={() => {
           dismissedRef.current = true;
@@ -195,6 +212,8 @@ export function Tooltip({ label, side = "top", children }: TooltipProps) {
         onBlur={() => {
           focusedRef.current = false;
           dismissedRef.current = false;
+          const trigger = wrapperRef.current?.firstElementChild;
+          if (trigger instanceof HTMLElement) delete trigger.dataset.restoredFocus;
           scheduleClose();
         }}
       >

@@ -2150,6 +2150,7 @@ dependencies = [
 name = "media-sorter"
 version = "1.0.2"
 dependencies = [
+ "libc",
  "native-dialog",
  "rand 0.10.2",
  "serde",
@@ -2162,6 +2163,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-shell",
  "ureq",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

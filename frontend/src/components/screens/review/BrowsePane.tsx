@@ -20,7 +20,7 @@ import { useI18n } from "@/i18n/I18nContext";
 import { MIN_TARGET_24 } from "@/lib/a11y";
 import { formatDate } from "@/lib/dateFormatters";
 import { formatBytes } from "@/lib/formatters";
-import { companionRoleLabel, companionStatusLabel } from "@/lib/evidenceLabels";
+import { companionRoleLabel, companionStatusLabel, plannedStatusLabel } from "@/lib/evidenceLabels";
 import { formatMetadataSource } from "@/lib/metadataSource";
 import { isDecidedState, isProposedState, isUndecidedState } from "@/lib/duplicateDecisions";
 import { cn } from "@/lib/utils";
@@ -285,6 +285,10 @@ export function BrowsePane({
                   onToggleSelection={() => onToggleSetSelection(line.entry.id)}
                   onResolve={() => onResolveSet(line.entry.id)}
                   onCompare={() => onCompare(line.entry)}
+                  onAccept={() => {
+                    if (line.entry.proposedKeeper)
+                      onKeep(line.entry.id, line.entry.proposedKeeper.source);
+                  }}
                   locale={locale}
                 />
               ) : line.kind === "setBody" ? (
@@ -419,6 +423,7 @@ function SetHeader({
   onToggleSelection,
   onResolve,
   onCompare,
+  onAccept,
   locale,
 }: {
   entry: SetEntry;
@@ -428,6 +433,7 @@ function SetHeader({
   onToggleSelection: () => void;
   onResolve: () => void;
   onCompare: () => void;
+  onAccept: () => void;
   locale: string;
 }) {
   const { t } = useI18n();
@@ -565,6 +571,11 @@ function SetHeader({
       </span>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {!settled && proposed && !entry.hasBaseline && (
+          <Button size="sm" onClick={onAccept}>
+            {t("review.browse.acceptProposal")}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -710,6 +721,19 @@ function SetCopies({
                     {t(`review.setAside.${row.setAsideCategory}`)}
                   </p>
                 )}
+                <p className="font-medium text-muted-foreground" data-copy-outcome>
+                  {!entry.hasBaseline && !isDecidedState(entry.decisionState)
+                    ? t("review.browse.awaitingChoice")
+                    : row.destinationPending
+                      ? t("review.destination.pending")
+                      : plannedStatusLabel(row.status, t)}
+                </p>
+                {(entry.hasBaseline || isDecidedState(entry.decisionState)) && row.destination && (
+                  <p className="break-all text-muted-foreground" data-copy-destination>
+                    <span className="font-semibold">{t("review.browse.columnDestination")}: </span>
+                    {row.destination}
+                  </p>
+                )}
                 {mediaUnitSummary(row, t) && (
                   <p className="line-clamp-3 text-faint">{mediaUnitSummary(row, t)}</p>
                 )}
@@ -807,6 +831,9 @@ function SetBlock({
         onToggleSelection={onToggleSetSelection}
         onResolve={onResolve}
         onCompare={() => onCompare(entry)}
+        onAccept={() => {
+          if (entry.proposedKeeper) onKeep(entry.id, entry.proposedKeeper.source);
+        }}
         locale={locale}
       />
       {expanded && (

@@ -82,10 +82,11 @@ export const en = {
   "review.truncated.detail":
     "This library has more duplicate stacks than one review session loads. The counts here describe what is shown, not the whole library.",
   "review.bulk.consequence.keep":
-    "Keeps one copy in each \u2014 {setAside} copies are set aside, freeing {bytes}.",
-  "review.bulk.consequence.keepAll": "Keeps every copy. Nothing is set aside.",
+    "One copy per set is selected for sorting. {setAside} extra copies ({bytes}) are preserved under _copies/. No files are deleted.",
+  "review.bulk.consequence.keepAll":
+    "Every file keeps its own sorting destination. No file is treated as a duplicate.",
   "review.bulk.consequence.keepFromFolder":
-    "Keeps the copy from {folder} \u2014 {setAside} copies are set aside, freeing {bytes}.",
+    "The copy from {folder} is selected for sorting. {setAside} extra copies ({bytes}) are preserved under _copies/. No files are deleted.",
   "review.bulk.open": "Decide these sets\u2026",
   "review.bulk.selectionTitle": "Decide the selected sets",
   "review.bulk.recommendTitle": "Accept the recommended copies",
@@ -135,16 +136,18 @@ export const en = {
   "review.reason.alreadyThere": "An identical file is already at the destination.",
   "review.reason.duplicatePending": "Still being compared — the run will not move it until it is.",
   "review.reason.duplicatePlain": "A duplicate of a file already in this run.",
-  "review.reason.duplicateKeeper": "The copy kept out of {count}.",
-  "review.reason.duplicateCopy": "A copy of {kept}, kept beside it under _copies/.",
+  "review.reason.duplicateKeeper":
+    "Selected for sorting out of {count} copies. The other copies are preserved beside it in _copies/.",
+  "review.reason.duplicateCopy":
+    "Extra copy of {kept}: preserved in the keeper’s _copies/ subfolder, not in the normal sorting folder.",
   "review.reason.duplicateUndecided":
-    "One of {count} copies still awaiting review — the run leaves the whole set alone.",
+    "One of {count} copies awaiting your choice. No sorting or _copies/ placement until you decide.",
   "review.reason.duplicateProposed":
-    "One of {count} copies ranked by a rule proposal — nothing binds until it is accepted.",
+    "One of {count} copies with a suggestion. Accept it or choose a copy before sorting or _copies/ placement.",
   "review.reason.notDuplicates":
     "Marked as different files; each one follows its own planned destination.",
-  "review.reason.keepInPlace": "This run only removes duplicates, so it stays where it is.",
-  "review.reason.noDate": "No date could be read, so there is no folder to place it in.",
+  "review.reason.keepInPlace": "No file action is planned: this file remains at its source path.",
+  "review.reason.noDate": "No usable date: placed in _undated/ for review.",
   "review.reason.suspiciousDate": "The date read is implausible, so it is set aside for a look.",
   "review.reason.futureDate": "The date read is in the future, so it is set aside for a look.",
   "review.reason.date.exif": "Placed by its EXIF capture date, {date}.",
@@ -168,8 +171,9 @@ export const en = {
   "review.flag.duplicate_pending": "Not checked yet",
   "review.flag.duplicate_pending.help":
     "This preview has not completed the duplicate check for this file. The run checks it again before deciding its destination. This is not an error.",
-  "review.flag.unit_member": "moves together",
-  "review.flag.unit_member.help": "This file moves together with its companions.",
+  "review.flag.unit_member": "file group",
+  "review.flag.unit_member.help":
+    "This photo/video and its associated files (such as an XMP or Live Photo video) are handled as one group. This does not select the duplicate keeper.",
   "config.runMode": "Run mode",
   "config.runMode.help": "What this run is for.",
   "config.runMode.organize": "Organise into folders",
@@ -1111,13 +1115,13 @@ export const en = {
   "review.mode": "What you are doing here",
   "review.mode.browse": "Browse the result",
   "review.mode.resolve": "Decide the duplicates",
-  "review.browse.stays": "Stays where it is",
+  "review.browse.stays": "No file action planned",
   "review.browse.stays.undecided": "Sets to review",
   "review.browse.stays.undecided.rule":
-    "These sets have a likely keeper but still need your review. Until then, the run skips every copy in the set.",
+    "No file in these sets is sorted or placed under _copies/ until you choose a keeper or keep all.",
   "review.browse.stays.proposed": "Suggested keep choices",
   "review.browse.stays.proposed.rule":
-    "A smart keep rule picked a likely keeper for each set. Review and accept the suggestion to apply it.",
+    "These recommendations are not yet accepted. All files remain at their source paths until you accept a suggestion or choose differently.",
   "review.browse.stays.baseline": "Baseline folders",
   "review.browse.stays.baseline.rule":
     "Baseline folders are compared against and never written to.",
@@ -1138,6 +1142,10 @@ export const en = {
     "The saved reviewed plan is no longer recoverable. Generate a new preview.",
   "review.persistence.stale":
     "The saved reviewed plan no longer matches its configuration or evidence. Generate a new preview.",
+  "review.destination.pending": "Recalculating the reviewed destination…",
+  "review.browse.awaitingChoice":
+    "No file action until you choose a copy or accept the suggestion.",
+  "review.browse.acceptProposal": "Accept suggestion",
   "review.browse.columnName": "Name",
   "review.browse.columnDate": "Date",
   "review.browse.columnStatus": "Status",
@@ -1273,8 +1281,8 @@ export const en = {
   "review.resolve.rationale.limitation.undatedLast":
     "Unknown modification dates remain unknown and rank after known dates.",
   "review.compare.unit.standalone": "Standalone file",
-  "review.compare.unit.primary": "Primary in unit {id}",
-  "review.compare.unit.member": "Member of unit {id}",
+  "review.compare.unit.primary": "Main photo/video: associated files follow its destination.",
+  "review.compare.unit.member": "Associated file: follows its main photo/video.",
   "review.compare.companions.none": "No detected companions",
   "review.compare.companions.entry":
     "{role} · {status} · destination: {destination} · warning: {warning}",
@@ -1282,15 +1290,15 @@ export const en = {
   "review.compare.unitWarnings": "Unit warnings",
   "review.compare.unitWarnings.none": "none",
   "review.detail.result": "Planned result",
-  "review.detail.mediaUnitLabel": "Media unit",
-  "review.detail.mediaUnit.primary": "Primary in unit {id}",
-  "review.detail.mediaUnit.member": "Member of unit {id}",
+  "review.detail.mediaUnitLabel": "Associated files",
+  "review.detail.mediaUnit.primary": "Main photo/video: associated files follow its destination.",
+  "review.detail.mediaUnit.member": "Associated file: follows its main photo/video.",
   "review.detail.mediaUnit.unknown": "Role in unit {id} is unknown",
   "review.detail.companionEvidence":
     "{file} · {role} · {status} · destination: {destination} · warning: {warning}",
   "review.detail.companionNoWarning": "none",
-  "review.browse.unit.primary": "Primary in unit {id}",
-  "review.browse.unit.member": "Member of unit {id}",
+  "review.browse.unit.primary": "Main photo/video: associated files follow its destination.",
+  "review.browse.unit.member": "Associated file: follows its main photo/video.",
   "review.browse.unit.unknown": "Role in unit {id} is unknown",
   "review.browse.unit.companion": "{role}: {status}, destination {destination}, warning {warning}",
   "review.browse.unit.noWarning": "none",
@@ -1302,13 +1310,14 @@ export const en = {
   "companion.role.audioNote": "Audio note",
   "companion.role.unknown": "Unknown companion role",
   "companion.role.unknownValue": "Unknown companion role ({value})",
-  "companion.status.attached": "Planned with the primary file",
+  "companion.status.attached":
+    "Follows the main file’s destination, including _copies/ when that file is a duplicate",
   "companion.status.leftInPlace": "Planned to remain in place",
   "companion.status.unknown": "Planned companion result unknown",
   "companion.status.unknownValue": "Planned companion result unknown ({value})",
   "review.plannedStatus.sort": "Will be organized",
-  "review.plannedStatus.keepInPlace": "Will remain in place",
-  "review.plannedStatus.duplicate": "Will be set aside as a duplicate",
+  "review.plannedStatus.keepInPlace": "No action: retained at the source path",
+  "review.plannedStatus.duplicate": "Extra copy → _copies/ (preserved)",
   "review.plannedStatus.junk": "Will be set aside as junk",
   "review.plannedStatus.unknownDate": "Will be set aside because the date is unknown",
   "review.plannedStatus.suspiciousDate": "Will be set aside because the date is suspicious",
@@ -1319,8 +1328,9 @@ export const en = {
   "review.plannedStatus.unknown": "Planned result unknown",
   "review.plannedStatus.unknownValue": "Planned result unknown ({value})",
   "companionEvidence.membership.unknown": "Unit membership unknown",
-  "companionEvidence.membership.primary": "Primary in unit {id}",
-  "companionEvidence.membership.member": "Member of unit {id}",
+  "companionEvidence.membership.primary":
+    "Main photo/video: associated files follow its destination.",
+  "companionEvidence.membership.member": "Associated file: follows its main photo/video.",
   "companionEvidence.membership.roleUnknown": "Member role unknown in unit {id}",
   "companionEvidence.primaryOutcome": "Result: {status} · destination: {destination}",
   "companionEvidence.companion":
@@ -1652,10 +1662,11 @@ export const de: Record<MessageKey, string> = {
   "review.truncated.detail":
     "Diese Bibliothek enthält mehr Duplikat-Stapel, als eine Sitzung lädt. Die Zahlen hier beschreiben das Angezeigte, nicht die gesamte Bibliothek.",
   "review.bulk.consequence.keep":
-    "Beh\u00e4lt in jedem eine Kopie \u2014 {setAside} Kopien werden beiseitegelegt, das gibt {bytes} frei.",
-  "review.bulk.consequence.keepAll": "Beh\u00e4lt jede Kopie. Es wird nichts beiseitegelegt.",
+    "Eine Datei je Duplikatgruppe wird zum Einsortieren gewählt. {setAside} weitere Kopien ({bytes}) bleiben unter _copies/ erhalten. Es wird nichts gelöscht.",
+  "review.bulk.consequence.keepAll":
+    "Jede Datei erhält ihr eigenes Sortierziel. Keine wird als Duplikat behandelt.",
   "review.bulk.consequence.keepFromFolder":
-    "Beh\u00e4lt die Kopie aus {folder} \u2014 {setAside} Kopien werden beiseitegelegt, das gibt {bytes} frei.",
+    "Die Datei aus {folder} wird zum Einsortieren gewählt. {setAside} weitere Kopien ({bytes}) bleiben unter _copies/ erhalten. Es wird nichts gelöscht.",
   "review.bulk.open": "Diese S\u00e4tze entscheiden\u2026",
   "review.bulk.selectionTitle": "Die ausgew\u00e4hlten S\u00e4tze entscheiden",
   "review.bulk.recommendTitle": "Die empfohlenen Kopien \u00fcbernehmen",
@@ -1706,17 +1717,18 @@ export const de: Record<MessageKey, string> = {
   "review.reason.duplicatePending":
     "Wird noch verglichen — bis dahin verschiebt der Durchlauf sie nicht.",
   "review.reason.duplicatePlain": "Ein Duplikat einer Datei aus diesem Durchlauf.",
-  "review.reason.duplicateKeeper": "Die behaltene Kopie von {count}.",
-  "review.reason.duplicateCopy": "Eine Kopie von {kept}, daneben unter _copies/ abgelegt.",
+  "review.reason.duplicateKeeper":
+    "Aus {count} Kopien zum Einsortieren gewählt. Die anderen bleiben daneben im Unterordner _copies/ erhalten.",
+  "review.reason.duplicateCopy":
+    "Weitere Kopie von {kept}: bleibt im Unterordner _copies/ der gewählten Datei erhalten, nicht im normalen Sortierordner.",
   "review.reason.duplicateUndecided":
-    "Eine von {count} noch zu prüfenden Kopien — der Durchlauf lässt den ganzen Satz liegen.",
+    "Eine von {count} Kopien, zwischen denen Sie wählen müssen. Keine Einsortierung oder Ablage in _copies/, bis Sie entscheiden.",
   "review.reason.duplicateProposed":
-    "Eine von {count} durch eine Regel vorgeschlagenen Kopien — verbindlich wird sie erst nach Annahme.",
+    "Eine von {count} Kopien mit Vorschlag. Nehmen Sie ihn an oder wählen Sie eine Datei, bevor die Einsortierung oder Ablage in _copies/ erfolgt.",
   "review.reason.notDuplicates":
     "Als unterschiedliche Dateien markiert; jede folgt ihrem eigenen geplanten Ziel.",
-  "review.reason.keepInPlace":
-    "Dieser Durchlauf entfernt nur Duplikate, deshalb bleibt sie liegen.",
-  "review.reason.noDate": "Es war kein Datum lesbar, also gibt es keinen Ordner dafür.",
+  "review.reason.keepInPlace": "Keine Dateiaktion geplant: diese Datei bleibt an ihrem Quellort.",
+  "review.reason.noDate": "Kein verwendbares Datum: wird zur Prüfung unter _undated/ abgelegt.",
   "review.reason.suspiciousDate":
     "Das gelesene Datum ist unplausibel, deshalb wird sie zur Prüfung beiseitegelegt.",
   "review.reason.futureDate":
@@ -1744,8 +1756,9 @@ export const de: Record<MessageKey, string> = {
   "review.flag.duplicate_pending": "Noch ungeprüft",
   "review.flag.duplicate_pending.help":
     "Diese Vorschau hat die Duplikatprüfung für diese Datei noch nicht abgeschlossen. Der Durchlauf prüft sie vor der Zielentscheidung erneut. Das ist kein Fehler.",
-  "review.flag.unit_member": "gehört zusammen",
-  "review.flag.unit_member.help": "Diese Datei wird zusammen mit ihren Begleitdateien verschoben.",
+  "review.flag.unit_member": "Datei mit Begleitdateien",
+  "review.flag.unit_member.help":
+    "Dieses Foto/Video und zugehörige Dateien (z. B. XMP oder Live-Photo-Video) werden zusammen behandelt. Das bestimmt nicht, welche Duplikatkopie einsortiert wird.",
   "config.runMode": "Modus",
   "config.runMode.help": "Wofür dieser Durchlauf gedacht ist.",
   "config.runMode.organize": "In Ordner einsortieren",
@@ -2717,13 +2730,13 @@ export const de: Record<MessageKey, string> = {
   "review.mode": "Was du hier tust",
   "review.mode.browse": "Ergebnis durchsehen",
   "review.mode.resolve": "Duplikate entscheiden",
-  "review.browse.stays": "Bleibt, wo es ist",
+  "review.browse.stays": "Keine Dateiaktion geplant",
   "review.browse.stays.undecided": "Zu prüfende Sätze",
   "review.browse.stays.undecided.rule":
-    "Diese Sätze haben eine wahrscheinliche beste Kopie, brauchen aber noch deine Prüfung. Bis dahin überspringt der Durchlauf jede Kopie im Satz.",
+    "In diesen Gruppen wird keine Datei einsortiert oder unter _copies/ abgelegt, bis Sie eine Datei wählen oder alle behalten.",
   "review.browse.stays.proposed": "Vorgeschlagene Auswahl",
   "review.browse.stays.proposed.rule":
-    "Eine intelligente Behaltregel hat je Satz eine wahrscheinliche beste Kopie ausgewählt. Prüfe und bestätige den Vorschlag, um ihn anzuwenden.",
+    "Diese Vorschläge sind noch nicht angenommen. Alle Dateien bleiben am Quellort, bis Sie einen Vorschlag annehmen oder anders entscheiden.",
   "review.browse.stays.baseline": "Referenzordner",
   "review.browse.stays.baseline.rule":
     "Referenzordner dienen nur zum Vergleich und werden nie beschrieben.",
@@ -2744,6 +2757,10 @@ export const de: Record<MessageKey, string> = {
     "Der gespeicherte geprüfte Plan kann nicht mehr wiederhergestellt werden. Erstelle eine neue Vorschau.",
   "review.persistence.stale":
     "Der gespeicherte geprüfte Plan passt nicht mehr zu Konfiguration oder Nachweisen. Erstelle eine neue Vorschau.",
+  "review.destination.pending": "Ziel für Ihre Entscheidung wird berechnet…",
+  "review.browse.awaitingChoice":
+    "Keine Dateiaktion, bis Sie eine Datei wählen oder den Vorschlag annehmen.",
+  "review.browse.acceptProposal": "Vorschlag annehmen",
   "review.browse.columnName": "Name",
   "review.browse.columnDate": "Datum",
   "review.browse.columnStatus": "Status",
@@ -2881,23 +2898,24 @@ export const de: Record<MessageKey, string> = {
   "review.resolve.rationale.limitation.undatedLast":
     "Unbekannte Änderungsdaten bleiben unbekannt und folgen auf bekannte Daten.",
   "review.compare.unit.standalone": "Eigenständige Datei",
-  "review.compare.unit.primary": "Primärdatei in Einheit {id}",
-  "review.compare.unit.member": "Mitglied der Einheit {id}",
+  "review.compare.unit.primary": "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
+  "review.compare.unit.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
   "review.compare.companions.none": "Keine Begleitdateien erkannt",
   "review.compare.companions.entry": "{role} · {status} · Ziel: {destination} · Warnung: {warning}",
   "review.compare.companions.noWarning": "keine",
   "review.compare.unitWarnings": "Warnungen der Einheit",
   "review.compare.unitWarnings.none": "keine",
   "review.detail.result": "Geplantes Ergebnis",
-  "review.detail.mediaUnitLabel": "Medieneinheit",
-  "review.detail.mediaUnit.primary": "Primärdatei in Einheit {id}",
-  "review.detail.mediaUnit.member": "Mitglied der Einheit {id}",
+  "review.detail.mediaUnitLabel": "Datei und Begleitdateien",
+  "review.detail.mediaUnit.primary":
+    "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
+  "review.detail.mediaUnit.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
   "review.detail.mediaUnit.unknown": "Rolle in Einheit {id} ist unbekannt",
   "review.detail.companionEvidence":
     "{file} · {role} · {status} · Ziel: {destination} · Warnung: {warning}",
   "review.detail.companionNoWarning": "keine",
-  "review.browse.unit.primary": "Primärdatei in Einheit {id}",
-  "review.browse.unit.member": "Mitglied der Einheit {id}",
+  "review.browse.unit.primary": "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
+  "review.browse.unit.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
   "review.browse.unit.unknown": "Rolle in Einheit {id} ist unbekannt",
   "review.browse.unit.companion": "{role}: {status}, Ziel {destination}, Warnung {warning}",
   "review.browse.unit.noWarning": "keine",
@@ -2909,13 +2927,14 @@ export const de: Record<MessageKey, string> = {
   "companion.role.audioNote": "Audionotiz",
   "companion.role.unknown": "Unbekannte Begleitdateirolle",
   "companion.role.unknownValue": "Unbekannte Begleitdateirolle ({value})",
-  "companion.status.attached": "Zusammen mit der Primärdatei geplant",
+  "companion.status.attached":
+    "Folgt dem Ziel der Hauptdatei, auch nach _copies/, wenn diese ein Duplikat ist",
   "companion.status.leftInPlace": "Soll am bisherigen Ort bleiben",
   "companion.status.unknown": "Geplantes Ergebnis der Begleitdatei unbekannt",
   "companion.status.unknownValue": "Geplantes Ergebnis der Begleitdatei unbekannt ({value})",
   "review.plannedStatus.sort": "Wird einsortiert",
-  "review.plannedStatus.keepInPlace": "Bleibt am bisherigen Ort",
-  "review.plannedStatus.duplicate": "Wird als Duplikat beiseitegelegt",
+  "review.plannedStatus.keepInPlace": "Keine Aktion: bleibt am Quellort",
+  "review.plannedStatus.duplicate": "Weitere Kopie → _copies/ (bleibt erhalten)",
   "review.plannedStatus.junk": "Wird als Ausschuss beiseitegelegt",
   "review.plannedStatus.unknownDate": "Wird wegen unbekannten Datums beiseitegelegt",
   "review.plannedStatus.suspiciousDate": "Wird wegen auffälligen Datums beiseitegelegt",
@@ -2926,8 +2945,9 @@ export const de: Record<MessageKey, string> = {
   "review.plannedStatus.unknown": "Geplantes Ergebnis unbekannt",
   "review.plannedStatus.unknownValue": "Geplantes Ergebnis unbekannt ({value})",
   "companionEvidence.membership.unknown": "Zugehörigkeit zur Medieneinheit unbekannt",
-  "companionEvidence.membership.primary": "Primärdatei in Einheit {id}",
-  "companionEvidence.membership.member": "Mitglied der Einheit {id}",
+  "companionEvidence.membership.primary":
+    "Hauptfoto/-video: Begleitdateien folgen seiner Zielentscheidung.",
+  "companionEvidence.membership.member": "Begleitdatei: folgt ihrem Hauptfoto/-video.",
   "companionEvidence.membership.roleUnknown": "Mitgliedsrolle in Einheit {id} unbekannt",
   "companionEvidence.primaryOutcome": "Ergebnis: {status} · Ziel: {destination}",
   "companionEvidence.companion":

@@ -1,14 +1,14 @@
 //! Own the child from creation through shutdown, including an unfinished startup.
-use std::process::{Child, ExitStatus};
+use std::process::ExitStatus;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
-use super::{graceful_kill, ApiSession, StartupError, StartupStage};
+use super::{ApiSession, OwnedBackend, StartupError, StartupStage};
 
 #[derive(Default)]
 struct Inner {
     closed: bool,
-    child: Option<Child>,
+    child: Option<OwnedBackend>,
     session: Option<Result<ApiSession, StartupError>>,
 }
 
@@ -30,7 +30,7 @@ impl BackendStartup {
 
     pub(super) fn spawn(
         &self,
-        create: impl FnOnce() -> Result<Child, StartupError>,
+        create: impl FnOnce() -> Result<OwnedBackend, StartupError>,
     ) -> Result<u32, StartupError> {
         // Closing and publishing a newly created child must be atomic. The lock
         // is held only for process creation, never during readiness polling.
@@ -73,7 +73,7 @@ impl BackendStartup {
             .take();
         if let Some(mut child) = child {
             super::write_log("INFO", "Shutting down backend process");
-            graceful_kill(&mut child);
+            child.stop();
             super::write_log("INFO", "Backend process stopped");
         }
     }
@@ -212,6 +212,106 @@ mod tests {
     #[ignore = "only launched as the controlled child of close_reaps_child_before_readiness"]
     fn child_wait_fixture() {
         thread::sleep(Duration::from_secs(30));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn close_terminates_backend_descendants() {
+        assert_descendants_stop(true);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn dropping_backend_terminates_descendants() {
+        assert_descendants_stop(false);
+    }
+
+    #[cfg(windows)]
+    fn assert_descendants_stop(explicit_close: bool) {
+        use std::ffi::c_void;
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+            fn WaitForSingleObject(handle: *mut c_void, timeout: u32) -> u32;
+            fn TerminateProcess(handle: *mut c_void, code: u32) -> i32;
+            fn CloseHandle(handle: *mut c_void) -> i32;
+        }
+        let path =
+            std::env::temp_dir().join(format!("mediasorter-child-{}.pid", rand::random::<u64>()));
+        let state = BackendStartup::default();
+        let mut command =
+            std::process::Command::new(std::env::current_exe().expect("test executable"));
+        command
+            .args([
+                "--exact",
+                "backend_state::tests::descendant_fixture",
+                "--ignored",
+            ])
+            .env("MEDIASORT_TEST_CHILD_PID", &path);
+        state
+            .spawn(|| {
+                super::super::spawn_with_startup_error(
+                    &mut command,
+                    "fixture",
+                    "fixture".into(),
+                    std::path::Path::new("/tmp/log"),
+                )
+            })
+            .expect("spawn fixture");
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !path.exists() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let pid: u32 = std::fs::read_to_string(&path)
+            .expect("descendant pid")
+            .parse()
+            .expect("pid");
+        // SAFETY: the fixture reports its own child; retain its process handle
+        // so PID reuse cannot target another application's process.
+        let handle = unsafe { OpenProcess(0x0010_0001, 0, pid) };
+        assert!(!handle.is_null());
+        if explicit_close {
+            state.close();
+        } else {
+            drop(state);
+        }
+        // Always clean up the controlled descendant, even on the regression.
+        let stopped = unsafe { WaitForSingleObject(handle, 2000) } == 0;
+        if !stopped {
+            unsafe {
+                TerminateProcess(handle, 1);
+                WaitForSingleObject(handle, 2000);
+            }
+        }
+        unsafe {
+            CloseHandle(handle);
+        }
+        std::fs::remove_file(path).expect("remove fixture pid");
+        assert!(stopped, "closing the backend left its descendant running");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "controlled child fixture for close_terminates_backend_descendants"]
+    fn descendant_fixture() {
+        use std::os::windows::process::CommandExt;
+        let mut child =
+            std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "backend_state::tests::child_wait_fixture",
+                    "--ignored",
+                ])
+                .creation_flags(0x0800_0000)
+                .spawn()
+                .expect("spawn descendant");
+        std::fs::write(
+            std::env::var_os("MEDIASORT_TEST_CHILD_PID").expect("fixture pid path"),
+            child.id().to_string(),
+        )
+        .expect("write pid");
+        thread::sleep(Duration::from_secs(30));
+        let _ = child.wait();
     }
 
     #[cfg(windows)]

@@ -493,7 +493,9 @@ test.describe("later stages", () => {
     await expectTargetsAndFocus(page, "Resolve");
 
     await openDetail(page, "IMG_0001.jpg");
-    await expect(page.getByText(/primary in unit unit-live-photo/i)).toBeVisible();
+    await expect(
+      page.getByText("Main photo/video: associated files follow its destination."),
+    ).toBeVisible();
     await expect(page.getByText(/IMG_0001\.xmp.*edit sidecar/i)).toBeVisible();
     await expectTargetsAndFocus(page, "Detail");
     await closeDetail(page);
@@ -505,7 +507,9 @@ test.describe("later stages", () => {
       .first()
       .click();
     await expect(page.getByRole("dialog", { name: /compare copies/i })).toBeVisible();
-    await expect(page.getByText(/primary in unit unit-live-photo/i)).toBeVisible();
+    await expect(
+      page.getByText("Main photo/video: associated files follow its destination."),
+    ).toBeVisible();
     expect(await page.getByText("unknown", { exact: true }).count()).toBeGreaterThan(0);
     await expect(page.getByText(/0 × 0/)).toHaveCount(0);
     await expectTargetsAndFocus(page, "Compare");
@@ -540,7 +544,7 @@ test.describe("later stages", () => {
     ).toBeVisible();
     await page.getByText(/media-unit evidence \(1\)/i).click();
     await expect(
-      page.getByText(/IMG_0001\.mov.*motion component.*planned with the primary file/i),
+      page.getByText(/IMG_0001\.mov.*motion component.*follows the main file’s destination/i),
     ).toBeVisible();
     await expectTargetsAndFocus(page, "Execute preflight");
     await page.getByRole("checkbox").check();
