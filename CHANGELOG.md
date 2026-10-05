@@ -3,6 +3,13 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [1.0.2](https://github.com/fileworks/media-sorter/compare/v1.0.1...v1.0.2) (2026-10-05)
+
+### Bug Fixes
+
+* handle the Windows per-user Programs fallback ([3568ee1](https://github.com/fileworks/media-sorter/commit/3568ee14f039807e02a36aa1d92c35fb83a55a8f))
+* Windows startup, previews and workflow continuity ([cc6a5bd](https://github.com/fileworks/media-sorter/commit/cc6a5bd8cd8be98072f38c64f2f901537d72a5ce))
+
 ## [1.0.1](https://github.com/fileworks/media-sorter/compare/v1.0.0...v1.0.1) (2026-10-04)
 
 ### Bug Fixes
