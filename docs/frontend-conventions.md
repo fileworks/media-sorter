@@ -25,6 +25,9 @@ translating their surrounding UI; exercise a running scan and a recovered plan i
 the browser when changing locale wiring.
 
 - Use semantic HSL tokens from `frontend/src/index.css` rather than raw colors.
+- `SelectedSetActions` shares selection actions across Browse and duplicate review;
+  pass the live selected sets and atomic `clearDecisions` callback, never an all-reset
+  callback. Keep folder previews consistent with the backend's root-level special branches.
 - Declare helpers before hooks/initializers: no-use-before-define is enforced.
 - Run lint with zero warnings, format check, Vitest and build. Pure logic uses
   the node test environment; components opt into jsdom with its environment docblock.

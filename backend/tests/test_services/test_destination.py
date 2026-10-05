@@ -139,17 +139,57 @@ def test_a_copy_is_named_for_its_keeper_and_source_root() -> None:
         Path("/phone/DCIM/keeper.jpg"),
         Path("/backup/photos/copy.jpg"),
         Path("/backup"),
+        destination_root=Path("/library"),
     )
 
-    assert destination == Path("/library/2024/03/_copies/keeper — from backup.jpg")
-    assert destination.parent.name == "_copies"
+    assert destination == Path("/library/_copies/2024/03/keeper — from backup.jpg")
 
 
-def test_copies_is_a_leaf_and_cannot_be_nested() -> None:
+def test_copy_keeper_cannot_already_be_in_a_copies_branch() -> None:
     with pytest.raises(ValueError, match="cannot itself be inside _copies"):
         copy_destination(
             Path("/library/2024/_copies/keeper.jpg"),
             Path("/phone/keeper.jpg"),
             Path("/backup/copy.jpg"),
             Path("/backup"),
+            destination_root=Path("/library"),
         )
+
+
+@pytest.mark.parametrize("relative", ["2025/07/14/Event/Camera", "_undated/Event", "_junk", "."])
+def test_all_copy_destinations_share_one_root_branch(relative: str) -> None:
+    root = Path("/library")
+    path = copy_destination(
+        root / relative / "kept.jpg",
+        Path("/phone/kept.jpg"),
+        Path("/backup/extra.jpg"),
+        Path("/backup"),
+        destination_root=root,
+    )
+    assert path == root / "_copies" / relative / "kept — from backup.jpg"
+
+
+@pytest.mark.parametrize(
+    "keeper",
+    ["/outside/kept.jpg", "/library/../outside/kept.jpg", "/library/_copies/2025/kept.jpg"],
+)
+def test_copy_policy_refuses_escaped_or_copy_tree_keepers(keeper: str) -> None:
+    with pytest.raises(ValueError):
+        copy_destination(
+            Path(keeper),
+            Path("/phone/kept.jpg"),
+            Path("/backup/extra.jpg"),
+            Path("/backup"),
+            destination_root=Path("/library"),
+        )
+
+
+def test_legacy_plan_without_recorded_root_keeps_its_adjacent_layout() -> None:
+    path = copy_destination(
+        Path("/library/2025/kept.jpg"),
+        Path("/phone/kept.jpg"),
+        Path("/backup/extra.jpg"),
+        Path("/backup"),
+        destination_root=None,
+    )
+    assert path == Path("/library/2025/_copies/kept — from backup.jpg")

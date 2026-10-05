@@ -1,10 +1,10 @@
-import { ButtonHTMLAttributes } from "react";
+import type { ComponentPropsWithRef } from "react";
 import { cn } from "@/lib/utils";
 
 type Variant = "default" | "destructive" | "ghost" | "outline" | "suggest";
 type Size = "sm" | "default" | "icon";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ComponentPropsWithRef<"button"> {
   variant?: Variant;
   size?: Size;
   className?: string;

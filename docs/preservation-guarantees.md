@@ -50,19 +50,32 @@ file's destination; excluded files are explicitly left at their source. They are
 not competing duplicate copies.
 
 In an organizing run, the copy you select as the keeper goes to its own planned
-sorting destination. The other copies go under **that keeper folder's `_copies/`**,
-with their associated files following them. This is a contextual subfolder, not
-one global `_copies` directory. If the keeper belongs under `_undated/` or another
-set-aside category, the displayed final path states that outcome explicitly.
+sorting destination. The other copies go under **root-level `_copies/`**, mirroring
+the keeper's folders. For example, `Y/M/D/photo.jpg` has extra copies under
+`_copies/Y/M/D/`; associated files follow their own main photo/video there.
+An undated or junk keeper has copies under `_copies/_undated/…` or `_copies/_junk/…`.
+All special branches (`_copies`, `_undated`, `_junk`, `_corrupted`) begin at the
+destination root, so date folders never hide them.
+The destination explanation recognizes those root branches explicitly; underscores
+in parent folders or user folder names do not imply a quarantine outcome.
 Browse's expanded cards, Details and Compare show the reviewed destinations from
 the same plan as execution, including any collision suffix. Accepting a suggestion
 directly from Browse is the same keeper decision as selecting it in the duplicate tab.
 The folder preview also updates automatically: confirmed extra copies appear in
-their actual contextual `_copies/` folder, and a set's cards list only the members
+their actual root-level `_copies/` branch, and a set's cards list only the members
 landing in that folder. Compare and the duplicate tab still show the complete set.
 Pending destination calculations remain labeled pending. No transfer occurs in
 the preview; changing the keeper, undoing a decision, or choosing “Not duplicates”
 rebuilds it from the reviewed plan.
+
+“Remove selected decisions” clears only explicit choices in selected editable sets;
+other decisions, protected references and every file stay unchanged. The selection
+remains available for another choice. “Clear set selection” only clears the selection.
+Both review views share these controls, and decision changes persist with the plan.
+
+Existing files are not reorganized automatically. Already saved frozen plans retain
+their reviewed paths, including the older adjacent `_copies/` layout. Build a new
+preview to use the root-level layout; a fresh decision is shown before execution.
 
 A suggestion alone authorizes nothing. Every outstanding duplicate set must be
 resolved before execution. “Not duplicates” keeps each member at its own planned
@@ -99,7 +112,7 @@ everything else, so keep independent backups.
 | `_undated/` | no usable date could be established, including implausible future dates |
 | `_junk/` | thumbnail or cache debris |
 | `_corrupted/` | the file could not be read, placed, or repaired |
-| `<keeper folder>/_copies/` | content is another copy of the keeper in that folder |
+| `_copies/<keeper's relative folders>/` | content is another copy of the selected file; its folder context is mirrored beneath this root branch |
 
 Content already verified in the destination is reported but not written again. Duplicate
 copies are staged and verified like every other placement, never deleted without a verified

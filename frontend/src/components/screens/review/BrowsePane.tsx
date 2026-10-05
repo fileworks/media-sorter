@@ -492,14 +492,24 @@ function SetHeader({
         )}
         <StackVisual paths={entry.rows.map((row) => row.source)} />
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <FiLayers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="truncate text-xs font-semibold text-foreground">{name}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              ·{" "}
-              {entry.setSize !== undefined && entry.setSize !== entry.rows.length
-                ? t("review.browse.copiesHere", { count: entry.rows.length, total: entry.setSize })
-                : t("review.stack.copies", { count: entry.rows.length })}
+          <span className="flex min-w-0 items-start gap-2">
+            <FiLayers className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+              <span
+                data-browse-set-name
+                className="max-w-full truncate text-xs font-semibold text-foreground"
+              >
+                {name}
+              </span>
+              <span className="max-w-full text-xs text-muted-foreground">
+                ·{" "}
+                {entry.setSize !== undefined && entry.setSize !== entry.rows.length
+                  ? t("review.browse.copiesHere", {
+                      count: entry.rows.length,
+                      total: entry.setSize,
+                    })
+                  : t("review.stack.copies", { count: entry.rows.length })}
+              </span>
             </span>
           </span>
           <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-3xs text-muted-foreground">

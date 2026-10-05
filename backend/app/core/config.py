@@ -95,9 +95,9 @@ class Config:
     rename: bool = False
     rename_pattern: str = "TYPE_YYYY-MM-DD"
 
-    # Duplicates — losing copies stay with their keeper under _copies/, never deleted. (The old
-    # duplicate_action="delete" option was removed 2026-07-11; legacy config
-    # files carrying that key load fine because from_dict drops unknown keys.)
+    # Duplicates — extra copies mirror keeper folders under root-level _copies/, never deleted.
+    # The old duplicate_action="delete" option was removed 2026-07-11; legacy config
+    # files carrying that key load fine because from_dict drops unknown keys.
     remove_duplicates: bool = True
 
     # Conversion

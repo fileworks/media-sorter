@@ -16,9 +16,12 @@ from app.services.outcome_provenance import append_collision, build_outcome_prov
 from app.services.verified_transfer import execute_transfer
 
 
-def test_bounded_provenance_records_decisions_and_is_carried_by_action(tmp_path: Path) -> None:
-    source_root = tmp_path / "input"
-    destination_root = tmp_path / "output"
+@pytest.mark.parametrize("ancestor", ["library", "_copies", "_archive"])
+def test_bounded_provenance_records_decisions_and_is_carried_by_action(
+    tmp_path: Path, ancestor: str
+) -> None:
+    source_root = tmp_path / ancestor / "input"
+    destination_root = tmp_path / ancestor / "output"
     source = source_root / "camera" / "IMG_1.jpg"
     source.parent.mkdir(parents=True)
     source.write_bytes(b"media")

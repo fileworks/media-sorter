@@ -181,7 +181,7 @@ or with the arrow keys — and shows the reference marked protected and says so.
 offers it a keeper decision, and a stale decision naming one is ignored rather than applied.
 
 **An outstanding set is visible before the run, not after it.** Browse separates proposals
-from undecided sets under *Stays where it is*. Both bind nothing, both count toward the one
+from undecided sets under *Needs a decision*. Both bind nothing, both count toward the one
 outstanding total, and Execute remains unavailable until every set is decided. Protected
 reference sets do not count because their immutable reference already answers the question.
 
@@ -189,7 +189,7 @@ reference sets do not count because their immutable reference already answers th
 
 There are two duplicate detections and they are independent. `PreviewService._preview_file`
 matches each file against the run's `DuplicateRegistry` and, on a hit, marks it `duplicate`
-and addresses it beside its keeper under `_copies/`. The catalog behind `GET /api/review/groups` is a
+and addresses it under root-level `_copies/`, mirroring its keeper's folders. The catalog behind `GET /api/review/groups` is a
 separate query with its own persistent identity.
 
 Only the catalog ever produced a `RowStack`, so a file the run was setting aside with no
@@ -208,15 +208,15 @@ deciding, and folding them in would hide a decision rather than reconcile one.
 
 One mechanism, end to end:
 
-1. The choice is held on the Review screen as **run state**. It is not persisted and not
-   sent anywhere until the run starts. Folder scope is decided earlier on Sources and is
+1. The choice is held on the Review screen and persisted as **plan review state**.
+   It authorizes no file transfer until the run starts. Folder scope is decided earlier on Sources and is
    sent independently to scan, analysis, preview, catalog queries and execution.
 2. `POST /api/sorting/start` receives it as `reviewed_sets: [{ keep, demote[] }]`. Both
    halves are needed: promoting a copy also demotes whichever copy the plan was going to
    place, so a decision is two changed actions, not one.
 3. `FrozenSortPlan.with_reviewed_sets()` derives a new plan in which the chosen copy uses
-   its recorded own destination and every other member follows it into that folder's
-   `_copies/` leaf. This remains exact across different dates and source-relative folders;
+   its recorded own destination and every other member follows the same relative folders
+   beneath root-level `_copies/`. This remains exact across different dates and source-relative folders;
    the stored plan is never edited.
 4. The run's `DuplicateRegistry` is seeded from the same sets, so the "first seen wins"
    keeper and the whitelisted action come from one input and cannot disagree.
@@ -239,7 +239,14 @@ own complete destination before Review.
 The whole set always follows its keeper. If members resolve to different dates, the
 keeper's date wins for placement while each loser's own date, source root, and would-be
 destination remain in the manifest and report. An undated or junk keeper applies the same
-rule: its copies land under `_undated/_copies/` or `_junk/_copies/`.
+rule: its copies land under `_copies/_undated/` or `_copies/_junk/`.
+
+Browse and duplicate review share selected-set actions. Removing selected decisions
+asks for confirmation, clears only explicit choices in editable selected sets, and
+leaves other decisions and the selection intact. Removing one or all decisions uses
+the same state reset. Recommendations become non-binding again; no files change.
+Saved plans retain previously frozen paths. Rebuild the preview for the new root-level
+layout; existing output is not migrated automatically.
 
 ## Similar media
 

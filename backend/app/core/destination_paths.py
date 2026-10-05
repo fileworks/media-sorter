@@ -36,7 +36,7 @@ QUARANTINE_FOLDERS: dict[str, str] = {
     "junk": "_junk",
 }
 
-#: Where a duplicate copy is placed, beside the keeper it follows.
+#: Root-level branch for duplicate copies, mirroring their keeper's folders.
 CONTEXTUAL_COPY_FOLDER = "_copies"
 
 
@@ -45,20 +45,38 @@ def copy_destination(
     keeper_source: Path,
     copy_source: Path,
     source_root: Path,
+    *,
+    destination_root: Path | None,
 ) -> Path:
-    """Return the contextual, unreserved destination for a duplicate copy.
+    """Mirror the keeper's relative folder beneath root-level ``_copies``.
 
     The caller applies the shared collision reservation, exactly as for every
     other planned path. The leaf name makes both relationships readable on
     disk: which file won and which input root supplied this copy.
+
+    ``None`` is reserved for old frozen plans without a recorded library root;
+    their existing adjacent layout is retained rather than guessing a boundary.
     """
-    if keeper_destination.parent.name == CONTEXTUAL_COPY_FOLDER:
+    if destination_root is None:
+        relative = Path()
+        base = keeper_destination.parent
+    else:
+        try:
+            relative = keeper_destination.parent.relative_to(destination_root)
+        except ValueError as exc:
+            raise ValueError("the duplicate keeper must be inside the destination root") from exc
+        if ".." in relative.parts:
+            raise ValueError("the duplicate keeper must be inside the destination root")
+        base = destination_root
+    if CONTEXTUAL_COPY_FOLDER in relative.parts or (
+        destination_root is None and keeper_destination.parent.name == CONTEXTUAL_COPY_FOLDER
+    ):
         raise ValueError("a duplicate keeper cannot itself be inside _copies")
 
     root_label = sanitize_path_segment(source_root.name) or "source"
     keeper_label = sanitize_path_segment(keeper_source.stem) or "keeper"
     filename = f"{keeper_label} — from {root_label}{copy_source.suffix}"
-    return keeper_destination.parent / CONTEXTUAL_COPY_FOLDER / filename
+    return base / CONTEXTUAL_COPY_FOLDER / relative / filename
 
 
 def reserve_destination(path: Path, reserved: set[str]) -> Path:

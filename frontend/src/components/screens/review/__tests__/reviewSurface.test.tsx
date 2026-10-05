@@ -1004,6 +1004,63 @@ describe("resolve", () => {
     expect(decisions.reviewedSets).toHaveLength(2);
   });
 
+  it.each(["browse", "resolve"] as const)(
+    "removes only the selected decision from %s, with cancellation and durable recovery",
+    async (mode) => {
+      const config = { ...TEST_CONFIG, duplicate_keeper_policy: "largest" as const };
+      const first = renderReview(result, config);
+      await waitForReview();
+      fireEvent.click(
+        screen.getByRole("checkbox", {
+          name: en("review.setSelection.toggle", { name: "a.jpg" }),
+        }),
+      );
+      acceptAllRecommendations(2);
+      switchTo(mode);
+      const untouched = decisions.reviewedSets.find((set) => set.keep === "/in/c.jpg");
+      expect(untouched).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: en("review.setSelection.reset") }));
+      const dialog = screen.getByRole("dialog", { name: en("review.setSelection.reset.title") });
+      expect(
+        within(dialog).getByText(en("review.setSelection.reset.description.one")),
+      ).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole("button", { name: en("common.cancel") }));
+      expect(decisions.reviewedSets).toHaveLength(2);
+
+      fireEvent.click(screen.getByRole("button", { name: en("review.setSelection.reset") }));
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: en("review.setSelection.reset.confirm"),
+        }),
+      );
+      await waitFor(() => expect(decisions.reviewedSets).toEqual([untouched]));
+      expect(decisions).toMatchObject({ outstandingSets: 1, proposedSets: 1 });
+
+      let persisted: PlanReviewState | undefined;
+      await waitFor(() => {
+        persisted = vi
+          .mocked(api.savePlanReviewState)
+          .mock.calls.map((call) => call[1])
+          .find(
+            (state) =>
+              state.selected_set_ids.includes("set-1") &&
+              state.decisions.length === 1 &&
+              state.decisions[0].group_id === "set-2",
+          );
+        expect(persisted).toBeTruthy();
+      });
+      first.unmount();
+      renderReview(result, config, { recoveredState: persisted });
+      await waitForReview();
+      expect(decisions.reviewedSets).toEqual([untouched]);
+      expect(screen.getByRole("button", { name: en("review.setSelection.reset") })).toHaveProperty(
+        "disabled",
+        true,
+      );
+    },
+  );
+
   it("rehydrates explicit choices and view state for the same plan, never a different plan", async () => {
     const first = renderReview(result, { ...TEST_CONFIG, duplicate_keeper_policy: "largest" });
     await waitForReview();
@@ -1150,6 +1207,15 @@ describe("resolve", () => {
       { keep: "/in/a.jpg", demote: ["/in/b.jpg"] },
       { keep: "/in/c.jpg", demote: ["/in/d.jpg"], keep_all: true },
     ]);
+
+    // The same reset clears keeper and not-duplicates answers in the selection.
+    fireEvent.click(screen.getByRole("button", { name: en("review.setSelection.reset") }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: en("review.setSelection.reset.confirm"),
+      }),
+    );
+    expect(decisions.reviewedSets).toEqual([]);
   });
 
   it("selects the visible collapsed sets with Ctrl/Cmd+A", async () => {

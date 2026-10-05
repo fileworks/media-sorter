@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.config import Config
 from app.core.config_fingerprint import config_fingerprint
 from app.core.database import DatabaseManager
-from app.core.destination_paths import initial_transfer_destination
+from app.core.destination_paths import contextualize_copy, initial_transfer_destination
 from app.core.exceptions import IntegrityTransferError, PlanAuthorizationError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
@@ -255,7 +255,7 @@ class SortingService(SortingSupportMixin):
 
         Set-aside strategy:
         - No usable date          → _undated/
-        - Duplicate content       → <keeper folder>/_copies/
+        - Duplicate content       → _copies/<keeper's relative folders>/
         - Junk                    → _junk/
         - Unreadable/corrupted    → _corrupted/
         - Already at destination  → report only; no write
@@ -956,7 +956,7 @@ class SortingService(SortingSupportMixin):
 
             # Classify cheaply up front, but let duplicate identity win first.
             # This permits a junk item to keep its copies together under
-            # `_junk/_copies` while preserving the non-destructive junk outcome.
+            # `_copies/_junk` while preserving the non-destructive junk outcome.
             junk_reason = classify_junk(file_path, config)
             try:
                 result = self._extraction.extract_detailed(
@@ -1005,7 +1005,7 @@ class SortingService(SortingSupportMixin):
 
             # Duplicate identity exists independently of date. Checking it
             # before the date branches lets an undated keeper hold its copies
-            # under `_undated/_copies/` instead of splitting the set.
+            # under `_copies/_undated/` instead of splitting the set.
             match = DuplicateMatch(False)
             if config.remove_duplicates:
                 # A binding "not duplicates" decision exempts the complete set
@@ -1191,13 +1191,12 @@ class SortingService(SortingSupportMixin):
                         keeper,
                         file_path,
                         source_root,
+                        destination_root=dest_root,
                     )
                     reservations = (
                         reserved_destinations if reserved_destinations is not None else set()
                     )
                     dest = reserve_destination(proposed, reservations)
-
-                from app.core.destination_paths import contextualize_copy
 
                 provenance = contextualize_copy(
                     provenance,

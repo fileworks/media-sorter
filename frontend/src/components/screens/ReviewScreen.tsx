@@ -853,6 +853,7 @@ export function ReviewScreen({
               onKeepAll={keepAll}
               onKeepAllMany={surface.markManyNotDuplicates}
               onReset={surface.clearDecision}
+              onResetMany={surface.clearDecisions}
               onResetAll={() =>
                 surface.clearDecisions(
                   allSets.filter((entry) => !entry.hasBaseline).map((entry) => entry.id),
@@ -1000,6 +1001,7 @@ export function ReviewScreen({
                     }}
                     onReviewSelected={() => openResolveAt([...surface.selectedSetIds][0] ?? null)}
                     onClearSelection={surface.clearSetSelection}
+                    onClearDecisions={surface.clearDecisions}
                   />
 
                   {paneEntries.length === 0 ? (

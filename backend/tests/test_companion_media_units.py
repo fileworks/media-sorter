@@ -584,7 +584,7 @@ def test_duplicate_evaluation_quarantines_a_whole_different_unit(tmp_path: Path)
 
     assert {Path(item["dest_path"]).parent for item in first} == {target / "2020"}
     assert second[0]["status"] == "duplicate"
-    assert {Path(item["dest_path"]).parent for item in second} == {target / "2020" / "_copies"}
+    assert {Path(item["dest_path"]).parent for item in second} == {target / "_copies" / "2020"}
 
 
 def test_manifest_actions_carry_unit_identity_and_primary_reference(tmp_path: Path) -> None:

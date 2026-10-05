@@ -148,7 +148,7 @@ failures fall back to on-demand rendering and never block media access.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Detect duplicates | `remove_duplicates` | `true` | Master switch for duplicate detection (per sort run). Each losing copy is verified under `<keeper folder>/_copies/`; it is never silently deleted. |
+| Detect duplicates | `remove_duplicates` | `true` | Master switch for duplicate detection (per sort run). Each extra copy is verified under root-level `_copies/<keeper's relative folders>/`; it is never silently deleted. |
 | Exact-match duplicates | `duplicate_exact_enabled` | `true` | SHA-256 byte-identical detection. |
 | Visual-similarity duplicates | `duplicate_perceptual_enabled` | `true` | Perceptual-hash near-duplicate detection (images and video). |
 | Similarity threshold | `duplicate_perceptual_threshold` | `95` | 0–100; how visually similar two files must be to count as duplicates. Higher = stricter. |
