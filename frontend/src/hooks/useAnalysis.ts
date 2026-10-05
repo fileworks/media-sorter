@@ -17,6 +17,8 @@ export interface UseAnalysisReturn {
   cancelled: boolean;
   elapsed: number;
   progress: TaskProgress | null;
+  /** The current task's first status request has returned or failed. */
+  statusSettled: boolean;
   /** Resolves with the scan when it finishes, or null if it failed or was cancelled. */
   runAnalysis: (excludedRoots?: string[]) => Promise<AnalysisResult | null>;
   resumeAnalysis: (taskId: string) => void;
@@ -210,6 +212,7 @@ export function useAnalysis(): UseAnalysisReturn {
     cancelled,
     elapsed,
     progress,
+    statusSettled: status !== undefined || Boolean(statusError),
     runAnalysis,
     resumeAnalysis,
     cancelAnalysis,

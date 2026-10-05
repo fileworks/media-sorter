@@ -5,7 +5,7 @@ The portable layout mirrors the path-resolution logic in the Rust shell
 (src-tauri/src/main.rs): the main exe lives in an ``app/`` subdirectory and
 its resources live directly below that executable directory:
 
-    MediaSorter-portable/
+    MediaSorter_X.Y.Z_x64-portable/
         app/
             MediaSorter.exe          ← double-click or run from terminal
             resources/               ← backend + ffmpeg runtime payloads
@@ -30,6 +30,8 @@ This script is stdlib-only so it runs on a bare CI runner without a virtualenv.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -38,10 +40,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = REPO_ROOT / "frontend"
 TARGET_RELEASE = FRONTEND / "src-tauri" / "target" / "release"
 RESOURCES_SRC = FRONTEND / "src-tauri" / "resources"
+TAURI_CONFIG = FRONTEND / "src-tauri" / "tauri.conf.json"
 
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def default_package_name() -> str:
+    """Use the native app's version for both the ZIP and its extracted root."""
+    version = json.loads(TAURI_CONFIG.read_text(encoding="utf-8"))["version"]
+    if not isinstance(version, str) or not re.fullmatch(
+        r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version
+    ):
+        raise ValueError("native application version is not a safe version string")
+    return f"MediaSorter_{version}_x64-portable"
 
 
 def main() -> int:
@@ -54,8 +67,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--name",
-        default="MediaSorter-portable",
-        help="stem used for the ZIP filename and its root directory inside the archive",
+        help="ZIP/root stem (default: MediaSorter_<native version>_x64-portable)",
     )
     args = parser.parse_args()
 
@@ -91,9 +103,13 @@ def main() -> int:
             return 1
 
     # ── Build the ZIP ─────────────────────────────────────────────────────────
+    try:
+        root = args.name or default_package_name()
+    except (OSError, ValueError, KeyError) as error:
+        log(f"ERROR: cannot determine portable package name: {error}")
+        return 1
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    root = args.name
     zip_path = out_dir / f"{root}.zip"
 
     log(f"==> Creating portable ZIP: {zip_path}")

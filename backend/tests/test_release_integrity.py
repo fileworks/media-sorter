@@ -557,6 +557,9 @@ def test_portable_builder_matches_launcher_resource_layout(
     output = tmp_path / "output"
     monkeypatch.setattr(make_portable_zip, "TARGET_RELEASE", target)
     monkeypatch.setattr(make_portable_zip, "RESOURCES_SRC", resources)
+    native_config = tmp_path / "tauri.conf.json"
+    native_config.write_text(json.dumps({"version": "9.8.7"}), encoding="utf-8")
+    monkeypatch.setattr(make_portable_zip, "TAURI_CONFIG", native_config)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -569,9 +572,12 @@ def test_portable_builder_matches_launcher_resource_layout(
 
     assert make_portable_zip.main() == 0
 
-    archive_path = output / "MediaSorter-portable.zip"
+    archive_path = output / "MediaSorter_9.8.7_x64-portable.zip"
     _, required = release_integrity._zip_required(archive_path)
     release_integrity._verify_zip_native_provenance(archive_path, required)
     with release_integrity.zipfile.ZipFile(archive_path) as archive:
+        assert all(
+            name.startswith("MediaSorter_9.8.7_x64-portable/") for name in archive.namelist()
+        )
         assert set(required.values()) <= set(archive.namelist())
         assert not any("/clip/" in name for name in archive.namelist())

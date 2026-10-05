@@ -94,7 +94,12 @@ export function StageShell({
   onStateChange,
 }: StageShellProps) {
   const { t } = useI18n();
-  const [state, setState] = useState<StageState>({ ...INITIAL_STATE, key: stageKey });
+  const [state, setState] = useState<StageState>(() => {
+    const initial = { ...INITIAL_STATE, key: stageKey };
+    return requestedStage && readiness(requestedStage, inputs).canEnter
+      ? goTo(initial, requestedStage).state
+      : initial;
+  });
   const [invalidated, setInvalidated] = useState<string[]>([]);
   const [pending, setPending] = useState<{ stage: Stage; view?: View } | null>(null);
   const [unlockAsked, setUnlockAsked] = useState(false);

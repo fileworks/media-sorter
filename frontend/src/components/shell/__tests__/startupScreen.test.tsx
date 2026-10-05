@@ -25,6 +25,8 @@ const nothing = {
   backendFailed: false,
   configReady: false,
   configFailed: false,
+  restoreReady: false,
+  restoreFailed: false,
 };
 
 afterEach(cleanup);
@@ -33,7 +35,7 @@ describe("startup step sequencing", () => {
   it("runs the first step and holds the rest until it finishes", () => {
     const steps = startupSteps(nothing, en);
 
-    expect(steps.map((step) => step.state)).toEqual(["running", "pending", "pending"]);
+    expect(steps.map((step) => step.state)).toEqual(["running", "pending", "pending", "pending"]);
   });
 
   it("advances exactly one step at a time", () => {
@@ -41,16 +43,29 @@ describe("startup step sequencing", () => {
       "done",
       "running",
       "pending",
+      "pending",
     ]);
     expect(
       startupSteps({ ...nothing, sessionReady: true, backendReady: true }, en).map((s) => s.state),
-    ).toEqual(["done", "done", "running"]);
+    ).toEqual(["done", "done", "running", "pending"]);
     expect(
       startupSteps(
         { ...nothing, sessionReady: true, backendReady: true, configReady: true },
         en,
       ).map((s) => s.state),
-    ).toEqual(["done", "done", "done"]);
+    ).toEqual(["done", "done", "done", "running"]);
+    expect(
+      startupSteps(
+        {
+          ...nothing,
+          sessionReady: true,
+          backendReady: true,
+          configReady: true,
+          restoreReady: true,
+        },
+        en,
+      ).map((s) => s.state),
+    ).toEqual(["done", "done", "done", "done"]);
   });
 
   it("never shows work in progress behind a failure", () => {
@@ -58,14 +73,29 @@ describe("startup step sequencing", () => {
     // unfinished — it has not been attempted, and must not spin as if it had.
     const steps = startupSteps({ ...nothing, sessionReady: true, backendFailed: true }, en);
 
-    expect(steps.map((step) => step.state)).toEqual(["done", "failed", "pending"]);
+    expect(steps.map((step) => step.state)).toEqual(["done", "failed", "pending", "pending"]);
     expect(steps.filter((step) => step.state === "running")).toEqual([]);
   });
 
   it("reports a failure at the very first step without inventing progress", () => {
     const steps = startupSteps({ ...nothing, sessionFailed: true }, en);
 
-    expect(steps.map((step) => step.state)).toEqual(["failed", "pending", "pending"]);
+    expect(steps.map((step) => step.state)).toEqual(["failed", "pending", "pending", "pending"]);
+  });
+
+  it("reports an initial recovery failure after settings loaded", () => {
+    const steps = startupSteps(
+      {
+        ...nothing,
+        sessionReady: true,
+        backendReady: true,
+        configReady: true,
+        restoreFailed: true,
+      },
+      en,
+    );
+    expect(steps.map((step) => step.state)).toEqual(["done", "done", "done", "failed"]);
+    expect(steps.filter((step) => step.state === "running")).toEqual([]);
   });
 });
 
@@ -82,7 +112,12 @@ describe("StartupScreen", () => {
     );
 
     const list = screen.getByRole("list", { name: en("startup.title") });
-    for (const key of ["startup.step.session", "startup.step.backend", "startup.step.config"]) {
+    for (const key of [
+      "startup.step.session",
+      "startup.step.backend",
+      "startup.step.config",
+      "startup.step.restore",
+    ]) {
       expect(within(list).getByText(en(key))).toBeTruthy();
     }
     const current = within(list)
