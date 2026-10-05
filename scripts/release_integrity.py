@@ -641,6 +641,23 @@ def _smoke_launcher(path: Path) -> None:
                 )
 
 
+def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) -> bool:
+    if getattr(error, "winerror", None) == 32:
+        return True
+    if getattr(error, "winerror", None) != 5 or not error.filename:
+        return False
+    # Windows can report access denied for a still-mapped metrics file. Limit
+    # this grace period to that file type in our own isolated browser profile.
+    try:
+        path = Path(error.filename).resolve()
+        return (
+            path.suffix.casefold() == ".pma"
+            and path.parent == (directory / "webview/EBWebView/BrowserMetrics").resolve()
+        )
+    except OSError:
+        return False
+
+
 @contextmanager
 def _webview_smoke_state():
     """Allow WebView2 to release its isolated profile after launcher shutdown."""
@@ -657,9 +674,13 @@ def _webview_smoke_state():
                 break
             except PermissionError as error:
                 # WebView2 subprocess shutdown can lag behind the GUI process.
-                # Retry sharing violations only; do not suppress permission or
-                # validation failures or kill unrelated browser processes.
-                if os.name != "nt" or getattr(error, "winerror", None) != 32 or attempt == 40:
+                # Retry sharing locks and the known metrics mapping race only.
+                # Unrelated or persistent permission failures remain failures.
+                if (
+                    os.name != "nt"
+                    or not _retryable_webview_cleanup_error(error, directory)
+                    or attempt == 40
+                ):
                     raise
                 time.sleep(0.25)
 

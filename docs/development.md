@@ -179,6 +179,9 @@ a ready session and a successfully loaded Blob image under the packaged CSP.
 `img-src` and `media-src` allow `blob:` because media is fetched with the launch
 capability and exposed through short-lived object URLs; script/network policies
 remain restricted. Test previews in the packaged WebView, not just Vite.
+On Windows, isolated smoke-profile cleanup allows at most ten seconds for sharing
+locks and access-denied `.pma` metrics files inside its own `BrowserMetrics` folder.
+Other permission errors fail immediately; persistent locks still fail the gate.
 
 The Windows release job also compiles a disposable NSIS fixture using Tauri's
 cached compiler and runs `scripts/check_nsis_guard.py --makensis <makensis.exe>`.

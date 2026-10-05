@@ -8,6 +8,7 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-10-05 | Bound isolated WebView2 smoke cleanup | Retry sharing locks and the known access-denied metrics-file race for up to ten seconds; unrelated or persistent permission errors still fail. Keep all retries inside disposable smoke state. | [release checks](development.md#releasing) |
 | 2026-10-04 | Responsive desktop startup and authenticated Blob media | Paint the loading window before background initialization; await the exact ready session; own and reap children throughout startup; hide Windows backend consoles; test actual Blob rendering under packaged CSP. | [startup](install.md#startup-and-interface-language), [release checks](development.md#releasing) |
 | 2026-10-04 | Separate interface locale from operational labels | EN/DE changes UI and device storage without resetting active progress or invalidating reviewed destinations; backend category language still participates in plan validation. | [UI conventions](frontend-conventions.md), [startup and language](install.md#startup-and-interface-language) |
 | 2026-10-05 | Platform-specific Windows icon and typography | Enlarge the ICO mark and explicitly attach its shared 256px resource as the taskbar's large icon, avoiding the 16px title-icon fallback; use native Segoe UI and at least 11px metadata on Windows. Preserve macOS artwork and padding. | [icon and typography](design-system.md#geometry-and-typography) |
