@@ -178,7 +178,9 @@ def read_signing_state(path: Path) -> SigningState:
             missing_variables=tuple(raw.get("missing_variables", [])),
         )
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise ReleaseIntegrityError(f"invalid signing-state file {path}: {error}") from error
+        raise ReleaseIntegrityError(
+            f"invalid signing-state file {path}: {error}"
+        ) from error
 
 
 def _sha256(path: Path) -> str:
@@ -225,7 +227,9 @@ def verify_snapshot(root: Path, snapshot: Path) -> None:
         raw = json.loads(snapshot.read_text(encoding="utf-8"))
         expected = raw["files"]
     except (OSError, ValueError, KeyError, TypeError) as error:
-        raise ReleaseIntegrityError(f"invalid payload snapshot {snapshot}: {error}") from error
+        raise ReleaseIntegrityError(
+            f"invalid payload snapshot {snapshot}: {error}"
+        ) from error
 
     current = {
         path.relative_to(root).as_posix(): {
@@ -266,9 +270,17 @@ def _load_command(name: str, environment: Mapping[str, str]) -> list[str]:
     try:
         value = json.loads(raw)
     except ValueError as error:
-        raise ReleaseIntegrityError(f"{name} must contain a JSON argument array") from error
-    if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
-        raise ReleaseIntegrityError(f"{name} must contain a non-empty JSON argument array")
+        raise ReleaseIntegrityError(
+            f"{name} must contain a JSON argument array"
+        ) from error
+    if (
+        not isinstance(value, list)
+        or not value
+        or not all(isinstance(item, str) for item in value)
+    ):
+        raise ReleaseIntegrityError(
+            f"{name} must contain a non-empty JSON argument array"
+        )
     if not any("{file}" in item for item in value):
         raise ReleaseIntegrityError(f"{name} must contain a {{file}} placeholder")
     return value
@@ -283,12 +295,16 @@ def render_command(
         name = match.group(1)
         value = environment.get(name, "")
         if not value:
-            raise ReleaseIntegrityError(f"signing command requires missing variable {name}")
+            raise ReleaseIntegrityError(
+                f"signing command requires missing variable {name}"
+            )
         return value
 
     rendered = []
     for argument in template:
-        value = argument.replace("{file}", str(path)).replace("{timestamp_url}", timestamp_url)
+        value = argument.replace("{file}", str(path)).replace(
+            "{timestamp_url}", timestamp_url
+        )
         rendered.append(ENV_PLACEHOLDER.sub(replace_environment, value))
     return rendered
 
@@ -353,11 +369,15 @@ def sign_nested_payloads(
         files = sorted(
             path
             for path in root.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".exe", ".dll"} and _is_pe(path)
+            if path.is_file()
+            and path.suffix.lower() in {".exe", ".dll"}
+            and _is_pe(path)
         )
         for path in files:
             _run_safe("WINDOWS_SIGN_COMMAND_JSON", path, env, purpose="sign nested PE")
-            _run_safe("WINDOWS_VERIFY_COMMAND_JSON", path, env, purpose="verify nested PE")
+            _run_safe(
+                "WINDOWS_VERIFY_COMMAND_JSON", path, env, purpose="verify nested PE"
+            )
         return files
 
     return []
@@ -395,7 +415,9 @@ def _macos_shell(app: Path) -> Path:
     matches = sorted(path for path in executable_dir.glob("*") if path.is_file())
     if len(matches) == 1:
         return matches[0]
-    raise ReleaseIntegrityError(f"could not identify the macOS shell under {executable_dir}")
+    raise ReleaseIntegrityError(
+        f"could not identify the macOS shell under {executable_dir}"
+    )
 
 
 def sign_outer_artifacts(
@@ -403,7 +425,9 @@ def sign_outer_artifacts(
 ) -> list[Path]:
     env = os.environ if environment is None else environment
     if state.mode == "unsigned":
-        print(f"Outer artifacts remain explicitly unsigned ({state.platform})", flush=True)
+        print(
+            f"Outer artifacts remain explicitly unsigned ({state.platform})", flush=True
+        )
         return []
     if state.mode != "signed":
         raise ReleaseIntegrityError(
@@ -414,9 +438,13 @@ def sign_outer_artifacts(
         paths = [_windows_shell()]
         paths.extend(_glob_files(("msi/*.msi", "nsis/*-setup.exe")))
         if len(paths) < 3:
-            raise ReleaseIntegrityError("Windows shell, MSI, and NSIS artifacts are required")
+            raise ReleaseIntegrityError(
+                "Windows shell, MSI, and NSIS artifacts are required"
+            )
         for path in paths:
-            _run_safe("WINDOWS_SIGN_COMMAND_JSON", path, env, purpose="sign outer artifact")
+            _run_safe(
+                "WINDOWS_SIGN_COMMAND_JSON", path, env, purpose="sign outer artifact"
+            )
             _run_safe(
                 "WINDOWS_VERIFY_COMMAND_JSON",
                 path,
@@ -429,7 +457,9 @@ def sign_outer_artifacts(
         app = BUNDLE_DIR / "macos" / "MediaSorter.app"
         dmgs = _glob_files(("dmg/*.dmg",))
         if not app.is_dir() or len(dmgs) != 1:
-            raise ReleaseIntegrityError("exactly one DMG and the packaged app are required")
+            raise ReleaseIntegrityError(
+                "exactly one DMG and the packaged app are required"
+            )
         subprocess.run(
             ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)],
             check=True,
@@ -469,7 +499,9 @@ def sign_outer_artifacts(
         subprocess.run(["xcrun", "stapler", "staple", str(dmg)], check=True)
         subprocess.run(["xcrun", "stapler", "validate", str(dmg)], check=True)
         subprocess.run(["codesign", "--verify", "--verbose=2", str(dmg)], check=True)
-        subprocess.run(["spctl", "--assess", "--type", "open", "--verbose=2", str(dmg)], check=True)
+        subprocess.run(
+            ["spctl", "--assess", "--type", "open", "--verbose=2", str(dmg)], check=True
+        )
         return [dmg]
 
     return []
@@ -484,7 +516,8 @@ def sign_windows_file(path: Path, environment: Mapping[str, str] | None = None) 
         return
     if state.mode == "partial":
         raise ReleaseIntegrityError(
-            "partial signing credentials; missing: " + ", ".join(state.missing_variables)
+            "partial signing credentials; missing: "
+            + ", ".join(state.missing_variables)
         )
     _run_safe("WINDOWS_SIGN_COMMAND_JSON", path, env, purpose="sign Tauri artifact")
     _run_safe("WINDOWS_VERIFY_COMMAND_JSON", path, env, purpose="verify Tauri artifact")
@@ -537,7 +570,9 @@ def _require_windows_gui_subsystem(path: Path) -> None:
     except (OSError, ValueError, struct.error) as error:
         raise ReleaseIntegrityError(f"invalid Windows PE header: {path}") from error
     if subsystem != WINDOWS_GUI_SUBSYSTEM:
-        raise ReleaseIntegrityError(f"packaged Windows shell would allocate a console: {path}")
+        raise ReleaseIntegrityError(
+            f"packaged Windows shell would allocate a console: {path}"
+        )
 
 
 def _smoke_program(path: Path, arguments: Sequence[str]) -> None:
@@ -594,7 +629,9 @@ def _smoke_backend(path: Path) -> None:
                             return
                 except OSError:
                     time.sleep(0.25)
-            raise ReleaseIntegrityError(f"packaged backend health check timed out: {path}")
+            raise ReleaseIntegrityError(
+                f"packaged backend health check timed out: {path}"
+            )
         finally:
             process.terminate()
             try:
@@ -627,7 +664,9 @@ def _smoke_launcher(path: Path) -> None:
             timeout=30,
         )
         if result.returncode == 0:
-            raise ReleaseIntegrityError("controlled launcher failure exited successfully")
+            raise ReleaseIntegrityError(
+                "controlled launcher failure exited successfully"
+            )
         log_path = log_dir / "mediasort.log"
         _require_file(log_path)
         log_text = log_path.read_text(encoding="utf-8")
@@ -641,13 +680,33 @@ def _smoke_launcher(path: Path) -> None:
                 )
 
 
+def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) -> bool:
+    if getattr(error, "winerror", None) == 32:
+        return True
+    if getattr(error, "winerror", None) != 5 or not error.filename:
+        return False
+    # Windows can report access denied for a still-mapped metrics file. Limit
+    # this grace period to that file type in our own isolated browser profile.
+    try:
+        path = Path(error.filename).resolve()
+        return (
+            path.suffix.casefold() == ".pma"
+            and path.parent
+            == (directory / "webview/EBWebView/BrowserMetrics").resolve()
+        )
+    except OSError:
+        return False
+
+
 @contextmanager
 def _webview_smoke_state():
     """Allow WebView2 to release its isolated profile after launcher shutdown."""
     temporary = tempfile.TemporaryDirectory(prefix="mediasorter-webview-smoke-")
     directory = Path(temporary.name).resolve()
     if directory.parent != Path(tempfile.gettempdir()).resolve():
-        raise ReleaseIntegrityError("WebView smoke state escaped its temporary directory")
+        raise ReleaseIntegrityError(
+            "WebView smoke state escaped its temporary directory"
+        )
     try:
         yield directory
     finally:
@@ -657,9 +716,13 @@ def _webview_smoke_state():
                 break
             except PermissionError as error:
                 # WebView2 subprocess shutdown can lag behind the GUI process.
-                # Retry sharing violations only; do not suppress permission or
-                # validation failures or kill unrelated browser processes.
-                if os.name != "nt" or getattr(error, "winerror", None) != 32 or attempt == 40:
+                # Retry sharing locks and the known metrics mapping race only.
+                # Unrelated or persistent permission failures remain failures.
+                if (
+                    os.name != "nt"
+                    or not _retryable_webview_cleanup_error(error, directory)
+                    or attempt == 40
+                ):
                     raise
                 time.sleep(0.25)
 
@@ -689,9 +752,13 @@ def _smoke_packaged_webview(path: Path) -> None:
                 timeout=60,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise ReleaseIntegrityError(f"packaged WebView smoke failed: {path}") from error
+            raise ReleaseIntegrityError(
+                f"packaged WebView smoke failed: {path}"
+            ) from error
         if result.returncode != 0:
-            raise ReleaseIntegrityError(f"packaged WebView exited with {result.returncode}: {path}")
+            raise ReleaseIntegrityError(
+                f"packaged WebView exited with {result.returncode}: {path}"
+            )
         log_path = log_dir / "mediasort.log"
         _require_file(log_path)
         log = log_path.read_text(encoding="utf-8")
@@ -711,7 +778,9 @@ def _zip_required(zip_path: Path) -> tuple[str, dict[str, str]]:
         names = set(archive.namelist())
         roots = {name.split("/", 1)[0] for name in names if "/" in name}
         if len(roots) != 1:
-            raise ReleaseIntegrityError(f"portable ZIP needs one root directory: {zip_path}")
+            raise ReleaseIntegrityError(
+                f"portable ZIP needs one root directory: {zip_path}"
+            )
         root = roots.pop()
         required = {
             "shell": f"{root}/app/MediaSorter.exe",
@@ -802,11 +871,17 @@ def verify_release(
             for path in (shell, backend, ffmpeg, ffprobe):
                 _require_file(path)
                 if not os.access(path, os.X_OK):
-                    raise ReleaseIntegrityError(f"packaged executable mode is missing: {path}")
+                    raise ReleaseIntegrityError(
+                        f"packaged executable mode is missing: {path}"
+                    )
             _verify_native_provenance(payload / "ffmpeg", "darwin")
             if state.mode == "signed":
                 for path in sorted(
-                    (item for item in app.rglob("*") if item.is_file() and _is_macho(item)),
+                    (
+                        item
+                        for item in app.rglob("*")
+                        if item.is_file() and _is_macho(item)
+                    ),
                     key=lambda item: len(item.parts),
                     reverse=True,
                 ):
@@ -841,7 +916,9 @@ def verify_release(
         nsis = _glob_files(("nsis/*-setup.exe",))
         zips = _glob_files(("portable/*.zip",))
         if len(msis) != 1 or len(nsis) != 1 or len(zips) != 1:
-            raise ReleaseIntegrityError("one MSI, NSIS installer, and portable ZIP are required")
+            raise ReleaseIntegrityError(
+                "one MSI, NSIS installer, and portable ZIP are required"
+            )
         for path in (msis[0], nsis[0], zips[0]):
             _require_file(path, minimum_size)
         _require_magic(msis[0], b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
@@ -860,7 +937,9 @@ def verify_release(
                     purpose="verify signed artifact",
                 )
         if run_smoke:
-            with tempfile.TemporaryDirectory(prefix="mediasorter-portable-smoke-") as temporary:
+            with tempfile.TemporaryDirectory(
+                prefix="mediasorter-portable-smoke-"
+            ) as temporary:
                 with zipfile.ZipFile(zips[0]) as archive:
                     archive.extractall(temporary)
                 extracted = Path(temporary)
@@ -926,7 +1005,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     preflight = subparsers.add_parser("preflight")
     preflight.add_argument("--platform", default=_default_platform())
-    preflight.add_argument("--output", type=Path, default=BUNDLE_DIR / "release-signing-state.json")
+    preflight.add_argument(
+        "--output", type=Path, default=BUNDLE_DIR / "release-signing-state.json"
+    )
     preflight.add_argument("--github-output", type=Path)
 
     normalize = subparsers.add_parser("normalize")
@@ -969,7 +1050,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             state = classify_signing(args.platform)
             if state.mode == "partial":
                 raise ReleaseIntegrityError(
-                    "partial signing credentials; missing: " + ", ".join(state.missing_variables)
+                    "partial signing credentials; missing: "
+                    + ", ".join(state.missing_variables)
                 )
             write_signing_state(state, args.output)
             if args.github_output:
