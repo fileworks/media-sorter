@@ -36,6 +36,8 @@ use tauri::{Manager, State};
 
 mod backend_state;
 mod owned_backend;
+#[cfg(windows)]
+mod windows_icon;
 use backend_state::BackendStartup;
 use owned_backend::OwnedBackend;
 
@@ -835,6 +837,15 @@ fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
     let backend_log_path = log_path.to_path_buf();
     let runtime_code = app.run_return(move |app_handle, event| {
         if let tauri::RunEvent::Ready = event {
+            #[cfg(windows)]
+            if let Some(window) = app_handle.get_webview_window("main") {
+                if let Err(error) = windows_icon::apply(&window) {
+                    write_log(
+                        "WARN",
+                        &format!("Could not set the high-resolution Windows taskbar icon: {error}"),
+                    );
+                }
+            }
             // Tauri creates configured windows during Ready, after build().
             // Start the worker only after that desktop initialization finishes.
             start_backend_in_background(
@@ -1018,10 +1029,9 @@ mod tests {
         let startup = BackendStartup::default();
         let id = startup
             .spawn(|| {
-                let mut child = Command::new("sh")
-                    .args(["-c", "exit 7"])
-                    .spawn()
-                    .expect("spawn fixture");
+                let mut command = Command::new("sh");
+                command.args(["-c", "exit 7"]);
+                let mut child = OwnedBackend::spawn(&mut command).expect("spawn fixture");
                 child.wait().expect("wait fixture");
                 Ok(child)
             })

@@ -87,7 +87,11 @@ banner at the top of the screen scrolls away.
    and centres it at **94%** of the ICO canvas, with every 16–256px frame derived
     from that Windows source. Its folder/arrow mark is enlarged separately to
     89% of the tile (about 84% of the canvas), rather than enlarging only the
-    background plate. The ICNS and other canonical assets keep their macOS
+    background plate. At native `Ready`, the shell also sets `ICON_BIG` from
+    the executable's shared 256px ICO resource: Tauri's normal window-icon path
+    only sets the small title-bar icon, which otherwise becomes the taskbar fallback.
+    Windows owns that shared handle for the process lifetime and scales it for DPI.
+    The ICNS and other canonical assets keep their macOS
    padding. An earlier revision inset the
   tile to 744/1024 to look smaller in the dock, which that normalisation now
   undoes; all it bought was an upscale on macOS and an undersized icon
