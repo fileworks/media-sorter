@@ -128,7 +128,7 @@ test("companion badge glyphs stay inside their box at Windows-style scaling", as
   );
   await page.goto("/");
   await openSurface(page, "review");
-  const badge = page.locator("[data-file-status]").getByText("file group", { exact: true });
+  const badge = page.locator("[data-file-status]").getByText("with XMP + MOV", { exact: true });
   await expect(badge).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await expect(badge).toHaveCSS("font-size", "11px");
