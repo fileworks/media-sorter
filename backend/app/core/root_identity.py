@@ -125,25 +125,32 @@ def same_root(left: RootIdentity, right: RootIdentity) -> bool:
 
 
 def _volume_evidence(path: Path, device_id: int) -> _VolumeEvidence:
-    if os.name == "nt":  # pragma: no cover - exercised by Windows CI
-        windows = _windows_volume_evidence(path)
-        if windows.volume_id is not None:
-            return windows
+    if sys.platform == "win32":
+        # A failed volume API leaves no proven volume identity. Report none, so
+        # the root degrades to path-only confidence instead of crashing on the
+        # POSIX-only statvfs or inventing a device identity.
+        return _windows_volume_evidence(path)
+    return _posix_volume_evidence(path, device_id)
 
+
+def _posix_volume_evidence(path: Path, device_id: int) -> _VolumeEvidence:
     filesystem_id: str | None = None
-    try:
-        statvfs = os.statvfs(path)
-        raw_fsid = getattr(statvfs, "f_fsid", None)
-        if raw_fsid is not None:
-            filesystem_id = f"fsid:{raw_fsid}"
-    except OSError:
-        pass
+    if sys.platform != "win32":
+        try:
+            statvfs = os.statvfs(path)
+            raw_fsid = getattr(statvfs, "f_fsid", None)
+            if raw_fsid is not None:
+                filesystem_id = f"fsid:{raw_fsid}"
+        except OSError:
+            pass
     return _VolumeEvidence(volume_id=f"device:{device_id}", filesystem_id=filesystem_id)
 
 
 def _windows_volume_evidence(path: Path) -> _VolumeEvidence:
     """Read Windows volume serial and filesystem name without a subprocess."""
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    if sys.platform != "win32":
+        return _VolumeEvidence(None, None)
+    kernel32 = ctypes.windll.kernel32
     volume_path = ctypes.create_unicode_buffer(261)
     if not kernel32.GetVolumePathNameW(str(path), volume_path, len(volume_path)):
         return _VolumeEvidence(None, None)

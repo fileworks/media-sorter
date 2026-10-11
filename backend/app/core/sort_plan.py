@@ -148,7 +148,7 @@ def destination_fingerprint(root: Path) -> str:
                 entries.append(
                     f"other:{relative}:{stat.S_IFMT(observed.st_mode):o}:"
                     f"{observed.st_dev}:{observed.st_ino}:"
-                    f"{observed.st_rdev}:{observed.st_size}"
+                    f"{getattr(observed, 'st_rdev', 0)}:{observed.st_size}"
                 )
     payload = "\n".join(sorted(entries)).encode("utf-8")
     return "destination-v1:" + hashlib.sha256(payload).hexdigest()

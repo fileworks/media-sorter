@@ -14,6 +14,7 @@ Tier definitions:
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -59,7 +60,7 @@ def _ram_gb() -> float:
                 ["sysctl", "-n", "hw.memsize"], text=True, timeout=_SYSCTL_TIMEOUT_SECONDS
             )
             return int(out.strip()) / (1024**3)
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             import ctypes
 
             class MEMORYSTATUSEX(ctypes.Structure):
@@ -77,7 +78,7 @@ def _ram_gb() -> float:
 
             stat = MEMORYSTATUSEX()
             stat.dwLength = ctypes.sizeof(stat)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))  # type: ignore[attr-defined]
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
             return float(stat.ullTotalPhys) / (1024**3)
         # Linux: /proc/meminfo
         with open("/proc/meminfo") as fh:

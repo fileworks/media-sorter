@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import tempfile
 import time
 from collections.abc import Iterator
@@ -165,7 +166,7 @@ def _migration_lock(path: Path) -> Iterator[None]:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = path.open("a+b")
     try:
-        if os.name == "nt":  # pragma: no cover - exercised by Windows CI
+        if sys.platform == "win32":  # pragma: no cover - exercised by Windows CI
             import msvcrt
 
             windows_lock = cast(Any, msvcrt)
@@ -186,7 +187,7 @@ def _migration_lock(path: Path) -> Iterator[None]:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         yield
     finally:
-        if os.name == "nt":  # pragma: no cover - exercised by Windows CI
+        if sys.platform == "win32":  # pragma: no cover - exercised by Windows CI
             import msvcrt
 
             windows_lock = cast(Any, msvcrt)
