@@ -338,3 +338,29 @@ def test_image_dimensions_unreadable_returns_none(tmp_path: Path) -> None:
     junk = tmp_path / "junk.jpg"
     junk.write_bytes(b"not an image")
     assert image_dimensions(junk) is None
+
+
+
+def test_open_image_lets_a_consumer_error_propagate(tmp_path: Path) -> None:
+    """AI-NEW-4: an error inside the block is not swallowed or turned into
+    ``RuntimeError: generator didn't stop after throw()``."""
+    from PIL import Image as PILImage
+
+    from app.services.filesystem_service import open_image
+
+    path = tmp_path / "pixel.png"
+    PILImage.new("RGB", (4, 4), "red").save(path)
+
+    with pytest.raises(ValueError, match="consumer failure marker"):
+        with open_image(path) as image:
+            assert image is not None
+            raise ValueError("consumer failure marker")
+
+
+def test_open_image_still_yields_none_for_an_unreadable_file(tmp_path: Path) -> None:
+    from app.services.filesystem_service import open_image
+
+    path = tmp_path / "broken.jpg"
+    path.write_bytes(b"not an image")
+    with open_image(path) as image:
+        assert image is None
