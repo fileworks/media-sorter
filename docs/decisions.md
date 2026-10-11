@@ -8,6 +8,7 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-10-11 | Unsigned macOS builds are sealed ad hoc and verified inside the final DMG | The native app refused to open because its bundle seal was invalid; every Mach-O is now signed ad hoc inside-out, Tauri seals the app with `-`, and the release job verifies seal and architecture in the mounted DMG. Developer ID stays an owner decision. | [release signing](release-signing.md) |
 | 2026-10-11 | One desktop instance per user, explained rather than silent | Two engines over one catalog would reconcile each other's live journals; a second launch names the running, starting or stuck process and never terminates it. | [observability](observability.md#launcher-diagnostics) |
 | 2026-10-11 | Launcher diagnostics: run IDs, stage timings, bounded engine output, previous-run marker | Startup and crash reports must be diagnosable from the log alone on every platform; logs rotate with fixed caps and never carry secrets or user paths. | [observability](observability.md#launcher-diagnostics) |
 | 2026-10-11 | Files with an unfinished duplicate check stay in place | Preview freezes no destination for them, so the plan lists them in `unresolved_sources` and the run keeps each unit untouched instead of inventing a destination or failing it as unplanned; Execute is not blocked. | [API contract](kb-api-contract.md), [preservation contract](preservation-guarantees.md) |

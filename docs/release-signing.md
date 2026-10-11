@@ -30,7 +30,13 @@ by decision, not yet the second.
 Release preflight has three outcomes:
 
 - **Unsigned:** no platform signing variables exist. Packaging continues and
-  emits `release-signing-state-<platform>.json` with `mode: unsigned`.
+  emits `release-signing-state-<platform>.json` with `mode: unsigned`. On macOS
+  every nested Mach-O is still signed **ad hoc** (identity `-`), innermost first,
+  and Tauri seals the finished app ad hoc. Apple Silicon refuses to run unsigned
+  code, and an app whose executable is only linker-signed fails verification with
+  "code has no resources but signature indicates they must be present". Ad-hoc
+  sealing proves the bundle is intact; it does not identify the publisher, so
+  Gatekeeper still shows its normal prompt for an un-notarized download.
 - **Signed:** the complete selected credential set exists. Nested and outer
   signing, trusted timestamping/notarization, and verification are mandatory;
   any failure blocks upload.
@@ -66,6 +72,13 @@ with hardened runtime; Tauri signs the outer app using the tracked entitlements;
 final DMG is signed, submitted with `notarytool`, stapled, and verified with `codesign`,
 `stapler`, and Gatekeeper. A payload snapshot fails the job if content or executable
 modes change after nested signing.
+
+In both modes the release job mounts the final DMG and checks the app inside it,
+not the build directory: every nested Mach-O passes `codesign --verify --strict`,
+the bundle passes `codesign --verify --deep --strict`, and every Mach-O contains
+the architecture the DMG is named for (`aarch64` → `arm64`, `x64` → `x86_64`).
+The copied app is then launched as a smoke test. A repaired package is always a new
+release; published bytes are never replaced.
 
 ## Windows providers
 

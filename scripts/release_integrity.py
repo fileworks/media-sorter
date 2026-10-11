@@ -317,6 +317,13 @@ def sign_nested_payloads(
     environment: Mapping[str, str] | None = None,
 ) -> list[Path]:
     env = os.environ if environment is None else environment
+    if state.mode == "unsigned" and state.platform == "macos":
+        # Without a Developer ID every Mach-O still needs a valid signature:
+        # Apple Silicon refuses to execute unsigned code, and a bundle whose
+        # executable is only linker-signed fails `codesign --verify` with "code
+        # has no resources but signature indicates they must be present". Seal
+        # each nested binary ad hoc, innermost first; Tauri then seals the app.
+        return _ad_hoc_sign_macho(root)
     if state.mode == "unsigned":
         print(f"Signing mode: explicitly unsigned ({state.platform})", flush=True)
         return []
@@ -361,6 +368,63 @@ def sign_nested_payloads(
         return files
 
     return []
+
+
+def _macho_inside_out(root: Path) -> list[Path]:
+    return sorted(
+        (path for path in root.rglob("*") if path.is_file() and _is_macho(path)),
+        key=lambda path: (-len(path.parts), str(path)),
+    )
+
+
+def _ad_hoc_sign_macho(root: Path) -> list[Path]:
+    """Give every nested Mach-O a structural ad-hoc signature (identity ``-``).
+
+    This proves bundle integrity, not publisher identity: Gatekeeper still shows
+    its normal prompt for an app downloaded without notarization.
+    """
+    print("Signing mode: ad hoc (no Developer ID configured) (macos)", flush=True)
+    files = _macho_inside_out(root)
+    for path in files:
+        print(f"  ad-hoc sign nested Mach-O: {path}", flush=True)
+        subprocess.run(["codesign", "--force", "--sign", "-", str(path)], check=True)
+    return files
+
+
+def _expected_macos_architecture(dmg: Path) -> str:
+    """The CPU architecture a DMG promises in its name (Tauri's suffix)."""
+    name = dmg.name.lower()
+    if "aarch64" in name or "arm64" in name:
+        return "arm64"
+    if "x64" in name or "x86_64" in name:
+        return "x86_64"
+    raise ReleaseIntegrityError(f"cannot tell the target architecture of {dmg.name}")
+
+
+def _require_architecture(paths: Sequence[Path], architecture: str) -> None:
+    """Every Mach-O must contain the architecture the DMG is named for."""
+    wrong: list[str] = []
+    for path in paths:
+        result = subprocess.run(
+            ["lipo", "-archs", str(path)], check=True, capture_output=True, text=True
+        )
+        if architecture not in result.stdout.split():
+            wrong.append(f"{path.name} ({result.stdout.strip() or 'none'})")
+    if wrong:
+        raise ReleaseIntegrityError(
+            f"Mach-O files lack the {architecture} architecture: " + ", ".join(wrong)
+        )
+
+
+def _verify_macos_seal(app: Path) -> list[Path]:
+    """Strictly verify every nested Mach-O, then the whole bundle seal."""
+    files = _macho_inside_out(app)
+    for path in files:
+        subprocess.run(["codesign", "--verify", "--strict", "--verbose=2", str(path)], check=True)
+    subprocess.run(
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True
+    )
+    return files
 
 
 def _glob_files(patterns: Sequence[str]) -> list[Path]:
@@ -825,20 +889,12 @@ def verify_release(
                 if not os.access(path, os.X_OK):
                     raise ReleaseIntegrityError(f"packaged executable mode is missing: {path}")
             _verify_native_provenance(payload / "ffmpeg", "darwin")
+            # The app inside the final DMG must carry a valid seal in every
+            # mode: ad hoc without a Developer ID, Developer ID otherwise. A
+            # broken seal is what made the native app refuse to open (NEW-6).
+            machos = _verify_macos_seal(app)
+            _require_architecture(machos, _expected_macos_architecture(dmg))
             if state.mode == "signed":
-                for path in sorted(
-                    (item for item in app.rglob("*") if item.is_file() and _is_macho(item)),
-                    key=lambda item: len(item.parts),
-                    reverse=True,
-                ):
-                    subprocess.run(
-                        ["codesign", "--verify", "--strict", "--verbose=2", str(path)],
-                        check=True,
-                    )
-                subprocess.run(
-                    ["codesign", "--verify", "--deep", "--strict", str(app)],
-                    check=True,
-                )
                 subprocess.run(["xcrun", "stapler", "validate", str(dmg)], check=True)
             if run_smoke:
                 _smoke_program(ffmpeg, ("-version",))
