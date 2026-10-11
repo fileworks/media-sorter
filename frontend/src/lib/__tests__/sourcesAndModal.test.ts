@@ -483,7 +483,7 @@ describe("execute preflight", () => {
     expect(text).toMatch(/source file\(s\) will be removed/i);
     expect(text).toMatch(/companion file\(s\).*remain/i);
     expect(text).toMatch(/embedded/i);
-    expect(text).toMatch(/quarantine/i);
+    expect(text).toMatch(/set aside/i);
   });
 
   /**

@@ -1,5 +1,17 @@
 import { useState, useMemo } from "react";
-import { FiLoader, FiSearch } from "react-icons/fi";
+import type { IconType } from "react-icons";
+import {
+  FiAlertTriangle,
+  FiCheck,
+  FiClock,
+  FiCopy,
+  FiHelpCircle,
+  FiLoader,
+  FiMinus,
+  FiSearch,
+  FiSlash,
+  FiX,
+} from "react-icons/fi";
 import { api } from "@/services/api";
 import { useToast } from "@/context/toast-context";
 import { Button } from "@/components/ui/button";
@@ -247,58 +259,71 @@ type SortCol = keyof Pick<
 
 const FILTER_TABS = REPORT_FILTER_TABS;
 
-const STATUS_STYLES: Record<string, { key: string; className: string }> = {
+const STATUS_STYLES: Record<string, { key: string; className: string; icon: IconType }> = {
   success: {
     key: "report.status.sorted",
     className: "text-success bg-success/10",
+    icon: FiCheck,
   },
   unknown_date: {
     key: "report.status.unknownDate",
     className: "text-warning bg-warning/10",
+    icon: FiHelpCircle,
   },
   future_date: {
     key: "report.status.futureDate",
     className: "text-warning bg-warning/10",
+    icon: FiClock,
   },
   duplicate: {
     key: "report.status.duplicate",
     className: "text-info bg-info/10",
+    icon: FiCopy,
   },
   failed: {
     key: "report.status.failed",
     className: "text-error bg-error/10",
+    icon: FiX,
   },
   corrupted: {
     key: "report.status.corrupted",
     className: "text-warning bg-warning/10",
+    icon: FiAlertTriangle,
   },
   junk: {
     key: "report.status.junk",
     className: "text-warning bg-warning/10",
+    icon: FiSlash,
   },
   already_in_destination: {
     key: "report.status.inDestination",
     className: "text-info bg-info/10",
+    icon: FiCopy,
   },
   kept_in_place: {
     key: "report.status.keptInPlace",
     className: "text-muted-foreground bg-muted",
+    icon: FiMinus,
   },
   incomplete_unit: {
     key: "report.status.incompleteUnit",
     className: "text-error bg-error/10",
+    icon: FiX,
   },
   unmatched_companion: {
     key: "report.status.unmatchedCompanion",
     className: "text-warning bg-warning/10",
+    icon: FiAlertTriangle,
   },
   cancelled: {
     key: "report.status.cancelled",
     className: "text-info bg-info/10",
+    icon: FiSlash,
   },
   blocked: {
     key: "report.status.blocked",
     className: "text-error bg-error/10",
+    icon: FiX,
   },
 };
 
@@ -307,14 +332,17 @@ function StatusBadge({ status }: { status: string }) {
   const s = STATUS_STYLES[status] ?? {
     key: status,
     className: "text-muted-foreground bg-muted",
+    icon: FiMinus,
   };
+  const Icon = s.icon;
   return (
     <span
       className={cn(
-        "whitespace-nowrap rounded-control px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-control px-2 py-0.5 text-xs font-medium",
         s.className,
       )}
     >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden />
       {t(s.key, {}, status)}
     </span>
   );

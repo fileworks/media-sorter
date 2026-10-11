@@ -305,7 +305,7 @@ export function preflight(input: PreflightInput): Preflight {
   }
   if (input.quarantineCount > 0) {
     irreversible.push({
-      text: `${input.quarantineCount} file(s) will be relocated to quarantine (${formatBytes(input.quarantineBytes)}); they are never deleted, but this run does not restore them.`,
+      text: `${input.quarantineCount} file(s) will be set aside in the review folders (${formatBytes(input.quarantineBytes)}). They are never deleted, but this run does not put them back.`,
       tone: "warning",
       messageKey: "preflight.irreversible.quarantine",
       params: { count: input.quarantineCount, bytes: formatBytes(input.quarantineBytes) },
@@ -360,7 +360,7 @@ export function preflight(input: PreflightInput): Preflight {
   }
   if (reversible.length === 0) {
     reversible.push({
-      text: "No effects in this group.",
+      text: "Nothing in this list.",
       tone: "neutral",
       messageKey: "preflight.reversible.none",
     });
@@ -375,8 +375,8 @@ export function preflight(input: PreflightInput): Preflight {
     irreversible,
     acknowledgement:
       input.sourceMutations > 0
-        ? "I reviewed both groups, including changes to input folders, and want to execute this exact plan"
-        : "I reviewed both groups and want to execute this exact plan",
+        ? "I reviewed both lists, including changes to input folders, and want to execute this exact plan"
+        : "I reviewed both lists and want to execute this exact plan",
     acknowledgementKey:
       input.sourceMutations > 0 ? "preflight.acknowledge.mutations" : "preflight.acknowledge",
   };
