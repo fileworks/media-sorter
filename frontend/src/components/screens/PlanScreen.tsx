@@ -25,7 +25,9 @@ export function PlanScreen({
 }: PlanScreenProps) {
   const { t, tCount, locale } = useI18n();
   const issueCount = Math.max(result.issues.length, result.stats.issue_count ?? 0);
-  const duplicateCount = Math.max(result.impact.unresolved_count, result.stats.will_skip_duplicate);
+  // Files, not sets: the dry run counts duplicate files it would set aside plus
+  // files whose duplicate check is still open. Sets are counted in Review.
+  const duplicateFiles = result.stats.will_skip_duplicate + (result.stats.duplicate_unknown ?? 0);
   const safeBoundary = result.impact.source_mutations === 0;
   /**
    * Four numbers that are not the same number, and say how they differ.
@@ -62,7 +64,7 @@ export function PlanScreen({
     ],
     [
       t("plan.sequence.duplicates.title"),
-      tCount("plan.sequence.duplicates.detail", duplicateCount),
+      tCount("plan.sequence.duplicates.detail", duplicateFiles),
     ],
     [
       t("plan.sequence.write.title"),
@@ -101,7 +103,7 @@ export function PlanScreen({
             {t("plan.summary.title", { count: result.stats.total.toLocaleString(locale) })}
           </h2>
           <p className="relative mt-1 text-xs text-muted-foreground">
-            {tCount("plan.summary.detail", duplicateCount)}
+            {tCount("plan.summary.detail", duplicateFiles)}
           </p>
           <dl className="relative mt-4 grid grid-cols-2 gap-3 border-t border-success/40 pt-4 sm:grid-cols-4">
             {metrics.map(([value, label, help]) => (

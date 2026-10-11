@@ -771,8 +771,8 @@ export const en = {
   "plan.recalculate": "Recalculate",
   "plan.complete": "Plan complete",
   "plan.summary.title": "{count} files are ready for review",
-  "plan.summary.detail.one": "1 duplicate set will be visible in the review workspace.",
-  "plan.summary.detail": "{count} duplicate sets will be visible in the review workspace.",
+  "plan.summary.detail.one": "1 file looks like a duplicate and is shown in the review workspace.",
+  "plan.summary.detail": "{count} files look like duplicates and are shown in the review workspace.",
   "plan.metric.files": "Files",
   "plan.metric.files.help":
     "Every file the scan found in the selected folders. The plan was calculated over all of them.",
@@ -805,9 +805,8 @@ export const en = {
   "plan.sequence.organize.detail.one": "Prepare 1 actionable file group for its destination.",
   "plan.sequence.organize.detail": "Prepare {count} actionable file groups for their destinations.",
   "plan.sequence.duplicates.title": "Decide duplicates",
-  "plan.sequence.duplicates.detail.one": "Keep 1 duplicate set visible for an explicit decision.",
-  "plan.sequence.duplicates.detail":
-    "Keep {count} duplicate sets visible for an explicit decision.",
+  "plan.sequence.duplicates.detail.one": "Show 1 likely duplicate file for an explicit decision.",
+  "plan.sequence.duplicates.detail": "Show {count} likely duplicate files for an explicit decision.",
   "plan.sequence.write.title": "Write to one destination",
   "plan.sequence.write.detail.one": "After approval, transfer and verify 1 planned file.",
   "plan.sequence.write.detail": "After approval, transfer and verify {count} planned files.",
@@ -2397,8 +2396,9 @@ export const de: Record<MessageKey, string> = {
   "plan.recalculate": "Neu berechnen",
   "plan.complete": "Plan vollständig",
   "plan.summary.title": "{count} Dateien sind bereit zur Prüfung",
-  "plan.summary.detail.one": "1 Duplikatgruppe wird in der Prüfoberfläche sichtbar.",
-  "plan.summary.detail": "{count} Duplikatgruppen werden in der Prüfoberfläche sichtbar.",
+  "plan.summary.detail.one": "1 Datei sieht nach einem Duplikat aus und wird in der Prüfoberfläche angezeigt.",
+  "plan.summary.detail":
+    "{count} Dateien sehen nach Duplikaten aus und werden in der Prüfoberfläche angezeigt.",
   "plan.metric.files": "Dateien",
   "plan.metric.files.help":
     "Alle Dateien, die der Scan in den gewählten Ordnern gefunden hat. Der Plan wurde über alle davon berechnet.",
@@ -2431,9 +2431,9 @@ export const de: Record<MessageKey, string> = {
   "plan.sequence.organize.detail": "{count} ausführbare Dateigruppen für ihre Ziele vorbereiten.",
   "plan.sequence.duplicates.title": "Duplikate entscheiden",
   "plan.sequence.duplicates.detail.one":
-    "1 Duplikatgruppe für eine bewusste Entscheidung sichtbar halten.",
+    "1 mögliche Duplikatdatei für eine bewusste Entscheidung anzeigen.",
   "plan.sequence.duplicates.detail":
-    "{count} Duplikatgruppen für eine bewusste Entscheidung sichtbar halten.",
+    "{count} mögliche Duplikatdateien für eine bewusste Entscheidung anzeigen.",
   "plan.sequence.write.title": "In ein Ziel schreiben",
   "plan.sequence.write.detail.one":
     "Nach der Freigabe 1 geplante Datei übertragen und verifizieren.",
