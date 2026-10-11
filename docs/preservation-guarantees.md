@@ -56,6 +56,10 @@ the keeper's folders. For example, `Y/M/D/photo.jpg` has extra copies under
 An undated or junk keeper has copies under `_copies/_undated/…` or `_copies/_junk/…`.
 All special branches (`_copies`, `_undated`, `_junk`, `_corrupted`) begin at the
 destination root, so date folders never hide them.
+A file whose duplicate check preview could not finish (for example a video whose
+frames were not compared) has no reviewed destination. The run leaves it, with its
+companions, exactly where it is and reports it as kept in place; a later preview can
+sort it.
 The destination explanation recognizes those root branches explicitly; underscores
 in parent folders or user folder names do not imply a quarantine outcome.
 Browse's expanded cards, Details and Compare show the reviewed destinations from
