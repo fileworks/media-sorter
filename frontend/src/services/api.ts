@@ -539,6 +539,8 @@ export interface RuleSet {
 export interface TaskProgress {
   current: number;
   total: number;
+  /** False while `total` is a placeholder; render "unknown", never 0. */
+  total_known?: boolean;
   percentage: number;
   estimated_time_remaining_seconds?: number;
   unit?: "items" | "bytes";

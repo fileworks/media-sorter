@@ -71,7 +71,11 @@ import { stageComplete, type StageInputs, type StageKey, type StageState } from 
 import { startBlock } from "@/lib/startupRecovery";
 import { isTauri } from "@/lib/utils";
 import { invalidationForConfigPatch } from "@/lib/workflowInvalidation";
-import { operationSummaries, type OperationSummary } from "@/lib/operationCenter";
+import {
+  operationSummaries,
+  type OperationSummary,
+  type PreflightInput,
+} from "@/lib/operationCenter";
 import { api } from "@/services/api";
 import type { Config, ConfigIssue } from "@/types/api";
 
@@ -143,11 +147,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
   const { logs } = useLogs();
   const { data: updateInfo } = useUpdateCheck(config?.update_check_enabled === true);
 
-  const {
-    data: health,
-    isLoading: healthLoading,
-    isError: healthError,
-  } = useQuery({
+  const { data: health, isError: healthError } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.health(),
     refetchInterval: 10_000,
@@ -239,16 +239,6 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
     [preview.result?.items],
   );
 
-  /**
-   * Settings are written straight through.
-   *
-   * This used to intercept every patch while a plan existed and raise a modal
-   * asking whether to discard it — a per-field answer to a per-session question.
-   * Six edits meant six identical dialogs, and the plan was destroyed on the
-   * first answer, so the remaining five asked about a plan that was already
-   * gone. The stage lock replaces all of it: while a plan exists the settings
-   * cannot be reached at all, and unlocking asks once.
-   */
   /** Invalidate only artifacts downstream of a still-valid scan. */
   const discardPlan = useCallback(() => {
     preview.clear();
@@ -564,7 +554,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
     },
     [preview.result?.plan_id],
   );
-  const preflightInput: import("@/lib/operationCenter").PreflightInput = {
+  const preflightInput: PreflightInput = {
     impactState: runImpact.isError ? "error" : runImpact.isSuccess ? "ready" : "loading",
     actionableGroups: impact?.actionable_groups ?? 0,
     quarantineCount: impact?.quarantine_count ?? 0,
@@ -603,13 +593,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
   }, [pendingSettingAnchor, stage]);
 
   const backendState: BackendState =
-    health?.status === "ok"
-      ? "ready"
-      : healthError
-        ? "lost"
-        : healthLoading
-          ? "connecting"
-          : "connecting";
+    health?.status === "ok" ? "ready" : healthError ? "lost" : "connecting";
 
   const startup = useStartupProgress({
     configReady: config !== undefined,

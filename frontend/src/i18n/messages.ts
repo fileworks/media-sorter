@@ -49,9 +49,6 @@ export const en = {
   "review.detail.infoFailed": "The file information could not be loaded.",
   "review.detail.provenanceLoading": "Loading the destination explanation…",
   "review.detail.provenanceFailed": "The destination explanation could not be loaded.",
-  // The chip names itself: without this the tooltip supplies the accessible
-  // name, so the visible "Junk 2" was announced as its help text instead —
-  // WCAG 2.5.3 wants the visible label inside the accessible one.
   "review.view.grid": "Grid view",
   "review.keepRule.scope": "Applies to this run only; it does not change your settings.",
   // Named after the rule it runs, not as a second algorithm standing beside it.
@@ -1609,6 +1606,9 @@ export const en = {
   "execute.title": "Organizing your library",
   "execute.titleDone": "The run is finished",
   "execute.confirmedCopy": "Confirmed: copy {files} files, verifying every one.",
+  "execute.confirmedCopyUncounted": "Confirmed: copy the reviewed files, verifying every one.",
+  "execute.confirmedMoveUncounted":
+    "Confirmed: move the reviewed files, verifying every one before the original leaves.",
   "execute.confirmedMove":
     "Confirmed: move {files} files, verifying every one before the original leaves.",
   "execute.phase.check": "Checking",
@@ -3309,6 +3309,10 @@ export const de: Record<MessageKey, string> = {
   "execute.title": "Bibliothek wird sortiert",
   "execute.titleDone": "Der Durchlauf ist abgeschlossen",
   "execute.confirmedCopy": "Bestätigt: {files} Dateien kopieren, jede einzeln geprüft.",
+  "execute.confirmedCopyUncounted":
+    "Bestätigt: die geprüften Dateien kopieren, jede einzeln geprüft.",
+  "execute.confirmedMoveUncounted":
+    "Bestätigt: die geprüften Dateien verschieben, jede geprüft, bevor das Original weggeht.",
   "execute.confirmedMove":
     "Bestätigt: {files} Dateien verschieben, jede geprüft, bevor das Original weggeht.",
   "execute.phase.check": "Wird geprüft",

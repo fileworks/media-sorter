@@ -1,5 +1,5 @@
 /**
- * Screen 6 — the run itself.
+ * Execute — the run itself.
  *
  * One big number, because during a twenty-minute operation the only question is
  * "how much longer". Everything else on the screen answers the second question,
@@ -31,7 +31,7 @@ const PHASE_ORDER: { id: string; phases: Phase[] }[] = [
   { id: "check", phases: ["validating"] },
   { id: "scan", phases: ["scanning_source"] },
   { id: "duplicates", phases: ["indexing_destination", "ranking"] },
-  { id: "organize", phases: ["sorting", "analyzing", "previewing"] },
+  { id: "organize", phases: ["sorting"] },
 ];
 
 function phaseIndex(phase: Phase | null | undefined): number {
@@ -103,9 +103,18 @@ export function ExecuteScreen({
           subtitle={
             <span className="inline-flex flex-wrap items-center gap-2">
               <FiCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
-              {t(config.copy_instead_of_move ? "execute.confirmedCopy" : "execute.confirmedMove", {
-                files: n(progress?.total),
-              })}
+              {progress?.total_known
+                ? t(
+                    config.copy_instead_of_move ? "execute.confirmedCopy" : "execute.confirmedMove",
+                    {
+                      files: n(progress.total),
+                    },
+                  )
+                : t(
+                    config.copy_instead_of_move
+                      ? "execute.confirmedCopyUncounted"
+                      : "execute.confirmedMoveUncounted",
+                  )}
             </span>
           }
         />
