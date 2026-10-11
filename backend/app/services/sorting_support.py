@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import uuid
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ from app.core.exceptions import MutationPolicyError
 from app.core.integrity import MutationActionKind, OperationOutcomeCode, PreservationProfile
 from app.core.integrity_policy import MutationAuthorization
 from app.core.logging_config import get_logger
-from app.core.media_units import CompanionRole
+from app.core.media_units import CompanionRole, MediaUnit
 from app.core.provenance import OutcomeProvenance
 from app.services.ai.category_classifier_service import CategoryClassifierService
 from app.services.destination import (
@@ -92,6 +93,72 @@ class SortingSupportMixin:
     _extraction: DateExtractionService
     _db: DatabaseManager | None
     _collisions_planned: int
+
+    def _new_companion_record(
+        self,
+        path: Path,
+        role: CompanionRole | None,
+        unit: MediaUnit,
+        operation_id: str,
+        config: Config,
+        source_root: Path,
+    ) -> dict[str, Any]:
+        extracted_date: str | None = None
+        with contextlib.suppress(Exception):
+            detail = self._extraction.extract_detailed(path, check_suspicious=False)
+            if detail.extracted_date is not None:
+                extracted_date = str(detail.extracted_date)
+        return {
+            "id": str(uuid.uuid4()),
+            "operation_id": operation_id,
+            "source_path": str(path),
+            "dest_path": None,
+            "extracted_date": extracted_date,
+            "metadata_source": "report_only",
+            "action": "copy" if config.copy_instead_of_move else "move",
+            "status": "failed",
+            "error_message": None,
+            "file_size": self._safe_stat(path),
+            "file_type": path.suffix.lower(),
+            "tags": [],
+            "category": None,
+            "camera_model": None,
+            "duplicate_type": None,
+            "duplicate_similarity": None,
+            "duplicate_of": None,
+            "suspicious": False,
+            "unit_id": unit.unit_id,
+            "companion_role": role,
+            "unit_primary_path": str(unit.primary),
+            "content_sha256": None,
+            "commit_method": None,
+            "source_safety": "source_retained",
+            "preservation_warnings": [],
+            "source_root": str(source_root),
+            "would_be_destination": None,
+        }
+
+    def _unresolved_unit_records(
+        self,
+        unit: MediaUnit,
+        operation_id: str,
+        config: Config,
+        source_root: Path,
+    ) -> list[dict[str, Any]]:
+        """Kept-in-place records for a unit whose duplicate check never finished (MS-01)."""
+        members: list[tuple[Path, CompanionRole | None]] = [(unit.primary, None)]
+        members.extend((companion.path, companion.companion_role) for companion in unit.companions)
+        records = [
+            self._new_companion_record(path, role, unit, operation_id, config, source_root)
+            for path, role in members
+        ]
+        for record in records:
+            record.update(
+                status="kept_in_place",
+                metadata_source=None,
+                kept_reason="duplicate_check_unresolved",
+            )
+        return records
 
     def _refuse_protected_without_execution(self, source: Path, destination: Path) -> None:
         """C-14: never touch a reference root on the unguarded path.
