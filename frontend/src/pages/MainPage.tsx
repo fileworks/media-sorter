@@ -964,7 +964,6 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
               companionItems={preview.result?.items ?? []}
               error={sorting.error}
               config={config}
-              reportPath={null}
               reportLoading={sorting.reportLoading}
               onCancel={() => setCancelConfirmOpen(true)}
               onRetry={sorting.canRetryStart ? startRun : undefined}

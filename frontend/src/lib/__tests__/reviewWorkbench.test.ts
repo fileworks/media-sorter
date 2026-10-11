@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_FILTERS,
-  availableActions,
   bulkImpactView,
   factLabel,
   factTitle,
@@ -11,14 +10,11 @@ import {
   groupRow,
   lowestConfidence,
   nextUnresolved,
-  outcomeLabel,
-  outcomeTone,
   resolutionLabel,
   type BulkImpact,
   type DuplicateGroup,
   type GroupMember,
   type GroupPlan,
-  type ResolvedOutcome,
 } from "@/lib/reviewWorkbench";
 import { fixedWindow } from "@/hooks/useVirtualWindow";
 
@@ -89,19 +85,6 @@ function plan(overrides: Partial<GroupPlan> = {}): GroupPlan {
     keeper_member_id: null,
     additional_keeps: [],
     stale_reason: null,
-    ...overrides,
-  };
-}
-
-function outcome(overrides: Partial<ResolvedOutcome> = {}): ResolvedOutcome {
-  return {
-    member_id: "a",
-    kind: "quarantine",
-    destination_path: null,
-    mutates_source: false,
-    requires_acknowledgement: false,
-    blocked_reason: null,
-    explanation: "",
     ...overrides,
   };
 }
@@ -217,62 +200,6 @@ describe("fixedWindow", () => {
 
   it("survives a zero row height", () => {
     expect(() => fixedWindow(10, 0, 600, 0)).not.toThrow();
-  });
-});
-
-describe("availableActions", () => {
-  it("offers a reference nothing, and explains why", () => {
-    const reference = member({ member_id: "ref", role: "reference" });
-
-    const actions = availableActions(reference, group(), undefined);
-
-    expect(actions.every((action) => !action.enabled)).toBe(true);
-    expect(actions[0].disabledReason).toMatch(/never changed/i);
-  });
-
-  it("offers keeper replacement only for exact groups", () => {
-    const exact = availableActions(member(), group(), undefined).map((a) => a.action);
-    const similar = availableActions(member(), group({ kind: "similar" }), undefined).map(
-      (a) => a.action,
-    );
-
-    expect(exact).toContain("replace_keeper");
-    expect(similar).toContain("keep_additional");
-    expect(similar).not.toContain("replace_keeper");
-  });
-
-  it("never offers permanent deletion", () => {
-    const actions = availableActions(member(), group(), undefined).map((a) => a.action);
-
-    expect(actions.join(",")).not.toMatch(/delete/i);
-  });
-
-  it("disables keeping the file that is already the keeper", () => {
-    const actions = availableActions(
-      member({ member_id: "a" }),
-      group(),
-      plan({ keeper_member_id: "a" }),
-    );
-
-    expect(actions.find((action) => action.action === "keep")?.enabled).toBe(false);
-  });
-});
-
-describe("outcomes", () => {
-  it("uses the backend explanation when it has one", () => {
-    expect(outcomeLabel(outcome({ explanation: "Moved to quarantine" }))).toBe(
-      "Moved to quarantine",
-    );
-  });
-
-  it("falls back to a plain-language default", () => {
-    expect(outcomeLabel(outcome({ kind: "no_action_reference" }))).toMatch(/nothing will touch/i);
-  });
-
-  it("warns when an action changes a source file", () => {
-    expect(outcomeTone(outcome({ mutates_source: true }))).toBe("warning");
-    expect(outcomeTone(outcome({ kind: "blocked" }))).toBe("danger");
-    expect(outcomeTone(outcome())).toBe("neutral");
   });
 });
 

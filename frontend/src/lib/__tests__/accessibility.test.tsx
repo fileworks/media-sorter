@@ -393,7 +393,6 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
         outcomes={{ sorted: 7172, duplicate: 964, junk: 312, name_collision: 3 }}
         error={null}
         config={ACCESSIBILITY_CONFIG}
-        reportPath="Sorted/_Reports/run.html"
         onCancel={() => undefined}
         onRetry={() => undefined}
       >

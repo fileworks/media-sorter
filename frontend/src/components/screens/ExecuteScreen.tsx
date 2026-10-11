@@ -46,9 +46,7 @@ interface ExecuteScreenProps {
   outcomes: Record<string, number>;
   error: string | null;
   config: Config;
-  reportPath: string | null;
   reportLoading?: boolean;
-  onPause?: () => void;
   onCancel: () => void;
   onRetry?: () => void;
   onRetryReport?: () => void;
@@ -65,7 +63,6 @@ export function ExecuteScreen({
   outcomes,
   error,
   config,
-  reportPath,
   reportLoading = false,
   onCancel,
   onRetry,
@@ -295,12 +292,6 @@ export function ExecuteScreen({
 
           <p className="border-t border-border pt-3 text-xs leading-relaxed text-faint">
             {reportLoading ? t("execute.reportLoading") : t("execute.reportNote")}
-            {reportPath && (
-              <>
-                <br />
-                <span className="font-mono text-muted-foreground">{reportPath}</span>
-              </>
-            )}
           </p>
         </section>
       </div>

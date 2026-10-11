@@ -246,68 +246,6 @@ export function filterKey(filters: ReviewFilters, catalogGeneration: number): st
 
 // ── Decisions ────────────────────────────────────────────────────────────────
 
-export interface MemberAction {
-  action: DecisionAction;
-  label: string;
-  enabled: boolean;
-  disabledReason?: string;
-}
-
-/**
- * Which actions a member may be given.
- *
- * Reference members get none — and the reason is in the tooltip rather than in
- * a silent absence, so the protection reads as deliberate.
- */
-export function availableActions(
-  member: GroupMember,
-  group: DuplicateGroup,
-  plan: GroupPlan | undefined,
-): MemberAction[] {
-  if (member.role === "reference") {
-    const reason = "Reference folders are compared against, never changed.";
-    return [
-      { action: "keep", label: "Protected", enabled: false, disabledReason: reason },
-      { action: "quarantine", label: "Move to quarantine", enabled: false, disabledReason: reason },
-    ];
-  }
-  const isKeeper = plan?.keeper_member_id === member.member_id;
-  const actions: MemberAction[] = [
-    { action: "keep", label: "Keep", enabled: !isKeeper },
-    { action: "quarantine", label: "Move to quarantine", enabled: true },
-    { action: "skip", label: "Skip", enabled: true },
-  ];
-  if (group.kind === "exact") {
-    actions.push({
-      action: "replace_keeper",
-      label: "Make this the keeper",
-      enabled: !isKeeper,
-    });
-  } else {
-    actions.push({ action: "keep_additional", label: "Keep this version too", enabled: true });
-  }
-  return actions;
-}
-
-const OUTCOME_TEXT: Record<OutcomeKind, string> = {
-  copy_to_destination: "Copied to the destination, kept where it is now",
-  move_to_destination: "Moved to the destination after verification",
-  quarantine: "Moved to quarantine — recoverable, never deleted",
-  skip: "Left exactly where it is",
-  no_action_reference: "Protected reference — nothing will touch it",
-  blocked: "Cannot run",
-};
-
-export function outcomeLabel(outcome: ResolvedOutcome): string {
-  return outcome.explanation || OUTCOME_TEXT[outcome.kind];
-}
-
-export function outcomeTone(outcome: ResolvedOutcome): "neutral" | "warning" | "danger" {
-  if (outcome.kind === "blocked") return "danger";
-  if (outcome.requires_acknowledgement || outcome.mutates_source) return "warning";
-  return "neutral";
-}
-
 // ── Navigation ───────────────────────────────────────────────────────────────
 
 /** The next group still needing a decision, wrapping to the start. */
