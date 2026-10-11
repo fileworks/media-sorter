@@ -25,7 +25,7 @@ function input(overrides: Partial<PreflightInput> = {}): PreflightInput {
     sourceMutations: 0,
     acknowledgedSourceMutations: false,
     staleGroups: 0,
-    unresolvedGroups: 0,
+    unresolvedFiles: 0,
     referenceCount: 0,
     freeBytes: 1_000,
     requiredBytes: 100,

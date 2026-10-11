@@ -426,7 +426,7 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
           sourceMutations: 0,
           acknowledgedSourceMutations: false,
           staleGroups: 0,
-          unresolvedGroups: 0,
+          unresolvedFiles: 0,
           freeBytes: null,
           requiredBytes: 1,
           quarantineWritable: true,

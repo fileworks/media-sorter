@@ -256,6 +256,11 @@ class FrozenSortPlan(BaseModel):
     #: skipped, and one it could not resolve stays unresolved.
     skip_count: int = 0
     unresolved_count: int = 0
+    #: Sources whose duplicate check could not finish during preview. The run
+    #: leaves each one, with its companions, exactly where it is instead of
+    #: choosing a destination nobody reviewed. Empty for plans written before
+    #: this field existed, which therefore keep their former behavior.
+    unresolved_sources: tuple[str, ...] = ()
     companions_left_in_place: int = 0
     #: The three configuration answers the impact depends on, carried so a
     #: derived plan can recompute its own impact without the Config.
@@ -734,6 +739,7 @@ def build_frozen_sort_plan(
     actions: list[FrozenSortAction] = []
     skipped = 0
     unresolved = 0
+    unresolved_sources: list[str] = []
     companions_left = 0
     quarantine_statuses = PLANNED_QUARANTINE_STATUSES
     for item in items:
@@ -742,6 +748,8 @@ def build_frozen_sort_plan(
         source = item.get("source")
         if status == "duplicate_unknown":
             unresolved += 1
+            if source:
+                unresolved_sources.append(str(source))
         elif not source or not destination or status not in {"sort", *quarantine_statuses}:
             skipped += 1
         if source and destination and status in {"sort", *quarantine_statuses}:
@@ -887,6 +895,7 @@ def build_frozen_sort_plan(
         ),
         skip_count=skipped,
         unresolved_count=unresolved,
+        unresolved_sources=tuple(unresolved_sources),
         companions_left_in_place=companions_left,
         copy_mode=config.copy_instead_of_move,
         converts_media=converts_media,

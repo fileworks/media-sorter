@@ -380,7 +380,7 @@ describe("execute preflight", () => {
     sourceMutations: 0,
     acknowledgedSourceMutations: false,
     staleGroups: 0,
-    unresolvedGroups: 0,
+    unresolvedFiles: 0,
     freeBytes: 1_000_000,
     requiredBytes: 10_000,
     quarantineWritable: true,
@@ -462,18 +462,16 @@ describe("execute preflight", () => {
     expect(preflight({ ...base, actionableGroups: 0 }).canExecute).toBe(false);
   });
 
-  it("mentions unresolved groups without blocking on them", () => {
-    const result = preflight({ ...base, unresolvedGroups: 5 });
+  it("leaves files with an unfinished duplicate check in place without blocking", () => {
+    // MS-01: the run keeps these files where they are, so Execute stays available
+    // and the line counts files, not groups.
+    const result = preflight({ ...base, unresolvedFiles: 5 });
 
     expect(result.canExecute).toBe(true);
-    expect(result.summary.some((line) => line.tone === "warning")).toBe(true);
-  });
-
-  it("blocks when preview could not freeze every sort outcome", () => {
-    const result = preflight({ ...base, unplannedCount: 2 });
-
-    expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/could not be frozen safely/i);
+    expect(result.blocking).toEqual([]);
+    const line = result.reversible.find((item) => item.messageKey === "preflight.reversible.unresolved");
+    expect(line?.params).toEqual({ count: 5 });
+    expect(line?.text).toMatch(/5 file\(s\).*leaves them where they are/);
   });
 
   it("names every configured irreversible consequence", () => {

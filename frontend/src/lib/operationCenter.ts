@@ -186,9 +186,8 @@ export interface PreflightInput {
   sourceMutations: number;
   acknowledgedSourceMutations: boolean;
   staleGroups: number;
-  unresolvedGroups: number;
-  /** Outcomes preview could not freeze safely; the whole sort must be reviewed again. */
-  unplannedCount?: number;
+  /** Files whose duplicate check preview could not finish; the run leaves them in place. */
+  unresolvedFiles: number;
   freeBytes: number | null;
   /**
    * Bytes the run needs, or `null` when nobody could work it out — no frozen
@@ -267,14 +266,6 @@ export function preflight(input: PreflightInput): Preflight {
       tone: "error",
       messageKey: "preflight.blocking.stale",
       params: { count: input.staleGroups },
-    });
-  }
-  if ((input.unplannedCount ?? 0) > 0) {
-    blocking.push({
-      text: `${input.unplannedCount} outcome(s) could not be frozen safely; review the plan again before executing.`,
-      tone: "error",
-      messageKey: "preflight.blocking.unplanned",
-      params: { count: input.unplannedCount ?? 0 },
     });
   }
   if (!input.quarantineWritable) {
@@ -366,12 +357,12 @@ export function preflight(input: PreflightInput): Preflight {
       params: { count: input.referenceCount },
     });
   }
-  if (input.unresolvedGroups > 0) {
+  if (input.unresolvedFiles > 0) {
     reversible.push({
-      text: `${input.unresolvedGroups} group(s) are still unresolved and are not part of this run.`,
+      text: `${input.unresolvedFiles} file(s) could not be checked for duplicates; this run leaves them where they are.`,
       tone: "warning",
       messageKey: "preflight.reversible.unresolved",
-      params: { count: input.unresolvedGroups },
+      params: { count: input.unresolvedFiles },
     });
   }
   if (reversible.length === 0) {

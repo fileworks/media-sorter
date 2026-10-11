@@ -47,8 +47,11 @@ uniform.
 4. `GET /sorting/{task_id}/report` → 409 while not completed, 404 if completed without a result.
 
 Video preview items can report `duplicate_evaluation: "unknown"` with
-`duplicate_unknown_reason: "video_perceptual_not_computed"`. Their final destination is
-deliberately omitted because the real sort performs the authoritative frame comparison.
+`duplicate_unknown_reason: "video_perceptual_not_computed"`. They have no reviewed
+destination, so the frozen plan lists them in `unresolved_sources` and execution leaves
+each one (with its companions) in place as `kept_in_place` with
+`kept_reason: "duplicate_check_unresolved"`. They never block Execute and never fail
+as unplanned actions; a later preview can sort them.
 
 ## Reviewed placements
 

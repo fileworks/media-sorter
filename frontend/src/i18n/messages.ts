@@ -180,7 +180,7 @@ export const en = {
   "review.flag.name_clash.help": "Another file wants this name. A suffix is added automatically.",
   "review.flag.duplicate_pending": "Not checked yet",
   "review.flag.duplicate_pending.help":
-    "This preview has not completed the duplicate check for this file. The run checks it again before deciding its destination. This is not an error.",
+    "The preview could not finish the duplicate check for this file. This run leaves it where it is; run a new preview later to sort it.",
   "review.flag.unit_member": "file group",
   "review.flag.unit_member.help":
     "This photo/video and its associated files (such as an XMP or Live Photo video) are handled as one group. This does not select the duplicate keeper.",
@@ -714,10 +714,6 @@ export const en = {
     "1 group changed since you reviewed it and must be looked at again.",
   "preflight.blocking.stale":
     "{count} groups changed since you reviewed them and must be looked at again.",
-  "preflight.blocking.unplanned.one":
-    "1 outcome could not be frozen safely. Review the plan again before executing.",
-  "preflight.blocking.unplanned":
-    "{count} outcomes could not be frozen safely. Review the plan again before executing.",
   "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
   "preflight.blocking.space": "Not enough free space: {required} needed, {available} available.",
   "preflight.blocking.spaceUnknown":
@@ -728,9 +724,10 @@ export const en = {
   "preflight.reversible.skip": "{count} files left exactly where they are.",
   "preflight.reversible.reference.one": "1 reference file will not be touched.",
   "preflight.reversible.reference": "{count} reference files will not be touched.",
-  "preflight.reversible.unresolved.one": "1 group is still unresolved and is not part of this run.",
+  "preflight.reversible.unresolved.one":
+    "1 file could not be checked for duplicates. This run leaves it where it is.",
   "preflight.reversible.unresolved":
-    "{count} groups are still unresolved and are not part of this run.",
+    "{count} files could not be checked for duplicates. This run leaves them where they are.",
   "preflight.reversible.none": "No effects in this group.",
   "preflight.irreversible.move.one":
     "1 source file will be removed only after the destination is verified.",
@@ -1793,7 +1790,7 @@ export const de: Record<MessageKey, string> = {
     "Eine andere Datei möchte diesen Namen. Ein Suffix wird automatisch angehängt.",
   "review.flag.duplicate_pending": "Noch ungeprüft",
   "review.flag.duplicate_pending.help":
-    "Diese Vorschau hat die Duplikatprüfung für diese Datei noch nicht abgeschlossen. Der Durchlauf prüft sie vor der Zielentscheidung erneut. Das ist kein Fehler.",
+    "Die Vorschau konnte die Duplikatprüfung für diese Datei nicht abschließen. Dieser Lauf lässt sie an ihrem Platz; starte später eine neue Vorschau, um sie einzusortieren.",
   "review.flag.unit_member": "Datei mit Begleitdateien",
   "review.flag.unit_member.help":
     "Dieses Foto/Video und zugehörige Dateien (z. B. XMP oder Live-Photo-Video) werden zusammen behandelt. Das bestimmt nicht, welche Duplikatkopie einsortiert wird.",
@@ -2342,10 +2339,6 @@ export const de: Record<MessageKey, string> = {
     "1 Gruppe hat sich seit der Prüfung geändert und muss erneut geprüft werden.",
   "preflight.blocking.stale":
     "{count} Gruppen haben sich seit der Prüfung geändert und müssen erneut geprüft werden.",
-  "preflight.blocking.unplanned.one":
-    "1 Ergebnis konnte nicht sicher festgeschrieben werden. Prüfe den Plan vor der Ausführung erneut.",
-  "preflight.blocking.unplanned":
-    "{count} Ergebnis(se) konnten nicht sicher festgeschrieben werden. Prüfe den Plan vor der Ausführung erneut.",
   "preflight.blocking.quarantine":
     "Die Quarantäne ist nicht beschreibbar; daher kann nichts sicher verschoben werden.",
   "preflight.blocking.space":
@@ -2360,9 +2353,10 @@ export const de: Record<MessageKey, string> = {
   "preflight.reversible.skip": "{count} Dateien bleiben unverändert an ihrem Ort.",
   "preflight.reversible.reference.one": "1 Referenzdatei wird nicht verändert.",
   "preflight.reversible.reference": "{count} Referenzdateien werden nicht verändert.",
-  "preflight.reversible.unresolved.one": "1 Gruppe ist noch ungeklärt und nicht Teil dieses Laufs.",
+  "preflight.reversible.unresolved.one":
+    "1 Datei konnte nicht auf Duplikate geprüft werden. Dieser Lauf lässt sie an ihrem Platz.",
   "preflight.reversible.unresolved":
-    "{count} Gruppen sind noch ungeklärt und nicht Teil dieses Laufs.",
+    "{count} Dateien konnten nicht auf Duplikate geprüft werden. Dieser Lauf lässt sie an ihrem Platz.",
   "preflight.reversible.none": "Keine Auswirkungen in dieser Gruppe.",
   "preflight.irreversible.move.one": "1 Quelldatei wird erst nach Prüfung des Ziels entfernt.",
   "preflight.irreversible.move":

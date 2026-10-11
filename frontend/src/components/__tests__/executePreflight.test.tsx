@@ -21,7 +21,7 @@ const input: PreflightInput = {
   sourceMutations: 0,
   acknowledgedSourceMutations: true,
   staleGroups: 0,
-  unresolvedGroups: 0,
+  unresolvedFiles: 0,
   freeBytes: 1,
   requiredBytes: 2048,
   quarantineWritable: true,

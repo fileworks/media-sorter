@@ -32,8 +32,8 @@ CONTRACT_FORMAT_VERSION: Final = 2
 #: Preview statuses that leave a file where the ordinary sort would put it.
 #:
 #: * ``sort`` — the ordinary dated destination (`preview_service._build_dest_path`).
-#: * ``duplicate_unknown`` — the real sort may still route this file as a
-#:   duplicate, so preview promises no destination at all.
+#: * ``duplicate_unknown`` — preview could not finish the duplicate check, so it
+#:   promises no destination and the run leaves the file where it is.
 #: * ``review_only`` — `config.sort` is off; nothing moves.
 #: * ``keep_in_place`` — `deduplicate_only` and not a duplicate or junk, so the
 #:   input tree is left exactly as it was found.

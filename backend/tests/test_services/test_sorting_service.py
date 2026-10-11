@@ -2262,3 +2262,39 @@ async def test_organize_mode_is_unaffected(tmp_path: Path) -> None:
 
     assert stats["run_mode"] == "organize"
     assert stats["kept_in_place"] == 0
+
+
+@pytest.mark.asyncio
+async def test_unresolved_duplicate_check_is_left_in_place_not_failed(tmp_path: Path) -> None:
+    """MS-01: a file preview could not resolve has no reviewed destination.
+
+    The run must leave it exactly where it is instead of deciding a destination
+    and then failing it as an unplanned action.
+    """
+    svc = _make_service(tmp_path)
+    source_root = Path(svc._config.source_directory)
+    dest_root = Path(svc._config.target_directory)
+    source_root.mkdir(parents=True)
+    dest_root.mkdir(parents=True)
+    clip = source_root / "clip.mp4"
+    clip.write_bytes(b"undecided video")
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(clip),
+                "destination": None,
+                "status": "duplicate_unknown",
+                "file_size": clip.stat().st_size,
+                "companions": [],
+            }
+        ],
+        svc._config,
+    )
+    assert plan.unresolved_sources == (str(clip),)
+
+    stats = await svc.run(_fake_task(), frozen_plan=plan)
+
+    assert stats["failed"] == 0
+    assert stats["kept_in_place"] == 1
+    assert clip.read_bytes() == b"undecided video"
+    assert [path for path in dest_root.rglob("*") if path.is_file()] == []

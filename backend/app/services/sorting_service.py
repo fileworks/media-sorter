@@ -509,6 +509,13 @@ class SortingService(SortingSupportMixin):
             if frozen_plan is not None
             else {}
         )
+        # Files the preview could not resolve as duplicate or not stay in place:
+        # the plan holds no reviewed destination for them (MS-01).
+        unresolved_sources: set[str] = (
+            {path_identity_key(source) for source in frozen_plan.unresolved_sources}
+            if frozen_plan is not None
+            else set()
+        )
         bytes_done = 0
         # Snapshot locale-sensitive dependencies. A config update can replace
         # the container's live services while this coroutine is running; these
@@ -568,6 +575,7 @@ class SortingService(SortingSupportMixin):
                 cancel_signal=cancel_signal,
                 execution=execution,
                 force_distinct=str(units[idx].primary) in distinct_sources,
+                left_unresolved=path_identity_key(str(units[idx].primary)) in unresolved_sources,
             )
             record = unit_records[0]
             if record["status"] == "cancelled":
@@ -709,8 +717,28 @@ class SortingService(SortingSupportMixin):
         cancel_signal: Any,
         execution: OperationExecution | None,
         force_distinct: bool = False,
+        left_unresolved: bool = False,
     ) -> list[dict[str, Any]]:
         """Process a primary first, then place its companions beside the result."""
+        if left_unresolved:
+            # The reviewed plan promised no destination for this unit, so the
+            # run must not invent one. Nothing is read, written or moved.
+            records = [
+                self._new_companion_record(
+                    member, role, unit, operation_id, config, source_root
+                )
+                for member, role in (
+                    (unit.primary, None),
+                    *((companion.path, companion.companion_role) for companion in unit.companions),
+                )
+            ]
+            for record in records:
+                record.update(
+                    status="kept_in_place",
+                    metadata_source=None,
+                    kept_reason="duplicate_check_unresolved",
+                )
+            return records
         if planned_destinations is None:
             planned_destinations = {}
         primary = self._process_file(
