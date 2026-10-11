@@ -33,6 +33,7 @@ from app.services.discovery import DiscoveryStats, discover_into_catalog
 from app.services.duplicate_grouping import burst_groups, exact_groups, similar_groups
 from app.services.duplicate_service import DuplicateService
 from app.services.keeper_policies import PolicySettings, apply_policy
+from tests.capabilities import requires_posix_permissions
 
 
 def _library(media: Path) -> ValidatedLibraryProfile:
@@ -76,6 +77,7 @@ def unreadable(tmp_path: Path) -> Iterator[Path]:
         os.chmod(locked, 0o600)
 
 
+@requires_posix_permissions
 class TestAnUnhashableFileDowngradesTheGeneration:
     def test_the_generation_is_partial_not_complete(self, tmp_path: Path, unreadable: Path) -> None:
         index_library_roots(_library(unreadable), data_dir=tmp_path / "state")
@@ -167,6 +169,7 @@ class TestIndexingIsACacheHit:
 class TestI09:
     """Only a complete generation may mark rows missing."""
 
+    @requires_posix_permissions
     def test_a_partial_generation_leaves_a_vanished_row_alone(self, tmp_path: Path) -> None:
         media = tmp_path / "media"
         media.mkdir()

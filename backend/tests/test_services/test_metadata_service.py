@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.services.metadata_service import MetadataService
+from tests.capabilities import requires_symlinks
 
 
 @pytest.fixture()
@@ -149,7 +150,7 @@ def test_write_keywords_sidecars_do_not_collide_across_extensions(
     assert "heic-tag" in (tmp_path / "IMG_1.heic.xmp").read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("symlink", [False, True])
+@pytest.mark.parametrize("symlink", [False, pytest.param(True, marks=requires_symlinks)])
 def test_generated_sidecar_never_replaces_existing_evidence(
     svc: MetadataService, tmp_path: Path, symlink: bool
 ) -> None:

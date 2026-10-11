@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.capabilities import requires_posix_modes
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "release_integrity.py"
 REPO_ROOT = SCRIPT_PATH.parents[1]
 SPEC = importlib.util.spec_from_file_location("release_integrity", SCRIPT_PATH)
@@ -121,6 +123,7 @@ def test_tauri_and_makefile_keep_signing_in_packaging_order() -> None:
     )
 
 
+@requires_posix_modes
 def test_snapshot_detects_content_and_mode_mutation(tmp_path: Path) -> None:
     root = tmp_path / "payload"
     root.mkdir()
@@ -141,6 +144,7 @@ def test_snapshot_detects_content_and_mode_mutation(tmp_path: Path) -> None:
         release_integrity.verify_snapshot(root, snapshot)
 
 
+@requires_posix_modes
 def test_normalize_finishes_modes_before_snapshot(tmp_path: Path) -> None:
     root = tmp_path / "resources"
     backend = root / "backend" / "mediasort-backend"

@@ -34,6 +34,7 @@ from app.core.integrity import (
 from app.core.integrity_policy import authorize_config_mutations
 from app.services import verified_transfer
 from app.services.verified_transfer import execute_transfer
+from tests.capabilities import requires_posix_permissions
 
 MEDIA = b"\xff\xd8\xff\xe0" + b"end to end media payload" * 400
 
@@ -192,6 +193,7 @@ def test_a_same_volume_move_still_works_on_a_full_volume(
     assert media.exists() is False
 
 
+@requires_posix_permissions
 def test_an_inaccessible_source_never_reports_success(
     media: Path,
     tmp_path: Path,

@@ -12,7 +12,7 @@ import os
 import sqlite3
 import stat
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -262,4 +262,4 @@ class TestTraversalRulesAcrossPlatforms:
 
             paths = {record.relative_path for record in catalog.iter_files("r1")}
 
-        assert paths == {"photos-old/b.jpg"}
+        assert {PurePath(path) for path in paths} == {PurePath("photos-old/b.jpg")}

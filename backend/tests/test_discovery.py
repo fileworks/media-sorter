@@ -17,6 +17,7 @@ from app.services.discovery import (
     discover_many,
     walk,
 )
+from tests.capabilities import requires_posix_permissions
 
 
 @pytest.fixture()
@@ -106,6 +107,7 @@ class TestTraversal:
 
         assert [item.relative_path for item in found] == ["big.jpg"]
 
+    @requires_posix_permissions
     def test_an_unreadable_directory_is_an_issue_not_an_abort(self, tmp_path: Path) -> None:
         root = _library(tmp_path / "library", files=2, nested=False)
         locked = root / "locked"
@@ -192,6 +194,7 @@ class TestCatalogWriting:
 
         assert sum(1 for _ in catalog.iter_files("r1")) == before
 
+    @requires_posix_permissions
     def test_a_partial_walk_records_its_issues(self, catalog: MediaCatalog, tmp_path: Path) -> None:
         root = _library(tmp_path / "library", files=2, nested=False)
         locked = root / "locked"

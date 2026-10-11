@@ -70,9 +70,7 @@ class DurableActionJournal:
 
     def _open_handle(self, *, exclusive: bool = False) -> None:
         try:
-            self._handle = self.path.open(
-                "x" if exclusive else "a", encoding="utf-8", newline="\n"
-            )
+            self._handle = self.path.open("x" if exclusive else "a", encoding="utf-8", newline="\n")
         except OSError as exc:
             raise JournalDurabilityError(f"Cannot open action journal {self.path}: {exc}") from exc
 

@@ -32,7 +32,7 @@ def test_to_jsonable_primitives() -> None:
 def test_to_jsonable_path() -> None:
     result = _to_jsonable(Path("/some/file.jpg"))
     assert isinstance(result, str)
-    assert "/some/file.jpg" in result
+    assert str(Path("/some/file.jpg")) in result
 
 
 def test_to_jsonable_exception() -> None:

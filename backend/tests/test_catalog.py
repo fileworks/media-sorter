@@ -174,9 +174,13 @@ class TestSchema:
             if source != path:
                 return
             if change == "write":
+                before = source.stat()
                 with source.open("r+b") as stream:
                     stream.seek(60)
                     stream.write((CATALOG_SCHEMA_VERSION + 1).to_bytes(4, "big"))
+                # A same-size write inside one timestamp tick is invisible to a
+                # stat comparison; real concurrent writers move the clock on.
+                os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
             elif change == "replace":
                 replacement = source.with_suffix(".replacement")
                 original_copy(source, replacement)

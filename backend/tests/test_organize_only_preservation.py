@@ -8,6 +8,7 @@ compares a full SHA-256 across a scenario the sort pipeline treats differently.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -318,7 +319,9 @@ def test_each_action_and_the_aggregate_report_are_auditable(tmp_path: Path) -> N
     assert path is not None and path.is_file()
     report = path.read_text(encoding="utf-8")
     assert record["content_sha256"] in report
-    assert str(source) in report
+    # The report is JSON, so compare the path as JSON encodes it (backslashes
+    # are escaped on Windows).
+    assert json.dumps(str(source))[1:-1] in report
     assert '"outcome": "completed"' in report
     assert '"verified_success": 1' in report
     assert execution.bytes_written == len(original)

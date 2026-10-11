@@ -21,6 +21,7 @@ import pytest
 
 from app.services.duplicate_service import destination_keeper_still_holds
 from app.services.verified_transfer import stream_sha256
+from tests.capabilities import requires_symlinks
 
 
 def _file(path: Path, payload: bytes = b"the destination copy") -> Path:
@@ -64,6 +65,7 @@ class TestTheKeeperIsReReadRatherThanTrusted:
         assert keeper.stat().st_size == 16
         assert not destination_keeper_still_holds(keeper, expected)
 
+    @requires_symlinks
     def test_a_symlink_in_place_of_the_keeper_does_not_verify(self, tmp_path: Path) -> None:
         real = _file(tmp_path / "elsewhere" / "photo.jpg")
         keeper = tmp_path / "destination" / "photo.jpg"
