@@ -114,3 +114,28 @@ def test_writable_agrees_with_the_sorter(client: TestClient, tmp_path: Path) -> 
             validate_target_directory(str(read_only))
     finally:
         read_only.chmod(0o700)
+
+
+def test_a_hanging_root_does_not_hold_up_the_listing() -> None:
+    """MS-12: one offline network drive must not stall the whole root listing."""
+    import threading
+    import time
+
+    from app.api.routes.fs import _probe_concurrently
+
+    release = threading.Event()
+    fast, slow = Path("fast"), Path("slow")
+
+    def probe(path: Path) -> tuple[bool, bool]:
+        if path == slow:
+            release.wait(5)
+        return True, True
+
+    started = time.monotonic()
+    results = _probe_concurrently([fast, slow], probe, budget_seconds=0.2)
+    elapsed = time.monotonic() - started
+    release.set()
+
+    assert elapsed < 1.0
+    assert results[fast] == (True, True)
+    assert results[slow] is None

@@ -14,9 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ctypes
 import os
 import string
 import sys
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -52,17 +56,65 @@ def _is_writable(path: Path) -> bool:
     return os.access(path, os.W_OK)
 
 
+#: The whole root listing waits at most this long for slow drives. A mapped
+#: network drive that is offline can block a filesystem call for many seconds.
+ROOT_PROBE_BUDGET_SECONDS = 1.5
+
+_Probe = tuple[bool, bool]
+
+
+def _probe_root(path: Path) -> _Probe:
+    """(exists, readable) for one candidate root."""
+    exists = path.exists()
+    return exists, exists and os.access(path, os.R_OK)
+
+
+def _probe_concurrently(
+    paths: list[Path],
+    probe: Callable[[Path], _Probe] = _probe_root,
+    *,
+    budget_seconds: float = ROOT_PROBE_BUDGET_SECONDS,
+) -> dict[Path, _Probe | None]:
+    """Probe every root at once and stop waiting after one shared budget.
+
+    A probe that has not answered in time maps to ``None``. Its daemon thread is
+    left to finish on its own: Python cannot cancel a blocked filesystem call,
+    but it no longer holds up the listing.
+    """
+    results: dict[Path, _Probe | None] = dict.fromkeys(paths)
+
+    def run(path: Path) -> None:
+        with contextlib.suppress(OSError):
+            results[path] = probe(path)
+
+    threads = [threading.Thread(target=run, args=(path,), daemon=True) for path in paths]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + budget_seconds
+    for thread in threads:
+        thread.join(max(0.0, deadline - time.monotonic()))
+    return results
+
+
+def _windows_drive_letters() -> list[Path]:
+    """Drives Windows reports as present, from one call that touches no disk."""
+    if sys.platform != "win32":
+        return []
+    mask = int(ctypes.windll.kernel32.GetLogicalDrives())
+    return [
+        Path(f"{letter}:\\")
+        for index, letter in enumerate(string.ascii_uppercase)
+        if mask & (1 << index)
+    ]
+
+
 def _platform_roots() -> list[DirectoryEntry]:
     """The places a person actually starts browsing from, per platform."""
-    candidates: list[Path] = []
+    candidates: list[Path] = [Path.home()]
     if sys.platform == "win32":
-        candidates = [Path(f"{letter}:\\") for letter in string.ascii_uppercase]
-        candidates = [drive for drive in candidates if drive.exists()]
-        home = Path.home()
-        if home.exists():
-            candidates.insert(0, home)
+        candidates.extend(_windows_drive_letters())
     else:
-        candidates = [Path("/"), Path.home()]
+        candidates.insert(0, Path("/"))
         if sys.platform == "darwin":
             volumes = Path("/Volumes")
             if volumes.is_dir():
@@ -71,19 +123,22 @@ def _platform_roots() -> list[DirectoryEntry]:
                         sorted(child for child in volumes.iterdir() if child.is_dir())
                     )
 
-    seen: set[str] = set()
+    unique = list(dict.fromkeys(candidates))
+    probes = _probe_concurrently(unique)
     roots: list[DirectoryEntry] = []
-    for candidate in candidates:
-        resolved = str(candidate)
-        if resolved in seen or not candidate.exists():
+    for candidate in unique:
+        probe = probes[candidate]
+        if probe is not None and not probe[0]:
             continue
-        seen.add(resolved)
+        resolved = str(candidate)
         roots.append(
             DirectoryEntry(
                 name=candidate.name or resolved,
                 path=resolved,
                 is_dir=True,
-                readable=os.access(candidate, os.R_OK),
+                # A drive that did not answer in time is listed but not readable,
+                # so the browser can say so instead of hiding the drive.
+                readable=probe is not None and probe[1],
             )
         )
     return roots
