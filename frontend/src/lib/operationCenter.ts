@@ -218,13 +218,23 @@ export interface PreflightLine {
 }
 
 export interface Preflight {
+  /** No blocking line remains. */
   canExecute: boolean;
+  /**
+   * The one rule the Execute button follows: nothing blocks and this exact plan
+   * was acknowledged. Every plan needs the acknowledgement, Copy included.
+   */
+  executable: boolean;
   blocking: PreflightLine[];
   summary: PreflightLine[];
   reversible: PreflightLine[];
   irreversible: PreflightLine[];
-  /** Shown when the user must tick something before the button enables. */
-  acknowledgement: string | null;
+  /**
+   * The acknowledgement sentence for this plan. It depends only on what the plan
+   * does, so ticking the box never swaps the warning for a milder one.
+   */
+  acknowledgement: string;
+  acknowledgementKey: "preflight.acknowledge" | "preflight.acknowledge.mutations";
 }
 
 /**
@@ -374,17 +384,18 @@ export function preflight(input: PreflightInput): Preflight {
   }
 
   return {
-    canExecute:
-      blocking.length === 0 && (input.sourceMutations === 0 || input.acknowledgedSourceMutations),
+    canExecute: blocking.length === 0,
+    executable: blocking.length === 0 && input.acknowledgedSourceMutations,
     blocking,
     summary: [...reversible, ...irreversible],
     reversible,
     irreversible,
-    acknowledgement: input.acknowledgedSourceMutations
-      ? null
-      : input.sourceMutations > 0
+    acknowledgement:
+      input.sourceMutations > 0
         ? "I reviewed both groups, including changes to input folders, and want to execute this exact plan"
         : "I reviewed both groups and want to execute this exact plan",
+    acknowledgementKey:
+      input.sourceMutations > 0 ? "preflight.acknowledge.mutations" : "preflight.acknowledge",
   };
 }
 

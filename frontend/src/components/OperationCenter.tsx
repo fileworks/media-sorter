@@ -205,7 +205,7 @@ export function ExecutePreflight({
     ? t("preflight.running")
     : !result.canExecute
       ? t("preflight.cannotExecute")
-      : !input.acknowledgedSourceMutations
+      : !result.executable
         ? t("preflight.needsAcknowledgement")
         : null;
 
@@ -291,11 +291,7 @@ export function ExecutePreflight({
             onChange={(event) => onAcknowledge(event.target.checked)}
             className="mt-0.5 h-4 w-4 shrink-0 rounded-control border-input text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted"
           />
-          {result.acknowledgement
-            ? input.sourceMutations > 0
-              ? t("preflight.acknowledge.mutations")
-              : t("preflight.acknowledge")
-            : t("preflight.acknowledge")}
+          {t(result.acknowledgementKey)}
         </label>
         {input.impactState !== "ready" && (
           <p id="preflight-acknowledge-blocked" className="mt-2 text-xs text-muted-foreground">
@@ -314,7 +310,7 @@ export function ExecutePreflight({
         <div className="mt-4 space-y-2">
           <Button
             className="w-full"
-            disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
+            disabled={!result.executable || busy}
             onClick={onExecute}
           >
             {busy ? t("preflight.running") : t("preflight.execute")}

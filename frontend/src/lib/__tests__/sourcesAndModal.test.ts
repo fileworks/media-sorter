@@ -452,10 +452,19 @@ describe("execute preflight", () => {
       acknowledgedSourceMutations: true,
     });
 
-    expect(pending.canExecute).toBe(false);
+    expect(pending.canExecute).toBe(true);
+    expect(pending.executable).toBe(false);
     expect(pending.acknowledgement).toMatch(/input folders/i);
-    expect(acknowledged.canExecute).toBe(true);
-    expect(acknowledged.acknowledgement).toBeNull();
+    expect(acknowledged.executable).toBe(true);
+    // MS-03: the warning stays visible once it is accepted.
+    expect(acknowledged.acknowledgement).toBe(pending.acknowledgement);
+    expect(acknowledged.acknowledgementKey).toBe("preflight.acknowledge.mutations");
+  });
+
+  it("requires the acknowledgement for every plan, Copy included", () => {
+    expect(preflight(base).executable).toBe(false);
+    expect(preflight({ ...base, acknowledgedSourceMutations: true }).executable).toBe(true);
+    expect(preflight(base).acknowledgementKey).toBe("preflight.acknowledge");
   });
 
   it("refuses to run when nothing was decided", () => {
