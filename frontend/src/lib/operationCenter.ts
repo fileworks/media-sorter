@@ -181,11 +181,11 @@ export interface PreflightInput {
   copyCount: number;
   moveCount: number;
   skipCount: number;
-  referenceCount: number;
+  /** Reference folders this run reads but never writes. */
+  referenceFolders: number;
   /** Actions that change an input folder under Copy mode. */
   sourceMutations: number;
   acknowledgedSourceMutations: boolean;
-  staleGroups: number;
   /** Files whose duplicate check preview could not finish; the run leaves them in place. */
   unresolvedFiles: number;
   freeBytes: number | null;
@@ -196,7 +196,6 @@ export interface PreflightInput {
    * and report an all-clear it had not earned (I-10).
    */
   requiredBytes: number | null;
-  quarantineWritable: boolean;
   /**
    * Permanently 0 since `P0-SAFE-001`: conversion quarantines the file it
    * replaces instead of discarding it, so there is no longer a case where an
@@ -270,21 +269,9 @@ export function preflight(input: PreflightInput): Preflight {
       messageKey: "preflight.blocking.empty",
     });
   }
-  if (input.staleGroups > 0) {
-    blocking.push({
-      text: `${input.staleGroups} group(s) changed since you reviewed them and must be looked at again.`,
-      tone: "error",
-      messageKey: "preflight.blocking.stale",
-      params: { count: input.staleGroups },
-    });
-  }
-  if (!input.quarantineWritable) {
-    blocking.push({
-      text: "Quarantine is not writable, so nothing can be moved safely.",
-      tone: "error",
-      messageKey: "preflight.blocking.quarantine",
-    });
-  }
+  // A stale plan and an unwritable destination are refused by the backend when
+  // the run starts (plan fingerprints, destination probe); the exact-impact
+  // request above fails for a stale plan. No client-side guess repeats them.
   if (input.requiredBytes === null) {
     blocking.push({
       text: "How much space this run needs is not known yet, so it cannot be checked against the disk.",
@@ -359,12 +346,12 @@ export function preflight(input: PreflightInput): Preflight {
       params: { count: input.skipCount },
     });
   }
-  if (input.referenceCount > 0) {
+  if (input.referenceFolders > 0) {
     reversible.push({
-      text: `${input.referenceCount} reference file(s) will not be touched.`,
+      text: `${input.referenceFolders} reference folder(s) are only read, never changed.`,
       tone: "neutral",
       messageKey: "preflight.reversible.reference",
-      params: { count: input.referenceCount },
+      params: { count: input.referenceFolders },
     });
   }
   if (input.unresolvedFiles > 0) {

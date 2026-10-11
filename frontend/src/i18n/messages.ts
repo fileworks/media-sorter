@@ -710,11 +710,6 @@ export const en = {
   "preflight.blocking.impactLoading": "Calculating the exact impact of these decisions…",
   "preflight.blocking.impactError":
     "The exact impact could not be verified. Return to Review and try again.",
-  "preflight.blocking.stale.one":
-    "1 group changed since you reviewed it and must be looked at again.",
-  "preflight.blocking.stale":
-    "{count} groups changed since you reviewed them and must be looked at again.",
-  "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
   "preflight.blocking.space": "Not enough free space: {required} needed, {available} available.",
   "preflight.blocking.spaceUnknown":
     "How much space this run needs is not known yet, so it cannot be checked against the disk.",
@@ -722,8 +717,8 @@ export const en = {
   "preflight.reversible.copy": "{count} files copied; the source remains available for re-running.",
   "preflight.reversible.skip.one": "1 file left exactly where it is.",
   "preflight.reversible.skip": "{count} files left exactly where they are.",
-  "preflight.reversible.reference.one": "1 reference file will not be touched.",
-  "preflight.reversible.reference": "{count} reference files will not be touched.",
+  "preflight.reversible.reference.one": "1 reference folder is only read, never changed.",
+  "preflight.reversible.reference": "{count} reference folders are only read, never changed.",
   "preflight.reversible.unresolved.one":
     "1 file could not be checked for duplicates. This run leaves it where it is.",
   "preflight.reversible.unresolved":
@@ -2334,12 +2329,6 @@ export const de: Record<MessageKey, string> = {
     "Die genauen Auswirkungen dieser Entscheidungen werden berechnet…",
   "preflight.blocking.impactError":
     "Die genauen Auswirkungen konnten nicht bestätigt werden. Kehre zur Prüfung zurück und versuche es erneut.",
-  "preflight.blocking.stale.one":
-    "1 Gruppe hat sich seit der Prüfung geändert und muss erneut geprüft werden.",
-  "preflight.blocking.stale":
-    "{count} Gruppen haben sich seit der Prüfung geändert und müssen erneut geprüft werden.",
-  "preflight.blocking.quarantine":
-    "Die Quarantäne ist nicht beschreibbar; daher kann nichts sicher verschoben werden.",
   "preflight.blocking.space":
     "Nicht genug freier Speicher: {required} benötigt, {available} verfügbar.",
   "preflight.blocking.spaceUnknown":
@@ -2350,8 +2339,8 @@ export const de: Record<MessageKey, string> = {
     "{count} Dateien werden kopiert; die Quelle bleibt für eine erneute Ausführung erhalten.",
   "preflight.reversible.skip.one": "1 Datei bleibt unverändert an ihrem Ort.",
   "preflight.reversible.skip": "{count} Dateien bleiben unverändert an ihrem Ort.",
-  "preflight.reversible.reference.one": "1 Referenzdatei wird nicht verändert.",
-  "preflight.reversible.reference": "{count} Referenzdateien werden nicht verändert.",
+  "preflight.reversible.reference.one": "1 Referenzordner wird nur gelesen, nie verändert.",
+  "preflight.reversible.reference": "{count} Referenzordner werden nur gelesen, nie verändert.",
   "preflight.reversible.unresolved.one":
     "1 Datei konnte nicht auf Duplikate geprüft werden. Dieser Lauf lässt sie an ihrem Platz.",
   "preflight.reversible.unresolved":

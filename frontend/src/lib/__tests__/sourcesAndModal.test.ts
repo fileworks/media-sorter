@@ -376,14 +376,12 @@ describe("execute preflight", () => {
     copyCount: 2,
     moveCount: 0,
     skipCount: 1,
-    referenceCount: 1,
+    referenceFolders: 1,
     sourceMutations: 0,
     acknowledgedSourceMutations: false,
-    staleGroups: 0,
     unresolvedFiles: 0,
     freeBytes: 1_000_000,
     requiredBytes: 10_000,
-    quarantineWritable: true,
     conversionWithoutOriginals: 0,
     companionsLeftInPlace: 0,
     embeddedTagCount: 0,
@@ -395,7 +393,7 @@ describe("execute preflight", () => {
     expect(result.canExecute).toBe(true);
     expect(result.summary.map((line) => line.text).join(" ")).toMatch(/never deleted/i);
     expect(result.summary.map((line) => line.text).join(" ")).toMatch(
-      /reference file\(s\) will not be touched/i,
+      /1 reference folder\(s\) are only read, never changed/i,
     );
   });
 
@@ -420,13 +418,6 @@ describe("execute preflight", () => {
     expect(result.blocking[0].messageKey).toBe("preflight.blocking.empty");
   });
 
-  it("blocks on stale review", () => {
-    const result = preflight({ ...base, staleGroups: 2 });
-
-    expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/changed since you reviewed/i);
-  });
-
   it("blocks on insufficient space and says both sizes in human units", () => {
     const result = preflight({ ...base, freeBytes: 1, requiredBytes: 5_000 });
 
@@ -438,10 +429,6 @@ describe("execute preflight", () => {
       required: "4.9 KB",
       available: "1 B",
     });
-  });
-
-  it("blocks on an unwritable quarantine", () => {
-    expect(preflight({ ...base, quarantineWritable: false }).canExecute).toBe(false);
   });
 
   it("requires an acknowledgement for source mutations, then allows it", () => {
