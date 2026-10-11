@@ -20,6 +20,7 @@ import { formatBytesShort } from "@/lib/formatters";
 import {
   centerBadge,
   centerState,
+  isRunning,
   preflight,
   reportView,
   type OperationSummary,
@@ -40,7 +41,8 @@ interface OperationCenterProps {
   seen?: string[];
   progress?: TaskProgress | null;
   activePath?: string | null;
-  onOpen?: (kind: string, id: string) => void;
+  /** Opens History, where each finished run's report, set-aside files and logs live. */
+  onOpen?: () => void;
 }
 
 export function OperationCenter({
@@ -50,7 +52,7 @@ export function OperationCenter({
   activePath = null,
   onOpen,
 }: OperationCenterProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const state = centerState(operations, seen);
   const badge = centerBadge(state);
@@ -126,38 +128,37 @@ export function OperationCenter({
                 <li key={operation.operationId} className="px-3 py-2">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="text-sm text-foreground">
-                      {t(`operations.kind.${operation.kind}`)} · {report.headline}
+                      {t(`operations.kind.${operation.kind}`)} · {t(report.headlineKey)}
                     </span>
-                    <span className="text-2xs text-muted-foreground">
-                      {t("operations.written", {
-                        bytes: formatBytesShort(operation.bytesWritten),
-                      })}
-                    </span>
+                    {operation.bytesWritten !== null && (
+                      <span className="text-2xs text-muted-foreground">
+                        {t("operations.written", {
+                          bytes: formatBytesShort(operation.bytesWritten),
+                        })}
+                      </span>
+                    )}
                   </div>
                   {report.facts.length > 0 && (
                     <dl className="mt-1 flex flex-wrap gap-x-3 text-2xs text-muted-foreground">
                       {report.facts.map((fact) => (
-                        <span key={fact.label}>
-                          {fact.label}: {fact.value}
+                        <span key={fact.labelKey}>
+                          {t(fact.labelKey)}: {fact.value.toLocaleString(locale)}
                         </span>
                       ))}
                     </dl>
                   )}
-                  {report.nextSteps.length > 0 && (
-                    <p className="mt-1 text-2xs text-warning">{report.nextSteps[0]}</p>
+                  {report.nextStepKeys.length > 0 && (
+                    <p className="mt-1 text-2xs text-warning">{t(report.nextStepKeys[0])}</p>
                   )}
-                  {onOpen && (
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {report.links.map((link) => (
-                        <button
-                          key={`${link.kind}:${link.id}`}
-                          type="button"
-                          onClick={() => onOpen(link.kind, link.id)}
-                          className="rounded-control border border-border px-2 py-0.5 text-2xs hover:border-primary"
-                        >
-                          {link.kind}
-                        </button>
-                      ))}
+                  {onOpen && !isRunning(operation) && (
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={onOpen}
+                        className="rounded-control border border-border px-2 py-0.5 text-2xs hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {t("operations.openHistory")}
+                      </button>
                     </div>
                   )}
                 </li>

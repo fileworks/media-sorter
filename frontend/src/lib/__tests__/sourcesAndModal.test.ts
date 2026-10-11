@@ -516,22 +516,31 @@ describe("execute preflight", () => {
 });
 
 describe("reportView", () => {
-  it("drops zero counts and links to what exists", () => {
+  it("drops zero counts and names the next step by key", () => {
     const view = reportView(operation({ counts: { ...operation().counts, quarantined: 3 } }));
 
-    expect(view.facts.map((fact) => fact.label)).toEqual(["Organized", "Quarantined"]);
-    expect(view.links.map((link) => link.kind)).toEqual(["report", "quarantine", "logs"]);
-    expect(view.nextSteps.join(" ")).toMatch(/nothing was deleted/i);
+    expect(view.facts.map((fact) => fact.labelKey)).toEqual([
+      "operations.fact.organized",
+      "operations.fact.quarantined",
+    ]);
+    expect(view.nextStepKeys).toEqual(["operations.next.quarantined"]);
   });
 
-  it("links to recovery when a run needs it", () => {
-    const view = reportView(operation({ recoveryState: "required" }));
+  it("puts an interrupted run's recovery first", () => {
+    const view = reportView(
+      operation({ recoveryState: "required", counts: { ...operation().counts, failed: 1 } }),
+    );
 
-    expect(view.links.some((link) => link.kind === "recovery")).toBe(true);
-    expect(view.nextSteps.join(" ")).toMatch(/interrupted/i);
+    expect(view.nextStepKeys[0]).toBe("operations.next.recovery");
   });
 
   it("says a running operation is still running", () => {
-    expect(reportView(operation({ outcome: null })).headline).toBe("Still running");
+    expect(reportView(operation({ outcome: null })).headlineKey).toBe("operations.stillRunning");
+  });
+
+  it("uses the shared outcome wording for finished runs", () => {
+    expect(reportView(operation({ outcome: "partial" })).headlineKey).toBe(
+      "report.outcome.partial",
+    );
   });
 });
