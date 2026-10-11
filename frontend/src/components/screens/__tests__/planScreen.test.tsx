@@ -7,7 +7,11 @@ import { PlanScreen } from "@/components/screens/PlanScreen";
 import { I18nProvider } from "@/i18n/I18nContext";
 import type { PreviewResult } from "@/types/api";
 
-function result(overrides: { duplicates: number; pending: number; unresolved: number }): PreviewResult {
+function result(overrides: {
+  duplicates: number;
+  pending: number;
+  unresolved: number;
+}): PreviewResult {
   return {
     config_fingerprint: "test",
     plan_id: "plan_test",

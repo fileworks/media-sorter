@@ -32,8 +32,8 @@ export type Classification = "safe_to_discard" | "safe_to_keep" | "needs_decisio
 export interface ClassifiedArtifact {
   artifact: RecoveryArtifact;
   classification: Classification;
-  /** The one sentence shown next to it. */
-  explanation: string;
+  /** Translation key of the one sentence shown next to it. */
+  explanationKey: string;
 }
 
 /**
@@ -48,35 +48,34 @@ export function classify(artifact: RecoveryArtifact): ClassifiedArtifact {
     return {
       artifact,
       classification: "safe_to_discard",
-      explanation: "A partial copy whose content is already verified elsewhere.",
+      explanationKey: "recovery.artifact.stageRedundant",
     };
   }
   if (artifact.kind === "result" && artifact.verified) {
     return {
       artifact,
       classification: "safe_to_keep",
-      explanation: "A finished, verified file. Nothing further is needed.",
+      explanationKey: "recovery.artifact.resultVerified",
     };
   }
   if (artifact.kind === "original" && artifact.verified) {
     return {
       artifact,
       classification: "safe_to_keep",
-      explanation: "Your original, verified and untouched.",
+      explanationKey: "recovery.artifact.originalVerified",
     };
   }
   if (artifact.kind === "quarantined") {
     return {
       artifact,
       classification: "safe_to_keep",
-      explanation: "Held in quarantine. It can be restored at any time.",
+      explanationKey: "recovery.artifact.setAside",
     };
   }
   return {
     artifact,
     classification: "needs_decision",
-    explanation:
-      "This could not be matched to a verified copy, so it is kept until you decide what it is.",
+    explanationKey: "recovery.artifact.needsDecision",
   };
 }
 
@@ -87,8 +86,9 @@ export interface RecoveryPlan {
   decisions: ClassifiedArtifact[];
   /** New work is blocked while any decision is outstanding. */
   blocksNewOperations: boolean;
-  headline: string;
-  guidance: string;
+  /** Counted translation key; the count is `decisions.length`. */
+  headlineKey: "recovery.headline.decisions" | "recovery.headline.reconciled";
+  guidanceKey: "recovery.guidance.decisions" | "recovery.guidance.reconciled";
 }
 
 export function buildRecoveryPlan(operation: RecoveryOperation): RecoveryPlan {
@@ -102,20 +102,17 @@ export function buildRecoveryPlan(operation: RecoveryOperation): RecoveryPlan {
     automatic,
     decisions,
     blocksNewOperations: decisions.length > 0,
-    headline:
-      decisions.length > 0
-        ? `${decisions.length} item${decisions.length === 1 ? "" : "s"} from an interrupted run need${decisions.length === 1 ? "s" : ""} your decision`
-        : "An interrupted run was reconciled automatically",
-    guidance:
-      decisions.length > 0
-        ? "Nothing was deleted. Review each item and choose whether to keep or discard it before starting new work."
-        : "Every leftover was matched to a verified copy. No files were lost and no action is needed.",
+    headlineKey:
+      decisions.length > 0 ? "recovery.headline.decisions" : "recovery.headline.reconciled",
+    guidanceKey:
+      decisions.length > 0 ? "recovery.guidance.decisions" : "recovery.guidance.reconciled",
   };
 }
 
 export interface StartBlock {
   blocked: boolean;
-  reason: string | null;
+  /** Items waiting for a decision; the caller words it with `recovery.headline.decisions`. */
+  decisionCount: number;
   /** The operation that must be resolved first, if any. */
   operationId: string | null;
 }
@@ -133,10 +130,10 @@ export function startBlock(operations: RecoveryOperation[]): StartBlock {
     if (plan.blocksNewOperations) {
       return {
         blocked: true,
-        reason: plan.headline,
+        decisionCount: plan.decisions.length,
         operationId: operation.operation_id,
       };
     }
   }
-  return { blocked: false, reason: null, operationId: null };
+  return { blocked: false, decisionCount: 0, operationId: null };
 }

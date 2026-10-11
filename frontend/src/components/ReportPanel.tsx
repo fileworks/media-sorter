@@ -644,7 +644,7 @@ const OUTCOME_BANNER: Record<StatusTone | "neutral", string> = {
 
 function outcomeBannerClass(outcome: OperationOutcome): string {
   if (outcome === "unknown") return OUTCOME_BANNER.neutral;
-  return OUTCOME_BANNER[presentOutcome(outcome, 0).tone];
+  return OUTCOME_BANNER[presentOutcome(outcome).tone];
 }
 
 export function ReportPanel({ report }: ReportPanelProps) {

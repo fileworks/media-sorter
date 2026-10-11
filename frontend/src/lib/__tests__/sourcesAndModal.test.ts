@@ -465,7 +465,9 @@ describe("execute preflight", () => {
 
     expect(result.canExecute).toBe(true);
     expect(result.blocking).toEqual([]);
-    const line = result.reversible.find((item) => item.messageKey === "preflight.reversible.unresolved");
+    const line = result.reversible.find(
+      (item) => item.messageKey === "preflight.reversible.unresolved",
+    );
     expect(line?.params).toEqual({ count: 5 });
     expect(line?.text).toMatch(/5 file\(s\).*leaves them where they are/);
   });

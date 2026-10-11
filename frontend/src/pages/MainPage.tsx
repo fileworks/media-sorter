@@ -202,6 +202,9 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
   const isAnyRunning = analysis.loading || preview.loading || isSorting || externalTaskActive;
   const recoveryOperations = useMemo(() => diagnostics?.recovery_operations ?? [], [diagnostics]);
   const recoveryBlock = startBlock(recoveryOperations);
+  const recoveryReason = recoveryBlock.blocked
+    ? tCount("recovery.headline.decisions", recoveryBlock.decisionCount)
+    : null;
 
   const initialProgressRestored = useInitialProgressRestoration({
     diagnosticsReady: diagnostics !== undefined,
@@ -335,7 +338,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
    */
   const buildPlan = useCallback(async (): Promise<boolean> => {
     if (recoveryBlock.blocked) {
-      toast(recoveryBlock.reason ?? t("stage.recovery.blocked"), "warning");
+      toast(recoveryReason ?? t("stage.recovery.blocked"), "warning");
       return false;
     }
     // Whichever gate is closed, the toast says which one — the backend would
@@ -368,6 +371,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
     preview,
     scan,
     recoveryBlock,
+    recoveryReason,
     rootBlocker,
     rootIssue,
     settingIssue,
@@ -444,7 +448,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
             : tCount("stage.gate.duplicates", runDecisions.outstandingSets),
       executionActive: isSorting || activeTask?.operation_kind === "sort",
       blocked: recoveryBlock.blocked,
-      blockedReason: recoveryBlock.reason,
+      blockedReason: recoveryReason,
     }),
     [
       issueText,
@@ -452,7 +456,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
       isSorting,
       planned,
       recoveryBlock.blocked,
-      recoveryBlock.reason,
+      recoveryReason,
       rootBlocker,
       rootIssue,
       rootsReady,

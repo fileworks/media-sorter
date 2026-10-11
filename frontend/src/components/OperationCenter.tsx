@@ -104,7 +104,22 @@ export function OperationCenter({
               kind: t(`operations.kind.${state.active.kind}`),
             })}
           </p>
-          {message && <p className="text-xs text-muted-foreground">{message.message}</p>}
+          {message && (
+            <p className="text-xs text-muted-foreground">
+              {t(message.messageKey, {
+                ...message.params,
+                ...(typeof message.params.current === "number"
+                  ? { current: message.params.current.toLocaleString(locale) }
+                  : {}),
+                ...(typeof message.params.total === "number"
+                  ? { total: message.params.total.toLocaleString(locale) }
+                  : {}),
+                phase: message.phase
+                  ? t(`progress.phase.${message.phase}`, undefined, t("progress.phase.working"))
+                  : "",
+              })}
+            </p>
+          )}
           {view?.determinate && view.percentage !== null && (
             <ProgressBar
               value={view.percentage}
@@ -309,11 +324,7 @@ export function ExecutePreflight({
           native `title` never appears for a keyboard user and cannot be read at
           all on a control that is disabled. */}
         <div className="mt-4 space-y-2">
-          <Button
-            className="w-full"
-            disabled={!result.executable || busy}
-            onClick={onExecute}
-          >
+          <Button className="w-full" disabled={!result.executable || busy} onClick={onExecute}>
             {busy ? t("preflight.running") : t("preflight.execute")}
           </Button>
           {executeBlockedBecause !== null && (

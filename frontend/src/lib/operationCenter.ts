@@ -413,7 +413,9 @@ export function reportView(operation: OperationSummary): ReportView {
 
   return {
     headlineKey:
-      operation.outcome === null ? "operations.stillRunning" : `report.outcome.${operation.outcome}`,
+      operation.outcome === null
+        ? "operations.stillRunning"
+        : `report.outcome.${operation.outcome}`,
     facts,
     nextStepKeys,
   };

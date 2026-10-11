@@ -114,12 +114,13 @@ describe("livenessMessage", () => {
     const message = livenessMessage(view, "//nas/photos/2019");
 
     expect(message.indeterminate).toBe(true);
-    expect(message.message).toContain("//nas/photos/2019");
+    expect(message.messageKey).toBe("progress.stalledAt");
+    expect(message.params.path).toBe("//nas/photos/2019");
   });
 
   it("says it is stopping once cancellation is requested", () => {
     const view = progressView(snapshot({ cancellationRequested: true }), 1_000);
 
-    expect(livenessMessage(view, null).message).toMatch(/stopping/i);
+    expect(livenessMessage(view, null).messageKey).toBe("progress.stopping");
   });
 });
