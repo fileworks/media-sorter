@@ -3,7 +3,7 @@ name = "mediasort-backend"
 # Derived from app/_version.py (the single source of truth, bumped by
 # scripts/sync-version.mjs on release) via hatchling's dynamic-version hook below.
 dynamic = ["version"]
-description = "MediaSorter — intelligent media organisation backend"
+description = "MediaSorter — intelligent media organization backend"
 authors = [
     {name = "Niklas Büchel", email = "gykonik@gmail.com"}
 ]
