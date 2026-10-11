@@ -208,9 +208,11 @@ def _windows_icon(source: Image.Image) -> Image.Image:
     # every macOS derivative continue to use the approved canonical source.
     mark_box = _bounding_box(tile, lambda pixel: pixel[3] > 128 and sum(pixel[:3]) < 500)
     mark = tile.crop((mark_box[0] - 2, mark_box[1] - 2, mark_box[2] + 3, mark_box[3] + 3))
+    # Pillow 12 deprecates getdata(); its replacement yields the same tuples.
+    pixels = getattr(mark, "get_flattened_data", None) or mark.getdata
     mark.putdata([
         (r, g, b, alpha if max(abs(r - 239), abs(g - 234), abs(b - 226)) > 2 else 0)
-        for r, g, b, alpha in mark.getdata()
+        for r, g, b, alpha in pixels()
     ])
     draw = ImageDraw.Draw(tile)
     draw.rectangle((mark_box[0] - 2, mark_box[1] - 2, mark_box[2] + 2, mark_box[3] + 2), fill=(239, 234, 226, 255))
