@@ -2,6 +2,9 @@
   "name": "media-sorter-release",
   "version": "0.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "description": "Audited release tooling for MediaSorter. This private package is never versioned or published.",
   "scripts": {
     "release": "release-it --ci",
