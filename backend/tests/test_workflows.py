@@ -377,21 +377,21 @@ def test_every_bundled_resource_glob_matches_something() -> None:
         )
 
 
-def test_the_windows_only_contracts_run_on_a_windows_runner() -> None:
-    """P2-TEST-002. Three contracts are `skipif` non-Windows, so the only place
-    they can ever execute is the Windows job — and `test_root_identity.py` was
-    not in its file list, which meant they were skipped everywhere and run
-    nowhere. A skip is never a pass."""
+def test_the_windows_job_runs_the_whole_backend_suite() -> None:
+    """P2-TEST-002 and WIN-NEW-8. Windows-only contracts are `skipif` elsewhere,
+    so the Windows job is the only place they run; an allowlist of modules
+    let new contracts and the rest of the suite skip on NTFS unnoticed. The
+    job therefore selects no files: every module runs, and capability-gated
+    tests skip only with a named reason."""
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
     windows = workflow["jobs"]["backend-windows"]
-    invocation = " ".join(str(step.get("run", "")) for step in windows["steps"] if "run" in step)
+    runs = [str(step["run"]) for step in windows["steps"] if "pytest" in str(step.get("run", ""))]
 
     assert "windows" in str(windows["runs-on"])
-    for module in (
-        "tests/test_utils/test_path_utils.py",
-        "tests/test_root_identity.py",
-    ):
-        assert module in invocation, module
+    assert windows["name"] == "Backend — Windows path / DirectML contracts"
+    assert len(runs) == 1
+    assert "tests/" not in runs[0]
+    assert " -k " not in runs[0]
 
 
 def test_the_transfer_and_catalog_suites_also_run_on_apfs() -> None:
@@ -410,38 +410,6 @@ def test_the_transfer_and_catalog_suites_also_run_on_apfs() -> None:
         "tests/test_path_identity.py",
     ):
         assert module in invocation, module
-
-
-def test_every_windows_only_test_lives_in_a_module_the_windows_job_runs() -> None:
-    """The rule rather than today's list: a new `skipif(win32)` contract added
-    to a module CI does not run would be invisible in exactly the same way."""
-    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
-    invocation = " ".join(
-        str(step.get("run", ""))
-        for step in workflow["jobs"]["backend-windows"]["steps"]
-        if "run" in step
-    )
-
-    unrun: list[str] = []
-    scanner = Path(__file__).name
-    for path in sorted((ROOT / "backend" / "tests").rglob("test_*.py")):
-        if path.name == scanner:
-            # This module names those markers in the line just below, and a
-            # scanner that reports itself reports nothing useful.
-            continue
-        # A *marker*, not a bare substring: this file names those expressions
-        # in its own detection logic and would otherwise report itself.
-        windows_only = any(
-            "skipif" in line and ('!= "win32"' in line or '!= "nt"' in line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-        )
-        if not windows_only:
-            continue
-        relative = path.relative_to(ROOT / "backend").as_posix()
-        if relative not in invocation:
-            unrun.append(relative)
-
-    assert unrun == [], f"windows-only contracts in modules the Windows job never runs: {unrun}"
 
 
 def test_the_release_attests_provenance_with_minimal_permissions() -> None:
