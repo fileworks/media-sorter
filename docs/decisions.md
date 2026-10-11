@@ -8,6 +8,8 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-10-11 | One desktop instance per user, explained rather than silent | Two engines over one catalog would reconcile each other's live journals; a second launch names the running, starting or stuck process and never terminates it. | [observability](observability.md#launcher-diagnostics) |
+| 2026-10-11 | Launcher diagnostics: run IDs, stage timings, bounded engine output, previous-run marker | Startup and crash reports must be diagnosable from the log alone on every platform; logs rotate with fixed caps and never carry secrets or user paths. | [observability](observability.md#launcher-diagnostics) |
 | 2026-10-11 | Files with an unfinished duplicate check stay in place | Preview freezes no destination for them, so the plan lists them in `unresolved_sources` and the run keeps each unit untouched instead of inventing a destination or failing it as unplanned; Execute is not blocked. | [API contract](kb-api-contract.md), [preservation contract](preservation-guarantees.md) |
 | 2026-10-11 | Every exact plan needs an explicit acknowledgement | One preflight rule owns it; the wording depends only on what the plan does, so accepting the input-folder warning never hides it. | [UI conventions](frontend-conventions.md) |
 | 2026-10-11 | Recovery journals use LF on every platform | Byte-identical records across operating systems; readers still accept CRLF from older journals. | [preservation contract](preservation-guarantees.md) |

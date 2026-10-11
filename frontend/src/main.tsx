@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { I18nProvider, storedLocale, translate } from "@/i18n/I18nContext";
+import { installShellErrorLogging, logRenderCrash } from "@/lib/shellLog";
 
 // ── Error boundary ────────────────────────────────────────────────────────────
 
@@ -56,6 +57,10 @@ class ErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: Error) {
     return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    logRenderCrash(error, info.componentStack);
   }
 
   render() {
@@ -119,6 +124,7 @@ const queryClient = new QueryClient({
 // ── Mount ─────────────────────────────────────────────────────────────────────
 
 document.documentElement.dataset.platform = /Win/i.test(navigator.platform) ? "windows" : "other";
+installShellErrorLogging();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

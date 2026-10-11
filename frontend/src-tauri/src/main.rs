@@ -19,15 +19,13 @@
 )]
 
 use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::Write;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use native_dialog::{DialogBuilder, MessageLevel};
 use rand::{distr::Alphanumeric, RngExt};
@@ -35,27 +33,23 @@ use serde::Serialize;
 use tauri::{Manager, State};
 
 mod backend_state;
+mod lifecycle;
 mod owned_backend;
 #[cfg(windows)]
 mod windows_icon;
 use backend_state::BackendStartup;
 use owned_backend::OwnedBackend;
 
-// ── File logger ───────────────────────────────────────────────────────────────
+// ── Launcher log ──────────────────────────────────────────────────────────────
 //
-// A minimal rotating file logger — no external crates needed.
-// Each entry is one line:  [YYYY-MM-DD HH:MM:SS] [LEVEL] message
-//
-// Rotation: when the log exceeds 2 MB the current file is renamed to
-// mediasort.1.log and a fresh mediasort.log is started. Only one backup is
-// kept so the total footprint stays under ~4 MB.
+// Every line carries a UTC timestamp with milliseconds, the level, this run's ID
+// and the milliseconds since launch (see lifecycle.rs). The file rotates at 2 MB
+// and keeps five backups, so the launcher never uses more than about 12 MB.
 //
 // Log location (mirrors the Python backend's log dir):
 //   macOS:   ~/Library/Logs/MediaSorter/mediasort.log
 //   Windows: %LOCALAPPDATA%\MediaSorter\Logs\mediasort.log
 //   Linux:   ${XDG_STATE_HOME:-~/.local/state}/MediaSorter/log/mediasort.log
-
-static LOG_FILE: OnceLock<Mutex<Option<File>>> = OnceLock::new();
 
 fn log_dir() -> PathBuf {
     if let Some(explicit) = std::env::var_os("MEDIASORT_LOG_DIR") {
@@ -85,113 +79,22 @@ fn log_dir() -> PathBuf {
     }
 }
 
-/// Open (or rotate) the log file and register it in LOG_FILE.
-/// Returns the path so the startup banner can report where logs live.
+/// Open the rotating log and return its path for the startup banner.
 fn init_logger() -> Result<PathBuf, StartupError> {
     let dir = log_dir();
     let path = dir.join("mediasort.log");
-    std::fs::create_dir_all(&dir).map_err(|error| {
+    lifecycle::init(&dir).map_err(|error| {
         StartupError::new(
             StartupStage::Path,
-            "MediaSorter could not create its log directory.",
-            format!("create_dir_all({}): {}", dir.display(), error),
+            "MediaSorter could not open its launcher log.",
+            format!("log_dir={} error={}", dir.display(), error),
             path.clone(),
         )
-    })?;
-
-    // Rotate when the file exceeds 2 MB.
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if meta.len() > 2 * 1024 * 1024 {
-            let backup = dir.join("mediasort.1.log");
-            let _ = std::fs::remove_file(&backup);
-            let _ = std::fs::rename(&path, &backup);
-        }
-    }
-
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|error| {
-            StartupError::new(
-                StartupStage::Path,
-                "MediaSorter could not open its launcher log.",
-                format!("open({}): {}", path.display(), error),
-                path.clone(),
-            )
-        })?;
-
-    LOG_FILE.get_or_init(|| Mutex::new(Some(file)));
-    Ok(path)
+    })
 }
 
 fn write_log(level: &str, msg: &str) {
-    let ts = current_timestamp();
-    let line = format!("[{}] [{}] {}\n", ts, level, msg);
-    if let Some(lock) = LOG_FILE.get() {
-        if let Ok(mut guard) = lock.lock() {
-            if let Some(file) = guard.as_mut() {
-                let _ = file.write_all(line.as_bytes());
-                let _ = file.flush();
-            }
-        }
-    }
-}
-
-/// ISO-8601 timestamp without an external crate.
-fn current_timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let d = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let (y, mo, day, h, mi, s) = unix_secs_to_datetime(d.as_secs());
-    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, mo, day, h, mi, s)
-}
-
-fn unix_secs_to_datetime(total_secs: u64) -> (u32, u32, u32, u32, u32, u32) {
-    let hour = ((total_secs % 86400) / 3600) as u32;
-    let min = ((total_secs % 3600) / 60) as u32;
-    let sec = (total_secs % 60) as u32;
-    let mut days = (total_secs / 86400) as u32;
-
-    let mut year = 1970u32;
-    loop {
-        let y_days = if is_leap_year(year) { 366 } else { 365 };
-        if days < y_days {
-            break;
-        }
-        days -= y_days;
-        year += 1;
-    }
-
-    let month_days: [u32; 12] = [
-        31,
-        if is_leap_year(year) { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut month = 1u32;
-    for &md in &month_days {
-        if days < md {
-            break;
-        }
-        days -= md;
-        month += 1;
-    }
-
-    (year, month, days + 1, hour, min, sec)
-}
-
-fn is_leap_year(year: u32) -> bool {
-    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
+    lifecycle::write(level, msg);
 }
 
 macro_rules! log_info {
@@ -199,6 +102,14 @@ macro_rules! log_info {
         let msg = format!($($arg)*);
         println!("[mediasort] INFO: {}", msg);
         write_log("INFO", &msg);
+    }};
+}
+
+macro_rules! log_warn {
+    ($($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        eprintln!("[mediasort] WARN: {}", msg);
+        write_log("WARN", &msg);
     }};
 }
 
@@ -306,13 +217,19 @@ fn show_fatal_startup_dialog(error: &StartupError) {
         log_error!("native_dialog_recovery_reached action=Quit");
         return;
     }
-    let reveal = DialogBuilder::message()
+    let reveal = match DialogBuilder::message()
         .set_level(MessageLevel::Error)
         .set_title("MediaSorter could not start")
         .set_text(error.dialog_text())
         .confirm()
         .show()
-        .unwrap_or(false);
+    {
+        Ok(choice) => choice,
+        Err(dialog_error) => {
+            log_error!("native_dialog_failed title=startup error={}", dialog_error);
+            false
+        }
+    };
     if reveal {
         if let Err(reveal_error) = reveal_in_file_manager(&error.log_path) {
             log_error!(
@@ -320,7 +237,7 @@ fn show_fatal_startup_dialog(error: &StartupError) {
                 error.log_path.display(),
                 reveal_error
             );
-            let _ = DialogBuilder::message()
+            if let Err(dialog_error) = DialogBuilder::message()
                 .set_level(MessageLevel::Error)
                 .set_title("Could not reveal the log")
                 .set_text(format!(
@@ -328,7 +245,10 @@ fn show_fatal_startup_dialog(error: &StartupError) {
                     error.log_path.display()
                 ))
                 .alert()
-                .show();
+                .show()
+            {
+                log_error!("native_dialog_failed title=reveal error={}", dialog_error);
+            }
         }
     }
 }
@@ -360,6 +280,34 @@ async fn get_api_session(state: State<'_, BackendState>) -> Result<ApiSession, S
 #[tauri::command]
 fn frontend_mounted() {
     log_info!("packaged_webview_frontend_mounted");
+    // The first moment the user can see MediaSorter: a later launch that finds
+    // this missing knows the window never appeared.
+    lifecycle::stage("ui_mounted", "");
+    lifecycle::mark_window_shown();
+}
+
+/// Frontend diagnostics (uncaught errors, failed requests) for the launcher log.
+///
+/// Bounded per run and per message, so a misbehaving page cannot flood the log.
+#[tauri::command]
+fn frontend_log(level: String, message: String) {
+    const LIMIT_PER_RUN: u32 = 500;
+    const MAX_CHARS: usize = 2000;
+    static COUNT: AtomicU32 = AtomicU32::new(0);
+    let seen = COUNT.fetch_add(1, Ordering::Relaxed);
+    if seen == LIMIT_PER_RUN {
+        log_warn!("frontend log limit of {LIMIT_PER_RUN} lines reached; dropping further lines");
+    }
+    if seen >= LIMIT_PER_RUN {
+        return;
+    }
+    let level = match level.as_str() {
+        "error" => "ERROR",
+        "warn" => "WARN",
+        _ => "INFO",
+    };
+    let text: String = message.chars().take(MAX_CHARS).collect();
+    write_log(level, &format!("frontend {text}"));
 }
 
 #[tauri::command]
@@ -384,6 +332,7 @@ fn frontend_failure(app: tauri::AppHandle) {
 fn frontend_ready(app: tauri::AppHandle) {
     log_info!("packaged_webview_media_ready");
     log_info!("packaged_webview_frontend_ready");
+    lifecycle::stage("ui_ready", "");
     if std::env::var("MEDIASORT_WEBVIEW_SMOKE").as_deref() == Ok("1") {
         // app.exit() does not consistently deliver the normal exit callbacks
         // before Windows tears down the WebView. Reap the packaged backend
@@ -406,15 +355,51 @@ fn reveal_path(path: String) {
 // ── Port negotiation ─────────────────────────────────────────────────────────
 
 fn backend_is_ready(port: u16, capability: &str) -> bool {
+    health_check(port, capability).is_ok()
+}
+
+/// One readiness probe; the error says why, for the log.
+fn health_check(port: u16, capability: &str) -> Result<(), String> {
     let url = format!("http://127.0.0.1:{}/api/health", port);
-    ureq::get(&url)
+    match ureq::get(&url)
         .header("X-MediaSorter-Capability", capability)
         .config()
         .timeout_global(Some(Duration::from_secs(2)))
         .build()
         .call()
-        .map(|r| r.status().as_u16() == 200)
-        .unwrap_or(false)
+    {
+        Ok(response) if response.status().as_u16() == 200 => Ok(()),
+        Ok(response) => Err(format!("http_status={}", response.status().as_u16())),
+        Err(error) => Err(format!("error={error}")),
+    }
+}
+
+/// The whole launch, all spawn attempts included, must finish within this.
+const STARTUP_BUDGET: Duration = Duration::from_secs(210);
+
+/// Write the engine's last output lines to the log, with the secret removed.
+fn log_backend_output(startup: &BackendStartup, capability: &str, reason: &str) {
+    const MAX_LINES: usize = 60;
+    let Some(tail) = startup.output_tail(capability) else {
+        return;
+    };
+    let lines: Vec<&str> = tail
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    if lines.is_empty() {
+        log_warn!("backend_output reason={reason} lines=0");
+        return;
+    }
+    let shown = &lines[lines.len().saturating_sub(MAX_LINES)..];
+    log_warn!(
+        "backend_output reason={reason} lines={} showing_last={}",
+        lines.len(),
+        shown.len()
+    );
+    for line in shown {
+        write_log("WARN", &format!("backend| {line}"));
+    }
 }
 
 /// Ask the OS for a free loopback port by binding to port 0, then release it so
@@ -453,18 +438,24 @@ fn acquire_backend(
 ) -> Result<u16, StartupError> {
     let mut attempted_ports = Vec::new();
     let mut failures = Vec::new();
+    let deadline = Instant::now() + STARTUP_BUDGET;
     for attempt in 1..=max_tries {
         if startup.is_closed() {
             return startup.session().map(|session| session.port);
         }
+        if Instant::now() >= deadline {
+            failures.push(format!(
+                "startup budget of {}s exhausted",
+                STARTUP_BUDGET.as_secs()
+            ));
+            break;
+        }
         let port = find_available_port(log_path)?;
         attempted_ports.push(port);
 
-        log_info!(
-            "Spawning backend on port {} (attempt {}/{})",
-            port,
-            attempt,
-            max_tries
+        lifecycle::stage(
+            "backend_spawn",
+            &format!("port={port} attempt={attempt}/{max_tries}"),
         );
         let child_id = match startup.spawn(|| {
             let mut child = spawn_backend(port, capability, log_path)?;
@@ -473,16 +464,23 @@ fn acquire_backend(
         }) {
             Ok(id) => id,
             Err(error) => {
+                log_warn!(
+                    "backend_spawn_failed attempt={attempt} detail={}",
+                    error.detail
+                );
                 failures.push(error.detail);
                 startup.wait_or_closed(Duration::from_millis(100));
                 continue;
             }
         };
+        log_info!("backend_spawned pid={child_id} port={port}");
 
         // Quick liveness probe — if the backend can't bind, it dies fast.
         startup.wait_or_closed(Duration::from_millis(500));
         match startup.probe() {
             Ok(Some(status)) => {
+                log_warn!("backend_exited_immediately port={port} status={status}");
+                log_backend_output(startup, capability, "exited_immediately");
                 failures.push(format!("port {} exited immediately with {}", port, status));
                 startup.stop_process();
                 startup.wait_or_closed(Duration::from_millis(100));
@@ -496,7 +494,14 @@ fn acquire_backend(
             Ok(None) => {}
         }
 
-        if let Err(error) = wait_for_backend(port, capability, 30, startup, child_id, log_path) {
+        if let Err(error) =
+            wait_for_backend(port, capability, 30, startup, child_id, log_path, deadline)
+        {
+            log_warn!(
+                "backend_not_ready attempt={attempt} detail={}",
+                error.detail
+            );
+            log_backend_output(startup, capability, "not_ready");
             failures.push(error.detail);
             startup.stop_process();
             continue;
@@ -524,6 +529,7 @@ fn acquire_backend(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wait_for_backend(
     port: u16,
     capability: &str,
@@ -531,8 +537,10 @@ fn wait_for_backend(
     startup: &BackendStartup,
     child_id: u32,
     log_path: &std::path::Path,
+    deadline: Instant,
 ) -> Result<(), StartupError> {
-    let url = format!("http://127.0.0.1:{}/api/health", port);
+    let started = Instant::now();
+    let mut last_reason = String::from("no probe completed");
     for attempt in 1..=max_attempts {
         match startup.probe() {
             Ok(Some(status)) => {
@@ -540,8 +548,12 @@ fn wait_for_backend(
                     StartupStage::Readiness,
                     "The MediaSorter backend exited before it became ready.",
                     format!(
-                        "port={} attempt={}/{} status={}",
-                        port, attempt, max_attempts, status
+                        "port={} attempt={}/{} status={} elapsed_ms={}",
+                        port,
+                        attempt,
+                        max_attempts,
+                        status,
+                        started.elapsed().as_millis()
                     ),
                     log_path.to_path_buf(),
                 ));
@@ -556,24 +568,28 @@ fn wait_for_backend(
             }
             Ok(None) => {}
         }
-        if let Ok(response) = ureq::get(&url)
-            .header("X-MediaSorter-Capability", capability)
-            .config()
-            .timeout_global(Some(Duration::from_secs(2)))
-            .build()
-            .call()
-        {
-            if response.status().as_u16() == 200 && !startup.is_closed() {
-                log_info!("Backend ready on port {}", port);
+        match health_check(port, capability) {
+            Ok(()) if !startup.is_closed() => {
+                lifecycle::stage(
+                    "backend_ready",
+                    &format!(
+                        "port={port} attempts={attempt} wait_ms={}",
+                        started.elapsed().as_millis()
+                    ),
+                );
                 return Ok(());
             }
+            Ok(()) => last_reason = "closing".into(),
+            Err(reason) => last_reason = reason,
         }
         if attempt == 1 || attempt % 5 == 0 {
             log_info!(
-                "Waiting for backend to be ready… (attempt {}/{})",
-                attempt,
-                max_attempts
+                "backend_waiting attempt={attempt}/{max_attempts} elapsed_ms={} last={last_reason}",
+                started.elapsed().as_millis()
             );
+        }
+        if Instant::now() >= deadline {
+            break;
         }
         if attempt < max_attempts {
             let delay_ms = (200u64 * attempt as u64).min(2000);
@@ -584,8 +600,11 @@ fn wait_for_backend(
         StartupStage::Readiness,
         "The MediaSorter backend did not become ready in time.",
         format!(
-            "health_url={} attempts={} child_id={}",
-            url, max_attempts, child_id
+            "port={} child_id={} elapsed_ms={} last={}",
+            port,
+            child_id,
+            started.elapsed().as_millis(),
+            last_reason
         ),
         log_path.to_path_buf(),
     ))
@@ -796,7 +815,7 @@ fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
 
     // Create the window before backend initialization so the bundled splash
     // and React startup screen can paint while Python imports its services.
-    log_info!("Starting Tauri window before backend readiness");
+    lifecycle::stage("window_build", "");
     let startup = Arc::new(BackendStartup::default());
     let startup_on_build_error = Arc::clone(&startup);
     let exit_code = Arc::new(AtomicI32::new(0));
@@ -811,15 +830,21 @@ fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
             exit_code: Arc::clone(&exit_code),
         })
         .setup(|_app| Ok(()))
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { .. } => {
+                lifecycle::stage("close_requested", &format!("window={}", window.label()));
+            }
+            tauri::WindowEvent::Destroyed => {
+                lifecycle::stage("window_destroyed", &format!("window={}", window.label()));
                 kill_backend(window.state::<BackendState>().inner());
             }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             frontend_ready,
             frontend_mounted,
             frontend_failure,
+            frontend_log,
             get_api_session,
             reveal_path
         ])
@@ -837,6 +862,7 @@ fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
     let backend_log_path = log_path.to_path_buf();
     let runtime_code = app.run_return(move |app_handle, event| {
         if let tauri::RunEvent::Ready = event {
+            lifecycle::stage("window_created", "");
             #[cfg(windows)]
             if let Some(window) = app_handle.get_webview_window("main") {
                 if let Err(error) = windows_icon::apply(&window) {
@@ -857,6 +883,9 @@ fn launch(log_path: &std::path::Path) -> Result<i32, StartupError> {
         // On macOS Cmd-Q (and other clean-exit paths) WindowEvent::Destroyed
         // may not fire before the process exits. RunEvent::Exit fires
         // reliably so we kill the backend there too.
+        if let tauri::RunEvent::ExitRequested { code, .. } = &event {
+            lifecycle::stage("exit_requested", &format!("code={code:?}"));
+        }
         if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
             kill_backend(app_handle.state::<BackendState>().inner());
         }
@@ -869,31 +898,210 @@ fn start_backend_in_background(
     backend_log_path: PathBuf,
     startup: Arc<BackendStartup>,
 ) {
-    thread::spawn(move || {
-        let result = start_backend(&backend_log_path, &startup);
-        startup.finish(result.clone());
-        if let Err(error) = result {
-            if !startup.is_closed() {
-                // Recovery UI must run on the desktop thread, especially on
-                // macOS. Closing the startup window suppresses stale dialogs.
-                let recovery_app = app_handle.clone();
-                let _ = app_handle.run_on_main_thread(move || {
-                    if !recovery_app.state::<BackendState>().startup.is_closed() {
-                        recovery_app
-                            .state::<BackendState>()
-                            .exit_code
-                            .store(1, Ordering::Release);
-                        show_fatal_startup_dialog(&error);
-                        kill_backend(recovery_app.state::<BackendState>().inner());
-                        recovery_app.exit(1);
-                    }
-                });
+    let capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
+        rand::rng()
+            .sample_iter(&Alphanumeric)
+            .take(48)
+            .map(char::from)
+            .collect()
+    });
+    let worker_startup = Arc::clone(&startup);
+    let worker_path = backend_log_path.clone();
+    let spawned = thread::Builder::new()
+        .name("backend-startup".into())
+        .spawn(move || {
+            let result = run_startup_worker(&worker_path, || {
+                start_backend(&worker_path, &worker_startup, &capability)
+            });
+            worker_startup.finish(result.clone());
+            match result {
+                Ok(_) => monitor_backend(app_handle, worker_startup, worker_path, capability),
+                Err(error) => {
+                    log_error!("stage=startup_failed {}", error);
+                    report_fatal(&app_handle, &worker_startup, error);
+                }
             }
+        });
+    if let Err(error) = spawned {
+        let failure = StartupError::new(
+            StartupStage::Spawn,
+            "MediaSorter could not start its startup worker.",
+            format!("thread spawn: {error}"),
+            backend_log_path,
+        );
+        log_error!("stage=startup_failed {}", failure);
+        startup.finish(Err(failure));
+    }
+}
+
+/// Run the startup and turn a panic into a startup failure, so the UI waiting
+/// for a session always receives a terminal answer.
+fn run_startup_worker(
+    log_path: &std::path::Path,
+    start: impl FnOnce() -> Result<ApiSession, StartupError>,
+) -> Result<ApiSession, StartupError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(start)).unwrap_or_else(|_| {
+        Err(StartupError::new(
+            StartupStage::Readiness,
+            "MediaSorter stopped starting because of an internal error.",
+            "startup worker panicked; the panic line above names its location",
+            log_path.to_path_buf(),
+        ))
+    })
+}
+
+/// Watch the engine after it became ready and report an exit nobody asked for.
+fn monitor_backend(
+    app_handle: tauri::AppHandle,
+    startup: Arc<BackendStartup>,
+    log_path: PathBuf,
+    capability: String,
+) {
+    let spawned = thread::Builder::new()
+        .name("backend-monitor".into())
+        .spawn(move || loop {
+            if startup.wait_or_closed(Duration::from_secs(1)) {
+                return;
+            }
+            match startup.probe() {
+                Ok(None) => continue,
+                Ok(Some(status)) => {
+                    log_error!("stage=backend_exited_unexpectedly status={status}");
+                    log_backend_output(&startup, &capability, "unexpected_exit");
+                    let error = StartupError::new(
+                        StartupStage::Readiness,
+                        "The MediaSorter engine stopped unexpectedly. Interrupted work is \
+                         checked the next time MediaSorter starts.",
+                        format!("backend exit status={status}"),
+                        log_path.clone(),
+                    );
+                    report_fatal(&app_handle, &startup, error);
+                    return;
+                }
+                // Closed or no longer inspectable: shutdown owns the outcome.
+                Err(_) => return,
+            }
+        });
+    if let Err(error) = spawned {
+        log_warn!("backend_monitor_unavailable error={error}");
+    }
+}
+
+/// Show the recovery dialog on the desktop thread, or fall back if that fails.
+fn report_fatal(app_handle: &tauri::AppHandle, startup: &Arc<BackendStartup>, error: StartupError) {
+    if startup.is_closed() {
+        return;
+    }
+    // Recovery UI must run on the desktop thread, especially on macOS.
+    // Closing the startup window suppresses stale dialogs.
+    let recovery_app = app_handle.clone();
+    let dialog_error = error.clone();
+    let dispatched = app_handle.run_on_main_thread(move || {
+        if !recovery_app.state::<BackendState>().startup.is_closed() {
+            recovery_app
+                .state::<BackendState>()
+                .exit_code
+                .store(1, Ordering::Release);
+            show_fatal_startup_dialog(&dialog_error);
+            kill_backend(recovery_app.state::<BackendState>().inner());
+            recovery_app.exit(1);
         }
     });
+    if let Err(dispatch_error) = dispatched {
+        // The event loop is gone or refused the task. Report from this thread;
+        // the dialog may not appear on every platform, but the log is written.
+        log_error!("recovery_dispatch_failed error={dispatch_error}");
+        startup.close();
+        show_fatal_startup_dialog(&error);
+        lifecycle::stage("exit_after_failed_dispatch", "code=1");
+        std::process::exit(1);
+    }
+}
+
+/// Explain why this launch stops because another instance owns MediaSorter.
+fn explain_other_instance(other: lifecycle::OtherInstance, log_path: &std::path::Path) -> i32 {
+    use lifecycle::OtherInstance;
+    let (level, title, text, code) = match &other {
+        OtherInstance::Running(marker) => {
+            log_info!(
+                "second_instance other_run={} other_pid={} state=running",
+                marker.run_id,
+                marker.pid
+            );
+            (
+                MessageLevel::Info,
+                "MediaSorter is already open",
+                "MediaSorter is already open. Switch to its window to continue.".to_string(),
+                0,
+            )
+        }
+        OtherInstance::Starting(marker) => {
+            log_info!(
+                "second_instance other_run={} other_pid={} state=starting",
+                marker.run_id,
+                marker.pid
+            );
+            (
+                MessageLevel::Info,
+                "MediaSorter is starting",
+                "MediaSorter is still starting. Its window should appear in a moment.".to_string(),
+                0,
+            )
+        }
+        OtherInstance::Stuck(marker) => {
+            log_warn!(
+                "second_instance other_run={} other_pid={} state=stuck_without_window \
+                 started={} last_stage={}",
+                marker.run_id,
+                marker.pid,
+                lifecycle::timestamp(
+                    std::time::UNIX_EPOCH + Duration::from_millis(marker.started_unix_ms as u64)
+                ),
+                marker.stage
+            );
+            (
+                MessageLevel::Warning,
+                "MediaSorter did not finish starting",
+                format!(
+                    "Another MediaSorter process (process ID {}) started earlier but never \
+                     showed its window. Security software can hold an app while it starts.\n\n\
+                     End that process in Task Manager (Windows) or Activity Monitor (macOS), \
+                     then open MediaSorter again.\n\nLog file:\n{}",
+                    marker.pid,
+                    log_path.display()
+                ),
+                2,
+            )
+        }
+        OtherInstance::Unknown => {
+            log_info!("second_instance other=unknown");
+            (
+                MessageLevel::Info,
+                "MediaSorter is already running",
+                "MediaSorter is already running. Switch to its window to continue.".to_string(),
+                0,
+            )
+        }
+    };
+    if std::env::var("MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE").as_deref() != Ok("1") {
+        if let Err(dialog_error) = DialogBuilder::message()
+            .set_level(level)
+            .set_title(title)
+            .set_text(text)
+            .alert()
+            .show()
+        {
+            log_error!(
+                "native_dialog_failed title=second_instance error={}",
+                dialog_error
+            );
+        }
+    }
+    code
 }
 
 fn main() {
+    lifecycle::install_panic_hook();
     let fallback_log_path = log_dir().join("mediasort.log");
     let log_path = match init_logger() {
         Ok(path) => path,
@@ -902,8 +1110,26 @@ fn main() {
             std::process::exit(1);
         }
     };
+    let dir = log_dir();
+    // Only the owner of the instance lock may touch the run marker; a second
+    // launch reads the running instance's marker to explain itself.
+    if let Err(other) = lifecycle::acquire_instance(&dir) {
+        std::process::exit(explain_other_instance(other, &log_path));
+    }
+    lifecycle::report_previous_run(&dir);
+    lifecycle::stage(
+        "logger_ready",
+        &format!(
+            "pid={} version={} os={} arch={}",
+            std::process::id(),
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ),
+    );
     match launch(&log_path) {
         Ok(code) => {
+            lifecycle::mark_clean_exit(code);
             if code != 0 {
                 std::process::exit(code);
             }
@@ -913,6 +1139,7 @@ fn main() {
             if error.log_path != fallback_log_path {
                 log_error!("fallback_log_path={}", fallback_log_path.display());
             }
+            lifecycle::mark_clean_exit(1);
             std::process::exit(1);
         }
     }
@@ -925,6 +1152,7 @@ fn kill_backend(state: &BackendState) {
 fn start_backend(
     log_path: &std::path::Path,
     startup: &BackendStartup,
+    capability: &str,
 ) -> Result<ApiSession, StartupError> {
     if std::env::var("MEDIASORT_STARTUP_SMOKE_FAIL").as_deref() == Ok("1") {
         return Err(StartupError::new(
@@ -934,20 +1162,16 @@ fn start_backend(
             log_path.to_path_buf(),
         ));
     }
-    let capability = std::env::var("MEDIASORT_API_CAPABILITY").unwrap_or_else(|_| {
-        rand::rng()
-            .sample_iter(&Alphanumeric)
-            .take(48)
-            .map(char::from)
-            .collect()
-    });
-    let port = if cfg!(debug_assertions) && backend_is_ready(8000, &capability) {
+    let port = if cfg!(debug_assertions) && backend_is_ready(8000, capability) {
         log_info!("Found existing backend on port 8000 (hot-reload mode)");
         8000
     } else {
-        acquire_backend(5, log_path, &capability, startup)?
+        acquire_backend(5, log_path, capability, startup)?
     };
-    Ok(ApiSession { port, capability })
+    Ok(ApiSession {
+        port,
+        capability: capability.to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -1043,11 +1267,22 @@ mod tests {
             &startup,
             id,
             std::path::Path::new("/tmp/mediasort.log"),
+            Instant::now() + Duration::from_secs(5),
         )
         .expect_err("child exit should fail readiness");
         assert_eq!(error.stage, StartupStage::Readiness);
         assert!(error.detail.contains("status"));
         startup.close();
+    }
+
+    #[test]
+    fn a_panicking_startup_still_reports_a_terminal_failure() {
+        let log = std::path::Path::new("/tmp/mediasort.log");
+        let error = run_startup_worker(log, || panic!("controlled startup panic"))
+            .expect_err("a panic must become a startup failure");
+        assert_eq!(error.stage, StartupStage::Readiness);
+        assert!(error.summary.contains("internal error"));
+        assert_eq!(error.log_path, log);
     }
 
     #[test]
