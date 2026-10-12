@@ -464,7 +464,8 @@ jobs:
           licenses="frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/licenses"
           test -s "$licenses/COPYING.GPLv3"
           test -s "$licenses/FFMPEG-LICENSE-AND-SOURCE-OFFER.md"
-          echo "GPL licence and written offer are present in the bundle"
+          test -s "$licenses/THIRD-PARTY-DATA.md"
+          echo "GPL licence, written offer and data attributions are present in the bundle"
 
   native:
     name: native

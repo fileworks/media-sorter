@@ -795,7 +795,6 @@ local-ai = [
     { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "onnxruntime", version = "1.26.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "psutil" },
-    { name = "reverse-geocoder" },
     { name = "tokenizers" },
 ]
 
@@ -832,7 +831,6 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.2" },
     { name = "rawpy", specifier = ">=0.18.0" },
-    { name = "reverse-geocoder", marker = "extra == 'local-ai'", specifier = ">=1.5.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.1" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "tokenizers", marker = "extra == 'local-ai'", specifier = ">=0.15.0" },
@@ -1931,18 +1929,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/48/64e97637398494e6b74f8388c5a17d726219a5ddc9f7c283ff9f77849a05/rawpy-0.27.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a949e9258af1d915b4316b77c8de9d9637d3624e6fe85a5bfb6cb4de15f485d6", size = 2940100, upload-time = "2026-05-07T08:29:13.647Z" },
     { url = "https://files.pythonhosted.org/packages/4d/01/1854b2f789d7a6d94152ba451bdaadae0010d4247099d9c2719b381d4b6b/rawpy-0.27.0-cp314-cp314-win_amd64.whl", hash = "sha256:3cac371c3b6302eb88bd1f33d43c7a92b5e553fdff14258b564f81e173a68c26", size = 940931, upload-time = "2026-05-07T08:29:15.604Z" },
 ]
-
-[[package]]
-name = "reverse-geocoder"
-version = "1.5.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0b/0f/b7d5d4b36553731f11983e19e1813a1059ad0732c5162c01b3220c927d31/reverse_geocoder-1.5.1.tar.gz", hash = "sha256:2a2e781b5f69376d922b78fe8978f1350c84fce0ddb07e02c834ecf98b57c75c", size = 2246559, upload-time = "2016-09-15T16:46:46.277Z" }
 
 [[package]]
 name = "ruff"

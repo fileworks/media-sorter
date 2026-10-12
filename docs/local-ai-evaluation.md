@@ -43,7 +43,21 @@ loading message.
 A generated JPEG exposed a real metadata bug: SceneCaptureType was read from
 IFD0 instead of the Exif sub-IFD. The regression tests use actual encoded EXIF,
 verify English/German output and leave source bytes unchanged. Camera scene mode
-is still only recorded metadata; nearest-city reverse geocoding is approximate.
+is still only recorded metadata.
+
+## Location tags
+
+GPS positions from photo EXIF and video ISO 6709 tags resolve offline against
+`backend/app/resources/geo`: the GeoNames `cities1000` export (CC BY 4.0) without
+city sections or historical, abandoned and destroyed places, plus CLDR country
+names. `scripts/build_geonames_extract.py` rebuilds it; `SOURCE.json` pins the
+checksums the backend verifies before use. A place counts only within 25 km, so
+photos at sea or far from any town of 1,000 people get no location. Coordinates
+must be finite and in range; `(0, 0)` is a real position. Place names are the
+GeoNames primary names; country names follow the interface language. Missing or
+corrupt data logs one warning per run, never the coordinates. The attribution
+ships in `resources/licenses/THIRD-PARTY-DATA.md`, and the packaged smoke check
+fails when the data was not collected.
 
 ## Candidates, using primary sources
 

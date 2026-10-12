@@ -293,6 +293,9 @@ def test_packaged_backend_smoke_uses_launch_capability(
         return Response()
 
     backend = tmp_path / "mediasort-backend"
+    for relative in release_integrity.BUNDLED_BACKEND_DATA:
+        (tmp_path / "_internal" / relative).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "_internal" / relative).write_bytes(b"x")
     monkeypatch.setattr(release_integrity.socket, "socket", lambda *_args: Listener())
     monkeypatch.setattr(release_integrity.subprocess, "Popen", popen)
     monkeypatch.setattr(release_integrity.urllib.request, "urlopen", urlopen)
@@ -302,6 +305,14 @@ def test_packaged_backend_smoke_uses_launch_capability(
     assert observed["command"] == [str(backend)]
     assert observed["header"] == observed["capability"]
     assert len(str(observed["capability"])) >= 32
+
+
+def test_packaged_backend_smoke_requires_the_bundled_place_data(tmp_path: Path) -> None:
+    """AI-01: a missing collect rule left location tags empty in every installed build."""
+    backend = tmp_path / "mediasort-backend"
+
+    with pytest.raises(release_integrity.ReleaseIntegrityError, match="geo/SOURCE.json"):
+        release_integrity._smoke_backend(backend)
 
 
 def test_packaged_webview_smoke_requires_frontend_ready_marker(

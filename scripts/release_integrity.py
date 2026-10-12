@@ -549,7 +549,21 @@ def _smoke_program(path: Path, arguments: Sequence[str]) -> None:
         raise ReleaseIntegrityError(f"smoke invocation failed: {path}") from error
 
 
+#: Data the frozen backend reads at runtime; a missing collect rule once left
+#: location tags silently empty in every installed build (AI-01).
+BUNDLED_BACKEND_DATA = ("app/resources/geo/SOURCE.json", "app/resources/geo/cities.tsv.gz")
+
+
+def _require_bundled_data(path: Path) -> None:
+    for relative in BUNDLED_BACKEND_DATA:
+        if not any(
+            (root / relative).is_file() for root in (path.parent / "_internal", path.parent)
+        ):
+            raise ReleaseIntegrityError(f"packaged backend lacks {relative}: {path}")
+
+
 def _smoke_backend(path: Path) -> None:
+    _require_bundled_data(path)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]

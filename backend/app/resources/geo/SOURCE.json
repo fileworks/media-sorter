@@ -1,0 +1,20 @@
+{
+  "dataset": "GeoNames cities1000",
+  "excluded_feature_codes": [
+    "PPLCH",
+    "PPLH",
+    "PPLQ",
+    "PPLW",
+    "PPLX"
+  ],
+  "source_url": "https://download.geonames.org/export/dump/cities1000.zip",
+  "license": "CC BY 4.0",
+  "attribution": "Place names: GeoNames (https://www.geonames.org/), CC BY 4.0",
+  "country_names": "Unicode CLDR via Babel, Unicode License v3",
+  "retrieved": "2026-10-12",
+  "places": 161628,
+  "sha256": {
+    "cities.tsv.gz": "2c977981bcf89f5769bb037acbe7eab529ee050c7184476d3070391094e794a6",
+    "countries.json": "b419dfc77a897080bcce4c3d55ef8f87948483b617cce529b4999ab04d0b60dd"
+  }
+}

@@ -74,13 +74,12 @@ dev = [
     "pyinstaller>=6.21.0",
 ]
 
-# Local, offline AI tagging (SigLIP 2 zero-shot + GPS geocoding). Optional so
+# Local, offline AI tagging (SigLIP 2 zero-shot tagging). Optional so
 # CI/tests do not pull onnxruntime; release builds freeze the inference runtime
 # but never model weights. Those are installed explicitly from immutable,
-# checksum-covered sources. reverse_geocoder bundles the GeoNames dataset
-# (~26 MB) for offline GPS → city name resolution — no network needed at runtime.
+# checksum-covered sources. GPS → place names use the GeoNames extract bundled
+# in app/resources/geo (scripts/build_geonames_extract.py), not a dependency.
 local-ai = [
-    "reverse_geocoder>=1.5.1",
     # onnxruntime runs the SigLIP 2 towers and tokenizers loads the Gemma
     # tokenizer. huggingface_hub is a tokenizers dependency; application code
     # never uses its network path and passes only verified local component paths.
