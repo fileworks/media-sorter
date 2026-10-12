@@ -134,10 +134,29 @@ With default bundled vocabularies and thresholds in English and German:
 
 A **non-shipped** experiment split text inference into batches of 16. Peak RSS
 dropped to 1.18 GB; first tagging took 4.52 s / 3.74 s. However, scores and some
-accepted labels changed, including new unsupported German coffee tags. Therefore
-this is not treated as a behavior-preserving memory optimization. The production
-encoder, model, thresholds and batching remain unchanged. Memory tuning needs a
-representative quality comparison, not just a lower RSS measurement.
+accepted labels changed, including new unsupported German coffee tags.
+
+### Text encoding since 2026-10-12
+
+The batch experiment changed scores because the int8 text tower quantizes
+activations per batch: a label's vector depended on which other labels shared its
+batch. Measured on Windows with the pinned pack, the same 80 prompts encoded
+together and one at a time differed by a cosine of up to 0.0021, and the first ten
+prompts changed again when encoded in a batch of ten. Encoding one text at a time
+is the only setting where a label's vector is stable: repeated runs were
+bit-identical. It took the same time (3.08 s against 3.06 s for 80 prompts) and
+avoided a 336 MB resident-memory peak (514 MB against 850 MB after encoding).
+With the bundled English tag vocabulary (475 prompts), the first tag took 21.3 s
+against 20.6 s batched, while process memory after it fell from 2.54 GB to
+548 MB, and to 266 MB once the idle text tower was released. Warm tagging then
+took 0.14 s without reloading it.
+
+The encoder therefore encodes each text alone, caches up to 4096 text vectors as
+read-only arrays, and releases the text tower (about 280 MB resident) after
+30 seconds without text work; a new label reloads it. Loading is locked, so
+concurrent first use builds the sessions once. Thresholds were not retuned for
+this change; the held-out harness compares accepted tags and categories before
+any threshold or template change.
 
 The four-step shell is implemented: Sources → Setup → Review → Execute, with
 optional adjustments inside Setup and an impact summary inside Review. Automatic

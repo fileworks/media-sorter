@@ -39,11 +39,9 @@ class VisionEncoder:
 
     @property
     def tagger_slope(self) -> float:
-        """Sigmoid sharpness for the per-label tagging scorer.
+        """Sigmoid sharpness for the per-label, anchor-relative tagging scorer.
 
-        CLIP ViT-B/32: 100.0 (trained logit scale).
-        SigLIP 2: lower value (~10–20) because SigLIP's cosine scores are
-        already sharper; recalibrate after the model swap.
+        Calibrated per model family; the shipped SigLIP 2 encoder uses 40.
         """
         return 100.0
 
@@ -51,8 +49,7 @@ class VisionEncoder:
     def categorize_scale(self) -> float:
         """Softmax temperature for the Smart Categorization classifier.
 
-        CLIP ViT-B/32: 40.0 (empirically tuned).
-        SigLIP 2: needs recalibration once the swap lands.
+        Calibrated per model family; the shipped SigLIP 2 encoder uses 60.
         """
         return 40.0
 
@@ -61,5 +58,8 @@ class VisionEncoder:
         return None
 
     def embed_texts(self, texts: list[str]) -> Any | None:
-        """Return a ``(len(texts), dim)`` float32 numpy matrix, or ``None``."""
+        """Return a ``(len(texts), dim)`` float32 numpy matrix, or ``None``.
+
+        The matrix may be read-only; consumers copy before modifying it.
+        """
         return None

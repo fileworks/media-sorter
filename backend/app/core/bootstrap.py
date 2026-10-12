@@ -3,6 +3,7 @@
 import asyncio
 import os
 import secrets
+import threading
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime, timezone
@@ -86,6 +87,9 @@ class ServiceContainer:
         self._hardware_profile: HardwareProfile | None = None
         self._encoder: VisionEncoder | None = None
         self._encoder_built = False
+        # Worker threads and the suggestion endpoint can ask for the encoder at
+        # once; it must be built once and reset atomically (AI-NEW-1).
+        self._encoder_lock = threading.RLock()
         self._ai_tagging_service: AITaggingService | None = None
         self._category_classifier_service: CategoryClassifierService | None = None
         self._category_suggestion_service: CategorySuggestionService | None = None
@@ -189,8 +193,9 @@ class ServiceContainer:
         preview_close = getattr(self._preview_service, "close", None)
         if callable(preview_close):
             preview_close()
-        self._encoder = None
-        self._encoder_built = False
+        with self._encoder_lock:
+            self._encoder = None
+            self._encoder_built = False
         self._ai_tagging_service = None
         self._category_classifier_service = None
         self._category_suggestion_service = None
@@ -366,17 +371,20 @@ class ServiceContainer:
         pack is not installed. Both
         AITaggingService and CategoryClassifierService accept ``None`` gracefully.
         """
-        if not self._encoder_built:
-            from app.services.ai.encoder_factory import build_encoder
+        if self._encoder_built:
+            return self._encoder
+        with self._encoder_lock:
+            if not self._encoder_built:
+                from app.services.ai.encoder_factory import build_encoder
 
-            self._encoder = build_encoder(
-                self._config,
-                self.hardware_profile,
-                self.ai_model_store,
-            )
-            self._encoder_built = True
-            self._logger.debug("Initialized vision encoder", encoder=self._encoder)
-        return self._encoder
+                self._encoder = build_encoder(
+                    self._config,
+                    self.hardware_profile,
+                    self.ai_model_store,
+                )
+                self._encoder_built = True
+                self._logger.debug("Initialized vision encoder", encoder=self._encoder)
+            return self._encoder
 
     @property
     def ai_tagging_service(self) -> "AITaggingService":

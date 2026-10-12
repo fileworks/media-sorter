@@ -19,6 +19,18 @@ Design notes
 * **Runtime-adaptive I/O.** Input names (``pixel_values`` / ``input_ids`` /
   ``attention_mask``) and the pooled-embedding output name are resolved from the
   loaded graph rather than hardcoded, so a slightly different export still works.
+* **Loaded once, published whole.** A lock makes concurrent first use load the
+  sessions once; they become visible only when vision, text and tokenizer are
+  all ready (AI-NEW-1).
+* **One text at a time.** The int8 text tower quantizes activations per batch,
+  so a label's vector used to depend on which other labels shared its batch
+  (cosine as low as 0.998 against encoding it alone). Encoding each text alone
+  makes every label's vector deterministic and avoids the ~340 MB activation
+  peak an 80-prompt batch caused, at the same speed.
+* **Bounded text cache, released text tower.** Text vectors are cached per text
+  in a bounded LRU of read-only arrays (AI-NEW-2). The text tower (~280 MB
+  resident) is only needed on a cache miss, so it is released after
+  ``TEXT_SESSION_IDLE_SECONDS`` without text work and reloaded on demand (AI-12).
 * **Injectable** vision/text sessions + tokenizer (any object exposing the small
   duck-typed interface used below) so tests run without a real download.
 """
@@ -26,6 +38,8 @@ Design notes
 from __future__ import annotations
 
 import os
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -61,6 +75,12 @@ _PAD_TOKEN = "<pad>"
 # least-specific. Tower-only exports expose ``pooler_output``.
 _EMBED_OUTPUT_CANDIDATES = ("pooler_output", "image_embeds", "text_embeds", "embeds")
 
+#: Distinct texts whose vectors stay cached: 4096 x 768 float32 is about 12.6 MB,
+#: far more than the bundled vocabularies and a generous custom one need.
+TEXT_CACHE_ENTRIES = 4096
+#: Seconds without text work before the text tower is released.
+TEXT_SESSION_IDLE_SECONDS = 30.0
+
 
 def _upright_rgb(image: Image) -> Image:
     """Apply EXIF orientation and convert to RGB (best-effort, never raises)."""
@@ -85,8 +105,7 @@ class SiglipOnnxEncoder(VisionEncoder):
 
     Returns raw (un-normalised) ``float32`` embedding vectors from each tower's
     pooled output; the tagging/categorization consumers L2-normalise and score
-    them, exactly as they do for CLIP. Text embeddings are memoised by the tuple
-    of input strings so a stable label/category vocabulary is encoded once.
+    them. Returned text matrices are read-only: their rows are shared via the cache.
     """
 
     def __init__(
@@ -108,7 +127,15 @@ class SiglipOnnxEncoder(VisionEncoder):
         self._tokenizer: Any | None = tokenizer
         self._model_store = model_store
         self._load_failed = False
-        self._text_cache: dict[tuple[str, ...], Any] = {}
+        self._lock = threading.RLock()
+        self._ready = False
+        # Only a text session this encoder built can be released and rebuilt.
+        self._owns_text_session = text_session is None
+        self._text_model_path: str | None = None
+        self._session_options: Any | None = None
+        self._providers: list[str] = []
+        self._text_cache: OrderedDict[str, Any] = OrderedDict()
+        self._idle_timer: threading.Timer | None = None
         # Resolved lazily from the loaded graphs.
         self._vision_input: str | None = None
         self._text_inputs: tuple[str, ...] = ()
@@ -153,29 +180,34 @@ class SiglipOnnxEncoder(VisionEncoder):
 
     def _ensure_loaded(self) -> bool:
         """Build the onnxruntime sessions + tokenizer once. False if unavailable."""
-        if (
-            self._vision_session is not None
-            and self._text_session is not None
-            and (self._tokenizer is not None)
-        ):
-            self._resolve_io()
+        if self._ready:
             return True
-        if self._load_failed:
-            return False
-        try:
-            self._load()
-            self._resolve_io()
-            return True
-        except Exception as exc:  # pragma: no cover - depends on optional runtime/deps
-            self._load_failed = True
-            logger.warning(
-                "SigLIP 2 encoder unavailable",
-                error=str(exc),
-                repo=self._repo,
-            )
-            return False
+        with self._lock:
+            if self._ready:
+                return True
+            if self._load_failed:
+                return False
+            try:
+                if (
+                    self._vision_session is None
+                    or self._text_session is None
+                    or self._tokenizer is None
+                ):
+                    self._load()
+                self._resolve_io()
+                self._ready = True
+                return True
+            except Exception as exc:  # pragma: no cover - depends on optional runtime/deps
+                self._load_failed = True
+                logger.warning(
+                    "SigLIP 2 encoder unavailable",
+                    error=str(exc),
+                    repo=self._repo,
+                )
+                return False
 
     def _load(self) -> None:
+        """Build every missing part, then publish them together (caller holds the lock)."""
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -200,22 +232,23 @@ class SiglipOnnxEncoder(VisionEncoder):
         # Local interactive workloads: cap intra-op threads to the physical core
         # count to avoid oversubscription on hyper-threaded CPUs.
         opts.intra_op_num_threads = max(1, (os.cpu_count() or 2) // 2)
+        text_path = installed(_TEXT_FILE)
 
-        if self._vision_session is None:
-            self._vision_session = ort.InferenceSession(
-                installed(_VISION_FILE), sess_options=opts, providers=providers
-            )
-        if self._text_session is None:
-            self._text_session = ort.InferenceSession(
-                installed(_TEXT_FILE), sess_options=opts, providers=providers
-            )
-        if self._tokenizer is None:
-            tok = Tokenizer.from_file(installed(_TOKENIZER_FILE))
-            pad_id = tok.token_to_id(_PAD_TOKEN) or 0
-            tok.enable_truncation(max_length=_MAX_TOKENS)
-            tok.enable_padding(length=_MAX_TOKENS, pad_id=pad_id, pad_token=_PAD_TOKEN)
-            self._tokenizer = tok
+        vision = self._vision_session or ort.InferenceSession(
+            installed(_VISION_FILE), sess_options=opts, providers=providers
+        )
+        text = self._text_session or ort.InferenceSession(
+            text_path, sess_options=opts, providers=providers
+        )
+        tokenizer = self._tokenizer
+        if tokenizer is None:
+            tokenizer = Tokenizer.from_file(installed(_TOKENIZER_FILE))
+            pad_id = tokenizer.token_to_id(_PAD_TOKEN) or 0
+            tokenizer.enable_truncation(max_length=_MAX_TOKENS)
+            tokenizer.enable_padding(length=_MAX_TOKENS, pad_id=pad_id, pad_token=_PAD_TOKEN)
 
+        self._vision_session, self._text_session, self._tokenizer = vision, text, tokenizer
+        self._text_model_path, self._session_options, self._providers = text_path, opts, providers
         logger.info("SigLIP 2 encoder ready", providers=providers, repo=self._repo)
 
     def _select_providers(self, ort: Any) -> list[str]:
@@ -315,19 +348,65 @@ class SiglipOnnxEncoder(VisionEncoder):
             return None
         import numpy as np
 
-        key = tuple(texts)
-        cached = self._text_cache.get(key)
-        if cached is not None:
-            return cached
         try:
-            feeds = self._tokenize(list(texts))
-            assert self._text_session is not None
-            out = self._text_session.run([self._text_output], feeds)
-            mat = np.asarray(out[0], dtype=np.float32)
-            if mat.ndim == 1:
-                mat = mat.reshape(1, -1)
-            self._text_cache[key] = mat
-            return mat
+            rows = [self._text_vector(text) for text in texts]
         except Exception as exc:
             logger.warning("SigLIP text embedding failed", error=str(exc))
             return None
+        matrix = np.vstack(rows)
+        matrix.setflags(write=False)
+        return matrix
+
+    def _text_vector(self, text: str) -> Any:
+        """One text's read-only vector, from the cache or encoded alone."""
+        import numpy as np
+
+        with self._lock:
+            cached = self._text_cache.get(text)
+            if cached is not None:
+                self._text_cache.move_to_end(text)
+                return cached
+            session = self._text_session_for_use()
+            out = session.run([self._text_output], self._tokenize([text]))
+            vector = np.array(np.asarray(out[0], dtype=np.float32).reshape(-1), copy=True)
+            vector.setflags(write=False)
+            self._text_cache[text] = vector
+            while len(self._text_cache) > TEXT_CACHE_ENTRIES:
+                self._text_cache.popitem(last=False)
+            self._schedule_text_release()
+            return vector
+
+    def _text_session_for_use(self) -> Any:
+        """The text session, rebuilt if it was released (caller holds the lock)."""
+        if self._text_session is None:
+            import onnxruntime as ort
+
+            if self._text_model_path is None:
+                raise RuntimeError("the SigLIP text model was released and cannot be reloaded")
+            self._text_session = ort.InferenceSession(
+                self._text_model_path,
+                sess_options=self._session_options,
+                providers=self._providers,
+            )
+            logger.info("SigLIP 2 text model reloaded")
+        return self._text_session
+
+    def _schedule_text_release(self) -> None:
+        if not self._owns_text_session or TEXT_SESSION_IDLE_SECONDS <= 0:
+            return
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+        timer = threading.Timer(TEXT_SESSION_IDLE_SECONDS, self.release_text_session)
+        timer.daemon = True
+        self._idle_timer = timer
+        timer.start()
+
+    def release_text_session(self) -> None:
+        """Free the text tower; cached vectors stay and a miss reloads it."""
+        with self._lock:
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+            if self._owns_text_session and self._text_session is not None:
+                self._text_session = None
+                logger.info("SigLIP 2 text model released", cached_texts=len(self._text_cache))
