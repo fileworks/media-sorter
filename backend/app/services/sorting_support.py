@@ -18,7 +18,10 @@ from app.core.integrity_policy import MutationAuthorization
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionRole, MediaUnit
 from app.core.provenance import OutcomeProvenance
-from app.services.ai.category_classifier_service import CategoryClassifierService
+from app.services.ai.category_classifier_service import (
+    CategoryClassifierService,
+    CategoryResult,
+)
 from app.services.destination import (
     build_dest_dir,
     normalized_suffix,
@@ -79,6 +82,28 @@ def _relative_to(path: Path, root: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return path.name
+
+
+def planned_category(
+    execution: OperationExecution | None, source: Path, *, own: bool = False
+) -> CategoryResult | None:
+    """The category Review saw for *source*, so a run never decides it again (AI-06).
+
+    Re-running the model during execution cost a full decode and inference per
+    file and could disagree with the reviewed placement. *own* asks for the
+    file's own explanation, which a duplicate keeps in ``would_be_provenance``.
+    ``None`` without a reviewed entry (dry runs, older plans): classify then.
+    """
+    action = execution.planned_action(source) if execution is not None else None
+    if action is None:
+        return None
+    provenance = (action.would_be_provenance or action.provenance) if own else action.provenance
+    if provenance is None or not provenance.categorization.enabled:
+        return None
+    reviewed = provenance.categorization
+    return CategoryResult(
+        reviewed.label, reviewed.confidence or 0.0, reviewed.margin or 0.0, reviewed.rejection
+    )
 
 
 class SortingSupportMixin:

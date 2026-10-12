@@ -232,16 +232,29 @@ export function DestinationExplanation({ provenance, onOpenSetting }: Destinatio
                         ? unknown
                         : percent.format(provenance.categorization.threshold),
                   })
-                : t("review.detail.categoryRejected", {
-                    confidence:
-                      provenance.categorization.confidence === null
-                        ? unknown
-                        : percent.format(provenance.categorization.confidence),
-                    threshold:
-                      provenance.categorization.threshold === null
-                        ? unknown
-                        : percent.format(provenance.categorization.threshold),
-                  })}
+                : t(
+                    provenance.categorization.rejection
+                      ? `review.detail.categoryRejected.${provenance.categorization.rejection}`
+                      : "review.detail.categoryRejected",
+                    {
+                      confidence:
+                        provenance.categorization.confidence === null
+                          ? unknown
+                          : percent.format(provenance.categorization.confidence),
+                      threshold:
+                        provenance.categorization.threshold === null
+                          ? unknown
+                          : percent.format(provenance.categorization.threshold),
+                      margin:
+                        provenance.categorization.margin == null
+                          ? unknown
+                          : percent.format(provenance.categorization.margin),
+                      minMargin:
+                        provenance.categorization.min_margin == null
+                          ? unknown
+                          : percent.format(provenance.categorization.min_margin),
+                    },
+                  )}
           </EvidenceRow>
 
           <EvidenceRow label={t("review.detail.evidence.rules")}>

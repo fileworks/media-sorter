@@ -376,6 +376,107 @@ async def test_process_file_uncategorized_when_classifier_unsure(tmp_path: Path)
     assert "_uncategorized" in Path(str(record["dest_path"])).parts
 
 
+class _CountingClassifier(_FakeClassifier):
+    def __init__(self, category: str | None) -> None:
+        super().__init__(category)
+        self.calls = 0
+
+    def classify_file(self, path: Path) -> Any:
+        self.calls += 1
+        return super().classify_file(path)
+
+
+@pytest.mark.asyncio
+async def test_a_reviewed_plan_category_is_not_decided_again(tmp_path: Path) -> None:
+    """AI-06: execution used to re-run the model and could contradict Review."""
+    piexif = pytest.importorskip("piexif")
+    PIL_Image = pytest.importorskip("PIL.Image")
+    from app.core.provenance import (
+        CategorizationProvenance,
+        DateResolutionProvenance,
+        DuplicateProvenance,
+        OutcomeProvenance,
+    )
+
+    svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
+    classifier = _CountingClassifier("food")
+    svc._classifier = cast("CategoryClassifierService", classifier)
+    source_root = tmp_path / "source"
+    dest_root = tmp_path / "target"
+    source_root.mkdir(parents=True)
+    dest_root.mkdir(parents=True)
+    img_path = source_root / "photo.jpg"
+    PIL_Image.new("RGB", (100, 100)).save(img_path, format="JPEG")
+    exif_dict = {"Exif": {piexif.ExifIFD.DateTimeOriginal: b"2024:03:10 12:00:00"}}
+    piexif.insert(piexif.dump(exif_dict), str(img_path))
+    reviewed = OutcomeProvenance(
+        date=DateResolutionProvenance(),
+        categorization=CategorizationProvenance(
+            enabled=True,
+            label="travel",
+            confidence=0.8,
+            threshold=0.55,
+            passed=True,
+            margin=0.3,
+            min_margin=0.15,
+        ),
+        duplicate=DuplicateProvenance(evaluated=False, status="not_evaluated"),
+    )
+    plan = build_frozen_sort_plan(
+        [
+            {
+                "source": str(img_path),
+                "destination": str(dest_root / "travel" / "photo.jpg"),
+                "status": "sort",
+                "provenance": reviewed.model_dump(mode="json"),
+                "source_root": str(source_root),
+            }
+        ],
+        svc._config,
+    )
+    execution = OperationExecution(
+        operation_id="op_test",
+        state_root=tmp_path / "state",
+        preservation=svc._config.preservation_profile,
+        authorization=authorize_config_mutations(svc._config),
+        frozen_plan=plan,
+    )
+
+    record = svc._process_file(
+        file_path=img_path,
+        source_root=source_root,
+        dest_root=dest_root,
+        config=svc._config,
+        dry_run=True,
+        registry=DuplicateRegistry(),
+        operation_id="op_test",
+        execution=execution,
+    )
+
+    assert classifier.calls == 0
+    assert record["category"] == "travel"
+    assert record["provenance"]["categorization"]["label"] == "travel"
+    assert record["provenance"]["categorization"]["margin"] == pytest.approx(0.3)
+
+
+@pytest.mark.asyncio
+async def test_without_a_reviewed_entry_the_file_is_classified(tmp_path: Path) -> None:
+    from app.services.sorting_support import planned_category
+
+    svc = _make_service(tmp_path, categorize_enabled=True)
+    plan = build_frozen_sort_plan([], svc._config)
+    execution = OperationExecution(
+        operation_id="op_test",
+        state_root=tmp_path / "state",
+        preservation=svc._config.preservation_profile,
+        authorization=authorize_config_mutations(svc._config),
+        frozen_plan=plan,
+    )
+
+    assert planned_category(execution, tmp_path / "unplanned.jpg") is None
+    assert planned_category(None, tmp_path / "unplanned.jpg") is None
+
+
 @pytest.mark.asyncio
 async def test_process_file_unknown_date(tmp_path: Path) -> None:
     """A file with no date at all → quarantine as unknown_date."""

@@ -215,4 +215,58 @@ describe("DestinationExplanation", () => {
     expect(screen.getByText(/42%.*55%/)).toBeTruthy();
     expect(screen.queryByText("_uncategorized")).toBeNull();
   });
+
+  it.each([
+    ["margin", /led the next one by only 12%; at least 15% is required/],
+    ["confidence", /confidence 56% did not reach 55%|56%.*did not reach 55%/],
+    ["background", /fitted no better than a generic photo/],
+  ] as const)("names the %s gate when that is why no category was produced", (rejection, text) => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation
+          provenance={{
+            ...provenance,
+            categorization: {
+              enabled: true,
+              label: null,
+              confidence: 0.56,
+              threshold: 0.55,
+              passed: false,
+              margin: 0.12,
+              min_margin: 0.15,
+              rejection,
+            },
+            path: provenance.path.filter((part) => part.decision !== "category"),
+          }}
+          onOpenSetting={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(text)).toBeTruthy();
+  });
+
+  it("does not blame confidence when an older plan recorded no reason", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation
+          provenance={{
+            ...provenance,
+            categorization: {
+              enabled: true,
+              label: null,
+              confidence: 0.56,
+              threshold: 0.55,
+              passed: false,
+            },
+            path: provenance.path.filter((part) => part.decision !== "category"),
+          }}
+          onOpenSetting={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(/did not pass every check/)).toBeTruthy();
+    expect(screen.queryByText(/did not reach/)).toBeNull();
+  });
 });

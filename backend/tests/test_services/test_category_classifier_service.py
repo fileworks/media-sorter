@@ -254,6 +254,21 @@ def test_gate_anchors_absorb_out_of_vocab() -> None:
     assert without_anchor.category == "food"  # same sims, no anchor → categorised
 
 
+def test_a_rejection_names_the_gate_that_failed() -> None:
+    """AI-NEW-5: Review blamed confidence for every rejection, even a margin miss."""
+    svc = _service(None, categorize_confidence_threshold=0.55, categorize_min_margin=0.15)
+    clear = np.asarray([0.32, 0.18, 0.16], dtype=np.float32)
+    anchors = np.asarray([0.18] * 5, dtype=np.float32)
+
+    assert svc._gate(clear, anchors, _CATS).rejection is None
+    assert svc._gate(clear, np.asarray([0.40], dtype=np.float32), _CATS).rejection == ("background")
+    tied = np.asarray([0.30, 0.30, 0.10], dtype=np.float32)
+    loose = _service(None, categorize_confidence_threshold=0.30, categorize_min_margin=0.15)
+    assert loose._gate(tied, None, _CATS).rejection == "margin"
+    weak = np.asarray([0.20, 0.19, 0.18], dtype=np.float32)
+    assert svc._gate(weak, None, _CATS).rejection == "confidence"
+
+
 def test_category_result_is_frozen() -> None:
     r = CategoryResult("food", 0.9, 0.8)
     with pytest.raises(dataclasses.FrozenInstanceError):

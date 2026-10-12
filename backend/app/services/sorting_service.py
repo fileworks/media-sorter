@@ -74,6 +74,7 @@ from app.services.rule_engine_service import RuleEngineService
 from app.services.sorting_support import (
     SortingSupportMixin,
     operation_outcome,
+    planned_category,
     root_identifier,
 )
 from app.services.transfer_failures import (
@@ -1046,7 +1047,9 @@ class SortingService(SortingSupportMixin):
                     )
                 else:
                     if config.categorize_enabled and classifier is not None:
-                        duplicate_category_result = classifier.classify_file(file_path)
+                        duplicate_category_result = planned_category(
+                            execution, file_path, own=True
+                        ) or classifier.classify_file(file_path)
                         duplicate_category = duplicate_category_result.category
                     if config.camera_subfolder_enabled:
                         duplicate_camera = sanitize_path_segment(
@@ -1278,7 +1281,9 @@ class SortingService(SortingSupportMixin):
             category: str | None = None
             category_result = CategoryResult(None, 0.0, 0.0)
             if config.categorize_enabled and classifier is not None:
-                category_result = classifier.classify_file(file_path)
+                category_result = planned_category(
+                    execution, file_path
+                ) or classifier.classify_file(file_path)
                 category = category_result.category
             record["category"] = category
 

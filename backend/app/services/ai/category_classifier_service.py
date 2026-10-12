@@ -33,7 +33,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from app.core.config import Config
 from app.core.logging_config import get_logger
@@ -63,6 +63,12 @@ _VIDEO_FRAME_SAMPLES = 5
 # alone hides, without a hand-tuned, model-specific constant.
 
 
+#: Why a classified file stayed uncategorized: its best category fitted no
+#: better than a generic photo, its confidence missed the threshold, or it did
+#: not lead the next category by the minimum margin.
+CategoryRejection = Literal["background", "confidence", "margin"]
+
+
 @dataclass(frozen=True)
 class CategoryResult:
     """Outcome of classifying one file.
@@ -70,12 +76,14 @@ class CategoryResult:
     ``category`` is the chosen (already path-safe) folder name, or ``None`` when
     the file is uncategorized. ``confidence`` is the top-1 softmax probability
     (over categories *and* background anchors) and ``margin`` is ``top1 - top2``
-    among the categories — both surfaced for logging/diagnostics.
+    among the categories. ``rejection`` names the first gate an uncategorized
+    result failed, so Review can say why instead of always blaming confidence.
     """
 
     category: str | None
     confidence: float
     margin: float
+    rejection: CategoryRejection | None = None
 
 
 _UNCATEGORIZED = CategoryResult(None, 0.0, 0.0)
@@ -283,10 +291,13 @@ class CategoryClassifierService:
         # the floor is a no-op and the softmax/threshold/margin gate alone decides).
         background = float(anchors.max()) if anchors.size else float("-inf")
 
-        if (
-            best_cosine >= background
-            and top1 >= self._config.categorize_confidence_threshold
-            and margin >= self._config.categorize_min_margin
-        ):
+        rejection: CategoryRejection | None = None
+        if best_cosine < background:
+            rejection = "background"
+        elif top1 < self._config.categorize_confidence_threshold:
+            rejection = "confidence"
+        elif margin < self._config.categorize_min_margin:
+            rejection = "margin"
+        if rejection is None:
             return CategoryResult(cats[int(order[0])], top1, margin)
-        return CategoryResult(None, top1, margin)
+        return CategoryResult(None, top1, margin, rejection)
