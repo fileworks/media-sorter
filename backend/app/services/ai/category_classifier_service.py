@@ -38,12 +38,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from app.core.concepts import bundled_labels
+from app.core.concepts import CATALOG, bundled_labels
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.image_embeddings import file_embedding
 from app.services.ai.prompts import prompt_group
+from app.services.ai.screenshot_detection import ScreenshotEvidence, screenshot_evidence
 from app.services.ai.video_sampling import (
     VIDEO_FRAME_SAMPLES,
     FrameSampling,
@@ -85,6 +86,8 @@ class CategoryResult:
     confidence: float
     margin: float
     rejection: CategoryRejection | None = None
+    #: Set when platform metadata, not the model, decided (OPT-04).
+    basis: ScreenshotEvidence | None = None
 
 
 _UNCATEGORIZED = CategoryResult(None, 0.0, 0.0)
@@ -134,6 +137,9 @@ class CategoryClassifierService:
         if not cats:
             return _UNCATEGORIZED
         raise_if_stopped(should_stop)
+        screenshot = self._screenshot_category(path, cats)
+        if screenshot is not None:
+            return screenshot
         try:
             import numpy as np
 
@@ -158,6 +164,23 @@ class CategoryClassifierService:
         except Exception as exc:  # pragma: no cover - defensive catch-all
             logger.warning("Categorization failed", path=str(path), error=str(exc))
             return _UNCATEGORIZED
+
+    def _screenshot_category(self, path: Path, cats: list[str]) -> CategoryResult | None:
+        """The screenshots folder for a file its platform labelled a screenshot."""
+        target = next(
+            (
+                name
+                for name in cats
+                if (concept := CATALOG.resolve(name)) is not None and concept.id == "screenshots"
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        evidence = screenshot_evidence(path)
+        if evidence is None:
+            return None
+        return CategoryResult(target, 1.0, 1.0, basis=evidence)
 
     # ------------------------------------------------------------------ #
     # Text-side: every category's prompt vectors                           #

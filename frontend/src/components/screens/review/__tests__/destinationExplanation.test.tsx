@@ -246,6 +246,29 @@ describe("DestinationExplanation", () => {
     expect(screen.getByText(text)).toBeTruthy();
   });
 
+  it("says when the platform's screenshot label, not the model, chose the folder", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DestinationExplanation
+          provenance={{
+            ...provenance,
+            categorization: {
+              enabled: true,
+              label: "screenshots",
+              confidence: 1,
+              threshold: 0.55,
+              passed: true,
+              basis: "file_name",
+            },
+          }}
+          onOpenSetting={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(/file name says this is a screenshot/)).toBeTruthy();
+  });
+
   it("does not blame confidence when an older plan recorded no reason", () => {
     render(
       <I18nProvider initialLocale="en">

@@ -49,6 +49,17 @@ IFD0 instead of the Exif sub-IFD. The regression tests use actual encoded EXIF,
 verify English/German output and leave source bytes unchanged. Camera scene mode
 is still only recorded metadata.
 
+## Screenshots from platform metadata
+
+A file whose name starts the way platforms name screenshots ("Screenshot_…",
+"Screen Shot …", "Bildschirmfoto …", "Capture d’écran …" and other languages), or
+whose EXIF/XMP user comment is "Screenshot" (iOS, macOS), is filed into the
+screenshots category and tagged "screenshot" without asking the model. Review says
+which signal decided. Files without these signals go to the model as before. An
+OCR pass for documents was not added: it would need another runtime and an
+explicitly installed model pack, and the evaluated SigLIP path already separates
+documents, receipts, maps and graphs.
+
 ## Image embeddings
 
 Preview categorizes a file and proposes its tags from one decode and one vision

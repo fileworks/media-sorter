@@ -686,6 +686,8 @@ export interface OutcomeProvenance {
     min_margin?: number | null;
     /** The first gate a rejected file failed; absent in older plans. */
     rejection?: "weak_match" | "confidence" | "margin" | null;
+    /** Platform screenshot metadata, not the model, chose the folder. */
+    basis?: "file_name" | "embedded_metadata" | null;
   };
   duplicate: {
     evaluated: boolean;

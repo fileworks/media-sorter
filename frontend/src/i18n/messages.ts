@@ -1503,6 +1503,10 @@ export const en = {
   "review.detail.categoryRejected.weak_match":
     "No category folder was produced: no category fitted this file clearly enough.",
   "review.detail.noRouteRule": "No route rule matched this file.",
+  "review.detail.categoryScreenshot.file_name":
+    "{label}: the file name says this is a screenshot, so the model was not asked.",
+  "review.detail.categoryScreenshot.embedded_metadata":
+    "{label}: the device marked this file as a screenshot, so the model was not asked.",
   "review.tags.title": "Content tags",
   "review.tags.help":
     "Proposed by the local model and not guaranteed to be right. The run writes exactly these tags; remove or add any before you start.",
@@ -3240,6 +3244,10 @@ export const de: Record<MessageKey, string> = {
   "review.detail.categoryRejected.weak_match":
     "Kein Kategorieordner entstand: Keine Kategorie passte deutlich genug zu dieser Datei.",
   "review.detail.noRouteRule": "Keine Weiterleitungsregel passte auf diese Datei.",
+  "review.detail.categoryScreenshot.file_name":
+    "{label}: Der Dateiname weist es als Bildschirmfoto aus, daher wurde das Modell nicht gefragt.",
+  "review.detail.categoryScreenshot.embedded_metadata":
+    "{label}: Das Gerät hat diese Datei als Bildschirmfoto markiert, daher wurde das Modell nicht gefragt.",
   "review.tags.title": "Inhalts-Tags",
   "review.tags.help":
     "Vom lokalen Modell vorgeschlagen und nicht garantiert richtig. Der Lauf schreibt genau diese Tags; entferne oder ergänze sie vor dem Start.",

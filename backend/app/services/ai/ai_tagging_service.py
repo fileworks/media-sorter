@@ -36,6 +36,7 @@ from app.services.ai.base_tagger import AITagger, build_tagger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.geo_lookup import GeoDataError, nearest_place, valid_coordinate
 from app.services.ai.image_embeddings import file_embedding
+from app.services.ai.screenshot_detection import screenshot_evidence
 from app.services.ai.video_sampling import (
     VIDEO_FRAME_SAMPLES,
     FrameSampling,
@@ -140,8 +141,9 @@ class AITaggingService:
             return []
         raise_if_stopped(should_stop)
 
-        # Step 1: deterministic metadata tags (GPS + scene mode).
+        # Step 1: deterministic metadata tags (GPS, scene mode, platform screenshots).
         scored: list[tuple[str, float]] = list(self._exif_tags(path))
+        scored.extend(self._screenshot_tag(path))
         if is_video(path) and self._config.ai_location_tags_enabled:
             scored.extend(self._location_tags(_video_coordinate(path)))
 
@@ -224,6 +226,20 @@ class AITaggingService:
         except Exception:
             pass
         return tags
+
+    def _screenshot_tag(self, path: Path) -> list[tuple[str, float]]:
+        """The vocabulary's screenshot tag when the platform labelled the file (OPT-04)."""
+        label = next(
+            (
+                name
+                for name in self._config.resolved_ai_tagging_labels()
+                if (concept := CATALOG.resolve(name)) is not None and concept.id == "screenshot"
+            ),
+            None,
+        )
+        if label is None or screenshot_evidence(path) is None:
+            return []
+        return [(label, 1.0)]
 
     def _location_tags(self, coordinate: tuple[float, float] | None) -> list[tuple[str, float]]:
         """Place and localized country name for *coordinate*, or nothing.

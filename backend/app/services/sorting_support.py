@@ -102,7 +102,11 @@ def planned_category(
         return None
     reviewed = provenance.categorization
     return CategoryResult(
-        reviewed.label, reviewed.confidence or 0.0, reviewed.margin or 0.0, reviewed.rejection
+        reviewed.label,
+        reviewed.confidence or 0.0,
+        reviewed.margin or 0.0,
+        reviewed.rejection,
+        reviewed.basis,
     )
 
 
