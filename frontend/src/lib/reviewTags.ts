@@ -17,3 +17,18 @@ export function cleanTags(tags: readonly string[]): string[] {
   }
   return out;
 }
+
+/**
+ * The content tags Review offers to edit for a row; `null` hides the editor.
+ *
+ * A copy set aside under `_copies/` is never tagged by a run, so offering its
+ * proposal as "tags the run will write" would be false. Its proposal stays in
+ * the plan: choosing it as the keeper later makes it editable again.
+ */
+export function editableAiTags(
+  row: { source: string; status: string; aiTags: string[] | null },
+  edits: ReadonlyMap<string, string[]>,
+): string[] | null {
+  if (row.status === "duplicate" || row.aiTags === null) return null;
+  return edits.get(row.source) ?? row.aiTags;
+}

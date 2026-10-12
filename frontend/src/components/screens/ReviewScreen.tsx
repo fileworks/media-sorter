@@ -35,6 +35,7 @@ import {
   type SetEntry,
 } from "@/lib/reviewBrowse";
 import { sortEntries, sortRows, sortSets } from "@/lib/reviewSort";
+import { editableAiTags } from "@/lib/reviewTags";
 import {
   catalogGroupsForRun,
   comparePair,
@@ -1067,7 +1068,7 @@ export function ReviewScreen({
         <DetailView
           row={detailRow}
           set={detailSet}
-          aiTags={surface.tagEdits.get(detailRow.source) ?? detailRow.aiTags}
+          aiTags={editableAiTags(detailRow, surface.tagEdits)}
           aiTagsEdited={surface.tagEdits.has(detailRow.source)}
           onAiTagsChange={(tags) => surface.setAiTags(detailRow.source, tags)}
           onAiTagsReset={() => surface.resetAiTags(detailRow.source)}

@@ -64,7 +64,10 @@ at most 50 per file and 100 characters each. A file the plan has no tags for, a
 file outside the plan or a repeated file returns 409
 `details.reason: "invalid_reviewed_tags"` before anything runs. A run with a plan
 writes exactly the reviewed tags and never runs the model; an empty list writes no
-AI tags. `PUT /sorting/plans/{plan_id}/review-state` persists the edits as
+AI tags. Tags are written only to the file a run places; a copy set aside under
+`_copies/` is never tagged, so a `duplicate` item's proposal applies only once Review
+chooses it as the keeper, and Review offers no tag editor for a set-aside copy.
+`PUT /sorting/plans/{plan_id}/review-state` persists the edits as
 `tag_edits` so they survive a restart; states saved earlier read as `[]`.
 
 ## Reviewed placements
