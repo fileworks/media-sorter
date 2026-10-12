@@ -17,16 +17,23 @@ const MAX_CHARS = 1500;
 
 /** Remove tokens and file paths; keep the shape of the message. */
 export function sanitizeForShellLog(message: string): string {
-  return message
-    .replace(
-      /(capability|token|api[_-]?key|authorization|password)\s*[=:]\s*\S+/gi,
-      "$1=[REDACTED]",
-    )
-    .replace(/[A-Za-z]:\\[^\s"']+/g, "<path>")
-    .replace(/(^|[\s"'(])\/(?:Users|home|Volumes|mnt|media|private)\/[^\s"')]+/g, "$1<path>")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_CHARS);
+  return (
+    message
+      // `key=value`, `Key: Bearer value` and quoted JSON fields such as `"token":"value"`.
+      .replace(
+        /["']?(capability|token|api[_-]?key|authorization|password|secret|cookie)["']?\s*[=:]\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+        "$1=[REDACTED]",
+      )
+      .replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 [REDACTED]")
+      .replace(/file:\/\/[^\s"')]+/gi, "<path>")
+      // Drive paths with either separator, then UNC and `//server/share` paths.
+      .replace(/\b[A-Za-z]:[\\/][^\s"']+/g, "<path>")
+      .replace(/(^|[\s"'(=])(?:\\\\|\/\/)[^\s"')]+/g, "$1<path>")
+      .replace(/(^|[\s"'(])\/(?:Users|home|Volumes|mnt|media|private)\/[^\s"')]+/g, "$1<path>")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_CHARS)
+  );
 }
 
 export function shellLog(level: ShellLogLevel, message: string): void {
