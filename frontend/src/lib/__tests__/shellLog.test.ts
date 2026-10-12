@@ -24,6 +24,13 @@ describe("sanitizeForShellLog", () => {
     "Cookie: session=SYNTHETIC-SECRET; refresh=SYNTHETIC-SECRET",
     "set-cookie: id=SYNTHETIC-SECRET",
     "GET /api/files?token=SYNTHETIC-SECRET failed",
+    // F3-001: credential names with a prefix.
+    "access_token=SYNTHETIC-SECRET",
+    "refresh_token=SYNTHETIC-SECRET",
+    "client_secret=SYNTHETIC-SECRET",
+    "x-api-key: SYNTHETIC-SECRET",
+    // F1-004 re-check: quotes escaped by an earlier serialization.
+    '{"message":"failed {\\"token\\":\\"SYNTHETIC-SECRET\\"}"}',
   ])("withholds the credential in %s", (message) => {
     const cleaned = sanitizeForShellLog(message);
 

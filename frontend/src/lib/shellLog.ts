@@ -22,7 +22,9 @@ const MAX_CHARS = 1500;
  */
 const SENSITIVE: readonly RegExp[] = [
   // A credential assigned or sent: `token=`, `"password":`, `Cookie:`, `Bearer x`.
-  /["']?\b(?:capability|token|api[_-]?key|authorization|password|passwd|secret|cookie|set-cookie|session)["']?\s*[=:]/i,
+  // Any name ending in a credential word counts (`access_token`, `client_secret`,
+  // `set-cookie`), and quotes may arrive escaped from a serialized string.
+  /(?:\\*["'])?[\w.-]*?(?:capability|token|api[_-]?key|authorization|password|passwd|secret|cookie|session)(?:\\*["'])?\s*[=:]/i,
   /\b(?:bearer|basic)\s+\S/i,
   // Paths: drive letters with either separator, `file:` URLs, UNC and
   // `//server` shares, home-relative and the usual user-data roots.
@@ -57,7 +59,16 @@ function describe(reason: unknown): string {
     const frame = reason.stack?.split("\n")[1]?.trim() ?? "";
     return `${reason.name}: ${reason.message}${frame ? ` at ${frame}` : ""}`;
   }
-  return typeof reason === "string" ? reason : (JSON.stringify(reason) ?? String(reason));
+  if (typeof reason === "string") return reason;
+  // Arbitrary objects are never serialized: their fields are not ours to log,
+  // and JSON escaping would hide credential names from the sanitizer. Only a
+  // `message` string is kept, and it goes through the same boundary.
+  if (typeof reason === "object" && reason !== null) {
+    const message: unknown = (reason as { message?: unknown }).message;
+    const kind = reason.constructor?.name || "Object";
+    return typeof message === "string" ? `${kind}: ${message}` : `${kind} without a message`;
+  }
+  return String(reason);
 }
 
 /** Forward uncaught errors and unhandled rejections; call once at startup. */
