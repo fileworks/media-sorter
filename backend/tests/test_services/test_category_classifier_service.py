@@ -17,7 +17,7 @@ import pytest
 from PIL import Image
 
 from app.core.config import Config
-from app.services.ai import category_classifier_service as mod
+from app.services.ai import video_sampling
 from app.services.ai.category_classifier_service import (
     CategoryClassifierService,
     CategoryResult,
@@ -187,8 +187,8 @@ def test_never_raises_on_inference_error(tmp_path: Path) -> None:
 def test_video_aggregates_frames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     p = tmp_path / "clip.mp4"
     p.write_bytes(b"\x00")
-    monkeypatch.setattr(mod, "probe_duration", lambda _p: 9.0)
-    monkeypatch.setattr(mod, "extract_frame", lambda _p, _t: Image.new("RGB", (8, 8)))
+    monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: 9.0)
+    monkeypatch.setattr(video_sampling, "_frame", lambda _p, _t, _s: Image.new("RGB", (8, 8)))
     result = _service([0.0, 1.0, 0.0, 0.0]).classify_file(p)  # aligns with "nature"
     assert result.category == "nature"
 
@@ -198,7 +198,7 @@ def test_video_no_duration_returns_uncategorized(
 ) -> None:
     p = tmp_path / "clip.mp4"
     p.write_bytes(b"\x00")
-    monkeypatch.setattr(mod, "probe_duration", lambda _p: None)
+    monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: None)
     assert _service([0.0, 1.0, 0.0, 0.0]).classify_file(p).category is None
 
 

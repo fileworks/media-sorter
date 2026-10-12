@@ -305,7 +305,7 @@ class _FakeClassifier:
     def __init__(self, category: str | None) -> None:
         self._category = category
 
-    def classify_file(self, path: Path) -> Any:
+    def classify_file(self, path: Path, should_stop: Any = None) -> Any:
         from app.services.ai.category_classifier_service import CategoryResult
 
         return CategoryResult(self._category, 0.99, 0.9)
@@ -381,7 +381,7 @@ class _CountingClassifier(_FakeClassifier):
         super().__init__(category)
         self.calls = 0
 
-    def classify_file(self, path: Path) -> Any:
+    def classify_file(self, path: Path, should_stop: Any = None) -> Any:
         self.calls += 1
         return super().classify_file(path)
 
@@ -475,6 +475,42 @@ async def test_without_a_reviewed_entry_the_file_is_classified(tmp_path: Path) -
 
     assert planned_category(execution, tmp_path / "unplanned.jpg") is None
     assert planned_category(None, tmp_path / "unplanned.jpg") is None
+
+
+class _CancelledClassifier:
+    def classify_file(self, path: Path, should_stop: Any = None) -> Any:
+        from app.services.ai.video_sampling import InferenceCancelled
+
+        raise InferenceCancelled("cancel fixture")
+
+
+@pytest.mark.asyncio
+async def test_cancelled_inference_is_a_cancelled_file_not_a_corrupt_one(tmp_path: Path) -> None:
+    """AI-NEW-3: cancellation must not reach the catch-all that sets files aside."""
+    PIL_Image = pytest.importorskip("PIL.Image")
+    svc = _make_service(tmp_path, copy_instead_of_move=True, categorize_enabled=True)
+    svc._classifier = cast("CategoryClassifierService", _CancelledClassifier())
+    source_root = tmp_path / "source"
+    dest_root = tmp_path / "target"
+    source_root.mkdir(parents=True)
+    dest_root.mkdir(parents=True)
+    img_path = source_root / "photo.jpg"
+    PIL_Image.new("RGB", (100, 100)).save(img_path, format="JPEG")
+    before = img_path.read_bytes()
+
+    record = svc._process_file(
+        file_path=img_path,
+        source_root=source_root,
+        dest_root=dest_root,
+        config=svc._config,
+        dry_run=True,
+        registry=DuplicateRegistry(),
+        operation_id="op_test",
+    )
+
+    assert record["status"] == "cancelled"
+    assert img_path.read_bytes() == before
+    assert not any(dest_root.rglob("*.jpg"))
 
 
 @pytest.mark.asyncio
@@ -1948,7 +1984,7 @@ class _FakeAI:
         self._raise = raise_exc
         self.calls: list[Path] = []
 
-    def tag_file(self, path: Path) -> list[str]:
+    def tag_file(self, path: Path, should_stop: Any = None) -> list[str]:
         self.calls.append(path)
         if self._raise:
             raise RuntimeError("tagger boom")

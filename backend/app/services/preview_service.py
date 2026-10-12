@@ -31,6 +31,7 @@ from app.core.sort_plan import (
     build_frozen_sort_plan,
 )
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
+from app.services.ai.video_sampling import InferenceCancelled, StopCheck, stop_check
 from app.services.catalog_indexing import index_library_roots
 from app.services.dedup_index import DedupIndex
 from app.services.destination import (
@@ -394,22 +395,26 @@ class PreviewService:
                 break
 
             # Offload the blocking per-file work so the event loop (and thus
-            # progress polling) is never starved on big directories.
-            item = await asyncio.to_thread(
-                self._preview_file,
-                primary_files[idx],
-                root_of.get(primary_files[idx], source_root),
-                dest_root,
-                config,
-                registry,
-                check_suspicious,
-                dest_registry,
-                operation_rules,
-                operation_classifier,
-                True,
-                task.cancel_token if task is not None else None,
-                planned_items,
-            )
+            # progress polling) is never starved on big directories. A file
+            # whose inference was cancelled has no decision and is left out.
+            try:
+                item = await asyncio.to_thread(
+                    self._preview_file,
+                    primary_files[idx],
+                    root_of.get(primary_files[idx], source_root),
+                    dest_root,
+                    config,
+                    registry,
+                    check_suspicious,
+                    dest_registry,
+                    operation_rules,
+                    operation_classifier,
+                    True,
+                    task.cancel_token if task is not None else None,
+                    planned_items,
+                )
+            except InferenceCancelled:
+                break
             slots[idx] = item
             if item.get("destination"):
                 proposed = Path(item["destination"])
@@ -764,7 +769,9 @@ class PreviewService:
                     quarantine_dir(dest_root, "future", file_path, source_root) / file_path.name
                 )
             else:
-                category_result = self._classify(file_path, config, classifier)
+                category_result = self._classify(
+                    file_path, config, classifier, stop_check(cancel_token)
+                )
                 category = category_result.category
                 camera = self._camera_segment(file_path, config)
                 _, would_be_destination = self._build_dest_path(
@@ -847,7 +854,9 @@ class PreviewService:
             )
 
         else:
-            category_result = self._classify(file_path, config, classifier)
+            category_result = self._classify(
+                file_path, config, classifier, stop_check(cancel_token)
+            )
             category = category_result.category
             camera = self._camera_segment(file_path, config)
             status, dest = self._build_dest_path(
@@ -955,12 +964,13 @@ class PreviewService:
         file_path: Path,
         config: Config,
         classifier: CategoryClassifierService | None = None,
+        should_stop: StopCheck | None = None,
     ) -> CategoryResult:
         """Return the classifier's actual decision record, not a display reconstruction."""
         active_classifier = classifier if classifier is not None else self._classifier
         if not config.categorize_enabled or active_classifier is None:
             return CategoryResult(None, 0.0, 0.0)
-        return active_classifier.classify_file(file_path)
+        return active_classifier.classify_file(file_path, should_stop)
 
     def _provenance(
         self,

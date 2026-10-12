@@ -30,7 +30,6 @@ unsupported type, below the confidence bar, unreadable file) yields a
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -39,8 +38,16 @@ from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.prompts import anchor_prompts, pool_normalized, prompt_group
+from app.services.ai.video_sampling import (
+    VIDEO_FRAME_SAMPLES,
+    FrameSampling,
+    InferenceCancelled,
+    StopCheck,
+    log_sampling,
+    raise_if_stopped,
+    sample_frames,
+)
 from app.services.filesystem_service import open_image
-from app.utils.ffmpeg_utils import extract_frame, probe_duration, sample_fractions
 from app.utils.media_utils import is_image, is_video
 
 if TYPE_CHECKING:
@@ -122,13 +129,17 @@ class CategoryClassifierService:
             out.append(safe)
         return out
 
-    def classify_file(self, path: Path) -> CategoryResult:
-        """Classify *path* into one category or ``None``. Never raises."""
+    def classify_file(self, path: Path, should_stop: StopCheck | None = None) -> CategoryResult:
+        """Classify *path* into one category or ``None``.
+
+        Never raises, except :class:`InferenceCancelled` once *should_stop* says so.
+        """
         if self._embedder is None or not self._config.categorize_enabled:
             return _UNCATEGORIZED
         cats = self.categories()
         if not cats:
             return _UNCATEGORIZED
+        raise_if_stopped(should_stop)
         try:
             import numpy as np
 
@@ -140,7 +151,7 @@ class CategoryClassifierService:
             if is_image(path):
                 img_emb = self._image_embedding(path)
             elif is_video(path):
-                img_emb = self._video_embedding(path)
+                img_emb = self._video_embedding(path, should_stop)
             else:
                 return _UNCATEGORIZED
             if img_emb is None:
@@ -151,6 +162,8 @@ class CategoryClassifierService:
             cat_sims = cat_vecs @ img_n
             anchor_sims = anchor_vecs @ img_n if anchor_vecs.size else None
             return self._gate(cat_sims, anchor_sims, cats)
+        except InferenceCancelled:
+            raise
         except Exception as exc:  # pragma: no cover - defensive catch-all
             logger.warning("Categorization failed", path=str(path), error=str(exc))
             return _UNCATEGORIZED
@@ -220,37 +233,39 @@ class CategoryClassifierService:
                 return None
             return embedder.embed_image(img)
 
-    def _video_embedding(self, path: Path) -> Any | None:
-        """Mean raw embedding across sampled keyframes, or ``None``."""
+    def _video_embedding(self, path: Path, should_stop: StopCheck | None = None) -> Any | None:
+        """Unit mean of the sampled frames' unit embeddings, or ``None``.
+
+        Each frame is normalised before averaging, so a frame with a larger raw
+        embedding norm no longer outweighs the others (AI-09).
+        """
         import numpy as np
 
-        duration = probe_duration(path)
-        if duration is None or duration <= 0:
-            return None
         embedder = self._embedder
         if embedder is None:
             return None
+        sampling = FrameSampling(VIDEO_FRAME_SAMPLES)
         acc: Any | None = None
         n = 0
-        for frac in sample_fractions(_VIDEO_FRAME_SAMPLES):
-            frame = extract_frame(path, duration * frac)
-            if frame is None:
-                continue
+        for frame in sample_frames(path, sampling, should_stop=should_stop):
             try:
                 emb = embedder.embed_image(frame)
-                if emb is None:
-                    continue
-                vec = np.asarray(emb, dtype=np.float32).reshape(-1)
-                acc = vec if acc is None else acc + vec
-                n += 1
             except Exception:
-                pass
-            finally:
-                with contextlib.suppress(Exception):
-                    frame.close()
+                continue
+            if emb is None:
+                continue
+            vec = np.asarray(emb, dtype=np.float32).reshape(-1)
+            norm = float(np.linalg.norm(vec))
+            if not np.isfinite(norm) or norm == 0.0:
+                continue
+            unit = vec / norm
+            acc = unit if acc is None else acc + unit
+            n += 1
+        log_sampling(path, sampling, purpose="categorization")
         if n == 0 or acc is None:
             return None
-        return acc / float(n)
+        mean = acc / float(n)
+        return mean / (float(np.linalg.norm(mean)) + 1e-8)
 
     # ------------------------------------------------------------------ #
     # Confidence gate                                                       #

@@ -28,6 +28,7 @@ from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortPlan, destination_fingerprint
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
+from app.services.ai.video_sampling import InferenceCancelled, stop_check
 from app.services.config_service import ConfigService
 from app.services.conversion_guard import MediaClass
 from app.services.conversion_publication import (
@@ -1049,7 +1050,7 @@ class SortingService(SortingSupportMixin):
                     if config.categorize_enabled and classifier is not None:
                         duplicate_category_result = planned_category(
                             execution, file_path, own=True
-                        ) or classifier.classify_file(file_path)
+                        ) or classifier.classify_file(file_path, stop_check(cancel_signal))
                         duplicate_category = duplicate_category_result.category
                     if config.camera_subfolder_enabled:
                         duplicate_camera = sanitize_path_segment(
@@ -1283,7 +1284,7 @@ class SortingService(SortingSupportMixin):
             if config.categorize_enabled and classifier is not None:
                 category_result = planned_category(
                     execution, file_path
-                ) or classifier.classify_file(file_path)
+                ) or classifier.classify_file(file_path, stop_check(cancel_signal))
                 category = category_result.category
             record["category"] = category
 
@@ -1454,9 +1455,11 @@ class SortingService(SortingSupportMixin):
                 # and before validation (so a bad write is still caught).
                 if config.ai_tagging_enabled and ai is not None:
                     try:
-                        ai_tags = ai.tag_file(dest)
+                        ai_tags = ai.tag_file(dest, stop_check(cancel_signal))
                         if ai_tags:
                             record["tags"] = _merge_tags([*record["tags"], *ai_tags])
+                    except InferenceCancelled:
+                        logger.info("AI tagging skipped after cancellation", path=str(dest))
                     except Exception as exc:
                         logger.warning("AI tagging step failed", path=str(dest), error=str(exc))
                 record["tags_written"] = self._write_derived_tags(
@@ -1510,7 +1513,7 @@ class SortingService(SortingSupportMixin):
             # failure evidence (the `suspicious` fields keep the reason).
             record.update(status="success", dest_path=str(dest), error_message=None)
 
-        except DuplicateCheckCancelled:
+        except (DuplicateCheckCancelled, InferenceCancelled):
             record["status"] = "cancelled"
             return record
         except PlanAuthorizationError as exc:

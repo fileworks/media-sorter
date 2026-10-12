@@ -12,8 +12,8 @@ independent sources:
 2. **SigLIP zero-shot ML** — the configured :class:`~app.services.ai.base_tagger.AITagger`
    scores the user-supplied label vocabulary against the image (or a sample of
    video keyframes).  For videos, a label must appear in at least
-   ``_MIN_FRAME_VOTES`` frames to qualify, preventing brief transient content
-   from polluting the tag list.
+   ``_MIN_FRAME_VOTES`` of the decoded sample frames, so a subject seen in a
+   single snapshot does not become a tag.
 
 Both sources are strictly best-effort: any failure yields an empty contribution
 rather than aborting a sort.  The service is *synchronous* and is invoked from
@@ -23,7 +23,6 @@ thread.
 
 from __future__ import annotations
 
-import contextlib
 import re
 import subprocess
 from pathlib import Path
@@ -36,25 +35,23 @@ from app.core.rules import normalized_key
 from app.services.ai.base_tagger import AITagger, build_tagger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.geo_lookup import GeoDataError, nearest_place, valid_coordinate
-from app.services.filesystem_service import open_image
-from app.utils.ffmpeg_utils import (
-    extract_frame,
-    probe_duration,
-    run_ffprobe_json,
-    sample_fractions,
+from app.services.ai.video_sampling import (
+    VIDEO_FRAME_SAMPLES,
+    FrameSampling,
+    InferenceCancelled,
+    StopCheck,
+    log_sampling,
+    raise_if_stopped,
+    sample_frames,
 )
+from app.services.filesystem_service import open_image
+from app.utils.ffmpeg_utils import run_ffprobe_json
 from app.utils.media_utils import is_image, is_video
 
 logger = get_logger(__name__)
 
-# Keyframes sampled per video. Each frame is a separate CLIP call, so 5 gives
-# good scene-change coverage without excessive processing time.
-_VIDEO_FRAME_SAMPLES = 5
-
-# Minimum number of frames a label must appear in to be included in the final
-# video tag list.  Requiring ≥ 2 of 5 frames means a label must persist across
-# ≥ 40 % of the clip — enough to exclude objects that flash by for a single
-# keyframe.
+# Decoded sample frames (of up to five, evenly spaced) a label must appear in
+# to become a video tag. A count of snapshots, not a share of the duration.
 _MIN_FRAME_VOTES = 2
 
 
@@ -132,7 +129,7 @@ class AITaggingService:
             self._provider_built = True
         return self._provider
 
-    def tag_file(self, path: Path) -> list[str]:
+    def tag_file(self, path: Path, should_stop: StopCheck | None = None) -> list[str]:
         """Return up to ``ai_tagging_max_tags`` descriptive tags for *path*.
 
         Merges deterministic EXIF/GPS tags (always attempted for images) with
@@ -140,6 +137,7 @@ class AITaggingService:
         """
         if not self._config.ai_tagging_enabled or self._max_tags <= 0:
             return []
+        raise_if_stopped(should_stop)
 
         # Step 1: deterministic metadata tags (GPS + scene mode).
         scored: list[tuple[str, float]] = list(self._exif_tags(path))
@@ -153,7 +151,9 @@ class AITaggingService:
                 if is_image(path):
                     scored.extend(self._tag_image(provider, path))
                 elif is_video(path):
-                    scored.extend(self._tag_video(provider, path))
+                    scored.extend(self._tag_video(provider, path, should_stop))
+            except InferenceCancelled:
+                raise
             except Exception as exc:  # pragma: no cover - defensive catch-all
                 logger.warning("AI tagging failed", path=str(path), error=str(exc))
 
@@ -261,28 +261,22 @@ class AITaggingService:
                 return []
             return provider.tag(img)
 
-    def _tag_video(self, provider: AITagger, path: Path) -> list[tuple[str, float]]:
-        """Sample keyframes and return labels that appear in ≥ _MIN_FRAME_VOTES frames.
+    def _tag_video(
+        self, provider: AITagger, path: Path, should_stop: StopCheck | None = None
+    ) -> list[tuple[str, float]]:
+        """Labels found in at least ``_MIN_FRAME_VOTES`` decoded sample frames.
 
-        Max-pooling across all frames (the old approach) allowed a label to be
-        included if it appeared in only one frame, so a brief flash of a face in
-        an outdoor clip could produce a "portrait" tag.  Voting filters that out:
-        a label must be consistent across a significant fraction of the clip.
+        Up to five frames, evenly spaced, are decoded; a label must appear in two
+        of them. That filters out a subject seen in a single snapshot. It is a
+        count of snapshots, not a share of the clip's duration, and a video with
+        fewer than two decoded frames gets no content tags.
         """
-        duration = probe_duration(path)
-        if duration is None or duration <= 0:
-            return []
+        sampling = FrameSampling(VIDEO_FRAME_SAMPLES)
         votes: dict[str, list[float]] = {}
-        for frac in sample_fractions(_VIDEO_FRAME_SAMPLES):
-            frame = extract_frame(path, duration * frac)
-            if frame is None:
-                continue
-            try:
-                for label, score in provider.tag(frame):
-                    votes.setdefault(label, []).append(score)
-            finally:
-                with contextlib.suppress(Exception):
-                    frame.close()
+        for frame in sample_frames(path, sampling, should_stop=should_stop):
+            for label, score in provider.tag(frame):
+                votes.setdefault(label, []).append(score)
+        log_sampling(path, sampling, purpose="tagging")
         # Keep only labels that appear in enough frames; rank by peak score.
         return [
             (label, max(scores))

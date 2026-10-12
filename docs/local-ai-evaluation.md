@@ -45,6 +45,19 @@ IFD0 instead of the Exif sub-IFD. The regression tests use actual encoded EXIF,
 verify English/German output and leave source bytes unchanged. Camera scene mode
 is still only recorded metadata.
 
+## Video frames
+
+Tagging and categorization sample up to five evenly spaced frames. A video tag
+needs the label in at least two decoded frames: a count of snapshots, not a share
+of the clip's duration, so a video with fewer than two decoded frames gets no
+content tags. Categorization normalises each frame's embedding before averaging,
+so one frame with a large raw norm cannot decide the video. A missing ffprobe or
+ffmpeg, a timeout, an unusable duration or an undecodable frame is recorded as the
+first failure reason, and a video that yields no frame logs one warning with that
+reason instead of looking like "nothing matched". Cancellation is checked between
+the probe and every frame: preview leaves the interrupted file out of the plan, and
+a run records it as cancelled rather than setting it aside as corrupt.
+
 ## Location tags
 
 GPS positions from photo EXIF and video ISO 6709 tags resolve offline against

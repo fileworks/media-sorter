@@ -22,7 +22,7 @@ from PIL import Image
 
 from app.core.config import Config
 from app.services.ai import ai_tagging_service as tagging
-from app.services.ai import geo_lookup
+from app.services.ai import geo_lookup, video_sampling
 from app.services.ai.ai_tagging_service import AITaggingService, _parse_iso6709
 
 GEO = Path(geo_lookup.__file__).resolve().parents[2] / "resources" / "geo"
@@ -144,7 +144,7 @@ class TestLocationTags:
         clip.write_bytes(b"\x00")
         probes: list[Path] = []
         monkeypatch.setattr(tagging, "run_ffprobe_json", lambda p, _e: probes.append(p))
-        monkeypatch.setattr(tagging, "probe_duration", lambda _p: None)
+        monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: None)
 
         assert _service(location=False).tag_file(photo) == []
         assert _service(location=False).tag_file(clip) == []
@@ -171,7 +171,7 @@ class TestLocationTags:
                 }
             },
         )
-        monkeypatch.setattr(tagging, "probe_duration", lambda _p: None)
+        monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: None)
 
         assert _service().tag_file(clip) == ["Sydney", "Australia"]
 
@@ -185,7 +185,7 @@ class TestLocationTags:
             raise FileNotFoundError("ffprobe")
 
         monkeypatch.setattr(tagging, "run_ffprobe_json", _missing)
-        monkeypatch.setattr(tagging, "probe_duration", lambda _p: None)
+        monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: None)
 
         assert _service().tag_file(clip) == []
 

@@ -15,6 +15,7 @@ import pytest
 from PIL import Image
 
 from app.core.config import Config
+from app.services.ai import video_sampling
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.base_tagger import (
     ZeroShotTagger,
@@ -213,12 +214,11 @@ def test_tag_file_video_votes_across_frames(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Labels must appear in >= _MIN_FRAME_VOTES frames; single-frame labels are excluded."""
-    from app.services.ai import ai_tagging_service as mod
 
     p = tmp_path / "clip.mp4"
     p.write_bytes(b"\x00")  # content irrelevant; extraction is monkeypatched
-    monkeypatch.setattr(mod, "probe_duration", lambda _p: 9.0)
-    monkeypatch.setattr(mod, "extract_frame", lambda _p, _t: _img())
+    monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: 9.0)
+    monkeypatch.setattr(video_sampling, "_frame", lambda _p, _t, _s: _img())
 
     # beach: frames 0+1 → 2 votes → qualifies, peak score 0.95
     # sky:   frame 0 only → 1 vote → excluded
@@ -244,10 +244,9 @@ def test_tag_file_video_votes_across_frames(
 def test_tag_file_video_no_duration_returns_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services.ai import ai_tagging_service as mod
 
     p = tmp_path / "clip.mp4"
     p.write_bytes(b"\x00")
-    monkeypatch.setattr(mod, "probe_duration", lambda _p: None)
+    monkeypatch.setattr(video_sampling, "_probe", lambda _p, _s: None)
     svc = _service_with(_StubProvider([("a", 0.9)]))
     assert svc.tag_file(p) == []

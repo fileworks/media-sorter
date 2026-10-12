@@ -433,7 +433,7 @@ class _FakePreviewClassifier:
     def __init__(self, category: str | None) -> None:
         self._category = category
 
-    def classify_file(self, path: Path) -> object:
+    def classify_file(self, path: Path, should_stop: Any = None) -> object:
         from app.services.ai.category_classifier_service import CategoryResult
 
         return CategoryResult(self._category, 0.99, 0.9)
@@ -755,6 +755,44 @@ async def test_per_file_worker_observes_cancellation_and_finishes_in_flight_item
     assert worker_threads and worker_threads[0] != main_thread
     assert len(result["items"]) == 1
     assert task.progress.phase == "previewing"
+
+
+@pytest.mark.asyncio
+async def test_a_file_whose_inference_was_cancelled_is_left_out_of_the_plan(
+    tmp_path: Path,
+) -> None:
+    """AI-NEW-3: a cut-short prediction must not be frozen as a decision."""
+    from app.background_tasks.task_manager import Task
+    from app.services.ai.video_sampling import InferenceCancelled
+
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for number in range(3):
+        (source / f"{number}.jpg").write_bytes(b"image")
+
+    cfg = _make_config(source, target, remove_duplicates=False)
+    svc = _make_preview_service(cfg)
+    task = Task(id="inference-cancel", operation_kind="preview")
+    calls: list[str] = []
+
+    def preview_file(*args: Any, **kwargs: Any) -> dict[str, object]:
+        calls.append(str(args[0]))
+        if len(calls) == 2:
+            task.cancel()
+            raise InferenceCancelled("cancel fixture")
+        return {
+            "source": str(args[0]),
+            "status": "sort",
+            "category": None,
+            "duplicate_evaluation": "known",
+        }
+
+    with patch.object(svc, "_preview_file", side_effect=preview_file):
+        result = await svc.preview(cfg, task=task)
+
+    assert [item["source"] for item in result["items"]] == calls[:1]
 
 
 @pytest.mark.asyncio
