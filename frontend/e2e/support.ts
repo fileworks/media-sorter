@@ -98,6 +98,7 @@ export const E2E_PREVIEW_RESULT: PreviewResult = {
       extracted_date: "2026-08-21T10:00:00Z",
       metadata_source: "exif",
       tags: ["synthetic"],
+      ai_tags: ["beach", "sunset"],
       status: "sort",
       file_size: 4_200_000,
       source_root: "/tmp/e2e-input",

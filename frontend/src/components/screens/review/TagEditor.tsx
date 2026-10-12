@@ -56,7 +56,7 @@ export function TagEditor({ tags, edited, onChange, onReset }: TagEditorProps) {
                 type="button"
                 aria-label={t("review.tags.remove", { tag })}
                 onClick={() => onChange(tags.filter((candidate) => candidate !== tag))}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <FiX className="h-3 w-3" aria-hidden />
               </button>
