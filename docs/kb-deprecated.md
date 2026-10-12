@@ -50,8 +50,8 @@ SigLIP 2, weaker zero-shot and English-only. SigLIP 2 base runs directly on onnx
 needed with SigLIP 2
 
 ❌ Hardcoding scoring constants in tagger/categoriser code ✅ `tagger_slope` /
-`categorize_scale` travel with the encoder (`VisionEncoder` properties) — CLIP and
-SigLIP need different calibrations (SigLIP needs a HIGHER softmax temperature than CLIP)
+`tagger_offset` / `categorize_scale` / `categorize_floor` travel with the encoder
+(`VisionEncoder`), calibrated with `scripts/evaluate_local_ai.py` on held-out fixtures
 
 ❌ Letting an AI failure raise out of the sort pipeline ✅ Best-effort everywhere: log a
 warning, yield no tags/category

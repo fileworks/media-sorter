@@ -681,7 +681,7 @@ export interface OutcomeProvenance {
     margin?: number | null;
     min_margin?: number | null;
     /** The first gate a rejected file failed; absent in older plans. */
-    rejection?: "background" | "confidence" | "margin" | null;
+    rejection?: "weak_match" | "confidence" | "margin" | null;
   };
   duplicate: {
     evaluated: boolean;

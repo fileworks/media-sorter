@@ -6,20 +6,24 @@ model is not confident enough. This is a *placement* decision (it changes where
 a file lands) and is deliberately independent of AI tagging, though both share
 the one shared local encoder.
 
-Robustness against "nothing really fits" (a settings screenshot landing in
-``nature``) comes from three compounding defences:
+Scoring follows the evaluated contract in ``docs/local-ai-evaluation.md``
+(public held-out fixtures, 2026-10-12):
 
-* **Prompt ensembling + descriptions** — each category is embedded from several
-  template phrasings (and an enriched description for well-known topics),
-  sharpening separation.
-* **Background anchors** — generic distractor prompts sit in the softmax
-  denominator only, so an out-of-vocabulary image sends its probability mass to
-  the anchors instead of the least-wrong category.
-* **An anchor-relative cosine floor** plus a categoriser-specific (un-saturated)
-  softmax temperature, so the dual confidence/margin gate is actually meaningful
-  rather than pinned at ≈1.0. The floor requires the winning category to explain
-  the image at least as well as a generic "a photo" anchor — a model-agnostic
-  bar rather than a hand-tuned absolute cosine.
+* **Best prompt per category** — each category is described by several
+  phrasings (templates plus an enriched description); its score is the best
+  single phrasing's cosine, which separated categories better than the
+  averaged ensemble.
+* **SigLIP's own scale** — the softmax over categories uses the model's learned
+  logit scale (the encoder's ``categorize_scale``), so the user's confidence
+  and margin settings act on probabilities in the model's native units.
+* **An absolute floor** — the winning category must reach the encoder's
+  ``categorize_floor`` cosine; below it nothing fits clearly enough and the file
+  stays in ``_uncategorized``. This replaced generic "a photo" anchors, which
+  rejected almost everything (coverage 5 % in English, 0 % in German).
+* **English prompts for bundled categories** — the folder keeps the interface
+  language's name, but the bundled concepts are scored with their English
+  prompts, which held out at 95 % accuracy against 89 % with German prompts.
+  Custom categories are scored in the interface language.
 
 The service is *synchronous* and strictly best-effort: it is invoked from the
 worker-thread per-file paths of ``SortingService`` and ``PreviewService`` and
@@ -34,11 +38,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from app.core.concepts import bundled_labels
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.image_embeddings import file_embedding
-from app.services.ai.prompts import anchor_prompts, pool_normalized, prompt_group
+from app.services.ai.prompts import prompt_group
 from app.services.ai.video_sampling import (
     VIDEO_FRAME_SAMPLES,
     FrameSampling,
@@ -60,20 +65,10 @@ logger = get_logger(__name__)
 # features see the same frames. 5 frames improves scene-change coverage.
 _VIDEO_FRAME_SAMPLES = 5
 
-# Anchor-relative cosine floor. The winning category must be at least as similar
-# to the image as the best generic "a photo" background anchor — otherwise a
-# generic prompt explains the image better than any category, so route to
-# ``_uncategorized``. Measuring against the image's own anchor cosine cancels the
-# per-model cosine offset (correct CLIP ViT-B/32 matches and the anchors both sit
-# near ≈0.20–0.26, so a fixed absolute floor wrongly rejects borderline-correct
-# matches). This directly catches the "nothing really fits" case the softmax
-# alone hides, without a hand-tuned, model-specific constant.
-
-
-#: Why a classified file stayed uncategorized: its best category fitted no
-#: better than a generic photo, its confidence missed the threshold, or it did
-#: not lead the next category by the minimum margin.
-CategoryRejection = Literal["background", "confidence", "margin"]
+#: Why a classified file stayed uncategorized: no category fitted clearly
+#: enough (below the encoder's floor), its confidence missed the threshold, or
+#: it did not lead the next category by the minimum margin.
+CategoryRejection = Literal["weak_match", "confidence", "margin"]
 
 
 @dataclass(frozen=True)
@@ -82,9 +77,8 @@ class CategoryResult:
 
     ``category`` is the chosen (already path-safe) folder name, or ``None`` when
     the file is uncategorized. ``confidence`` is the top-1 softmax probability
-    (over categories *and* background anchors) and ``margin`` is ``top1 - top2``
-    among the categories. ``rejection`` names the first gate an uncategorized
-    result failed, so Review can say why instead of always blaming confidence.
+    over the categories and ``margin`` is ``top1 - top2``. ``rejection`` names
+    the first gate an uncategorized result failed, so Review can say why.
     """
 
     category: str | None
@@ -143,10 +137,9 @@ class CategoryClassifierService:
         try:
             import numpy as np
 
-            vecs = self._prompt_matrix(cats)
-            if vecs is None:  # embedder unavailable / model missing
+            groups = self._prompt_groups(cats)
+            if groups is None:  # embedder unavailable / model missing
                 return _UNCATEGORIZED
-            cat_vecs, anchor_vecs = vecs
 
             if is_image(path):
                 img_emb = self._image_embedding(path)
@@ -159,9 +152,7 @@ class CategoryClassifierService:
 
             img = np.asarray(img_emb, dtype=np.float32).reshape(-1)
             img_n = img / (np.linalg.norm(img) + 1e-8)
-            cat_sims = cat_vecs @ img_n
-            anchor_sims = anchor_vecs @ img_n if anchor_vecs.size else None
-            return self._gate(cat_sims, anchor_sims, cats)
+            return self._gate(category_similarities(groups, img_n), cats)
         except InferenceCancelled:
             raise
         except Exception as exc:  # pragma: no cover - defensive catch-all
@@ -169,55 +160,57 @@ class CategoryClassifierService:
             return _UNCATEGORIZED
 
     # ------------------------------------------------------------------ #
-    # Text-side: ensembled category + anchor vectors                       #
+    # Text-side: every category's prompt vectors                           #
     # ------------------------------------------------------------------ #
 
-    def _prompt_matrix(
-        self, cats: list[str]
-    ) -> tuple[NDArray[np.float32], NDArray[np.float32]] | None:
-        """Return ``(category_vectors, anchor_vectors)`` as unit-row matrices.
+    def _prompt_groups(self, cats: list[str]) -> list[NDArray[np.float32]] | None:
+        """Unit prompt vectors per category, in *cats* order, or ``None``.
 
-        Each category vector is the ensemble (mean of normalised embeddings) of
-        its template + description prompts; each anchor is a single prompt. All
-        prompts are embedded in one cached call. Returns ``None`` when the
-        embedder is unavailable.
+        Bundled categories are scored with their English concept prompts (see
+        the module docstring); custom ones in the interface language. All
+        prompts go through the encoder's text cache in one call.
         """
         import numpy as np
 
-        cat_prompts: list[str] = []
-        cat_sizes: list[int] = []
-        model_id = (
-            str(getattr(self._embedder, "model_id", "unknown"))
-            if self._embedder is not None
-            else "unknown"
-        )
-        for c in cats:
-            prompts = prompt_group(
-                c,
-                operation_locale=self._config.language,
-                model_id=model_id,
-                bundled=self._config.categorize_categories_provenance == "bundled",
-            )
-            cat_prompts.extend(prompts)
-            cat_sizes.append(len(prompts))
-
-        anchors = list(
-            anchor_prompts(
-                self._config.language,
-                model_id,
-            )
-        )
         embedder = self._embedder
         if embedder is None:
             return None
-        raw = embedder.embed_texts(cat_prompts + anchors)
+        model_id = str(getattr(embedder, "model_id", "unknown"))
+        bundled = self._config.categorize_categories_provenance == "bundled"
+        english = (
+            dict(
+                zip(
+                    bundled_labels("category", self._config.language),
+                    bundled_labels("category", "en"),
+                    strict=True,
+                )
+            )
+            if bundled
+            else {}
+        )
+        prompts: list[str] = []
+        sizes: list[int] = []
+        for name in cats:
+            label = english.get(name)
+            group = prompt_group(
+                label if label is not None else name,
+                operation_locale="en" if label is not None else self._config.language,
+                model_id=model_id,
+                bundled=label is not None,
+            )
+            prompts.extend(group)
+            sizes.append(len(group))
+        raw = embedder.embed_texts(prompts)
         if raw is None:
             return None
-        raw_arr = np.asarray(raw, dtype=np.float32)
-        split = len(cat_prompts)
-        cat_vecs = pool_normalized(raw_arr[:split], cat_sizes)
-        anchor_vecs = pool_normalized(raw_arr[split:], [1] * len(anchors))
-        return cat_vecs, anchor_vecs
+        unit = np.asarray(raw, dtype=np.float32)
+        unit = unit / (np.linalg.norm(unit, axis=1, keepdims=True) + 1e-8)
+        groups: list[NDArray[np.float32]] = []
+        start = 0
+        for size in sizes:
+            groups.append(unit[start : start + size])
+            start += size
+        return groups
 
     # ------------------------------------------------------------------ #
     # Image-side: a single (averaged) embedding per file                   #
@@ -268,44 +261,31 @@ class CategoryClassifierService:
     # Confidence gate                                                       #
     # ------------------------------------------------------------------ #
 
-    def _gate(self, cat_sims: Any, anchor_sims: Any, cats: list[str]) -> CategoryResult:
-        """Apply the floor + temperature-scaled softmax + dual (threshold, margin) gate.
+    def _gate(self, cat_sims: Any, cats: list[str]) -> CategoryResult:
+        """Apply the floor, the native-scale softmax and the confidence/margin gate.
 
-        *cat_sims* are the per-category cosine similarities; *anchor_sims* (or
-        ``None``) the background-anchor similarities, included in the softmax
-        denominator only so an out-of-vocabulary image can't be forced into a
-        category.
+        *cat_sims* are the per-category cosine similarities (best prompt each).
         """
         import numpy as np
 
         cat = np.asarray(cat_sims, dtype=np.float32).reshape(-1)
-        anchors = (
-            np.asarray(anchor_sims, dtype=np.float32).reshape(-1)
-            if anchor_sims is not None
-            else np.empty(0, dtype=np.float32)
-        )
-
         embedder = self._embedder
-        if embedder is None:
+        if embedder is None or cat.size == 0:
             return _UNCATEGORIZED
-        logits = embedder.categorize_scale * np.concatenate([cat, anchors])
+        logits = embedder.categorize_scale * cat
         logits = logits - logits.max()
         exp = np.exp(logits)
         probs = exp / (exp.sum() + 1e-8)
-        cat_probs = probs[: cat.shape[0]]
 
-        order = np.argsort(cat_probs)[::-1]
-        top1 = float(cat_probs[order[0]])
-        top2 = float(cat_probs[order[1]]) if order.shape[0] > 1 else 0.0
+        order = np.argsort(probs)[::-1]
+        top1 = float(probs[order[0]])
+        top2 = float(probs[order[1]]) if order.shape[0] > 1 else 0.0
         margin = top1 - top2
         best_cosine = float(cat[order[0]])
-        # Background level: best generic-anchor cosine (−inf when no anchors, so
-        # the floor is a no-op and the softmax/threshold/margin gate alone decides).
-        background = float(anchors.max()) if anchors.size else float("-inf")
 
         rejection: CategoryRejection | None = None
-        if best_cosine < background:
-            rejection = "background"
+        if best_cosine < float(getattr(embedder, "categorize_floor", -1.0)):
+            rejection = "weak_match"
         elif top1 < self._config.categorize_confidence_threshold:
             rejection = "confidence"
         elif margin < self._config.categorize_min_margin:
@@ -313,3 +293,10 @@ class CategoryClassifierService:
         if rejection is None:
             return CategoryResult(cats[int(order[0])], top1, margin)
         return CategoryResult(None, top1, margin, rejection)
+
+
+def category_similarities(groups: list[NDArray[np.float32]], image: Any) -> NDArray[np.float32]:
+    """Each category's best prompt cosine against a unit image vector."""
+    import numpy as np
+
+    return np.asarray([float((rows @ image).max()) for rows in groups], dtype=np.float32)

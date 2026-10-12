@@ -4,7 +4,8 @@ Both AI tagging (:mod:`app.services.ai.base_tagger`) and Smart Categorization
 (:mod:`app.services.ai.category_classifier_service`) need only the three methods
 below; they are completely agnostic about *which* model backs the encoder.
 
-Encoder-specific calibration constants (``tagger_slope``, ``categorize_scale``)
+Encoder-specific calibration (``tagger_slope``, ``tagger_offset``,
+``categorize_scale``, ``categorize_floor``)
 travel with the encoder rather than being hardcoded in the consumers, because
 different model families have different cosine-similarity scales.
 """
@@ -45,13 +46,22 @@ class VisionEncoder:
         """
         return 100.0
 
+    def tagger_offset(self, locale: str) -> float:
+        """Extra cosine a label must gain over the generic background, per language.
+
+        Calibrated on held-out fixtures (``scripts/evaluate_local_ai.py``).
+        """
+        return 0.0
+
     @property
     def categorize_scale(self) -> float:
-        """Softmax temperature for the Smart Categorization classifier.
-
-        Calibrated per model family; the shipped SigLIP 2 encoder uses 60.
-        """
+        """Softmax temperature for Smart Categorization: the model's logit scale."""
         return 40.0
+
+    @property
+    def categorize_floor(self) -> float:
+        """Cosine the winning category must reach; below it nothing fits clearly."""
+        return -1.0
 
     def embed_image(self, image: Image) -> Any | None:
         """Return a 1-D float32 numpy array for *image*, or ``None``."""

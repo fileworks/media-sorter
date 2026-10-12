@@ -28,9 +28,10 @@ retired on 2026-10-11: at about 608 MB it was a larger download than SigLIP's
 Sizes are download sizes, not RAM requirements. The interface uses the manifest
 inventory instead of invented tier-size estimates.
 
-The tagger already uses independent multi-label scores, prompt ensembling,
-localized bundled concepts and background anchors. Categorization has both a
-score and margin gate and an uncategorized fallback. These scores are not
+The tagger uses independent multi-label scores, prompt ensembling, localized
+bundled concepts and a per-language margin over generic background prompts.
+Categorization scores each category's best prompt on the model's own scale and has
+an absolute floor, a score and margin gate and an uncategorized fallback. These scores are not
 calibrated probabilities of a label being correct. Do not tune them by intuition
 or imply that a 99% threshold means 99% accuracy.
 
@@ -81,6 +82,55 @@ GeoNames primary names; country names follow the interface language. Missing or
 corrupt data logs one warning per run, never the coordinates. The attribution
 ships in `resources/licenses/THIRD-PARTY-DATA.md`, and the packaged smoke check
 fails when the data was not collected.
+
+## Held-out evaluation — 2026-10-12
+
+`scripts/evaluate_local_ai.py` scores the shipped tagger and categorizer, and
+alternatives, against `scripts/ai-eval/commons-manifest.json`: 228 Wikimedia
+Commons thumbnails (640 px) under free licences, each pinned by SHA-256 with its
+licence, author and source page. Images are downloaded on demand into a cache
+outside the repository and never committed. Labels were assigned by visual review:
+`labels` must be found (alternatives such as `sunset|sunrise`), `acceptable` may
+be emitted, and any other vocabulary label counts as a false tag. Ambiguous,
+duplicate and sensitive candidates were excluded. Parameters were chosen on the
+even-numbered half only; the odd half is held out. Run it with the backend venv
+and `--model-dir` pointing at an installed pack.
+
+Results on the held-out half, CPU, int8 pack:
+
+| | Before | Shipped |
+|---|---|---|
+| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.847 / 0.884 / 0.865 |
+| Tagging, German | 0.949 / 0.666 / 0.783 | 0.898 / 0.878 / 0.888 |
+| Categorization coverage, English / German | 4.9 % / 0 % | 61.7 % / 61.7 % |
+| Categorization accuracy when assigned | 100 % (4 files) / n/a | 95.2 % / 95.2 % |
+
+What changed, and why:
+
+- **Tag margin per language.** A label must beat the generic background by
+  0.005 (English) or 0.007 (German) cosine. Without it German tagging emitted
+  `indoor`, `graph`, `artwork` and `screenshot` on half the images.
+- **Categorization on SigLIP's own scale.** Each category is scored by its best
+  prompt; the softmax uses the checkpoint's logit scale (112.9, from
+  `google/siglip2-base-patch16-256` at revision `3f9f96cb`); the winner must reach
+  the cosine at which the model's own sigmoid gives 0.0003. The generic "a photo"
+  anchors that rejected nearly everything are gone. The user's confidence (55 %)
+  and margin (15 %) settings keep their meaning.
+- **English prompts for bundled categories.** Folders keep the interface language,
+  but German users' bundled categories are scored with English concept prompts
+  (95 % held-out accuracy against 89 % with German prompts). Custom categories are
+  scored in the interface language.
+- **Templates unchanged (AI-10).** Dropping the article templates that produce
+  "a photo of a pets" did not help (F1 0.876 against 0.878), and SigLIP's
+  documented "This is a photo of {}." alone was worse (0.830).
+- **Native sigmoid for tags not adopted.** The pairwise sigmoid with the learned
+  bias, at any tested threshold, scored below the calibrated anchor-relative
+  score in both languages.
+
+Limits: 228 images, mostly well-composed photographs; no selfies, birthdays,
+parties or memes; thumbnails only, so full-resolution decoding (and a JPEG draft
+decode) is not measured here. The numbers support these defaults; they do not
+guarantee accuracy on a personal library, which Review exists to check.
 
 ## Candidates, using primary sources
 

@@ -1481,13 +1481,13 @@ export const en = {
   "review.detail.categoryPassed":
     "{label} passed at {confidence}; the required confidence was {threshold}.",
   "review.detail.categoryRejected":
-    "No category folder was produced: the best match ({confidence}) did not pass every check — at least {threshold} confidence, a clear lead over the next category, and a better fit than a generic photo.",
+    "No category folder was produced: the best match ({confidence}) did not pass every check — at least {threshold} confidence, a clear lead over the next category, and a clear enough fit.",
   "review.detail.categoryRejected.confidence":
     "No category folder was produced: confidence {confidence} did not reach {threshold}.",
   "review.detail.categoryRejected.margin":
     "No category folder was produced: the best category led the next one by only {margin}; at least {minMargin} is required.",
-  "review.detail.categoryRejected.background":
-    "No category folder was produced: the best category fitted no better than a generic photo.",
+  "review.detail.categoryRejected.weak_match":
+    "No category folder was produced: no category fitted this file clearly enough.",
   "review.detail.noRouteRule": "No route rule matched this file.",
   "review.tags.title": "Content tags",
   "review.tags.help":
@@ -3204,13 +3204,13 @@ export const de: Record<MessageKey, string> = {
   "review.detail.categoryPassed":
     "{label} bestand mit {confidence}; erforderlich waren {threshold}.",
   "review.detail.categoryRejected":
-    "Kein Kategorieordner entstand: Der beste Treffer ({confidence}) bestand nicht jede Prüfung — mindestens {threshold} Sicherheit, ein klarer Vorsprung vor der nächsten Kategorie und eine bessere Passung als ein allgemeines Foto.",
+    "Kein Kategorieordner entstand: Der beste Treffer ({confidence}) bestand nicht jede Prüfung — mindestens {threshold} Sicherheit, ein klarer Vorsprung vor der nächsten Kategorie und eine ausreichend deutliche Passung.",
   "review.detail.categoryRejected.confidence":
     "Kein Kategorieordner entstand: {confidence} erreichte den Grenzwert {threshold} nicht.",
   "review.detail.categoryRejected.margin":
     "Kein Kategorieordner entstand: Die beste Kategorie lag nur {margin} vor der nächsten; mindestens {minMargin} sind nötig.",
-  "review.detail.categoryRejected.background":
-    "Kein Kategorieordner entstand: Die beste Kategorie passte nicht besser als ein allgemeines Foto.",
+  "review.detail.categoryRejected.weak_match":
+    "Kein Kategorieordner entstand: Keine Kategorie passte deutlich genug zu dieser Datei.",
   "review.detail.noRouteRule": "Keine Weiterleitungsregel passte auf diese Datei.",
   "review.tags.title": "Inhalts-Tags",
   "review.tags.help":

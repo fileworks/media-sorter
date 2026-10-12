@@ -93,9 +93,14 @@ def test_available_with_injected_components() -> None:
 def test_model_id_and_calibration_constants() -> None:
     enc, *_ = _make_encoder()
     assert enc.model_id == "siglip2-base-patch16-256"
-    # SigLIP-specific calibration (distinct from CLIP's 100/40).
+    # Calibration evaluated on held-out public fixtures (scripts/evaluate_local_ai.py).
     assert enc.tagger_slope == 40.0
-    assert enc.categorize_scale == 60.0
+    assert enc.tagger_offset("en") == 0.005
+    assert enc.tagger_offset("de") == 0.007
+    # The checkpoint's own logit scale, and the cosine at which its sigmoid
+    # (with the learned bias) reaches 0.0003.
+    assert enc.categorize_scale == pytest.approx(112.90118)
+    assert enc.categorize_floor == pytest.approx(0.0767, abs=1e-4)
 
 
 def test_preprocess_shape_and_normalisation() -> None:

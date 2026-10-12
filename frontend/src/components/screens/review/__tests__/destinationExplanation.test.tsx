@@ -219,7 +219,7 @@ describe("DestinationExplanation", () => {
   it.each([
     ["margin", /led the next one by only 12%; at least 15% is required/],
     ["confidence", /confidence 56% did not reach 55%|56%.*did not reach 55%/],
-    ["background", /fitted no better than a generic photo/],
+    ["weak_match", /no category fitted this file clearly enough/],
   ] as const)("names the %s gate when that is why no category was produced", (rejection, text) => {
     render(
       <I18nProvider initialLocale="en">

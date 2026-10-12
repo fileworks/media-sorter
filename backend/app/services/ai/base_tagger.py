@@ -183,7 +183,9 @@ class ZeroShotTagger(AITagger):
             # Use the encoder's calibrated slope so different model families
             # (CLIP vs SigLIP) apply the right sharpness.
             slope = self._embedder.tagger_slope
-            probs = 1.0 / (1.0 + np.exp(-slope * (label_sims - background)))
+            offset_for = getattr(self._embedder, "tagger_offset", None)
+            offset = float(offset_for(self._locale)) if callable(offset_for) else 0.0
+            probs = 1.0 / (1.0 + np.exp(-slope * (label_sims - background - offset)))
 
             scored = [
                 (self._labels[i], float(probs[i]))
