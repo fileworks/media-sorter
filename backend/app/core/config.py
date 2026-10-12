@@ -142,7 +142,7 @@ class Config:
     # Compatibility input for configurations saved before the common setting.
     # ``None`` means the canonical setting was used.
     ai_tagging_embed_in_files: bool | None = None
-    # Editable label vocabulary scored by the local CLIP zero-shot tagger.
+    # Editable label vocabulary scored by the local SigLIP zero-shot tagger.
     ai_tagging_labels: list[str] = field(
         default_factory=lambda: [
             # Places & environments
@@ -206,12 +206,12 @@ class Config:
     )
     ai_tagging_labels_provenance: Literal["bundled", "custom"] | None = None
 
-    # ── Smart Categorization (local CLIP routing into topic folders) ──────────
+    # ── Smart Categorization (local SigLIP routing into topic folders) ──────────
     # Independent of the ai_tagging_* group above: this decides WHERE a file is
     # placed — it nests each file under its date folder in a user-named topic
     # subfolder (…/Y/M/D/<category>/), exactly like the camera subfolder. Files
     # the classifier is not confident about go to …/Y/M/D/_uncategorized/.
-    # Local-CLIP only (no cloud taxonomy can match the user's folder names).
+    # Local model only (no cloud taxonomy can match the user's folder names).
     categorize_enabled: bool = False
     categorize_categories: list[str] = field(
         default_factory=lambda: [
@@ -334,7 +334,7 @@ class Config:
     update_check_enabled: bool = True
 
     # ── AI engine settings ────────────────────────────────────────────────────
-    # Model tier used for local CLIP/SigLIP inference.
+    # Model tier used for local SigLIP inference.
     # "auto" → let HardwareProfile.probe() choose based on CPU/RAM/EP detection.
     # Explicit values: "off" | "lite" | "standard" | "max".
     ai_model_tier: str = "auto"
@@ -610,7 +610,7 @@ IMAGE_QUALITY_MAX = 100
 
 # Smart Categorization limits.
 # There is no user-facing cap on the number of categories — more categories are
-# technically fine (each adds one cheap, cached CLIP text embedding). This is a
+# technically fine (each adds one cheap, cached text embedding). This is a
 # purely defensive sanity ceiling to reject a pathological payload, not a limit
 # users are expected to hit.
 CATEGORIZE_SANITY_MAX = 1000

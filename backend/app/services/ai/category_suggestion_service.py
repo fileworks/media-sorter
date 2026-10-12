@@ -2,7 +2,9 @@
 
 Samples images from the user's source directory, clusters them with k-means
 (pure numpy), and names each cluster by matching the centroid to a curated
-vocabulary via cosine similarity.
+vocabulary via cosine similarity. Names come back in the interface language and
+never repeat a category the user already has; Setup offers them as one-click
+additions, never as automatic changes.
 """
 
 from __future__ import annotations
@@ -14,8 +16,8 @@ from typing import TYPE_CHECKING
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
+from app.services.ai.image_embeddings import file_embedding
 from app.services.analysis_service import AnalysisService
-from app.services.filesystem_service import open_image
 from app.utils.media_utils import is_image
 
 if TYPE_CHECKING:
@@ -89,6 +91,72 @@ _VOCABULARY: tuple[str, ...] = (
     "kids",
     "school",
 )
+
+
+#: German folder names for the suggestion vocabulary, so a German interface is
+#: never offered English folders.
+_GERMAN: dict[str, str] = {
+    "nature": "Natur",
+    "landscape": "Landschaft",
+    "mountains": "Berge",
+    "beach": "Strand",
+    "forest": "Wald",
+    "ocean": "Meer",
+    "sunset": "Sonnenuntergang",
+    "travel": "Reisen",
+    "city": "Stadt",
+    "architecture": "Architektur",
+    "street": "Straße",
+    "buildings": "Gebäude",
+    "urban": "Urban",
+    "family": "Familie",
+    "friends": "Freunde",
+    "portrait": "Porträts",
+    "selfie": "Selfies",
+    "people": "Menschen",
+    "baby": "Baby",
+    "wedding": "Hochzeit",
+    "birthday": "Geburtstag",
+    "celebration": "Feiern",
+    "party": "Party",
+    "holidays": "Feiertage",
+    "christmas": "Weihnachten",
+    "food": "Essen",
+    "cooking": "Kochen",
+    "restaurant": "Restaurant",
+    "coffee": "Kaffee",
+    "drinks": "Getränke",
+    "animals": "Tiere",
+    "pets": "Haustiere",
+    "dogs": "Hunde",
+    "cats": "Katzen",
+    "birds": "Vögel",
+    "wildlife": "Wildtiere",
+    "sports": "Sport",
+    "fitness": "Fitness",
+    "hiking": "Wandern",
+    "cycling": "Radfahren",
+    "cars": "Autos",
+    "vehicles": "Fahrzeuge",
+    "transportation": "Verkehr",
+    "art": "Kunst",
+    "music": "Musik",
+    "concert": "Konzerte",
+    "work": "Arbeit",
+    "documents": "Dokumente",
+    "screenshots": "Bildschirmfotos",
+    "vacation": "Urlaub",
+    "summer": "Sommer",
+    "winter": "Winter",
+    "flowers": "Blumen",
+    "garden": "Garten",
+    "plants": "Pflanzen",
+    "home": "Zuhause",
+    "interior": "Innenräume",
+    "decor": "Dekoration",
+    "kids": "Kinder",
+    "school": "Schule",
+}
 
 
 def _kmeans_centroids(X: NDArray[np.float32], k: int, n_iter: int) -> NDArray[np.float32]:
@@ -176,18 +244,15 @@ class CategorySuggestionService:
         vecs: list[NDArray[np.float32]] = []
         for path in samples:
             try:
-                with open_image(path) as img:
-                    if img is None:
-                        continue
-                    emb = encoder.embed_image(img)
-                    if emb is None:
-                        continue
-                    v = np.asarray(emb, dtype=np.float32).reshape(-1)
-                    norm = float(np.linalg.norm(v))
-                    if norm > 1e-8:
-                        vecs.append(v / norm)
+                emb = file_embedding(encoder, path)
             except Exception:
                 continue
+            if emb is None:
+                continue
+            v = np.asarray(emb, dtype=np.float32).reshape(-1)
+            norm = float(np.linalg.norm(v))
+            if norm > 1e-8:
+                vecs.append(v / norm)
 
         if len(vecs) < 2:
             return []
@@ -204,11 +269,16 @@ class CategorySuggestionService:
 
         best_idx = np.argmax(centroids_n @ vocab_embs.T, axis=1)
 
+        existing = {name.casefold() for name in self._config.resolved_categories()}
         labels: list[str] = []
         seen: set[str] = set()
         for idx in best_idx:
-            label = _VOCABULARY[int(idx)]
-            if label not in seen:
-                seen.add(label)
+            label = self._localized(_VOCABULARY[int(idx)])
+            key = label.casefold()
+            if key not in seen and key not in existing:
+                seen.add(key)
                 labels.append(label)
         return labels
+
+    def _localized(self, word: str) -> str:
+        return _GERMAN.get(word, word) if self._config.language == "de" else word

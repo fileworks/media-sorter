@@ -5,6 +5,7 @@ import type { SectionProps } from "@/components/config/constants";
 import { AiCapabilityChip, ModelTierSelect } from "@/components/config/fields/AiEngine";
 import { AiTagsInput } from "@/components/config/fields/AiTagsInput";
 import { CategorizeConfidenceSlider } from "@/components/config/fields/CategorizeConfidenceSlider";
+import { CategorySuggestions } from "@/components/config/fields/CategorySuggestions";
 import { CategoryTagsInput } from "@/components/config/fields/CategoryTagsInput";
 import { RuleBuilderInline } from "@/components/RuleBuilder";
 import { Button } from "@/components/ui/button";
@@ -371,6 +372,16 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                 {t("config.vocabulary.restore")}
               </button>
             )}
+            <CategorySuggestions
+              categories={config.categorize_categories}
+              hasSource={Boolean(config.source_directory)}
+              onAdd={(category) =>
+                updateConfig({
+                  categorize_categories: [...config.categorize_categories, category],
+                  categorize_categories_provenance: "custom",
+                })
+              }
+            />
           </SettingRow>
           <SettingRow
             field="categorize_confidence_threshold"

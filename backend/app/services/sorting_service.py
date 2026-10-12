@@ -1279,7 +1279,7 @@ class SortingService(SortingSupportMixin):
 
             # Smart Categorization: classify the SOURCE file (it hasn't moved
             # yet) into a topic folder before building the destination. Runs in
-            # this worker thread, so CLIP inference never blocks the event loop.
+            # this worker thread, so model inference never blocks the event loop.
             category: str | None = None
             category_result = CategoryResult(None, 0.0, 0.0)
             if config.categorize_enabled and classifier is not None:

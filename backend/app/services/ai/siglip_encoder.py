@@ -209,7 +209,7 @@ class SiglipOnnxEncoder(VisionEncoder):
         # anchor-relative gap is small; slope 40 maps a confident +0.06 gap to
         # ≈0.92 and a marginal +0.015 gap to ≈0.65 while keeping non-matches
         # (negative gap) below the 0.5 threshold. Empirically calibrated on
-        # SigLIP 2 base/16 @256 (CLIP uses 100 for its wider cosine spread).
+        # SigLIP 2 base/16 @256.
         return 40.0
 
     def tagger_offset(self, locale: str) -> float:

@@ -1088,6 +1088,17 @@ export const en = {
   "config.folder.categorizeHelp":
     "Route each file into a topic folder, decided offline on this computer.",
   "config.folder.categoriesHelp": "The topics files may be routed into.",
+  "config.folder.suggest": "Suggest from my photos",
+  "config.folder.suggestHelp":
+    "Looks at up to 150 photos from the input folder on this computer and proposes folder names. Nothing changes until you add one.",
+  "config.folder.suggestRunning": "Looking at a sample of your photos…",
+  "config.folder.suggestNone":
+    "No new names to suggest — your categories already cover what the sample shows.",
+  "config.folder.suggestNeedsSource":
+    "Choose an input folder first; suggestions come from its photos.",
+  "config.folder.suggestFailed": "Suggestions are unavailable right now.",
+  "config.folder.suggestions": "Suggested categories",
+  "config.folder.suggestAdd": "Add {name} as a category",
   "config.example.destination": "Sorted",
   "config.example.subfolder": "Holiday 2019",
   "config.folder.previewTitle": "What the destination will look like",
@@ -2807,6 +2818,17 @@ export const de: Record<MessageKey, string> = {
   "config.folder.categorizeHelp":
     "Jede Datei in einen Themenordner einsortieren, offline auf diesem Rechner entschieden.",
   "config.folder.categoriesHelp": "Die Themen, in die Dateien einsortiert werden können.",
+  "config.folder.suggest": "Aus meinen Fotos vorschlagen",
+  "config.folder.suggestHelp":
+    "Sieht sich bis zu 150 Fotos aus dem Eingangsordner auf diesem Computer an und schlägt Ordnernamen vor. Nichts ändert sich, bis du einen hinzufügst.",
+  "config.folder.suggestRunning": "Eine Auswahl deiner Fotos wird angesehen …",
+  "config.folder.suggestNone":
+    "Keine neuen Namen — deine Kategorien decken bereits ab, was die Auswahl zeigt.",
+  "config.folder.suggestNeedsSource":
+    "Wähle zuerst einen Eingangsordner; die Vorschläge stammen aus seinen Fotos.",
+  "config.folder.suggestFailed": "Vorschläge sind gerade nicht verfügbar.",
+  "config.folder.suggestions": "Vorgeschlagene Kategorien",
+  "config.folder.suggestAdd": "{name} als Kategorie hinzufügen",
   "config.example.destination": "Sortiert",
   "config.example.subfolder": "Urlaub 2019",
   "config.folder.previewTitle": "So wird der Zielordner aussehen",

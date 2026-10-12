@@ -134,7 +134,7 @@ class AITaggingService:
         """Return up to ``ai_tagging_max_tags`` descriptive tags for *path*.
 
         Merges deterministic EXIF/GPS tags (always attempted for images) with
-        CLIP zero-shot tags (when a provider is available).  Never raises.
+        SigLIP zero-shot tags (when a provider is available).  Never raises.
         """
         if not self._config.ai_tagging_enabled or self._max_tags <= 0:
             return []
@@ -145,7 +145,7 @@ class AITaggingService:
         if is_video(path) and self._config.ai_location_tags_enabled:
             scored.extend(self._location_tags(_video_coordinate(path)))
 
-        # Step 2: CLIP-based ML tags.
+        # Step 2: SigLIP zero-shot tags.
         provider = self._get_provider()
         if provider is not None:
             try:
@@ -162,7 +162,7 @@ class AITaggingService:
             return []
 
         # Deduplicate keeping the highest score per label (EXIF score=1.0 wins
-        # over any CLIP probability for the same label), then rank and cap.
+        # over any model probability for the same label), then rank and cap.
         seen: dict[str, tuple[str, float]] = {}
         for label, score in scored:
             key = normalized_key(label)

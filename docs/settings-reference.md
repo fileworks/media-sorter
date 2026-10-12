@@ -351,7 +351,7 @@ queued for transfer: generated tags cannot occupy its reviewed destination first
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | Smart Categorization | `categorize_enabled` | `false` | File each photo/video into your own topic folders (`…/Y/M/D/<category>/`). Local-model only. Mutually exclusive with *Preserve source subfolders*. |
-| Categories | `categorize_categories` | bundled concepts² | Untouched bundled concepts display and emit in the selected language. Editing marks the list custom; custom names remain verbatim across language changes. Works best for visually distinct topics. |
+| Categories | `categorize_categories` | bundled concepts² | Untouched bundled concepts display and emit in the selected language. Editing marks the list custom; custom names remain verbatim across language changes. Works best for visually distinct topics. **Suggest from my photos** clusters up to 150 sampled photos from the input folder with the local model and offers names in the interface language, excluding existing categories; nothing is added until the user picks one (`POST /api/ai/suggest-categories`). |
 | Categorization confidence | `categorize_confidence_threshold` | `0.55` | Top-1 probability floor (0.50–0.99). Files below it go to `_uncategorized/` rather than being guessed wrong. |
 | Categorization margin | `categorize_min_margin` | `0.15` | Required separation between the top and second-best category, so ambiguous files aren't force-filed. |
 

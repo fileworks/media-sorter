@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Per-label sigmoid slope for the local CLIP tagger. Tagging is inherently
+# Per-label sigmoid slope for the local zero-shot tagger. Tagging is inherently
 # *multi-label* (a beach-sunset photo is legitimately "beach" AND "sunset" AND
 # "sky"), so each label gets an INDEPENDENT probability rather than competing in
 # one softmax — a softmax over 30-40 labels divides the budget so co-occurring
@@ -77,7 +77,7 @@ class AITagger(ABC):
 class ZeroShotTagger(AITagger):
     """Offline zero-shot tagger backed by the shared :class:`VisionEncoder`.
 
-    Scores the configured *labels* against the image using aligned CLIP image and
+    Scores the configured *labels* against the image using aligned image and
     text embeddings, then assigns each label an INDEPENDENT, anchor-relative
     probability (see :data:`TAGGER_SLOPE`) and keeps those meeting *threshold* —
     so legitimately co-occurring tags are all retained rather than competing in a
@@ -181,7 +181,7 @@ class ZeroShotTagger(AITagger):
             # Independent per-label sigmoid (multi-label): co-occurring tags each
             # get their own probability instead of dividing one softmax budget.
             # Use the encoder's calibrated slope so different model families
-            # (CLIP vs SigLIP) apply the right sharpness.
+            # apply the right sharpness.
             slope = self._embedder.tagger_slope
             offset_for = getattr(self._embedder, "tagger_offset", None)
             offset = float(offset_for(self._locale)) if callable(offset_for) else 0.0
@@ -209,7 +209,7 @@ def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITag
 
     Returns ``None`` (logging the reason) when AI tagging is disabled or no
     encoder is available, so callers can treat "no tagger" as simply "no AI
-    tags". The shared *embedder* (if given) is reused so the CLIP/SigLIP model
+    tags". The shared *embedder* (if given) is reused so the SigLIP model
     loads only once across AI tagging and Smart Categorization.
 
     There is one provider by design. Tagging runs entirely on this machine, so

@@ -1,7 +1,7 @@
 """Smart Categorization classifier.
 
 Routes a single media file into exactly one of the user's topic categories
-(top-1 CLIP zero-shot) or leaves it ``None`` (→ ``_uncategorized``) when the
+(top-1 SigLIP zero-shot) or leaves it ``None`` (→ ``_uncategorized``) when the
 model is not confident enough. This is a *placement* decision (it changes where
 a file lands) and is deliberately independent of AI tagging, though both share
 the one shared local encoder.
@@ -104,7 +104,7 @@ class CategoryClassifierService:
     def categories(self) -> list[str]:
         """Return the de-duplicated, path-sanitized category folder names.
 
-        Sanitizing here (not only at build time) means the names used as CLIP
+        Sanitizing here (not only at build time) means the names used as model
         labels are exactly the folder names that will be created, so the
         prediction and the placement can never disagree.
         """

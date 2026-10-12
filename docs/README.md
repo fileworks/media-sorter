@@ -72,6 +72,6 @@ compatibility but are not used by the desktop interface.
 | [install.md](install.md) | public desktop installer selection, checksums and updates |
 | [headless.md](headless.md) | source-built Docker API and CLI prerequisites |
 | [dependency-security.md](dependency-security.md) | the dependency audit policy and its suppression file |
-| [model-distribution.md](model-distribution.md) | optional CLIP/SigLIP packs, pinned digests, the mirror escape hatch |
+| [model-distribution.md](model-distribution.md) | optional SigLIP packs, pinned digests, the mirror escape hatch |
 | [release-signing.md](release-signing.md) | signing credentials and the declared signed/unsigned state |
 | [release-smoke-checklist.md](release-smoke-checklist.md) | the clean-machine confidence pass after a release |
