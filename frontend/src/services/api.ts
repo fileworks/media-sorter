@@ -628,11 +628,15 @@ export interface AiModelPackStatus {
   error: string | null;
   /** No longer selectable; an installed copy can only be removed. */
   retired?: boolean;
+  /** What installing would download after reusing identical installed files. */
+  download_size?: number;
 }
 
 export interface AiModelInventory {
   effective_tier: "off" | "lite" | "standard" | "max";
   required_pack_id: string | null;
+  /** The pack local AI uses now: the required one or a working predecessor. */
+  active_pack_id?: string | null;
   packs: AiModelPackStatus[];
 }
 

@@ -37,6 +37,8 @@ Design notes
 
 from __future__ import annotations
 
+import functools
+import io
 import math
 import os
 import threading
@@ -56,7 +58,12 @@ logger = get_logger(__name__)
 # onnx-community SigLIP 2 base/16 @256 (Apache-2.0). Its immutable commit and
 # file digests live in ai-models.json; these names only address installed files.
 SIGLIP2_REPO = "onnx-community/siglip2-base-patch16-256-ONNX"
-_VISION_FILE = "onnx/vision_model_quantized.onnx"
+#: The vision tower each pack ships: v2 full precision, v1 int8 (see evaluation).
+_VISION_FILES = {
+    "siglip-standard-v2": "onnx/vision_model.onnx",
+    "siglip-standard-v1": "onnx/vision_model_quantized.onnx",
+}
+DEFAULT_PACK = "siglip-standard-v2"
 _TEXT_FILE = "onnx/text_model_quantized.onnx"
 _TOKENIZER_FILE = "tokenizer.json"
 
@@ -90,16 +97,49 @@ _CATEGORIZE_FLOOR = (math.log(0.0003 / 0.9997) - _LOGIT_BIAS) / _LOGIT_SCALE
 _TAGGER_OFFSETS = {"en": 0.005, "de": 0.007}
 
 
+def _to_srgb(image: Image, icc: bytes | None) -> Image | None:
+    """Convert pixels encoded in an embedded non-sRGB profile to sRGB, or ``None``.
+
+    SigLIP learned from sRGB web images. A Display P3 photo (every recent
+    iPhone) or an Adobe RGB/CMYK file read as if it were sRGB shows the model
+    shifted colours. Only the temporary pixels are converted; the file is never
+    touched. Any failure returns ``None`` and the caller uses the raw pixels.
+    """
+    if not icc:
+        return None
+    try:
+        from PIL import ImageCms
+
+        source = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+        if "srgb" in (ImageCms.getProfileDescription(source) or "").casefold():
+            return None
+        return ImageCms.profileToProfile(image, source, _srgb_profile(), outputMode="RGB")
+    except Exception as exc:
+        logger.debug("Colour profile not applied", error=str(exc))
+        return None
+
+
+@functools.cache
+def _srgb_profile() -> Any:
+    from PIL import ImageCms
+
+    return ImageCms.createProfile("sRGB")
+
+
 def _upright_rgb(image: Image) -> Image:
-    """Apply EXIF orientation and convert to RGB (best-effort, never raises)."""
+    """Apply EXIF orientation, convert to sRGB and RGB (best-effort, never raises)."""
     from PIL import ImageOps
 
+    icc = image.info.get("icc_profile")
     try:
         img = ImageOps.exif_transpose(image)
     except Exception:
         img = image
     if img is None:  # pragma: no cover - only in PIL in-place mode
         img = image
+    managed = _to_srgb(img, icc if isinstance(icc, bytes) else None)
+    if managed is not None:
+        return managed
     if img.mode != "RGB":
         try:
             img = img.convert("RGB")
@@ -126,7 +166,11 @@ class SiglipOnnxEncoder(VisionEncoder):
         text_session: Any | None = None,
         tokenizer: Any | None = None,
         model_store: AiModelStore | None = None,
+        pack_id: str = DEFAULT_PACK,
     ) -> None:
+        if pack_id not in _VISION_FILES:
+            raise ValueError(f"unknown SigLIP pack: {pack_id}")
+        self._pack_id = pack_id
         self._repo = repo
         self._allow_gpu = allow_gpu
         self._image_size = image_size
@@ -231,7 +275,7 @@ class SiglipOnnxEncoder(VisionEncoder):
         from tokenizers import Tokenizer
 
         components = (
-            self._model_store.component_paths("siglip-standard-v1", verify=True)
+            self._model_store.component_paths(self._pack_id, verify=True)
             if self._model_store is not None
             else None
         )
@@ -254,7 +298,7 @@ class SiglipOnnxEncoder(VisionEncoder):
         text_path = installed(_TEXT_FILE)
 
         vision = self._vision_session or ort.InferenceSession(
-            installed(_VISION_FILE), sess_options=opts, providers=providers
+            installed(_VISION_FILES[self._pack_id]), sess_options=opts, providers=providers
         )
         text = self._text_session or ort.InferenceSession(
             text_path, sess_options=opts, providers=providers
@@ -268,7 +312,9 @@ class SiglipOnnxEncoder(VisionEncoder):
 
         self._vision_session, self._text_session, self._tokenizer = vision, text, tokenizer
         self._text_model_path, self._session_options, self._providers = text_path, opts, providers
-        logger.info("SigLIP 2 encoder ready", providers=providers, repo=self._repo)
+        logger.info(
+            "SigLIP 2 encoder ready", providers=providers, repo=self._repo, pack_id=self._pack_id
+        )
 
     def _select_providers(self, ort: Any) -> list[str]:
         """Pick onnxruntime execution providers, honouring ``allow_gpu``."""

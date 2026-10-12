@@ -21,10 +21,13 @@ an unresolved set, not an excuse to guess. AI must never authorize removal.
 
 ## What the implementation actually provides
 
-`encoder_factory.py` maps Standard to the quantized SigLIP 2 base/16 256-pixel
-encoder; saved Lite and Max values select the same model. CLIP ViT-B/32 (Lite) was
-retired on 2026-10-11: at about 608 MB it was a larger download than SigLIP's
-413 MB, scored lower at zero-shot matching and understood only English labels.
+`encoder_factory.py` maps Standard to the SigLIP 2 base/16 256-pixel encoder
+(pack `siglip-standard-v2`: full-precision vision tower, int8 text tower, 690 MB);
+saved Lite and Max values select the same model. An installed v1 pack (int8 vision,
+413 MB) keeps working until v2 is installed, and the upgrade copies its identical
+verified files, so it downloads only the 372 MB vision tower. CLIP ViT-B/32 (Lite)
+was retired on 2026-10-11: it was larger than SigLIP's first pack, scored lower at
+zero-shot matching and understood only English labels.
 Sizes are download sizes, not RAM requirements. The interface uses the manifest
 inventory instead of invented tier-size estimates.
 
@@ -96,14 +99,15 @@ duplicate and sensitive candidates were excluded. Parameters were chosen on the
 even-numbered half only; the odd half is held out. Run it with the backend venv
 and `--model-dir` pointing at an installed pack.
 
-Results on the held-out half, CPU, int8 pack:
+Results on the held-out half, CPU. "Before" is the int8 v1 pack with the
+earlier scoring; "Shipped" is pack v2 with the scoring below:
 
 | | Before | Shipped |
 |---|---|---|
-| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.847 / 0.884 / 0.865 |
-| Tagging, German | 0.949 / 0.666 / 0.783 | 0.898 / 0.878 / 0.888 |
-| Categorization coverage, English / German | 4.9 % / 0 % | 61.7 % / 61.7 % |
-| Categorization accuracy when assigned | 100 % (4 files) / n/a | 95.2 % / 95.2 % |
+| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.941 / 0.902 / 0.921 |
+| Tagging, German | 0.949 / 0.666 / 0.783 | 0.924 / 0.921 / 0.923 |
+| Categorization coverage, English / German | 4.9 % / 0 % | 63 % / 63 % |
+| Categorization accuracy when assigned | 100 % (4 files) / n/a | 97.1 % / 97.1 % |
 
 What changed, and why:
 
@@ -126,6 +130,22 @@ What changed, and why:
 - **Native sigmoid for tags not adopted.** The pairwise sigmoid with the learned
   bias, at any tested threshold, scored below the calibrated anchor-relative
   score in both languages.
+
+- **Full-precision vision tower (AI-13).** Same pinned upstream revision, same
+  calibration. With the int8 v1 pack held-out F1 was 0.865 (English) and 0.886
+  (German); with the fp32 vision tower 0.921 and 0.923, and categorization
+  accuracy rose from 93.9 % to 97.1 %. It costs 13 ms more per image on CPU
+  (181 ms against 168 ms here) and 257 MB more resident memory, still far below
+  the former 2.5 GB peak. The fp16 tower was slower (220 ms) and loads in
+  onnxruntime 1.23 only with reduced graph optimization; the fp16 text tower did
+  not beat int8 text. Re-tuning the offsets for fp32 changed held-out results
+  inconsistently, so one calibration serves both packs.
+- **Colour profiles (AI-NEW-7).** Embedded non-sRGB profiles (Display P3 from
+  phones, Adobe RGB, CMYK) are converted to sRGB on the temporary pixels. With
+  the fixtures re-encoded as Display P3, reading them as sRGB lowered German tag F1
+  from 0.884 to 0.866 and categorized 8 fewer files; converting restored 0.877 and
+  the original 118 correct categories (two more wrong ones). Video frames arrive
+  from ffmpeg as sRGB already; HDR tone mapping is not evaluated.
 
 Limits: 228 images, mostly well-composed photographs; no selfies, birthdays,
 parties or memes; thumbnails only, so full-resolution decoding (and a JPEG draft

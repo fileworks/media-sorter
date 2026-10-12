@@ -330,3 +330,13 @@ def test_idle_text_tower_is_released_automatically(monkeypatch: pytest.MonkeyPat
 
     assert enc._text_session is None
     assert enc.embed_image(Image.new("RGB", (8, 8))) is not None
+
+
+def test_each_pack_loads_its_own_vision_tower() -> None:
+    from app.services.ai import siglip_encoder as module
+
+    assert module._VISION_FILES["siglip-standard-v2"] == "onnx/vision_model.onnx"
+    assert module._VISION_FILES["siglip-standard-v1"] == "onnx/vision_model_quantized.onnx"
+    assert SiglipOnnxEncoder()._pack_id == "siglip-standard-v2"
+    with pytest.raises(ValueError):
+        SiglipOnnxEncoder(pack_id="unknown-pack")

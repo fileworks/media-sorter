@@ -173,8 +173,23 @@ def _parse_component(name: str, raw_component: object) -> tuple[ModelComponent, 
     )
 
 
+#: The pack each tier installs. v2 carries the full-precision vision tower: on
+#: the held-out fixtures it raised tag F1 to 0.92 in English and German for
+#: about 13 ms more per image (docs/local-ai-evaluation.md).
+CURRENT_PACK = "siglip-standard-v2"
+#: Installed packs a tier may keep using until its current pack is installed,
+#: so an upgrade never switches local AI off.
+FALLBACK_PACKS: tuple[str, ...] = ("siglip-standard-v1",)
+
+
 def pack_for_tier(tier: str) -> str | None:
     # "lite" and "max" are saved-setting aliases for the one shipped model.
     if tier in ("standard", "lite", "max"):
-        return "siglip-standard-v1"
+        return CURRENT_PACK
     return None
+
+
+def candidate_packs_for_tier(tier: str) -> tuple[str, ...]:
+    """The current pack first, then installed predecessors that still work."""
+    current = pack_for_tier(tier)
+    return () if current is None else (current, *FALLBACK_PACKS)

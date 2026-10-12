@@ -22,10 +22,10 @@ for (const theme of ["light", "dark"] as const) {
         await page.route("**/api/ai/models", (route) =>
           route.fulfill({
             json: {
-              required_pack_id: "siglip-standard-v1",
+              required_pack_id: "siglip-standard-v2",
               packs: [
                 {
-                  pack_id: "siglip-standard-v1",
+                  pack_id: "siglip-standard-v2",
                   display_name: "SigLIP 2 Standard",
                   state: "not_installed",
                   total_size: 412538967,

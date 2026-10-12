@@ -105,7 +105,22 @@ export function AiModelManager() {
             <div>
               <h4 className="text-sm font-semibold text-foreground">{pack.display_name}</h4>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {formatBytes(pack.total_size, { locale, decimals: 0, nullPlaceholder: "0 B" })}
+                {pack.state !== "ready" &&
+                pack.download_size !== undefined &&
+                pack.download_size < pack.total_size
+                  ? t("config.ai.downloadPartial", {
+                      download: formatBytes(pack.download_size, {
+                        locale,
+                        decimals: 0,
+                        nullPlaceholder: "0 B",
+                      }),
+                      total: formatBytes(pack.total_size, {
+                        locale,
+                        decimals: 0,
+                        nullPlaceholder: "0 B",
+                      }),
+                    })
+                  : formatBytes(pack.total_size, { locale, decimals: 0, nullPlaceholder: "0 B" })}
                 {" · "}
                 <a
                   href={pack.license_url}
@@ -184,6 +199,9 @@ export function AiModelManager() {
               ? t("config.ai.modelOffline")
               : t("config.ai.modelVerifiedDownload")}
           </p>
+          {pack.state !== "ready" && inventory.active_pack_id != null && (
+            <p className="mt-1 text-xs text-foreground">{t("config.ai.upgradeAvailable")}</p>
+          )}
 
           <div className="mt-3 flex flex-wrap gap-2">
             {!downloading && pack.state !== "ready" && (
@@ -248,7 +266,14 @@ export function RetiredModelPacks() {
   const { t, locale } = useI18n();
   const { inventory, remove } = useAiModels();
   const [confirming, setConfirming] = useState<string | null>(null);
-  const retired = (inventory?.packs ?? []).filter((pack) => pack.retired && pack.state === "ready");
+  // Offer the space back only once the current pack is in use: until then a
+  // retired predecessor is what keeps local AI working.
+  const currentReady = inventory?.packs.some(
+    (pack) => pack.pack_id === inventory.required_pack_id && pack.state === "ready",
+  );
+  const retired = currentReady
+    ? (inventory?.packs ?? []).filter((pack) => pack.retired && pack.state === "ready")
+    : [];
   if (retired.length === 0) return null;
 
   return (

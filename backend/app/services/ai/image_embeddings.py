@@ -27,7 +27,7 @@ from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.filesystem_service import open_image
 
 #: Changes whenever image preprocessing changes, so old vectors are never reused.
-PREPROCESSING_VERSION = "full-decode-exif-upright-v1"
+PREPROCESSING_VERSION = "full-decode-exif-upright-srgb-v2"
 CACHE_BYTES = 64 * 1024 * 1024
 
 CacheKey = tuple[str, int, int, int, str, str]

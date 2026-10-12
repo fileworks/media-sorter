@@ -29,7 +29,9 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
   const requiredModel = inventory?.packs.find(
     (pack) => pack.pack_id === inventory.required_pack_id,
   );
-  const modelMissing = !localOff && requiredModel?.state !== "ready";
+  // A predecessor pack keeps local AI working until the current one is installed.
+  const modelReady = inventory?.active_pack_id != null || requiredModel?.state === "ready";
+  const modelMissing = !localOff && !modelReady;
 
   const categorizeBlocked = config.preserve_subfolders || localOff || modelMissing;
   const categorizeReason = config.preserve_subfolders

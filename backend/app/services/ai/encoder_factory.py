@@ -19,11 +19,12 @@ network access; model objects load their already-verified files only on first us
 from __future__ import annotations
 
 from app.core.config import Config
+from app.core.exceptions import MediaSortException
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.hardware import HardwareProfile, ModelTier
 from app.services.ai.model_installation import AiModelStore
-from app.services.ai.model_manifest import pack_for_tier
+from app.services.ai.model_manifest import candidate_packs_for_tier, pack_for_tier
 
 logger = get_logger(__name__)
 
@@ -44,14 +45,32 @@ def build_encoder(
         logger.info("AI model tier is off; local AI disabled")
         return None
 
-    pack_id = pack_for_tier(tier)
-    if pack_id is None or model_store.component_paths(pack_id, verify=False) is None:
-        logger.info("Local AI model pack is not installed", tier=tier, pack_id=pack_id)
+    pack_id = installed_pack(tier, model_store)
+    if pack_id is None:
+        logger.info("Local AI model pack is not installed", tier=tier, pack_id=pack_for_tier(tier))
         return None
+    if pack_id != pack_for_tier(tier):
+        logger.info(
+            "Using the previous local AI model until the current one is installed",
+            pack_id=pack_id,
+            current=pack_for_tier(tier),
+        )
 
     from app.services.ai.siglip_encoder import SiglipOnnxEncoder
 
     return SiglipOnnxEncoder(
         allow_gpu=getattr(config, "ai_allow_gpu", True),
         model_store=model_store,
+        pack_id=pack_id,
     )
+
+
+def installed_pack(tier: str, model_store: AiModelStore) -> str | None:
+    """The pack local AI uses for *tier*: the current one, else a working predecessor."""
+    for pack_id in candidate_packs_for_tier(tier):
+        try:
+            if model_store.component_paths(pack_id, verify=False):
+                return pack_id
+        except MediaSortException:  # a pack this manifest does not know
+            continue
+    return None

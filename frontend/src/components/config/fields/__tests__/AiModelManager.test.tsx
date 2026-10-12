@@ -113,7 +113,7 @@ describe("AiModelManager", () => {
       effective_tier: "standard",
       required_pack_id: PACK.pack_id,
       packs: [
-        { ...PACK },
+        { ...PACK, state: "ready", installed_size: PACK.total_size },
         {
           ...PACK,
           pack_id: "clip-lite-v1",
@@ -147,5 +147,44 @@ describe("AiModelManager", () => {
     expect(remove).not.toHaveBeenCalled();
     fireEvent.click(within(region).getByRole("button", { name: "Remove model files" }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith("clip-lite-v1"));
+  });
+
+  it("keeps a working predecessor and shows the upgrade with its real download", async () => {
+    vi.spyOn(api, "getAiModels").mockResolvedValue({
+      effective_tier: "standard",
+      required_pack_id: "siglip-standard-v2",
+      active_pack_id: "siglip-standard-v1",
+      packs: [
+        {
+          ...PACK,
+          pack_id: "siglip-standard-v2",
+          total_size: 689_793_386,
+          download_size: 371_992_072,
+        },
+        {
+          ...PACK,
+          pack_id: "siglip-standard-v1",
+          display_name: "SigLIP 2 Standard (previous version)",
+          state: "ready",
+          installed_size: PACK.total_size,
+          retired: true,
+        },
+      ],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider initialLocale="en">
+          <AiModelManager />
+          <RetiredModelPacks />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await view.findByText(/An improved version of the model is available/)).toBeTruthy();
+    expect(view.getByText(/to download \(.* in total\)/)).toBeTruthy();
+    expect(view.queryByText("An older AI model is still installed")).toBeNull();
   });
 });

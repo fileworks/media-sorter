@@ -2,8 +2,17 @@
   "schema_version": 1,
   "default_source": "https://huggingface.co",
   "presentation": {
-    "clip-lite-v1": {"display_name": "CLIP Lite (retired)", "retired": true},
-    "siglip-standard-v1": {"display_name": "SigLIP 2 Standard"}
+    "clip-lite-v1": {
+      "display_name": "CLIP Lite (retired)",
+      "retired": true
+    },
+    "siglip-standard-v1": {
+      "display_name": "SigLIP 2 Standard (previous version)",
+      "retired": true
+    },
+    "siglip-standard-v2": {
+      "display_name": "SigLIP 2 Standard"
+    }
   },
   "packs": {
     "clip-lite-v1": {
@@ -82,6 +91,36 @@
               "path": "onnx/vision_model_quantized.onnx",
               "size": 94737653,
               "sha256": "f2eb8ccfa3dc0b3761d9ea9a39554fe0f2be71b247ad7f68a80720ec88895650"
+            },
+            {
+              "path": "onnx/text_model_quantized.onnx",
+              "size": 283438275,
+              "sha256": "6f59b39d880c413042314b79302b74d0dd93b273caf8fbfdb1eb2df61a7fefd4"
+            },
+            {
+              "path": "tokenizer.json",
+              "size": 34363039,
+              "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322"
+            }
+          ]
+        }
+      }
+    },
+    "siglip-standard-v2": {
+      "model_id": "siglip2-base-patch16-256",
+      "display_name": "SigLIP 2 Standard",
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/blob/d1114256522a37ffa257a0a58017348ab0058db2/README.md",
+      "total_size": 689793386,
+      "components": {
+        "model": {
+          "repository": "onnx-community/siglip2-base-patch16-256-ONNX",
+          "revision": "d1114256522a37ffa257a0a58017348ab0058db2",
+          "files": [
+            {
+              "path": "onnx/vision_model.onnx",
+              "size": 371992072,
+              "sha256": "f5cb16728a704703f05516ded628397e11dbca4de2eb5db04b0c0bcee988aa7a"
             },
             {
               "path": "onnx/text_model_quantized.onnx",

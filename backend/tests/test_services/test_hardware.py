@@ -209,7 +209,30 @@ def test_every_saved_tier_builds_the_same_siglip_encoder(tier: str) -> None:
         result = build_encoder(config, profile, model_store)
 
     assert result is mock_siglip
-    constructor.assert_called_once_with(allow_gpu=True, model_store=model_store)
+    constructor.assert_called_once_with(
+        allow_gpu=True, model_store=model_store, pack_id="siglip-standard-v2"
+    )
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected"),
+    [
+        ({"siglip-standard-v2", "siglip-standard-v1"}, "siglip-standard-v2"),
+        ({"siglip-standard-v1"}, "siglip-standard-v1"),
+        (set(), None),
+    ],
+)
+def test_an_upgrade_never_switches_local_ai_off(installed: set[str], expected: str | None) -> None:
+    """The previous pack keeps working until the current one is installed."""
+    from app.services.ai.encoder_factory import installed_pack
+
+    model_store = MagicMock()
+    model_store.component_paths.side_effect = lambda pack_id, verify: (
+        {"model": MagicMock()} if pack_id in installed else None
+    )
+
+    assert installed_pack("standard", model_store) == expected
+    assert installed_pack("off", model_store) is None
 
 
 def test_build_encoder_standard_does_not_silently_fall_back_to_another_pack() -> None:

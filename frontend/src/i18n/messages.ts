@@ -647,6 +647,9 @@ export const en = {
   "config.ai.modelRemove": "Remove files",
   "config.ai.modelConfirmRemove": "Remove model files",
   "config.ai.retired.title": "An older AI model is still installed",
+  "config.ai.upgradeAvailable":
+    "An improved version of the model is available. The installed one keeps working until you install it.",
+  "config.ai.downloadPartial": "{download} to download ({total} in total)",
   "config.ai.retired.detail": "{name} ({size}) is no longer used. Remove it to free the space.",
   "config.slider.lenient": "More lenient (85%)",
   "config.slider.strict": "Stricter (100%)",
@@ -2336,6 +2339,9 @@ export const de: Record<MessageKey, string> = {
   "config.ai.modelRemove": "Dateien entfernen",
   "config.ai.modelConfirmRemove": "Modelldateien entfernen",
   "config.ai.retired.title": "Ein älteres KI-Modell ist noch installiert",
+  "config.ai.upgradeAvailable":
+    "Eine verbesserte Version des Modells ist verfügbar. Das installierte Modell funktioniert weiter, bis du sie installierst.",
+  "config.ai.downloadPartial": "{download} zum Herunterladen ({total} insgesamt)",
   "config.ai.retired.detail":
     "{name} ({size}) wird nicht mehr verwendet. Entferne es, um den Speicher freizugeben.",
   "config.slider.lenient": "Großzügiger (85 %)",
