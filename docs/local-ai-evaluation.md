@@ -100,25 +100,37 @@ fails when the data was not collected.
 ## Held-out evaluation — 2026-10-12
 
 `scripts/evaluate_local_ai.py` scores the shipped tagger and categorizer, and
-alternatives, against `scripts/ai-eval/commons-manifest.json`: 228 Wikimedia
+alternatives, against `scripts/ai-eval/commons-manifest.json`: 227 Wikimedia
 Commons thumbnails (640 px) under free licences, each pinned by SHA-256 with its
 licence, author and source page. Images are downloaded on demand into a cache
 outside the repository and never committed. Labels were assigned by visual review:
 `labels` must be found (alternatives such as `sunset|sunrise`), `acceptable` may
 be emitted, and any other vocabulary label counts as a false tag. Ambiguous,
-duplicate and sensitive candidates were excluded. Parameters were chosen on the
-even-numbered half only; the odd half is held out. Run it with the backend venv
+duplicate and sensitive candidates were excluded. Each fixture carries a frozen
+`split`: parameters were chosen on the `calibration` split only, and the
+`held_out` split (113 images) is scored separately. The split never depends on
+which downloads succeeded, no image appears twice (one Commons file listed in both
+halves was removed from the held-out half on 2026-10-12), and a run with a missing
+or changed fixture refuses to score unless `--allow-incomplete` marks the report
+incomplete. Run it with the backend venv
 and `--model-dir` pointing at an installed pack.
 
-Results on the held-out half, CPU. "Before" is the int8 v1 pack with the
-earlier scoring; "Shipped" is pack v2 with the scoring below:
+Results on the held-out split, CPU, re-run on 2026-10-12 after the de-duplication.
+"Before" is the earlier recorded measurement with the int8 v1 pack and the
+earlier scoring; the current script's "before" rows reuse the loaded pack's
+embeddings, so they do not reproduce that column. "Shipped" is pack v2 with the
+scoring below. Categorization reports two populations: *expected coverage* counts
+the 80 held-out images that have an expected category; *assigned share* counts
+all 113. Accuracy covers every assignment, including ones where no category was
+expected.
 
 | | Before | Shipped |
 |---|---|---|
-| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.941 / 0.902 / 0.921 |
-| Tagging, German | 0.949 / 0.666 / 0.783 | 0.924 / 0.921 / 0.923 |
-| Categorization coverage, English / German | 4.9 % / 0 % | 63 % / 63 % |
-| Categorization accuracy when assigned | 100 % (4 files) / n/a | 97.1 % / 97.1 % |
+| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.940 / 0.900 / 0.920 |
+| Tagging, German | 0.949 / 0.666 / 0.783 | 0.923 / 0.919 / 0.921 |
+| Categorization expected coverage, English / German | 4.9 % / 0 % | 62.5 % / 62.5 % (of 80) |
+| Categorization assigned share, English / German | not recorded | 59.3 % / 59.3 % (67 of 113) |
+| Categorization accuracy when assigned | 100 % (4 files) / n/a | 97.0 % / 97.0 % (65 of 67) |
 
 What changed, and why:
 
@@ -145,7 +157,8 @@ What changed, and why:
 - **Full-precision vision tower (AI-13).** Same pinned upstream revision, same
   calibration. With the int8 v1 pack held-out F1 was 0.865 (English) and 0.886
   (German); with the fp32 vision tower 0.921 and 0.923, and categorization
-  accuracy rose from 93.9 % to 97.1 %. It costs 13 ms more per image on CPU
+  accuracy rose from 93.9 % to 97.1 % (measured before the 2026-10-12
+  de-duplication; the re-run gives 0.920, 0.921 and 97.0 %). It costs 13 ms more per image on CPU
   (181 ms against 168 ms here) and 257 MB more resident memory, still far below
   the former 2.5 GB peak. The fp16 tower was slower (220 ms) and loads in
   onnxruntime 1.23 only with reduced graph optimization; the fp16 text tower did
@@ -158,7 +171,7 @@ What changed, and why:
   the original 118 correct categories (two more wrong ones). Video frames arrive
   from ffmpeg as sRGB already; HDR tone mapping is not evaluated.
 
-Limits: 228 images, mostly well-composed photographs; no selfies, birthdays,
+Limits: 227 images, mostly well-composed photographs; no selfies, birthdays,
 parties or memes; thumbnails only, so full-resolution decoding (and a JPEG draft
 decode) is not measured here. The numbers support these defaults; they do not
 guarantee accuracy on a personal library, which Review exists to check.

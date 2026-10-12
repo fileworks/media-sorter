@@ -265,9 +265,20 @@ class CategoryScore:
                 self.assigned_unexpected += 1
 
     def row(self) -> dict[str, Any]:
+        """Two populations, each with its denominator (F1-007).
+
+        ``expected_coverage`` counts only images that have an expected category;
+        ``assigned_share`` counts every evaluated image. ``accuracy_when_assigned``
+        covers every assignment, including on images where none was expected.
+        """
         assigned = self.correct + self.wrong
+        covered = self.expected - self.abstained_expected
         return {
-            "coverage": round((self.expected - self.abstained_expected) / max(1, self.expected), 3),
+            "images": self.images,
+            "expected_images": self.expected,
+            "expected_coverage": round(covered / max(1, self.expected), 3),
+            "assigned": assigned,
+            "assigned_share": round(assigned / max(1, self.images), 3),
             "accuracy_when_assigned": round(self.correct / assigned, 3) if assigned else None,
             "correct": self.correct,
             "wrong": self.wrong,
@@ -404,7 +415,14 @@ def _evaluate_locale(
     report["categorization"][locale] = category_results
 
 
-def evaluate(model_dir: Path, cache: Path, json_out: Path | None) -> int:
+def split(images: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
+    """The manifest's frozen split; never derived from which downloads succeeded."""
+    return [image for image in images if image["split"] == name]
+
+
+def evaluate(
+    model_dir: Path, cache: Path, json_out: Path | None, *, allow_incomplete: bool = False
+) -> int:
     from app.services.ai.model_installation import AiModelStore
     from app.services.ai.siglip_encoder import SiglipOnnxEncoder
     from app.services.filesystem_service import open_image
@@ -429,10 +447,20 @@ def evaluate(model_dir: Path, cache: Path, json_out: Path | None) -> int:
         embeddings[image["id"]] = vec / (np.linalg.norm(vec) + 1e-8)
     embed_seconds = time.perf_counter() - started
 
-    # Parameters were chosen on the even-numbered half; the odd half is held out.
-    held_out = [image for index, image in enumerate(images) if index % 2 == 1]
+    if problems and not allow_incomplete:
+        # A missing fixture changes what each half contains; publishing those
+        # numbers as the benchmark would be wrong.
+        print("Incomplete fixture set; refusing to score:", file=sys.stderr)
+        for problem in problems:
+            print(f"- {problem}", file=sys.stderr)
+        return 3
+
+    # Parameters were chosen on the calibration split only.
+    held_out = split(images, "held_out")
     report: dict[str, Any] = {
         "images": len(embeddings),
+        "held_out_images": sum(1 for image in held_out if image["id"] in embeddings),
+        "complete": not problems,
         "problems": problems,
         "embed_seconds": round(embed_seconds, 1),
         "tagging": {},
@@ -517,8 +545,9 @@ def _markdown(report: dict[str, Any]) -> str:
         lines += [
             f"### Categorization — {locale}",
             "",
-            "| Variant | Coverage | Accuracy when assigned | Correct | Wrong | Abstained |",
-            "|---|---|---|---|---|---|",
+            "| Variant | Expected coverage | Assigned share | Accuracy when assigned "
+            "| Correct | Wrong | Abstained |",
+            "|---|---|---|---|---|---|---|",
         ]
         fixed = [item for item in results.items() if item[0].startswith(("shipped", "before"))]
         ranked = sorted(
@@ -527,7 +556,9 @@ def _markdown(report: dict[str, Any]) -> str:
         )
         for name, row in fixed + ranked[:6]:
             lines.append(
-                f"| {name} | {row['coverage']} | {row['accuracy_when_assigned']} | "
+                f"| {name} | {row['expected_coverage']} ({row['expected_images']} images) | "
+                f"{row['assigned_share']} ({row['assigned']}/{row['images']}) | "
+                f"{row['accuracy_when_assigned']} | "
                 f"{row['correct']} | {row['wrong']} | {row['abstained_where_expected']} |"
             )
         lines.append("")
@@ -547,10 +578,15 @@ def main() -> int:
         / "ai-eval",
     )
     parser.add_argument("--json", type=Path, default=None)
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help="score even when fixtures failed; the report is marked incomplete",
+    )
     args = parser.parse_args()
     if args.model_dir is None:
         parser.error("--model-dir (or MEDIASORT_MODEL_DIR) is required")
-    return evaluate(args.model_dir, args.cache, args.json)
+    return evaluate(args.model_dir, args.cache, args.json, allow_incomplete=args.allow_incomplete)
 
 
 if __name__ == "__main__":
