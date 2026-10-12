@@ -139,3 +139,29 @@ def test_a_hanging_root_does_not_hold_up_the_listing() -> None:
     assert elapsed < 1.0
     assert results[fast] == (True, True)
     assert results[slow] is None
+
+
+def test_repeated_listings_reuse_the_blocked_probe_of_an_offline_root() -> None:
+    """F1-008: asking again must not pile up one blocked thread per request."""
+    import threading
+
+    from app.api.routes.fs import _probe_concurrently
+
+    release = threading.Event()
+    calls: list[Path] = []
+    offline = Path("offline")
+
+    def probe(path: Path) -> tuple[bool, bool]:
+        calls.append(path)
+        release.wait(5)
+        return True, True
+
+    try:
+        for _ in range(5):
+            assert _probe_concurrently([offline], probe, budget_seconds=0.05)[offline] is None
+        assert len(calls) == 1
+    finally:
+        release.set()
+
+    # Once the drive answers, the next listing sees it and probes afresh later.
+    assert _probe_concurrently([offline], probe, budget_seconds=2.0)[offline] == (True, True)

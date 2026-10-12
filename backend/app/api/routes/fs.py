@@ -69,6 +69,25 @@ def _probe_root(path: Path) -> _Probe:
     return exists, exists and os.access(path, os.R_OK)
 
 
+class _InFlight:
+    """One probe thread and the answer it leaves behind."""
+
+    def __init__(self, path: Path, probe: Callable[[Path], _Probe]) -> None:
+        self.result: _Probe | None = None
+        self.thread = threading.Thread(target=self._run, args=(path, probe), daemon=True)
+
+    def _run(self, path: Path, probe: Callable[[Path], _Probe]) -> None:
+        with contextlib.suppress(OSError):
+            self.result = probe(path)
+
+
+#: Probes still running from earlier requests, at most one per root. A drive
+#: that stays offline therefore holds one blocked thread, however often the
+#: browser asks again.
+_in_flight: dict[tuple[Callable[[Path], _Probe], Path], _InFlight] = {}
+_in_flight_lock = threading.Lock()
+
+
 def _probe_concurrently(
     paths: list[Path],
     probe: Callable[[Path], _Probe] = _probe_root,
@@ -79,20 +98,28 @@ def _probe_concurrently(
 
     A probe that has not answered in time maps to ``None``. Its daemon thread is
     left to finish on its own: Python cannot cancel a blocked filesystem call,
-    but it no longer holds up the listing.
+    but it no longer holds up the listing. A later request waits on that same
+    probe rather than starting another one for the root.
     """
-    results: dict[Path, _Probe | None] = dict.fromkeys(paths)
-
-    def run(path: Path) -> None:
-        with contextlib.suppress(OSError):
-            results[path] = probe(path)
-
-    threads = [threading.Thread(target=run, args=(path,), daemon=True) for path in paths]
-    for thread in threads:
-        thread.start()
+    probes: dict[Path, _InFlight] = {}
+    with _in_flight_lock:
+        for path in dict.fromkeys(paths):
+            current = _in_flight.get((probe, path))
+            if current is None or not current.thread.is_alive():
+                current = _InFlight(path, probe)
+                _in_flight[(probe, path)] = current
+                current.thread.start()
+            probes[path] = current
     deadline = time.monotonic() + budget_seconds
-    for thread in threads:
-        thread.join(max(0.0, deadline - time.monotonic()))
+    for current in probes.values():
+        current.thread.join(max(0.0, deadline - time.monotonic()))
+    results: dict[Path, _Probe | None] = {}
+    with _in_flight_lock:
+        for path, current in probes.items():
+            finished = not current.thread.is_alive()
+            results[path] = current.result if finished else None
+            if finished and _in_flight.get((probe, path)) is current:
+                del _in_flight[(probe, path)]
     return results
 
 
