@@ -106,6 +106,18 @@ def planned_category(
     )
 
 
+def reviewed_ai_tags(execution: OperationExecution | None, source: Path) -> list[str] | None:
+    """The content tags Review approved for *source*; ``None`` without a plan entry.
+
+    A reviewed entry without tags (tagging off for it, or an older plan) means
+    no AI tags: a run writes only what Review showed (AI-05).
+    """
+    action = execution.planned_action(source) if execution is not None else None
+    if action is None:
+        return None
+    return list(action.ai_tags or ())
+
+
 class SortingSupportMixin:
     """Placement, quarantine, destination-planning, and persistence support."""
 

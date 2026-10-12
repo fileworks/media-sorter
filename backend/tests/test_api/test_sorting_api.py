@@ -174,7 +174,7 @@ def test_review_snapshot_and_decisions_recover_after_backend_restart(tmp_path: P
 
     assert recovered.status_code == 200
     assert recovered.json()["preview_result"] == preview
-    assert recovered.json()["review_state"] == review_state
+    assert recovered.json()["review_state"] == {**review_state, "tag_edits": []}
 
 
 def test_review_state_rejects_ambiguous_duplicate_decisions(tmp_path: Path) -> None:
@@ -573,3 +573,36 @@ def test_impact_describes_the_directory_scoped_preview(tmp_path: Path) -> None:
     assert report.status_code == 200
     assert report.json()["excluded_roots"] == [str(skipped)]
     assert not any(path.name == "2024-01-03-camera.jpg" for path in destination.rglob("*"))
+
+
+def test_tag_edits_for_a_file_the_plan_does_not_tag_are_refused(tmp_path: Path) -> None:
+    """AI-05: a run carries Review's tag edits only for files the plan proposed tags for."""
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    photo = source / "2024-01-02-a.jpg"
+    Image.new("RGB", (16, 16), "navy").save(photo)
+    app = AppFactory.create(
+        config=Config(
+            source_directory=str(source),
+            target_directory=str(destination),
+            copy_instead_of_move=True,
+        )
+    )
+
+    with TestClient(app) as local:
+        preview = local.post("/api/preview").json()
+        assert preview["items"][0]["ai_tags"] is None
+        started = local.post(
+            "/api/sorting/start",
+            json={
+                "expected_config_fingerprint": preview["config_fingerprint"],
+                "plan_id": preview["plan_id"],
+                "reviewed_tags": [{"source": str(photo), "tags": ["beach"]}],
+            },
+        )
+
+    assert started.status_code == 409
+    assert started.json()["details"]["reason"] == "invalid_reviewed_tags"
+    assert not any(destination.rglob("*.jpg"))

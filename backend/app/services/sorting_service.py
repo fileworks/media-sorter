@@ -76,6 +76,7 @@ from app.services.sorting_support import (
     SortingSupportMixin,
     operation_outcome,
     planned_category,
+    reviewed_ai_tags,
     root_identifier,
 )
 from app.services.transfer_failures import (
@@ -1453,7 +1454,10 @@ class SortingService(SortingSupportMixin):
                 # them into the file itself (EXIF / video metadata / XMP sidecar).
                 # Runs before the utime sync (a metadata rewrite changes mtime)
                 # and before validation (so a bad write is still caught).
-                if config.ai_tagging_enabled and ai is not None:
+                reviewed_tags = reviewed_ai_tags(execution, file_path)
+                if reviewed_tags is not None:
+                    record["tags"] = _merge_tags([*record["tags"], *reviewed_tags])
+                elif config.ai_tagging_enabled and ai is not None:
                     try:
                         ai_tags = ai.tag_file(dest, stop_check(cancel_signal))
                         if ai_tags:

@@ -60,7 +60,8 @@ and are still tested; each file says so at the top.
 
 Review uses `GET /api/media/info` for the open inspector and
 `POST /api/review/outcomes` for complete plan provenance. Keeper choices stay in
-client run state and are sent as `reviewed_sets` to `POST /api/sorting/start`.
+client run state and are sent as `reviewed_sets` to `POST /api/sorting/start`;
+content-tag edits travel the same way as `reviewed_tags`.
 The older server-side review-decision and policy endpoints remain tested for API
 compatibility but are not used by the desktop interface.
 

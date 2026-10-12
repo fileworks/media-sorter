@@ -1489,6 +1489,15 @@ export const en = {
   "review.detail.categoryRejected.background":
     "No category folder was produced: the best category fitted no better than a generic photo.",
   "review.detail.noRouteRule": "No route rule matched this file.",
+  "review.tags.title": "Content tags",
+  "review.tags.help":
+    "Proposed by the local model and not guaranteed to be right. The run writes exactly these tags; remove or add any before you start.",
+  "review.tags.none": "No content tags will be written for this file.",
+  "review.tags.remove": "Remove tag {tag}",
+  "review.tags.add": "Add a content tag",
+  "review.tags.placeholder": "Add a tag",
+  "review.tags.addButton": "Add",
+  "review.tags.reset": "Restore proposed tags",
   "review.detail.routeWinner": "Rule “{name}” won and added “{folder}”.",
   "review.detail.routeLost": "Rule “{name}” also matched but lost at priority {priority}.",
   "review.detail.tagRules": "Matching tag rules: {names}.",
@@ -3203,6 +3212,15 @@ export const de: Record<MessageKey, string> = {
   "review.detail.categoryRejected.background":
     "Kein Kategorieordner entstand: Die beste Kategorie passte nicht besser als ein allgemeines Foto.",
   "review.detail.noRouteRule": "Keine Weiterleitungsregel passte auf diese Datei.",
+  "review.tags.title": "Inhalts-Tags",
+  "review.tags.help":
+    "Vom lokalen Modell vorgeschlagen und nicht garantiert richtig. Der Lauf schreibt genau diese Tags; entferne oder ergänze sie vor dem Start.",
+  "review.tags.none": "Für diese Datei werden keine Inhalts-Tags geschrieben.",
+  "review.tags.remove": "Tag {tag} entfernen",
+  "review.tags.add": "Inhalts-Tag hinzufügen",
+  "review.tags.placeholder": "Tag hinzufügen",
+  "review.tags.addButton": "Hinzufügen",
+  "review.tags.reset": "Vorgeschlagene Tags wiederherstellen",
   "review.detail.routeWinner": "Die Regel „{name}“ gewann und ergänzte „{folder}“.",
   "review.detail.routeLost":
     "Die Regel „{name}“ passte ebenfalls, verlor aber mit Priorität {priority}.",

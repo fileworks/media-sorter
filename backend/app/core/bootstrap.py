@@ -175,6 +175,8 @@ class ServiceContainer:
             self._ai_tagging_service = fresh_ai
             if self._sorting_service is not None:
                 self._sorting_service._ai = fresh_ai
+            if self._preview_service is not None:
+                self._preview_service._ai = fresh_ai
 
     def close(self) -> None:
         """Release the lazy services that own temporary or persistent resources."""
@@ -417,6 +419,7 @@ class ServiceContainer:
                 rule_engine_service=self.rule_engine_service,
                 duplicate_service=self.duplicate_service,
                 category_classifier_service=self.category_classifier_service,
+                ai_tagging_service=self.ai_tagging_service,
             )
             self._logger.debug("Initialized PreviewService")
         return self._preview_service

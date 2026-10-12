@@ -117,6 +117,19 @@ describe("task transport", () => {
     );
   });
 
+  it("sends Review's tag edits with the run", async () => {
+    mocks.post.mockResolvedValue({ data: { task_id: "tagged" } });
+    const client = new MediaSorterApiClient();
+
+    await client.startSort(false, undefined, "fingerprint", "plan", {
+      reviewedTags: [{ source: "/in/a.jpg", tags: ["Lake"] }],
+    });
+
+    expect(mocks.post.mock.calls[mocks.post.mock.calls.length - 1][1].reviewed_tags).toEqual([
+      { source: "/in/a.jpg", tags: ["Lake"] },
+    ]);
+  });
+
   it("does not retry a terminal validation response", async () => {
     const validation = new AxiosError("invalid", "ERR_BAD_REQUEST", undefined, undefined, {
       status: 422,

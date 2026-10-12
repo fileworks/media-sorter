@@ -506,6 +506,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
     void sorting.startSorting(false, preview.result?.config_fingerprint, preview.result?.plan_id, {
       excludedRoots: excludedForRun,
       reviewedSets: runDecisions.reviewedSets,
+      reviewedTags: runDecisions.reviewedTags,
     });
   }, [
     excludedForRun,
@@ -547,6 +548,7 @@ export default function MainPage({ onReady }: { onReady?: () => void }) {
         current.persistenceState === decisions.persistenceState &&
         current.persistenceError === decisions.persistenceError &&
         current.reviewState === decisions.reviewState &&
+        current.reviewedTags === decisions.reviewedTags &&
         sameReviewedSets(current.reviewedSets, decisions.reviewedSets)
           ? current
           : { ...decisions, planId },

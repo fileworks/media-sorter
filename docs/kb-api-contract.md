@@ -53,6 +53,20 @@ each one (with its companions) in place as `kept_in_place` with
 `kept_reason: "duplicate_check_unresolved"`. They never block Execute and never fail
 as unplanned actions; a later preview can sort them.
 
+## Reviewed content tags
+
+When AI tagging is enabled, preview items carry `ai_tags`: the tags the local model
+proposes for `sort` and `duplicate` items, or `null` when tagging was off for the
+file. The frozen plan stores them on each primary action. `POST /sorting/start`
+accepts `reviewed_tags: [{ source, tags[] }]`, which replaces the proposal for each
+listed file in that run only; tags are trimmed and case-insensitively de-duplicated,
+at most 50 per file and 100 characters each. A file the plan has no tags for, a
+file outside the plan or a repeated file returns 409
+`details.reason: "invalid_reviewed_tags"` before anything runs. A run with a plan
+writes exactly the reviewed tags and never runs the model; an empty list writes no
+AI tags. `PUT /sorting/plans/{plan_id}/review-state` persists the edits as
+`tag_edits` so they survive a restart; states saved earlier read as `[]`.
+
 ## Reviewed placements
 
 `POST /sorting/placements` accepts the same `plan_id`, `excluded_roots` and

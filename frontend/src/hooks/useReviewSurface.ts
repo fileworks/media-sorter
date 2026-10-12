@@ -16,6 +16,7 @@ import {
   type KeeperPolicyId,
   type PlanReviewState,
   type ReviewDecisionState,
+  type ReviewedTags,
 } from "@/services/api";
 import type { PreviewResult } from "@/types/api";
 
@@ -57,6 +58,29 @@ export type ReviewMode = "browse" | "resolve";
 function stored<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
   const value = readStored(key);
   return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+/**
+ * A saved state in the exact key order and shape this hook produces, so a state
+ * saved before a field existed is not mistaken for an unsaved change.
+ */
+function canonicalReviewState(state: PlanReviewState): PlanReviewState {
+  return {
+    schema_version: state.schema_version,
+    config_fingerprint: state.config_fingerprint,
+    decisions: state.decisions,
+    selected_set_ids: state.selected_set_ids,
+    mode: state.mode,
+    queue_set_id: state.queue_set_id,
+    detail_path: state.detail_path,
+    viewer_path: state.viewer_path,
+    search: state.search,
+    tree_path: state.tree_path,
+    tag_edits: state.tag_edits ?? [],
+    view: state.view,
+    sort: state.sort,
+    keep_policy: state.keep_policy,
+  };
 }
 
 /**
@@ -117,11 +141,35 @@ export function useReviewSurface(
   const [keepPolicy, setKeepPolicy] = useState<KeeperPolicyId>(
     initialState?.keep_policy ?? defaultKeepPolicy,
   );
+  /** Review's content-tag edits by source; files not listed keep the proposal. */
+  const [tagEdits, setTagEdits] = useState<Map<string, string[]>>(
+    () => new Map((initialState?.tag_edits ?? []).map((edit) => [edit.source, edit.tags])),
+  );
+  const setAiTags = useCallback((source: string, tags: string[]) => {
+    setTagEdits((current) => new Map(current).set(source, tags));
+  }, []);
+  const resetAiTags = useCallback((source: string) => {
+    setTagEdits((current) => {
+      if (!current.has(source)) return current;
+      const next = new Map(current);
+      next.delete(source);
+      return next;
+    });
+  }, []);
+  const reviewedTags = useMemo<ReviewedTags[]>(
+    () =>
+      [...tagEdits.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([source, tags]) => ({ source, tags })),
+    [tagEdits],
+  );
   const [persistenceState, setPersistenceState] = useState<ReviewPersistenceState>("saving");
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const desiredStateRef = useRef<{ fingerprint: string; state: PlanReviewState } | null>(null);
   const savedFingerprintRef = useRef<string | null>(
-    initialState === null || !recoveredStateSaved ? null : JSON.stringify(initialState),
+    initialState === null || !recoveredStateSaved
+      ? null
+      : JSON.stringify(canonicalReviewState(initialState)),
   );
   const savingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -169,11 +217,13 @@ export function useReviewSurface(
       viewer_path: viewerPath,
       search,
       tree_path: treePath,
+      tag_edits: reviewedTags,
       view,
       sort,
       keep_policy: keepPolicy,
     }),
     [
+      reviewedTags,
       decisions,
       detailPath,
       keepPolicy,
@@ -535,6 +585,10 @@ export function useReviewSurface(
     clearDecisions,
     acceptAllProposals,
     reviewedSets,
+    tagEdits,
+    setAiTags,
+    resetAiTags,
+    reviewedTags,
     selectedSetIds,
     toggleSetSelection,
     selectSets,

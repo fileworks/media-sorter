@@ -173,6 +173,12 @@ export type TransferMode = "copy" | "move";
  * promoting a copy also demotes whichever copy the plan was going to place —
  * two actions, not one.
  */
+/** The content tags Review settled on for one file. */
+export interface ReviewedTags {
+  source: string;
+  tags: string[];
+}
+
 export interface ReviewedSet {
   keep: string;
   demote: string[];
@@ -694,6 +700,11 @@ export interface PreviewItem {
   extracted_date: string | null;
   metadata_source: string;
   tags: string[];
+  /**
+   * Content tags the local model proposed; what a run writes unless Review
+   * edits them. Null when tagging was off for this file.
+   */
+  ai_tags?: string[] | null;
   /** Predicted Smart Categorization folder, or null (→ _uncategorized). */
   category?: string | null;
   /**
@@ -984,6 +995,8 @@ export interface PlanReviewState {
   viewer_path: string | null;
   search: string;
   tree_path: string | null;
+  /** Content-tag edits; absent in states saved before tags were reviewable. */
+  tag_edits?: ReviewedTags[];
   view: "list" | "grid";
   sort: "name" | "size" | "date";
   keep_policy: KeeperPolicyId;
@@ -1644,7 +1657,11 @@ export class MediaSorterApiClient {
     idempotencyKey?: string,
     expectedConfigFingerprint?: string,
     planId?: string,
-    decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
+    decisions: {
+      excludedRoots?: string[];
+      reviewedSets?: ReviewedSet[];
+      reviewedTags?: ReviewedTags[];
+    } = {},
   ): Promise<string> {
     return this.startTask(
       "/api/sorting/start",
@@ -1654,6 +1671,7 @@ export class MediaSorterApiClient {
         plan_id: planId,
         excluded_roots: decisions.excludedRoots ?? [],
         reviewed_sets: decisions.reviewedSets ?? [],
+        reviewed_tags: decisions.reviewedTags ?? [],
       },
       idempotencyKey,
     );

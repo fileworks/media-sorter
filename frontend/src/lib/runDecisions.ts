@@ -1,8 +1,10 @@
-import type { PlanReviewState, ReviewedSet } from "@/services/api";
+import type { PlanReviewState, ReviewedSet, ReviewedTags } from "@/services/api";
 
 export interface RunDecisions {
   planId: string | null;
   reviewedSets: ReviewedSet[];
+  /** Content-tag edits the run carries; files not listed keep the proposal. */
+  reviewedTags: ReviewedTags[];
   outstandingSets: number | null;
   proposedSets: number;
   undecidedSets: number;
@@ -28,6 +30,7 @@ export function sameReviewedSets(left: ReviewedSet[], right: ReviewedSet[]): boo
 export const EMPTY_RUN_DECISIONS: RunDecisions = {
   planId: null,
   reviewedSets: [],
+  reviewedTags: [],
   outstandingSets: null,
   proposedSets: 0,
   undecidedSets: 0,

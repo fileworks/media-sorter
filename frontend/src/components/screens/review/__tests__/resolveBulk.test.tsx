@@ -34,6 +34,7 @@ function setEntry(
       dateSource: "none",
       category: null,
       tags: [],
+      aiTags: null,
       unitId: null,
       unitPrimary: true,
       companionCount: 0,

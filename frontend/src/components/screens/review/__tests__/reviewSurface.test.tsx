@@ -137,6 +137,7 @@ function group(id: string, members: MemberSpec[], kind: "exact" | "similar" = "e
 
 let decisions: {
   reviewedSets: { keep: string; demote: string[]; keep_all?: boolean }[];
+  reviewedTags?: { source: string; tags: string[] }[];
   outstandingSets: number;
   proposedSets: number;
   undecidedSets: number;
@@ -1645,6 +1646,47 @@ describe("selecting a file and opening a file are different gestures", () => {
 
     fireEvent.click(next);
     expect(within(await screen.findByRole("dialog")).getByText("two.jpg")).toBeTruthy();
+  });
+
+  it("lets Review edit the content tags a run will write, and carries the edit with the run", async () => {
+    vi.spyOn(api, "getMediaInfo").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api, "reviewOutcomes").mockReturnValue(new Promise(() => {}));
+    renderReview(
+      previewResult(
+        item({ source: "/in/one.jpg", destination: "/out/one.jpg", ai_tags: ["beach", "sea"] }),
+      ),
+    );
+    await screen.findByText("one.jpg");
+    fireEvent.click(screen.getByText("one.jpg"));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: en("review.tags.remove", { tag: "beach" }) }),
+    );
+    fireEvent.change(within(dialog).getByRole("textbox", { name: en("review.tags.add") }), {
+      target: { value: "  Lake  " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: en("review.tags.addButton") }));
+
+    await waitFor(() =>
+      expect(decisions.reviewedTags).toEqual([{ source: "/in/one.jpg", tags: ["sea", "Lake"] }]),
+    );
+    expect(decisions.reviewState?.tag_edits).toEqual(decisions.reviewedTags);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: en("review.tags.reset") }));
+    await waitFor(() => expect(decisions.reviewedTags).toEqual([]));
+    expect(within(dialog).getByText("beach")).toBeTruthy();
+  });
+
+  it("offers no tag editor for a file the plan does not tag", async () => {
+    vi.spyOn(api, "getMediaInfo").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api, "reviewOutcomes").mockReturnValue(new Promise(() => {}));
+    renderReview(previewResult(item({ source: "/in/one.jpg", destination: "/out/one.jpg" })));
+    await screen.findByText("one.jpg");
+    fireEvent.click(screen.getByText("one.jpg"));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).queryByRole("textbox", { name: en("review.tags.add") })).toBeNull();
   });
 
   it("states the independent file-info and provenance loading states", async () => {

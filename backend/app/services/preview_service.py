@@ -30,6 +30,7 @@ from app.core.sort_plan import (
     FrozenSortPlan,
     build_frozen_sort_plan,
 )
+from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
 from app.services.ai.video_sampling import InferenceCancelled, StopCheck, stop_check
 from app.services.catalog_indexing import index_library_roots
@@ -149,8 +150,10 @@ class PreviewService:
         duplicate_service: DuplicateService | None = None,
         category_classifier_service: CategoryClassifierService | None = None,
         plan_store: PlanStore | None = None,
+        ai_tagging_service: AITaggingService | None = None,
     ) -> None:
         self._fs = filesystem_service
+        self._ai = ai_tagging_service
         self._extraction = extraction_service
         self._rules = rule_engine_service
         self._dups = duplicate_service
@@ -374,6 +377,9 @@ class PreviewService:
             if isinstance(self._classifier, CategoryClassifierService)
             else self._classifier
         )
+        operation_ai = (
+            self._ai.for_operation(config) if isinstance(self._ai, AITaggingService) else self._ai
+        )
 
         if task is not None and task.cancel_token.is_set():
             return {
@@ -412,6 +418,7 @@ class PreviewService:
                     True,
                     task.cancel_token if task is not None else None,
                     planned_items,
+                    operation_ai,
                 )
             except InferenceCancelled:
                 break
@@ -619,6 +626,7 @@ class PreviewService:
         use_operation_services: bool = False,
         cancel_token: Any | None = None,
         planned_items: dict[str, dict[str, Any]] | None = None,
+        operation_ai: AITaggingService | None = None,
     ) -> dict[str, Any]:
         """Predict the outcome for a single file.
 
@@ -891,9 +899,21 @@ class PreviewService:
             status = "keep_in_place"
             dest = None
 
+        # Content tags are proposed here so Review shows exactly what a run
+        # would write (AI-05). Duplicates get them too: Review may keep one.
+        ai_tags: list[str] | None = None
+        if (
+            config.ai_tagging_enabled
+            and operation_ai is not None
+            and dest is not None
+            and status in {"sort", "duplicate"}
+        ):
+            ai_tags = operation_ai.tag_file(file_path, stop_check(cancel_token))
+
         item: dict[str, Any] = {
             "source": str(file_path),
             "destination": dest,
+            "ai_tags": ai_tags,
             "extracted_date": str(extracted_date) if extracted_date else None,
             "metadata_source": source,
             "tags": tags,
