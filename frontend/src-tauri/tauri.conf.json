@@ -20,6 +20,8 @@
         "title": "MediaSorter",
         "width": 1100,
         "height": 800,
+        "minWidth": 640,
+        "minHeight": 480,
         "resizable": true
       }
     ]

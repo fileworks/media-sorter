@@ -371,3 +371,37 @@ for (const locked of [false, true]) {
     });
   }
 }
+
+// MS-13: the desktop window's minimum size is the smallest size every stage is
+// checked to fit. Below it nothing is promised, so the shell refuses to shrink.
+for (const locale of ["en", "de"] as const) {
+  test(`every stage fits the minimum window size: ${locale}, 640x480`, async ({ page }) => {
+    await stubBackend(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await openSurface(page, "configure");
+    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption(locale);
+    await expect(page.locator("html")).toHaveAttribute("lang", locale);
+
+    // The window can be shrunk on any stage, so each is reached wide and then
+    // narrowed (below 768 px the stepper intentionally shows only the current stage).
+    const visited: string[] = [];
+    for (const stage of ["sources", "configure", "review", "execute"]) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const step = page.locator(`[data-stage-id="${stage}"]`);
+      if (!(await step.isEnabled())) continue;
+      await step.click();
+      visited.push(stage);
+      await page.setViewportSize({ width: 640, height: 480 });
+      const overflow = await page.locator("main").evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `${stage} overflows horizontally`).toBeLessThanOrEqual(1);
+      const pageOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(pageOverflow, `${stage} scrolls the page sideways`).toBeLessThanOrEqual(1);
+      const mainHeight = (await page.locator("main").boundingBox())?.height ?? 0;
+      expect(mainHeight, `${stage} leaves no room for content`).toBeGreaterThan(160);
+    }
+    expect(visited).toContain("configure");
+  });
+}
