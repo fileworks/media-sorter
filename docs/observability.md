@@ -136,7 +136,9 @@ app not start, or why did it stop?" without a debugger.
   as interrupted, so a second launch does not start another engine. It says that
   MediaSorter is already open, still starting, or — when another process has been
   starting for more than 90 seconds without a window — names that process ID and
-  how to end it. MediaSorter never terminates another process itself.
+  how to end it. MediaSorter never terminates another process itself. When the
+  instance lock cannot be opened or taken, the launch stops with an error that
+  names the cause and the log file instead of starting an unguarded engine.
 
 ## Honest progress
 

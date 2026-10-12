@@ -1082,6 +1082,17 @@ fn explain_other_instance(other: lifecycle::OtherInstance, log_path: &std::path:
                 0,
             )
         }
+        OtherInstance::LockUnavailable(error) => (
+            MessageLevel::Error,
+            "MediaSorter could not start",
+            format!(
+                "MediaSorter could not confirm that no other copy is running, so it did \
+                 not start. Check that its log folder is writable, then open MediaSorter \
+                 again.\n\nError: {error}\n\nLog file:\n{}",
+                log_path.display()
+            ),
+            1,
+        ),
     };
     if std::env::var("MEDIASORT_STARTUP_SMOKE_NONINTERACTIVE").as_deref() != Ok("1") {
         if let Err(dialog_error) = DialogBuilder::message()

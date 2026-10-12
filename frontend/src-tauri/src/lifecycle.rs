@@ -305,6 +305,9 @@ pub(super) enum OtherInstance {
     Stuck(RunMarker),
     /// The lock is held but its owner left no readable marker.
     Unknown,
+    /// The lock could not be opened or taken, so this launch cannot prove it
+    /// is the only engine over the catalog.
+    LockUnavailable(String),
 }
 
 /// Take the per-user instance lock, or describe who holds it.
@@ -317,11 +320,7 @@ pub(super) fn acquire_instance(dir: &Path) -> Result<(), OtherInstance> {
         .open(&path)
     {
         Ok(file) => file,
-        Err(error) => {
-            // A lock we cannot even open must not prevent starting; say so.
-            write("WARN", &format!("instance_lock_unavailable error={error}"));
-            return Ok(());
-        }
+        Err(error) => return Err(lock_unavailable(error)),
     };
     match file.try_lock() {
         Ok(()) => {
@@ -332,11 +331,15 @@ pub(super) fn acquire_instance(dir: &Path) -> Result<(), OtherInstance> {
             read_marker(&dir.join(MARKER_FILE)),
             SystemTime::now(),
         )),
-        Err(std::fs::TryLockError::Error(error)) => {
-            write("WARN", &format!("instance_lock_unavailable error={error}"));
-            Ok(())
-        }
+        Err(std::fs::TryLockError::Error(error)) => Err(lock_unavailable(error)),
     }
+}
+
+/// Without the lock, a second engine could reconcile the first one's live
+/// journals, so an unusable lock stops the launch instead of being ignored.
+fn lock_unavailable(error: std::io::Error) -> OtherInstance {
+    write("ERROR", &format!("instance_lock_unavailable error={error}"));
+    OtherInstance::LockUnavailable(error.to_string())
 }
 
 pub(super) fn classify_other(marker: Option<RunMarker>, now: SystemTime) -> OtherInstance {
@@ -493,5 +496,16 @@ mod tests {
         second.try_lock().unwrap();
         drop(second);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_unopenable_instance_lock_refuses_to_start() {
+        let dir = std::env::temp_dir().join(format!("ms-nolock-{}", rand::random::<u64>()));
+        // The directory does not exist, so the lock file cannot be opened.
+        assert!(matches!(
+            acquire_instance(&dir),
+            Err(OtherInstance::LockUnavailable(_))
+        ));
+        assert!(INSTANCE_LOCK.get().is_none());
     }
 }
