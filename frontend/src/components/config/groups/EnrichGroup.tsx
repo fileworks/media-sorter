@@ -228,6 +228,20 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
             </Select>
           </SettingRow>
 
+          <SettingRow
+            field="ai_location_tags_enabled"
+            label={t("config.ai.location")}
+            description={t("config.ai.locationHelp")}
+            htmlFor="ai-location"
+          >
+            <Toggle
+              id="ai-location"
+              label={t("config.ai.location")}
+              checked={config.ai_location_tags_enabled}
+              onChange={(value) => updateConfig({ ai_location_tags_enabled: value })}
+            />
+          </SettingRow>
+
           <Disclosure summary={t("config.ai.advanced")}>
             {!localOff && (
               <SettingRow

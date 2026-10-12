@@ -333,6 +333,7 @@ probabilities.
 |---|---|---|---|
 | Tag media by content | `ai_tagging_enabled` | `false` | Master switch for content tagging. Runs during a real sort, not in preview. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
+| Add place names from GPS | `ai_location_tags_enabled` | `false` | Adds the nearest town (GeoNames, within 25 km) and the country, in the interface language, for photos and videos with a GPS position. Off for new users; configurations saved before this setting keep it on when tagging was on. Coordinates are never logged. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
 | Store generated tags | `embed_tags_in_files` + `preservation_profile.derived_metadata` | Report only | Report only leaves `embed_tags_in_files=false` and `derived_metadata=report_only`. XMP sidecar files explicitly selects `sidecar_and_report`, without rewriting media. Into the image files requests embedding (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise), which still needs a reviewed mutation profile. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |

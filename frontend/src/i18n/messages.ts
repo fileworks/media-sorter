@@ -393,7 +393,7 @@ export const en = {
   "sort.cancelFailed": "Failed to cancel",
   "sort.cancelRequested": "Cancellation requested.",
   "sort.statusFailed": "Sort status could not be read.",
-  "help.aiModelTier": "Auto selects a suitable local CLIP or SigLIP model for this machine.",
+  "help.aiModelTier": "Auto uses the local SigLIP 2 model when this machine can run it.",
   "help.aiAllowGpu":
     "Use CoreML (macOS) or CUDA acceleration when available. On Windows, local AI runs on the CPU.",
   "app.tagline": "Review first. Organize with confidence.",
@@ -577,6 +577,9 @@ export const en = {
   "config.ai.enabled": "Tag media by content",
   "config.ai.labels": "Labels to detect",
   "config.ai.maxTags": "Maximum tags per file",
+  "config.ai.location": "Add place names from GPS",
+  "config.ai.locationHelp":
+    "Adds the nearest town and the country for photos and videos with a GPS position. Location is personal: these tags travel with the files and sidecars you share.",
   "config.ai.confidence": "Confidence (0–1)",
   "config.ai.embed": "Store generated tags",
   "config.input.addLabel": "Add label…",
@@ -2061,7 +2064,8 @@ export const de: Record<MessageKey, string> = {
   "sort.cancelFailed": "Abbruch fehlgeschlagen",
   "sort.cancelRequested": "Abbruch angefordert.",
   "sort.statusFailed": "Der Sortierstatus konnte nicht gelesen werden.",
-  "help.aiModelTier": "Automatisch wählt ein passendes lokales CLIP- oder SigLIP-Modell.",
+  "help.aiModelTier":
+    "Automatisch verwendet das lokale SigLIP-2-Modell, wenn dieser Rechner es ausführen kann.",
   "help.aiAllowGpu":
     "Wenn verfügbar CoreML- (macOS) oder CUDA-Beschleunigung verwenden. Unter Windows läuft die lokale KI auf dem Prozessor.",
   "app.tagline": "Erst prüfen. Dann sicher organisieren.",
@@ -2246,6 +2250,9 @@ export const de: Record<MessageKey, string> = {
   "config.ai.enabled": "Medien nach Inhalt taggen",
   "config.ai.labels": "Zu erkennende Bezeichnungen",
   "config.ai.maxTags": "Maximale Tags pro Datei",
+  "config.ai.location": "Ortsnamen aus GPS hinzufügen",
+  "config.ai.locationHelp":
+    "Ergänzt den nächstgelegenen Ort und das Land für Fotos und Videos mit GPS-Position. Der Aufnahmeort ist persönlich: Diese Tags wandern mit den Dateien und Sidecars, die du teilst.",
   "config.ai.confidence": "Konfidenz (0–1)",
   "config.ai.embed": "Erzeugte Tags speichern",
   "config.input.addLabel": "Bezeichnung hinzufügen…",

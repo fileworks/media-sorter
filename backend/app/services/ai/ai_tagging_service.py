@@ -143,7 +143,7 @@ class AITaggingService:
 
         # Step 1: deterministic metadata tags (GPS + scene mode).
         scored: list[tuple[str, float]] = list(self._exif_tags(path))
-        if is_video(path):
+        if is_video(path) and self._config.ai_location_tags_enabled:
             scored.extend(self._location_tags(_video_coordinate(path)))
 
         # Step 2: CLIP-based ML tags.
@@ -230,7 +230,11 @@ class AITaggingService:
         Score 1.0 gives metadata priority; it is not a calibrated probability.
         Coordinates are never logged: they are personal data.
         """
-        if coordinate is None or not valid_coordinate(*coordinate):
+        if (
+            not self._config.ai_location_tags_enabled
+            or coordinate is None
+            or not valid_coordinate(*coordinate)
+        ):
             return []
         try:
             place = nearest_place(*coordinate)

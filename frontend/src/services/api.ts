@@ -65,6 +65,8 @@ export interface Config {
   ai_tagging_enabled: boolean;
   ai_tagging_confidence_threshold: number;
   ai_tagging_max_tags: number;
+  /** Place/country tags from GPS; off for new users. */
+  ai_location_tags_enabled: boolean;
   embed_tags_in_files: boolean;
   ai_tagging_labels: string[];
   ai_tagging_labels_provenance: "bundled" | "custom";
@@ -136,6 +138,8 @@ export interface RecipeSettings {
   ai_tagging_enabled: boolean;
   ai_tagging_confidence_threshold: number;
   ai_tagging_max_tags: number;
+  /** Place/country tags from GPS; off for new users. */
+  ai_location_tags_enabled: boolean;
   embed_tags_in_files: boolean;
   exclude_patterns: string[];
   min_file_size_kb: number | null;

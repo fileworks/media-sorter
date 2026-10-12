@@ -1,6 +1,7 @@
 {
   "config": {
     "ai_allow_gpu": true,
+    "ai_location_tags_enabled": false,
     "ai_model_tier": "auto",
     "ai_tagging_confidence_threshold": 0.5,
     "ai_tagging_enabled": false,

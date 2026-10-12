@@ -53,6 +53,7 @@ const LABEL_OVERRIDES: Partial<Record<keyof Config, string>> = {
   ai_tagging_enabled: "AI content tagging",
   ai_tagging_confidence_threshold: "Tag confidence",
   ai_tagging_max_tags: "Max tags per file",
+  ai_location_tags_enabled: "Location tags",
   embed_tags_in_files: "Embed tags in files",
   ai_tagging_labels: "Tag labels",
   ai_model_tier: "AI model tier",

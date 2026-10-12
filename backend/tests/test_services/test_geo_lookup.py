@@ -117,8 +117,10 @@ def _gps_jpeg(path: Path, lat: float, lon: float) -> None:
     image.save(path, format="JPEG", exif=exif)
 
 
-def _service(language: str = "en") -> AITaggingService:
-    svc = AITaggingService(Config(ai_tagging_enabled=True, language=language))
+def _service(language: str = "en", *, location: bool = True) -> AITaggingService:
+    svc = AITaggingService(
+        Config(ai_tagging_enabled=True, ai_location_tags_enabled=location, language=language)
+    )
     svc._provider = None
     svc._provider_built = True
     return svc
@@ -131,6 +133,23 @@ class TestLocationTags:
 
         assert _service("de").tag_file(photo) == ["Munich", "Deutschland"]
         assert _service("en").tag_file(photo) == ["Munich", "Germany"]
+
+    def test_location_tags_need_their_own_opt_in(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """AI-NEW-6: content tagging alone never adds where a photo was taken."""
+        photo = tmp_path / "munich.jpg"
+        _gps_jpeg(photo, 48.1374, 11.5755)
+        clip = tmp_path / "clip.mov"
+        clip.write_bytes(b"\x00")
+        probes: list[Path] = []
+        monkeypatch.setattr(tagging, "run_ffprobe_json", lambda p, _e: probes.append(p))
+        monkeypatch.setattr(tagging, "probe_duration", lambda _p: None)
+
+        assert _service(location=False).tag_file(photo) == []
+        assert _service(location=False).tag_file(clip) == []
+        assert probes == []
+        assert Config().ai_location_tags_enabled is False
 
     def test_a_photo_at_sea_gets_no_location(self, tmp_path: Path) -> None:
         photo = tmp_path / "sea.jpg"
@@ -204,3 +223,15 @@ class TestLocationTags:
 )
 def test_iso6709_decimal_degrees_are_parsed(value: object, expected: object) -> None:
     assert _parse_iso6709(value) == expected
+
+
+class TestLocationSettingMigration:
+    def test_a_saved_config_with_tagging_keeps_location_tags(self) -> None:
+        assert Config.from_dict({"ai_tagging_enabled": True}).ai_location_tags_enabled is True
+
+    def test_a_saved_config_without_tagging_gets_the_new_default(self) -> None:
+        assert Config.from_dict({"ai_tagging_enabled": False}).ai_location_tags_enabled is False
+
+    def test_an_explicit_choice_is_kept(self) -> None:
+        config = Config.from_dict({"ai_tagging_enabled": True, "ai_location_tags_enabled": False})
+        assert config.ai_location_tags_enabled is False

@@ -134,6 +134,10 @@ class Config:
     ai_tagging_confidence_threshold: float = 0.5
     # Max tags written per file; whether to embed tags into the media files.
     ai_tagging_max_tags: int = 10
+    # Place and country names from GPS positions are personal data and travel
+    # with shared tags, so they are a separate choice. Off for new users;
+    # configurations saved before this setting keep what tagging already did.
+    ai_location_tags_enabled: bool = False
     embed_tags_in_files: bool = False
     # Compatibility input for configurations saved before the common setting.
     # ``None`` means the canonical setting was used.
@@ -452,6 +456,9 @@ class Config:
 
         if "embed_tags_in_files" not in source and "ai_tagging_embed_in_files" in source:
             source["embed_tags_in_files"] = source["ai_tagging_embed_in_files"]
+        if "ai_location_tags_enabled" not in source:
+            # Before this setting, enabling tagging also added location tags.
+            source["ai_location_tags_enabled"] = bool(source.get("ai_tagging_enabled"))
 
         english_tags = bundled_labels("tag", "en")
         english_categories = bundled_labels("category", "en")

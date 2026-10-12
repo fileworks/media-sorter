@@ -92,6 +92,7 @@ export const SECTION_FIELDS = {
     "ai_tagging_enabled",
     "ai_tagging_confidence_threshold",
     "ai_tagging_max_tags",
+    "ai_location_tags_enabled",
     "embed_tags_in_files",
     "ai_tagging_labels",
     "ai_tagging_labels_provenance",

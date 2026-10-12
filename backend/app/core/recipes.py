@@ -130,6 +130,7 @@ class RecipeSettings(BaseModel):
     ai_tagging_enabled: bool = False
     ai_tagging_confidence_threshold: float = 0.5
     ai_tagging_max_tags: int = 10
+    ai_location_tags_enabled: bool = False
     embed_tags_in_files: bool = False
     exclude_patterns: list[str] = Field(
         default_factory=lambda: [
