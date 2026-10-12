@@ -238,3 +238,29 @@ def test_bundled_manifest_uses_immutable_revisions_and_exact_sizes(tmp_path: Pat
         for pack in store.packs.values()
         for component in pack.components
     )
+
+
+def test_existing_installs_keep_their_directory_across_renames(tmp_path: Path) -> None:
+    """The pack digest names the install directory, so presentation edits must not move it.
+
+    Renaming SigLIP inside its hashed entry once changed the digest, and every
+    existing install would have looked missing and downloaded 413 MB again.
+    """
+    store = AiModelStore(tmp_path, environment={})
+
+    assert store.packs["siglip-standard-v1"].digest.startswith("0a33387368d900a7")
+    assert store.packs["clip-lite-v1"].digest.startswith("739ef78b4507d118")
+    assert store.packs["siglip-standard-v1"].display_name == "SigLIP 2 Standard"
+    assert store.packs["clip-lite-v1"].display_name == "CLIP Lite (retired)"
+
+
+def test_presentation_must_be_an_object() -> None:
+    document = json.loads(
+        (Path(__file__).resolve().parents[2] / "app" / "resources" / "ai-models.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    document["presentation"] = ["not", "an", "object"]
+
+    with pytest.raises(ModelManifestError, match="presentation"):
+        parse_manifest(json.dumps(document))

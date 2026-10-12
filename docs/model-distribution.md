@@ -2,14 +2,20 @@
 
 MediaSorter downloads its optional SigLIP 2 model files only after an explicit Install
 action. The earlier CLIP Lite pack is retired: it stays in the manifest only so an
-installed copy is listed and can be removed, and it can no longer be installed. The application manifest pins every upstream object to an immutable commit, byte
+installed copy is listed and can be removed, and it can no longer be installed.
+
+The application manifest pins every upstream object to an immutable commit, byte
 size, and SHA-256 digest. Installed packs remain usable offline and can be removed from
-the settings screen.
+the settings screen. A pack's install directory is named after the digest of its
+manifest entry, so that entry never changes for a released pack: names and
+retirement live in the manifest's separate `presentation` section, and a test pins
+the released digests.
 
 ## Hosting decision
 
 Fileworks will not redistribute these model weights from a first-party GitHub Release or
-CDN for now. The SigLIP pack is roughly 413 MB, comes from an upstream project with its own licence and notice obligations, and would add a material
+CDN for now. The SigLIP pack is roughly 413 MB, comes from an upstream project with
+its own licence and notice obligations, and would add a material
 bandwidth, availability, and supply-chain maintenance commitment. The immutable Hugging
 Face revisions remain the default source.
 
