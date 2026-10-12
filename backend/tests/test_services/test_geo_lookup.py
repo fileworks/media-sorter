@@ -15,7 +15,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from PIL import Image
@@ -117,7 +117,7 @@ def _gps_jpeg(path: Path, lat: float, lon: float) -> None:
     image.save(path, format="JPEG", exif=exif)
 
 
-def _service(language: str = "en", *, location: bool = True) -> AITaggingService:
+def _service(language: Literal["en", "de"] = "en", *, location: bool = True) -> AITaggingService:
     svc = AITaggingService(
         Config(ai_tagging_enabled=True, ai_location_tags_enabled=location, language=language)
     )
