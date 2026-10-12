@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import ssl
@@ -566,6 +567,11 @@ def _markdown(report: dict[str, Any]) -> str:
 
 
 def main() -> int:
+    # The report uses symbols such as "≥"; a redirected stdout on Windows
+    # defaults to the ANSI code page and would fail after the whole run.
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
