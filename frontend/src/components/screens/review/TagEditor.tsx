@@ -6,24 +6,7 @@ import { FiRotateCcw, FiX } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/I18nContext";
-
-/** Mirrors the backend's bounds for Review's tag edits. */
-export const MAX_REVIEWED_TAGS = 50;
-export const MAX_REVIEWED_TAG_LENGTH = 100;
-
-/** Trimmed, case-insensitively unique tags; the same rule the backend applies. */
-export function cleanTags(tags: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of tags) {
-    const tag = raw.split(/\s+/).filter(Boolean).join(" ");
-    const key = tag.toLocaleLowerCase();
-    if (tag === "" || seen.has(key)) continue;
-    seen.add(key);
-    out.push(tag);
-  }
-  return out;
-}
+import { cleanTags, MAX_REVIEWED_TAG_LENGTH, MAX_REVIEWED_TAGS } from "@/lib/reviewTags";
 
 interface TagEditorProps {
   /** The tags the run will write: the proposal, or Review's edit of it. */
