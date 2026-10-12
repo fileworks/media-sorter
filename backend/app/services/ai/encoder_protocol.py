@@ -20,9 +20,8 @@ if TYPE_CHECKING:
 class VisionEncoder:
     """Structural base / Protocol for image+text encoders.
 
-    Concrete implementations: :class:`~app.services.ai.clip_embedder.ClipEmbedder`
-    (CLIP ViT-B/32 via fastembed — "Lite" tier) and the future
-    ``SiglipOnnxEncoder`` ("Standard" / "Max" tier).
+    The shipped implementation is ``SiglipOnnxEncoder``; tests inject small
+    deterministic encoders through the same interface.
 
     Both tagging and categorization call only ``embed_image`` / ``embed_texts``;
     they never import the concrete class — enabling a clean model swap.

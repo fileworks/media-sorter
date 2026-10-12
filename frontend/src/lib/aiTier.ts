@@ -8,22 +8,35 @@
  */
 import type { AiModelTier, Config, HardwareInfo } from "@/types/api";
 
-export type ResolvedTier = Exclude<AiModelTier, "auto">;
+/** The tiers that exist: one shipped model (SigLIP 2) or none. */
+export type ResolvedTier = "off" | "standard";
+/** What the setting can show and save. */
+export type SelectableTier = "auto" | ResolvedTier;
 
-export const TIER_RANK: Record<ResolvedTier, number> = { off: 0, lite: 1, standard: 2, max: 2 };
+/**
+ * Saved settings from releases that offered Lite (CLIP) and Max (the same SigLIP
+ * model) select the one shipped model, exactly as the backend resolves them.
+ */
+export function normalizeTier(tier: AiModelTier | undefined): SelectableTier {
+  if (tier === "lite" || tier === "max") return "standard";
+  return tier ?? "auto";
+}
 
-export const TIER_LABEL: Record<AiModelTier, string> = {
+export const TIER_RANK: Record<ResolvedTier, number> = { off: 0, standard: 1 };
+
+export const TIER_LABEL: Record<SelectableTier, string> = {
   auto: "Auto",
   off: "Off",
-  lite: "Lite",
   standard: "Standard",
-  max: "Max",
 };
 
 /** The tier that will actually run, given the user's choice + the hardware probe. */
 export function effectiveTier(config: Config, hardware: HardwareInfo | undefined): ResolvedTier {
-  const choice = config.ai_model_tier ?? "auto";
-  if (choice === "auto") return hardware?.recommended_tier ?? "lite";
+  const choice = normalizeTier(config.ai_model_tier);
+  if (choice === "auto") {
+    const recommended = normalizeTier(hardware?.recommended_tier ?? "standard");
+    return recommended === "auto" ? "standard" : recommended;
+  }
   return choice;
 }
 

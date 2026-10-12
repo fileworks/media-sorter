@@ -312,8 +312,8 @@ Use either, both, or neither.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Local AI model tier | `ai_model_tier` | `"auto"` | Auto follows the hardware probe. Lite uses CLIP ViT-B/32; Standard and the legacy Max choice use the same SigLIP 2 base model and acceleration policy; Off disables inference. Max is not a quality upgrade. Packs are explicitly installed, verified and loaded lazily. |
-| Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML / CUDA / DirectML). Turn off to force CPU-only. Only shown when an accelerator is detected. |
+| Local AI model tier | `ai_model_tier` | `"auto"` | Auto follows the hardware probe. Standard runs SigLIP 2 base (multilingual, the one shipped model); Off disables inference. Saved `lite` and `max` values from older releases select Standard. The pack is explicitly installed, verified and loaded lazily. |
+| Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML on macOS, CUDA where its runtime is installed). The Windows build ships the CPU runtime, so local AI runs on the CPU there and the toggle stays hidden. Turn off to force CPU-only. |
 
 The local AI section in Setup probes your machine (`GET /api/hardware`) and shows a **capability
 chip**: your CPU/RAM/GPU summary and the recommended tier. If the machine is below the
@@ -337,9 +337,8 @@ probabilities.
 | Store generated tags | `embed_tags_in_files` + `preservation_profile.derived_metadata` | Report only | Report only leaves `embed_tags_in_files=false` and `derived_metadata=report_only`. XMP sidecar files explicitly selects `sidecar_and_report`, without rewriting media. Into the image files requests embedding (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise), which still needs a reviewed mutation profile. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
-Local SigLIP uses localized descriptions and templates. Local CLIP may use stable English
-semantic prompts for model quality, but still emits the selected localized label. Model
-download failures remain best-effort and never fail the sort.
+Local SigLIP uses localized descriptions and templates and emits the selected
+localized label. Model download failures remain best-effort and never fail the sort.
 
 Generated XMP sidecars never replace existing files or follow existing symlinks.
 If the sidecar name is occupied, existing edits are retained and new tags remain

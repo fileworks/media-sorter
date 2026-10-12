@@ -1,9 +1,9 @@
 """AI tagging — local only.
 
 Turns a single image into a ranked list of ``(label, score)`` pairs (score in
-``0..1``) using :class:`LocalClipTagger`: offline CLIP/SigLIP zero-shot via
-``fastembed`` (ONNX Runtime, no torch, no API key). It scores the user-supplied
-label vocabulary against the image.
+``0..1``) using :class:`ZeroShotTagger`: offline SigLIP 2 zero-shot through ONNX
+Runtime (no torch, no API key). It scores the user-supplied label vocabulary
+against the image.
 
 Tagging is deliberately local-only: no provider setting, no credentials, and no
 code path that can send a photograph anywhere. That is a product decision, not
@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.concepts import Locale
 from app.core.logging_config import get_logger
-from app.services.ai.clip_embedder import ClipEmbedder
 from app.services.ai.encoder_protocol import VisionEncoder
 
 if TYPE_CHECKING:
@@ -71,12 +70,12 @@ class AITagger(ABC):
 
 
 # --------------------------------------------------------------------------- #
-# Local — CLIP zero-shot via fastembed                                          #
+# Local — zero-shot via the shared encoder                                         #
 # --------------------------------------------------------------------------- #
 
 
-class LocalClipTagger(AITagger):
-    """Offline CLIP zero-shot tagger backed by a shared :class:`ClipEmbedder`.
+class ZeroShotTagger(AITagger):
+    """Offline zero-shot tagger backed by the shared :class:`VisionEncoder`.
 
     Scores the configured *labels* against the image using aligned CLIP image and
     text embeddings, then assigns each label an INDEPENDENT, anchor-relative
@@ -85,20 +84,15 @@ class LocalClipTagger(AITagger):
     single softmax. The label and background-anchor text embeddings are computed
     once and cached inside the embedder.
 
-    A shared *embedder* may be injected (so AI tagging and Smart Categorization
-    load the model only once). For tests, ``image_model`` / ``text_model`` can be
-    passed instead — any object exposing ``embed(iterable) -> iterator`` of
-    ``numpy`` vectors — and a private embedder is built around them, avoiding any
-    real model download.
+    The shared *embedder* is required, so AI tagging and Smart Categorization load
+    the model only once. Tests inject any object implementing the encoder protocol.
     """
 
     def __init__(
         self,
         labels: list[str],
+        embedder: VisionEncoder,
         threshold: float = 0.5,
-        embedder: VisionEncoder | None = None,
-        image_model: Any | None = None,
-        text_model: Any | None = None,
         locale: Locale = "en",
         bundled: bool = False,
     ) -> None:
@@ -106,8 +100,6 @@ class LocalClipTagger(AITagger):
         self._locale = locale
         self._bundled = bundled
         self._threshold = threshold
-        if embedder is None:
-            embedder = ClipEmbedder(image_model=image_model, text_model=text_model)
         self._embedder = embedder
         self._text_emb_cache: tuple[Any, Any] | None = None
 
@@ -191,7 +183,7 @@ class LocalClipTagger(AITagger):
             scored.sort(key=lambda p: p[1], reverse=True)
             return scored
         except Exception as exc:
-            logger.warning("Local CLIP inference failed", error=str(exc))
+            logger.warning("Local zero-shot inference failed", error=str(exc))
             return []
 
 
@@ -217,12 +209,12 @@ def build_tagger(config: Config, embedder: VisionEncoder | None = None) -> AITag
     if embedder is None:
         # The shared encoder is built by the factory, which returns None when
         # the hardware tier is "off" or the model is unavailable. Honour that
-        # here instead of silently fabricating a fresh ClipEmbedder and
+        # here instead of silently fabricating a fresh encoder and
         # loading the very model the user opted out of.
         logger.info("AI tagging is enabled but no encoder is available; AI tagging disabled")
         return None
 
-    return LocalClipTagger(
+    return ZeroShotTagger(
         labels=config.resolved_ai_tagging_labels(),
         threshold=config.ai_tagging_confidence_threshold,
         embedder=embedder,

@@ -21,11 +21,11 @@ an unresolved set, not an excuse to guess. AI must never authorize removal.
 
 ## What the implementation actually provides
 
-`encoder_factory.py` maps Lite to CLIP ViT-B/32 and both Standard and Max to the
-same quantized SigLIP 2 base/16 256-pixel encoder, with the same acceleration
-setting. Max is not a higher-quality model. The bundled manifest contains about
-608 MB for CLIP and 413 MB for SigLIP, including text towers and tokenizers;
-these are download sizes, not RAM requirements. The interface uses the manifest
+`encoder_factory.py` maps Standard to the quantized SigLIP 2 base/16 256-pixel
+encoder; saved Lite and Max values select the same model. CLIP ViT-B/32 (Lite) was
+retired on 2026-10-11: at about 608 MB it was a larger download than SigLIP's
+413 MB, scored lower at zero-shot matching and understood only English labels.
+Sizes are download sizes, not RAM requirements. The interface uses the manifest
 inventory instead of invented tier-size estimates.
 
 The tagger already uses independent multi-label scores, prompt ensembling,

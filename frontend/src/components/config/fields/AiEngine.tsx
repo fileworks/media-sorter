@@ -9,10 +9,11 @@ import {
   TIER_RANK,
   effectiveTier,
   machineTooWeak,
+  normalizeTier,
   type ResolvedTier,
 } from "@/lib/aiTier";
 import { useI18n } from "@/i18n/I18nContext";
-import { AiModelManager } from "@/components/config/fields/AiModelManager";
+import { AiModelManager, RetiredModelPacks } from "@/components/config/fields/AiModelManager";
 
 /**
  * Capability chip: tells the user, in one line, whether their machine can run
@@ -48,7 +49,9 @@ export function AiCapabilityChip({ hardware, config }: { hardware: HardwareInfo;
         <span className="font-medium text-foreground">{summary}</span>
         {" · "}
         <span data-tier-recommendation className="font-medium text-suggest">
-          {t("config.ai.recommended", { tier: TIER_LABEL[hardware.recommended_tier] })}
+          {t("config.ai.recommended", {
+            tier: TIER_LABEL[normalizeTier(hardware.recommended_tier)],
+          })}
         </span>
         {eff !== "off" && eff !== hardware.recommended_tier && (
           <span className="text-warning"> {t("config.ai.running", { tier: TIER_LABEL[eff] })}</span>
@@ -78,8 +81,8 @@ export function ModelTierSelect({
   updateConfig: (patch: Partial<Config>) => void;
 }) {
   const { t } = useI18n();
-  const recommended = hardware.recommended_tier;
-  const tier = config.ai_model_tier;
+  const recommended = effectiveTier({ ...config, ai_model_tier: "auto" }, hardware);
+  const tier = normalizeTier(config.ai_model_tier);
 
   const slowFlag = (tierValue: ResolvedTier): string =>
     recommended !== "off" && TIER_RANK[tierValue] > TIER_RANK[recommended]
@@ -91,12 +94,10 @@ export function ModelTierSelect({
       value: "auto",
       label: t("config.ai.tier.auto", { tier: TIER_LABEL[recommended] }),
     },
-    { value: "lite", label: t("config.ai.tier.lite", { slow: slowFlag("lite") }) },
     {
       value: "standard",
       label: t("config.ai.tier.standard", { slow: slowFlag("standard") }),
     },
-    { value: "max", label: t("config.ai.tier.max", { slow: slowFlag("max") }) },
     { value: "off", label: t("config.ai.tier.off") },
   ];
 
@@ -143,6 +144,7 @@ export function ModelTierSelect({
       )}
 
       {eff !== "off" && <AiModelManager />}
+      <RetiredModelPacks />
       <p className={cn("text-xs text-muted-foreground")}>{t("config.ai.download")}</p>
     </div>
   );

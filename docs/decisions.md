@@ -8,6 +8,7 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-10-11 | One local model: SigLIP 2 Standard; CLIP Lite retired | Lite was a larger download, weaker and English-only, and Max was the same model; saved lite/max values select Standard, the old pack stays removable but not installable, and fastembed leaves the dependency set. Windows runs local AI on the CPU and says so. | [settings](settings-reference.md), [model distribution](model-distribution.md) |
 | 2026-10-11 | Unsigned macOS builds are sealed ad hoc and verified inside the final DMG | The native app refused to open because its bundle seal was invalid; every Mach-O is now signed ad hoc inside-out, Tauri seals the app with `-`, and the release job verifies seal and architecture in the mounted DMG. Developer ID stays an owner decision. | [release signing](release-signing.md) |
 | 2026-10-11 | One desktop instance per user, explained rather than silent | Two engines over one catalog would reconcile each other's live journals; a second launch names the running, starting or stuck process and never terminates it. | [observability](observability.md#launcher-diagnostics) |
 | 2026-10-11 | Launcher diagnostics: run IDs, stage timings, bounded engine output, previous-run marker | Startup and crash reports must be diagnosable from the log alone on every platform; logs rotate with fixed caps and never carry secrets or user paths. | [observability](observability.md#launcher-diagnostics) |

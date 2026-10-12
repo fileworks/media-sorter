@@ -4,7 +4,7 @@ Routes a single media file into exactly one of the user's topic categories
 (top-1 CLIP zero-shot) or leaves it ``None`` (→ ``_uncategorized``) when the
 model is not confident enough. This is a *placement* decision (it changes where
 a file lands) and is deliberately independent of AI tagging, though both share
-the one :class:`~app.services.ai.clip_embedder.ClipEmbedder`.
+the one shared local encoder.
 
 Robustness against "nothing really fits" (a settings screenshot landing in
 ``nature``) comes from three compounding defences:

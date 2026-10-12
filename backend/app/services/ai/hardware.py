@@ -6,9 +6,9 @@ machines rather than hanging or OOM-ing.
 
 Tier definitions:
   off      — machine is below the minimum (< 4 CPUs or < 3.5 GB RAM)
-  lite     — CLIP ViT-B/32 via fastembed (optional verified model pack)
-  standard — SigLIP 2 base/16 via onnxruntime (default on capable hardware)
-  max      — compatibility alias for the same SigLIP 2 base/16 model
+  standard — SigLIP 2 base/16 via onnxruntime (the one shipped model)
+
+Saved ``lite`` and ``max`` values from older releases resolve to ``standard``.
 """
 
 from __future__ import annotations
@@ -26,7 +26,11 @@ logger = get_logger(__name__)
 #: healthy response and short enough that a wedged call cannot stall startup.
 _SYSCTL_TIMEOUT_SECONDS = 10
 
-ModelTier = Literal["off", "lite", "standard", "max"]
+ModelTier = Literal["off", "standard"]
+
+#: Saved settings from releases that offered more tiers. Both selected a model that
+#: is no longer shipped (Lite, CLIP) or the same SigLIP model (Max).
+LEGACY_TIER_ALIASES: dict[str, ModelTier] = {"lite": "standard", "max": "standard"}
 
 _ACCELERATOR_EPS = {
     "CUDAExecutionProvider",
@@ -106,13 +110,15 @@ def _has_accelerator(providers: list[str]) -> bool:
 
 
 def _recommend_tier(cpus: int, ram_gb: float, has_accel: bool) -> ModelTier:
+    """Recommend the one shipped model where the machine can run it, else Off.
+
+    ``has_accel`` no longer changes the model: acceleration only speeds up the
+    same SigLIP 2 encoder.
+    """
+    del has_accel
     if cpus < 4 or ram_gb < 3.5:
         return "off"
-    if has_accel:
-        return "max"
-    if cpus >= 8 or ram_gb >= 7.5:
-        return "standard"
-    return "lite"
+    return "standard"
 
 
 @dataclass(frozen=True)
@@ -123,7 +129,7 @@ class HardwareProfile:
     total_ram_gb: float
     onnx_providers: list[str] = field(default_factory=list)
     has_accelerator: bool = False
-    recommended_tier: ModelTier = "lite"
+    recommended_tier: ModelTier = "standard"
 
     @classmethod
     def probe(cls) -> HardwareProfile:
@@ -158,13 +164,18 @@ class HardwareProfile:
         if config_tier == "auto":
             return self.recommended_tier
         t = config_tier.lower()
-        valid: tuple[ModelTier, ...] = ("off", "lite", "standard", "max")
-        if t not in valid:
+        tier: ModelTier
+        if t in LEGACY_TIER_ALIASES:
+            tier = LEGACY_TIER_ALIASES[t]
+        elif t == "off":
+            tier = "off"
+        elif t == "standard":
+            tier = "standard"
+        else:
             logger.warning("Unknown ai_model_tier, falling back to probe", value=config_tier)
             return self.recommended_tier
-        tier: ModelTier = t
-        tier_rank = {"off": 0, "lite": 1, "standard": 2, "max": 3}
-        if tier_rank.get(tier, 0) > tier_rank.get(self.recommended_tier, 0):
+        tier_rank = {"off": 0, "standard": 1}
+        if tier_rank[tier] > tier_rank[self.recommended_tier]:
             logger.warning(
                 "Requested ai_model_tier may be slow on this machine",
                 requested=tier,

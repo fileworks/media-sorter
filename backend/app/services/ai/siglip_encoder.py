@@ -1,10 +1,8 @@
-"""SigLIP 2 vision+text encoder backed by onnxruntime ("Standard" / "Max" tier).
+"""SigLIP 2 vision+text encoder backed by onnxruntime (the "Standard" tier).
 
-This is the higher-quality local encoder that replaces the CLIP ViT-B/32
-placeholder for the ``standard`` and ``max`` model tiers. It implements the same
-:class:`~app.services.ai.encoder_protocol.VisionEncoder` contract as
-:class:`~app.services.ai.clip_embedder.ClipEmbedder`, so AI tagging and Smart
-Categorization consume it without caring which model is loaded.
+The one shipped local encoder. It implements the
+:class:`~app.services.ai.encoder_protocol.VisionEncoder` contract, so AI tagging
+and Smart Categorization consume it without caring which model is loaded.
 
 Why SigLIP 2 (Google, 2025): substantially stronger zero-shot than CLIP ViT-B/32
 (~79% vs ~63% ImageNet) at the *exact* task both features use (image↔text-label

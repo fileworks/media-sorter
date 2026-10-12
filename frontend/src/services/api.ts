@@ -427,7 +427,7 @@ export interface HardwareInfo {
   logical_cpus: number;
   total_ram_gb: number;
   has_accelerator: boolean;
-  /** Probe's recommended tier: "off" | "lite" | "standard" | "max". */
+  /** Probe's recommended tier: "off" or "standard" (older builds also sent "lite"/"max"). */
   recommended_tier: Exclude<AiModelTier, "auto">;
   onnx_providers: string[];
 }
@@ -616,6 +616,8 @@ export interface AiModelPackStatus {
   source: string;
   task_id: string | null;
   error: string | null;
+  /** No longer selectable; an installed copy can only be removed. */
+  retired?: boolean;
 }
 
 export interface AiModelInventory {

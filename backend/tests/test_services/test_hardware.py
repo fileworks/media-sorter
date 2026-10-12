@@ -27,7 +27,8 @@ def test_recommend_tier_too_little_ram() -> None:
 
 
 def test_recommend_tier_with_accelerator() -> None:
-    assert _recommend_tier(8, 16.0, True) == "max"
+    # Acceleration speeds up the same model; it no longer selects another tier.
+    assert _recommend_tier(8, 16.0, True) == "standard"
 
 
 def test_recommend_tier_standard_cpus() -> None:
@@ -38,9 +39,9 @@ def test_recommend_tier_standard_ram() -> None:
     assert _recommend_tier(4, 8.0, False) == "standard"
 
 
-def test_recommend_tier_lite() -> None:
-    # 4 CPUs, 4 GB RAM, no accelerator — middle ground → lite
-    assert _recommend_tier(4, 4.0, False) == "lite"
+def test_recommend_tier_minimum_machine_runs_the_shipped_model() -> None:
+    # 4 CPUs, 4 GB RAM — the old middle "lite" ground now runs SigLIP 2.
+    assert _recommend_tier(4, 4.0, False) == "standard"
 
 
 # --------------------------------------------------------------------------- #
@@ -101,7 +102,7 @@ def test_probe_detects_accelerator() -> None:
         profile = HardwareProfile.probe()
 
     assert profile.has_accelerator is True
-    assert profile.recommended_tier == "max"
+    assert profile.recommended_tier == "standard"
 
 
 # --------------------------------------------------------------------------- #
@@ -128,9 +129,12 @@ def test_effective_tier_explicit_off(standard_profile: HardwareProfile) -> None:
     assert standard_profile.effective_tier("off") == "off"
 
 
-def test_effective_tier_explicit_max(standard_profile: HardwareProfile) -> None:
-    # Should warn but honour the request
-    assert standard_profile.effective_tier("max") == "max"
+@pytest.mark.parametrize("legacy", ["max", "lite", "MAX", "Lite"])
+def test_saved_legacy_tiers_resolve_to_the_shipped_model(
+    standard_profile: HardwareProfile, legacy: str
+) -> None:
+    # Saved settings from releases with Lite/Max keep working (AI-04).
+    assert standard_profile.effective_tier(legacy) == "standard"
 
 
 def test_effective_tier_unknown_falls_back(standard_profile: HardwareProfile) -> None:
@@ -138,7 +142,7 @@ def test_effective_tier_unknown_falls_back(standard_profile: HardwareProfile) ->
 
 
 def test_effective_tier_case_insensitive(standard_profile: HardwareProfile) -> None:
-    assert standard_profile.effective_tier("LITE") == "lite"
+    assert standard_profile.effective_tier("STANDARD") == "standard"
 
 
 # --------------------------------------------------------------------------- #
@@ -146,7 +150,7 @@ def test_effective_tier_case_insensitive(standard_profile: HardwareProfile) -> N
 # --------------------------------------------------------------------------- #
 
 
-def _make_profile(tier: ModelTier = "lite") -> HardwareProfile:
+def _make_profile(tier: ModelTier = "standard") -> HardwareProfile:
     return HardwareProfile(
         logical_cpus=4,
         total_ram_gb=8.0,
@@ -165,43 +169,24 @@ def test_build_encoder_off_returns_none() -> None:
     assert result is None
 
 
-def test_build_encoder_lite_returns_encoder_when_available() -> None:
-    from app.core.config import Config
-    from app.services.ai.clip_embedder import ClipEmbedder
-    from app.services.ai.encoder_factory import build_encoder
-
-    mock_encoder = MagicMock(spec=ClipEmbedder)
-    mock_encoder.model_id = "clip-vit-b-32"
-    model_store = MagicMock()
-    model_store.component_paths.return_value = {"image": MagicMock(), "text": MagicMock()}
-
-    config = Config(ai_model_tier="auto")
-    profile = _make_profile("lite")
-
-    with patch("app.services.ai.encoder_factory.ClipEmbedder", return_value=mock_encoder):
-        result = build_encoder(config, profile, model_store)
-
-    assert result is mock_encoder
-
-
 def test_build_encoder_returns_none_when_model_unavailable() -> None:
     from app.core.config import Config
     from app.services.ai.encoder_factory import build_encoder
 
     config = Config(ai_model_tier="auto")
-    profile = _make_profile("lite")
+    profile = _make_profile("standard")
     model_store = MagicMock()
     model_store.component_paths.return_value = None
 
-    with patch("app.services.ai.encoder_factory.ClipEmbedder") as constructor:
+    with patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder") as constructor:
         result = build_encoder(config, profile, model_store)
 
     assert result is None
     constructor.assert_not_called()
 
 
-@pytest.mark.parametrize("tier", ["standard", "max"])
-def test_build_encoder_standard_and_max_use_identical_siglip_settings(tier: str) -> None:
+@pytest.mark.parametrize("tier", ["standard", "max", "lite"])
+def test_every_saved_tier_builds_the_same_siglip_encoder(tier: str) -> None:
     from app.core.config import Config
     from app.services.ai.encoder_factory import build_encoder
     from app.services.ai.siglip_encoder import SiglipOnnxEncoder
@@ -236,12 +221,8 @@ def test_build_encoder_standard_does_not_silently_fall_back_to_another_pack() ->
     model_store = MagicMock()
     model_store.component_paths.return_value = None
 
-    with (
-        patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder") as siglip,
-        patch("app.services.ai.encoder_factory.ClipEmbedder") as clip,
-    ):
+    with patch("app.services.ai.siglip_encoder.SiglipOnnxEncoder") as siglip:
         result = build_encoder(config, profile, model_store)
 
     assert result is None
     siglip.assert_not_called()
-    clip.assert_not_called()

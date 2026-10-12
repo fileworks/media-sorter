@@ -394,7 +394,8 @@ export const en = {
   "sort.cancelRequested": "Cancellation requested.",
   "sort.statusFailed": "Sort status could not be read.",
   "help.aiModelTier": "Auto selects a suitable local CLIP or SigLIP model for this machine.",
-  "help.aiAllowGpu": "Use CoreML, CUDA, or DirectML acceleration when available.",
+  "help.aiAllowGpu":
+    "Use CoreML (macOS) or CUDA acceleration when available. On Windows, local AI runs on the CPU.",
   "app.tagline": "Review first. Organize with confidence.",
   "app.history": "History",
   "app.back": "Back",
@@ -614,9 +615,7 @@ export const en = {
   "config.ai.model": "Local AI model",
   "config.ai.gpu": "Use GPU acceleration",
   "config.ai.tier.auto": "Auto — use {tier} (recommended)",
-  "config.ai.tier.lite": "Lite — CLIP{slow}",
   "config.ai.tier.standard": "Standard — SigLIP 2{slow}",
-  "config.ai.tier.max": "Max — same SigLIP 2 model as Standard{slow}",
   "config.ai.tier.off": "Off — disable the local model",
   "config.ai.slow": " · may be slow",
   "config.ai.download":
@@ -644,6 +643,8 @@ export const en = {
   "config.ai.modelRetry": "Retry download",
   "config.ai.modelRemove": "Remove files",
   "config.ai.modelConfirmRemove": "Remove model files",
+  "config.ai.retired.title": "An older AI model is still installed",
+  "config.ai.retired.detail": "{name} ({size}) is no longer used. Remove it to free the space.",
   "config.slider.lenient": "More lenient (85%)",
   "config.slider.strict": "Stricter (100%)",
   "config.slider.pixel": "Nearly pixel-perfect — safest, fewest false positives",
@@ -2061,7 +2062,8 @@ export const de: Record<MessageKey, string> = {
   "sort.cancelRequested": "Abbruch angefordert.",
   "sort.statusFailed": "Der Sortierstatus konnte nicht gelesen werden.",
   "help.aiModelTier": "Automatisch wählt ein passendes lokales CLIP- oder SigLIP-Modell.",
-  "help.aiAllowGpu": "Wenn verfügbar CoreML-, CUDA- oder DirectML-Beschleunigung verwenden.",
+  "help.aiAllowGpu":
+    "Wenn verfügbar CoreML- (macOS) oder CUDA-Beschleunigung verwenden. Unter Windows läuft die lokale KI auf dem Prozessor.",
   "app.tagline": "Erst prüfen. Dann sicher organisieren.",
   "app.history": "Verlauf",
   "app.back": "Zurück",
@@ -2282,9 +2284,7 @@ export const de: Record<MessageKey, string> = {
   "config.ai.model": "Lokales KI-Modell",
   "config.ai.gpu": "GPU-Beschleunigung verwenden",
   "config.ai.tier.auto": "Automatisch — {tier} verwenden (empfohlen)",
-  "config.ai.tier.lite": "Lite — CLIP{slow}",
   "config.ai.tier.standard": "Standard — SigLIP 2{slow}",
-  "config.ai.tier.max": "Max — dasselbe SigLIP-2-Modell wie Standard{slow}",
   "config.ai.tier.off": "Aus — lokales Modell deaktivieren",
   "config.ai.slow": " · möglicherweise langsam",
   "config.ai.download":
@@ -2313,6 +2313,9 @@ export const de: Record<MessageKey, string> = {
   "config.ai.modelRetry": "Download wiederholen",
   "config.ai.modelRemove": "Dateien entfernen",
   "config.ai.modelConfirmRemove": "Modelldateien entfernen",
+  "config.ai.retired.title": "Ein älteres KI-Modell ist noch installiert",
+  "config.ai.retired.detail":
+    "{name} ({size}) wird nicht mehr verwendet. Entferne es, um den Speicher freizugeben.",
   "config.slider.lenient": "Großzügiger (85 %)",
   "config.slider.strict": "Strenger (100 %)",
   "config.slider.pixel": "Nahezu pixelgenau — am sichersten, wenigste Fehlalarme",

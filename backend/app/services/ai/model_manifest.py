@@ -45,6 +45,8 @@ class ModelPack:
     total_size: int
     components: tuple[ModelComponent, ...]
     digest: str
+    #: No longer selectable; kept only so an installed copy can be removed.
+    retired: bool = False
 
 
 def _safe_relative(value: object) -> str:
@@ -104,6 +106,7 @@ def parse_manifest(raw: str) -> tuple[str, dict[str, ModelPack]]:
             total_size=measured_total,
             components=components,
             digest=hashlib.sha256(canonical).hexdigest(),
+            retired=raw_pack.get("retired") is True,
         )
     return source.rstrip("/"), packs
 
@@ -161,8 +164,7 @@ def _parse_component(name: str, raw_component: object) -> tuple[ModelComponent, 
 
 
 def pack_for_tier(tier: str) -> str | None:
-    if tier == "lite":
-        return "clip-lite-v1"
-    if tier in ("standard", "max"):
+    # "lite" and "max" are saved-setting aliases for the one shipped model.
+    if tier in ("standard", "lite", "max"):
         return "siglip-standard-v1"
     return None

@@ -23,7 +23,7 @@ from app.core.rules import (
     validate_relative_route,
 )
 from app.services.ai.base_tagger import (
-    LocalClipTagger,
+    ZeroShotTagger,
 )
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.destination import build_dest_dir, reserve_destination
@@ -277,7 +277,7 @@ class _PromptCapture:
 
 def test_siglip_uses_german_prompts_but_emits_only_german() -> None:
     embedder = _PromptCapture()
-    tagger = LocalClipTagger(
+    tagger = ZeroShotTagger(
         ["Bildschirmfoto"],
         threshold=0,
         embedder=cast("VisionEncoder", embedder),

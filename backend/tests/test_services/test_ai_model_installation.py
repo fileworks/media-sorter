@@ -230,6 +230,8 @@ def test_bundled_manifest_uses_immutable_revisions_and_exact_sizes(tmp_path: Pat
 
     assert set(store.packs) == {"clip-lite-v1", "siglip-standard-v1"}
     assert store.packs["clip-lite-v1"].total_size == 608_015_951
+    assert store.packs["clip-lite-v1"].retired is True
+    assert store.packs["siglip-standard-v1"].retired is False
     assert store.packs["siglip-standard-v1"].total_size == 412_538_967
     assert all(
         len(component.revision) == 40

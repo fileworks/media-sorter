@@ -325,7 +325,6 @@ bundle-backend:
 		--collect-all=pydantic \
 		--collect-all=fastapi \
 		--collect-all=app.resources \
-		--collect-all=fastembed \
 		--collect-all=onnxruntime \
 		--collect-all=tokenizers \
 		--collect-all=huggingface_hub \

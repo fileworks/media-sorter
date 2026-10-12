@@ -41,6 +41,7 @@ class ModelStatusResponse(BaseModel):
     source: str
     task_id: str | None = None
     error: str | None = None
+    retired: bool = False
 
 
 class ModelInventoryResponse(BaseModel):
@@ -95,6 +96,14 @@ async def install_model(
     body: TaskStartRequest | None = None,
 ) -> TaskStartResponse:
     request = body or TaskStartRequest()
+    pack = container.ai_model_store.packs.get(pack_id)
+    if pack is not None and pack.retired:
+        raise MediaSortException(
+            status_code=409,
+            message="This local AI model is retired and can only be removed.",
+            code="MODEL_PACK_RETIRED",
+            details={"pack_id": pack_id},
+        )
     existing = _pack_task(container, pack_id)
     if existing is not None and existing.status in ("pending", "running"):
         return TaskStartResponse(

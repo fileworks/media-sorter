@@ -4,7 +4,8 @@
   "packs": {
     "clip-lite-v1": {
       "model_id": "clip-vit-b-32",
-      "display_name": "CLIP Lite",
+      "display_name": "CLIP Lite (retired)",
+      "retired": true,
       "license": "MIT",
       "license_url": "https://huggingface.co/Qdrant/clip-ViT-B-32-vision/blob/e0c24ed0fa57fa3e4f97f30de74c51d944036ace/README.md",
       "total_size": 608015951,
@@ -65,7 +66,7 @@
     },
     "siglip-standard-v1": {
       "model_id": "siglip2-base-patch16-256",
-      "display_name": "SigLIP Standard / Max",
+      "display_name": "SigLIP 2 Standard",
       "license": "Apache-2.0",
       "license_url": "https://huggingface.co/onnx-community/siglip2-base-patch16-256-ONNX/blob/d1114256522a37ffa257a0a58017348ab0058db2/README.md",
       "total_size": 412538967,

@@ -5,7 +5,7 @@
   Follow [development setup](development.md#setup) for full/native prerequisites.
 - Ruff is the single linter + formatter; Mypy `--strict`; gate: `make ci` (lint + typecheck + tests ≥80% cov)
 - Layout: `backend/app/{main.py, api/{deps.py, schemas.py, routes/}, core/, services/, background_tasks/, utils/}`
-- Optional extras: `[local-ai]` (fastembed/onnxruntime) — absent in CI; all AI imports are lazy so tests never need it
+- Optional extras: `[local-ai]` (onnxruntime/tokenizers/geocoding) — absent in CI; all AI imports are lazy so tests never need it
 
 ## FastAPI — Core Patterns
 - **App factory**: `AppFactory.create()` in `core/bootstrap.py`; lifespan via `_make_lifespan` (captures the loop for thread-safe logging, tears down the TaskManager)

@@ -57,6 +57,7 @@ class ModelStatus:
     source: str
     task_id: str | None = None
     error: str | None = None
+    retired: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -71,6 +72,7 @@ class ModelStatus:
             "source": self.source,
             "task_id": self.task_id,
             "error": self.error,
+            "retired": self.retired,
         }
 
 
@@ -175,6 +177,7 @@ class AiModelStore:
             source=self.source_label,
             task_id=task.id if task is not None else None,
             error=error,
+            retired=pack.retired,
         )
 
     def component_paths(self, pack_id: str, *, verify: bool = True) -> dict[str, Path] | None:
@@ -191,6 +194,13 @@ class AiModelStore:
 
     def _install(self, task: Task, pack_id: str) -> dict[str, object]:
         pack = self._pack(pack_id)
+        if pack.retired:
+            raise MediaSortException(
+                status_code=409,
+                message="This local AI model is retired and can only be removed.",
+                code="MODEL_PACK_RETIRED",
+                details={"pack_id": pack_id},
+            )
         with self._lock:
             if self._installed(pack, full=True):
                 task.update_progress(

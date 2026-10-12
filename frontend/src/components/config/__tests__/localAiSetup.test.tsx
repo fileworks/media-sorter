@@ -21,6 +21,7 @@ vi.mock("@/hooks/useAiModels", () => ({
 }));
 vi.mock("@/components/config/fields/AiModelManager", () => ({
   AiModelManager: () => <section aria-label="Local AI model files">Not installed</section>,
+  RetiredModelPacks: () => null,
 }));
 
 afterEach(cleanup);

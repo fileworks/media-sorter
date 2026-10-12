@@ -7,9 +7,8 @@ test; ``test_local_only_tagging.py`` asserts there cannot be one.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -18,10 +17,10 @@ from PIL import Image
 from app.core.config import Config
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.base_tagger import (
-    LocalClipTagger,
+    ZeroShotTagger,
     build_tagger,
 )
-from app.services.ai.clip_embedder import ClipEmbedder
+from app.services.ai.encoder_protocol import VisionEncoder
 
 
 def _img() -> Image.Image:
@@ -43,28 +42,47 @@ def test_build_tagger_local_requires_shared_encoder() -> None:
     # silently fabricating a fresh CLIP model the user opted out of.
     assert build_tagger(cfg) is None
     # With a shared encoder, the local CLIP tagger is built and reuses it.
-    assert isinstance(build_tagger(cfg, ClipEmbedder()), LocalClipTagger)
+    assert isinstance(
+        build_tagger(
+            cfg, cast("VisionEncoder", _VectorEncoder(lambda _i: [1.0], lambda _t: [1.0]))
+        ),
+        ZeroShotTagger,
+    )
 
 
 # ------------------------------------------------------------------ #
-# LocalClipTagger — injected fake embedders (no fastembed/model needed) #
+# ZeroShotTagger — injected fake embedders (no fastembed/model needed) #
 # ------------------------------------------------------------------ #
 
 
-class _FakeEmbedder:
-    """Mimics fastembed: ``embed(iterable)`` yields a vector per item."""
+class _VectorEncoder:
+    """Deterministic encoder: fixed vectors for the image and for each prompt."""
 
-    def __init__(self, vector_for: Any) -> None:
-        self._vector_for = vector_for
+    model_id = "test-encoder"
+    tagger_slope = 100.0
+    categorize_scale = 40.0
+    available = True
 
-    def embed(self, items: Any) -> Iterator[Any]:
-        for it in items:
-            yield self._vector_for(it)
+    def __init__(self, image_vector: Any, text_vector: Any) -> None:
+        self._image_vector = image_vector
+        self._text_vector = text_vector
+
+    def embed_image(self, image: Any) -> Any:
+        return np.asarray(self._image_vector(image), dtype=np.float32)
+
+    def embed_texts(self, texts: list[str]) -> Any:
+        return np.asarray([self._text_vector(text) for text in texts], dtype=np.float32)
+
+
+def _tagger(labels: list[str], encoder: _VectorEncoder, threshold: float) -> ZeroShotTagger:
+    return ZeroShotTagger(
+        labels=labels, embedder=cast("VisionEncoder", encoder), threshold=threshold
+    )
 
 
 def _local_tagger(
     labels: list[str], image_vec: list[float], threshold: float = 0.2
-) -> LocalClipTagger:
+) -> ZeroShotTagger:
     basis = {
         lbl: [1.0 if i == j else 0.0 for j in range(len(labels))] for i, lbl in enumerate(labels)
     }
@@ -79,11 +97,7 @@ def _local_tagger(
                 return np.asarray(basis[lbl])
         return np.zeros(len(labels))
 
-    text_model = _FakeEmbedder(_vec_for)
-    image_model = _FakeEmbedder(lambda _img: np.asarray(image_vec))
-    return LocalClipTagger(
-        labels=labels, threshold=threshold, image_model=image_model, text_model=text_model
-    )
+    return _tagger(labels, _VectorEncoder(lambda _img: image_vec, _vec_for), threshold)
 
 
 def test_local_clip_scores_aligned_label_highest() -> None:
@@ -96,24 +110,17 @@ def test_local_clip_scores_aligned_label_highest() -> None:
 
 
 def test_local_clip_empty_labels_returns_empty() -> None:
-    tagger = LocalClipTagger(labels=[], threshold=0.2, image_model=object(), text_model=object())
-    assert tagger.tag(_img()) == []
+    encoder = _VectorEncoder(lambda _i: [1.0], lambda _t: [1.0])
+    assert _tagger([], encoder, 0.2).tag(_img()) == []
 
 
-def test_local_clip_missing_fastembed_degrades_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No injected models + fastembed import fails → returns [] (never raises).
-    import builtins
+def test_an_unavailable_encoder_degrades_to_no_tags() -> None:
+    class _Unavailable(_VectorEncoder):
+        def embed_image(self, image: Any) -> Any:
+            return None
 
-    real_import = builtins.__import__
-
-    def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name == "fastembed":
-            raise ImportError("no fastembed")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-    tagger = LocalClipTagger(labels=["beach"], threshold=0.2)
-    assert tagger.tag(_img()) == []
+    encoder = _Unavailable(lambda _i: [1.0], lambda _t: [1.0])
+    assert _tagger(["beach"], encoder, 0.2).tag(_img()) == []
 
 
 def test_local_clip_multilabel_keeps_cooccurring_tags() -> None:
@@ -140,12 +147,7 @@ def test_local_clip_anchor_background_suppresses_weak_match() -> None:
                 return np.asarray(v)
         return np.asarray([0.0, 0.0, 1.0])  # generic "a photo" anchors
 
-    tagger = LocalClipTagger(
-        labels=["beach", "city"],
-        threshold=0.5,
-        image_model=_FakeEmbedder(lambda _i: np.asarray([0.6, 0.3, 0.5])),
-        text_model=_FakeEmbedder(vec_for),
-    )
+    tagger = _tagger(["beach", "city"], _VectorEncoder(lambda _i: [0.6, 0.3, 0.5], vec_for), 0.5)
     assert set(dict(tagger.tag(_img()))) == {"beach"}
 
 

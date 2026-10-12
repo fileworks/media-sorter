@@ -239,3 +239,58 @@ export function AiModelManager() {
     </section>
   );
 }
+
+/**
+ * An older model pack this release no longer uses (the retired CLIP Lite pack).
+ * It is never deleted silently; the user is offered the space back.
+ */
+export function RetiredModelPacks() {
+  const { t, locale } = useI18n();
+  const { inventory, remove } = useAiModels();
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const retired = (inventory?.packs ?? []).filter((pack) => pack.retired && pack.state === "ready");
+  if (retired.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {retired.map((pack) => (
+        <section
+          key={pack.pack_id}
+          className="rounded-window border border-border bg-muted/30 p-3"
+          aria-label={t("config.ai.retired.title")}
+        >
+          <p className="text-sm font-medium text-foreground">{t("config.ai.retired.title")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("config.ai.retired.detail", {
+              name: pack.display_name,
+              size: formatBytes(pack.total_size, { locale, decimals: 0, nullPlaceholder: "0 B" }),
+            })}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {confirming === pack.pack_id ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => remove.mutate(pack.pack_id)}
+                  disabled={remove.isPending}
+                >
+                  <FiTrash2 className="h-3.5 w-3.5" />
+                  {t("config.ai.modelConfirmRemove")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>
+                  {t("common.cancel")}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setConfirming(pack.pack_id)}>
+                <FiTrash2 className="h-3.5 w-3.5" />
+                {t("config.ai.modelRemove")}
+              </Button>
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}

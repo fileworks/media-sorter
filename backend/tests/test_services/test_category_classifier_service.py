@@ -39,7 +39,7 @@ def _save_jpg(path: Path) -> Path:
 
 
 class _FakeEmbedder:
-    """Deterministic stand-in for ClipEmbedder.
+    """Deterministic stand-in for the shared encoder.
 
     ``embed_texts`` returns, per prompt, the one-hot basis vector of whichever
     category name appears in the prompt (so the prompt *ensemble* of templates +
