@@ -266,14 +266,12 @@ export function RetiredModelPacks() {
   const { t, locale } = useI18n();
   const { inventory, remove } = useAiModels();
   const [confirming, setConfirming] = useState<string | null>(null);
-  // Offer the space back only once the current pack is in use: until then a
-  // retired predecessor is what keeps local AI working.
-  const currentReady = inventory?.packs.some(
-    (pack) => pack.pack_id === inventory.required_pack_id && pack.state === "ready",
+  // The predecessor local AI is using right now stays until the current pack
+  // replaces it; any other retired pack (CLIP can never be active) is offered
+  // back at once, so its space can make room for the upgrade.
+  const retired = (inventory?.packs ?? []).filter(
+    (pack) => pack.retired && pack.state === "ready" && pack.pack_id !== inventory?.active_pack_id,
   );
-  const retired = currentReady
-    ? (inventory?.packs ?? []).filter((pack) => pack.retired && pack.state === "ready")
-    : [];
   if (retired.length === 0) return null;
 
   return (

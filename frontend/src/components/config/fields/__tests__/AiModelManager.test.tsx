@@ -187,4 +187,49 @@ describe("AiModelManager", () => {
     expect(view.getByText(/to download \(.* in total\)/)).toBeTruthy();
     expect(view.queryByText("An older AI model is still installed")).toBeNull();
   });
+
+  it("offers an unused retired pack back even before the current pack is installed", async () => {
+    // F1-012: CLIP can never be active, so its space must be reclaimable to
+    // make room for the upgrade; only the predecessor in use stays protected.
+    vi.spyOn(api, "getAiModels").mockResolvedValue({
+      effective_tier: "standard",
+      required_pack_id: "siglip-standard-v2",
+      active_pack_id: "siglip-standard-v1",
+      packs: [
+        { ...PACK, pack_id: "siglip-standard-v2", total_size: 689_793_386 },
+        {
+          ...PACK,
+          pack_id: "siglip-standard-v1",
+          display_name: "SigLIP 2 Standard (previous version)",
+          state: "ready",
+          installed_size: PACK.total_size,
+          retired: true,
+        },
+        {
+          ...PACK,
+          pack_id: "clip-lite-v1",
+          display_name: "CLIP Lite (retired)",
+          state: "ready",
+          total_size: 608_015_951,
+          installed_size: 608_015_951,
+          retired: true,
+        },
+      ],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider initialLocale="en">
+          <RetiredModelPacks />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const offers = await view.findAllByText("An older AI model is still installed");
+    expect(offers).toHaveLength(1);
+    expect(view.getByText(/CLIP Lite \(retired\)/)).toBeTruthy();
+    expect(view.queryByText(/previous version/)).toBeNull();
+  });
 });

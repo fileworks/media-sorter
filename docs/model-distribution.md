@@ -6,8 +6,10 @@ tower, int8 text tower, tokenizer). Its predecessor `siglip-standard-v1` (int8
 vision, 413 MB) is retired but keeps local AI working until v2 is installed;
 installing v2 copies v1's identical files after verifying their SHA-256, so the
 upgrade downloads 372 MB, and the UI shows that real download size. Removal of v1
-is offered once v2 is ready. The earlier CLIP Lite pack is retired too: it stays in
-the manifest only so an installed copy is listed and can be removed.
+is offered once v2 is ready (more precisely: once v1 is no longer the pack in use).
+The earlier CLIP Lite pack is retired too: it stays in the manifest only so an
+installed copy is listed, and since it can never be in use, its removal is offered
+at once, so its 608 MB can make room for the v2 download.
 
 The application manifest pins every upstream object to an immutable commit, byte
 size, and SHA-256 digest. Installed packs remain usable offline and can be removed from
