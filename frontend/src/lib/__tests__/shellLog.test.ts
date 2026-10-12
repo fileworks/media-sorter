@@ -64,6 +64,23 @@ describe("sanitizeForShellLog", () => {
     expect(sanitizeForShellLog(message)).toBe(message);
   });
 
+  it("scans a very long error in bounded time", () => {
+    // F6-001: the credential pattern is costly per character, so only the text
+    // that can be logged is scanned.
+    const started = performance.now();
+    const cleaned = sanitizeForShellLog(`Error: ${"x".repeat(1_000_000)}`);
+
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(cleaned.length).toBe(1500);
+  });
+
+  it("withholds a credential that starts just before the cap", () => {
+    const cleaned = sanitizeForShellLog(`${"x ".repeat(740)}token=SYNTHETIC-SECRET`);
+
+    expect(cleaned.endsWith(WITHHELD)).toBe(true);
+    expect(cleaned).not.toContain("SYNTHETIC");
+  });
+
   it("bounds the length and flattens new lines", () => {
     const cleaned = sanitizeForShellLog(`first\nsecond ${"x".repeat(5000)}`);
 

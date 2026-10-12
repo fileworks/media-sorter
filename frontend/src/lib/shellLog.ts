@@ -35,16 +35,25 @@ const SENSITIVE: readonly RegExp[] = [
 
 export const WITHHELD = "[withheld]";
 
-/** Keep the message up to the first credential or path; withhold the rest. */
+/**
+ * Keep the message up to the first credential or path; withhold the rest.
+ *
+ * Only the text that can be logged is scanned: a private value always follows
+ * its marker, so nothing past the cap can surface, and the scan stays bounded
+ * however long the error is (it runs on the UI thread).
+ */
 export function sanitizeForShellLog(message: string): string {
-  const flat = message.replace(/\s+/g, " ").trim();
+  const flat = message
+    .slice(0, MAX_CHARS * 4)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_CHARS);
   let cut = flat.length;
   for (const pattern of SENSITIVE) {
     const match = pattern.exec(flat);
     if (match !== null) cut = Math.min(cut, match.index + (match.groups?.lead?.length ?? 0));
   }
-  const kept = cut < flat.length ? `${flat.slice(0, cut).trimEnd()} ${WITHHELD}`.trim() : flat;
-  return kept.slice(0, MAX_CHARS);
+  return cut < flat.length ? `${flat.slice(0, cut).trimEnd()} ${WITHHELD}`.trim() : flat;
 }
 
 export function shellLog(level: ShellLogLevel, message: string): void {
