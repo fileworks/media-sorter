@@ -147,6 +147,17 @@ jobs:
       # capability named, and `test_capability_guards.py` fails if a POSIX
       # host would skip them. GitHub's Windows runners can create symlinks, so
       # those proofs run here too. The job keeps its protected check name.
+      # The video-signature and grouping suites decode real clips. Use the same
+      # pinned, SHA-256-verified ffmpeg the Windows package bundles rather than
+      # whatever a package manager currently serves.
+      - name: Provide the pinned ffmpeg
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python scripts/fetch_ffmpeg.py --dest "$RUNNER_TEMP/ffmpeg"
+          echo "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
+
       - name: Run the full backend suite on Windows
         working-directory: backend
         run: python -m pytest -q -ra

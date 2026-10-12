@@ -340,7 +340,6 @@ def test_image_dimensions_unreadable_returns_none(tmp_path: Path) -> None:
     assert image_dimensions(junk) is None
 
 
-
 def test_open_image_lets_a_consumer_error_propagate(tmp_path: Path) -> None:
     """AI-NEW-4: an error inside the block is not swallowed or turned into
     ``RuntimeError: generator didn't stop after throw()``."""
