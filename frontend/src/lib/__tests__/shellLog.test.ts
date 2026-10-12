@@ -1,51 +1,60 @@
 import { describe, expect, it } from "vitest";
 
-import { sanitizeForShellLog } from "@/lib/shellLog";
+import { sanitizeForShellLog, WITHHELD } from "@/lib/shellLog";
 
 describe("sanitizeForShellLog", () => {
-  it("removes credentials and user paths but keeps the message", () => {
+  it("keeps the message up to the first path and withholds the rest", () => {
     const cleaned = sanitizeForShellLog(
       "TypeError: failed for C:\\Users\\Anna\\Pictures\\a.jpg with capability=abc123 and /Users/anna/Pictures/b.jpg",
     );
 
-    expect(cleaned).toContain("TypeError: failed for <path>");
-    expect(cleaned).toContain("capability=[REDACTED]");
-    expect(cleaned).not.toContain("Anna");
-    expect(cleaned).not.toContain("anna");
-    expect(cleaned).not.toContain("abc123");
+    expect(cleaned).toBe(`TypeError: failed for ${WITHHELD}`);
   });
 
+  // Every private value must be gone, whatever its spelling. The end of a path
+  // with spaces or of an escaped secret cannot be found reliably, so nothing
+  // after the first marker survives (F1-004).
   it.each([
-    ["Authorization: Bearer SYNTHETIC-SECRET", "Authorization=[REDACTED]"],
-    ["sent Bearer SYNTHETIC-SECRET upstream", "Bearer [REDACTED]"],
-    ['failed request {"token":"SYNTHETIC-SECRET"}', "token=[REDACTED]"],
-    ["failed request {'api_key': 'SYNTHETIC-SECRET'}", "api_key=[REDACTED]"],
-    ["password = SYNTHETIC-SECRET", "password=[REDACTED]"],
-  ])("redacts the credential in %s", (message, kept) => {
+    "Authorization: Bearer SYNTHETIC-SECRET",
+    "sent Bearer SYNTHETIC-SECRET upstream",
+    'failed request {"token":"SYNTHETIC-SECRET"}',
+    "failed request {'api_key': 'SYNTHETIC-SECRET'}",
+    "password = SYNTHETIC-SECRET",
+    'failed request {"password":"SYNTHETIC\\"SECRET"}',
+    "Cookie: session=SYNTHETIC-SECRET; refresh=SYNTHETIC-SECRET",
+    "set-cookie: id=SYNTHETIC-SECRET",
+    "GET /api/files?token=SYNTHETIC-SECRET failed",
+  ])("withholds the credential in %s", (message) => {
     const cleaned = sanitizeForShellLog(message);
 
-    expect(cleaned).toContain(kept);
-    expect(cleaned).not.toContain("SYNTHETIC-SECRET");
+    expect(cleaned).toContain(WITHHELD);
+    expect(cleaned).not.toContain("SECRET");
   });
 
   it.each([
     "failed C:/Users/Example/Pictures/personal.jpg",
-    "failed \\\\nas\\Example\\Pictures\\personal.jpg",
+    'failed to open "C:/Users/Example/My Pictures/personal.jpg"',
+    "failed C:\\Users\\Example\\My Pictures\\personal.jpg",
+    'failed to open "\\\\nas\\Example\\My Pictures\\personal.jpg"',
     "failed //nas/Example/Pictures/personal.jpg",
-    "failed file:///home/example/personal.jpg",
-    'failed "/media/example/personal.jpg"',
-  ])("removes the user path in %s", (message) => {
+    "failed file:///home/example/My Pictures/personal.jpg",
+    'failed "/media/example/My Pictures/personal.jpg"',
+    "failed /Users/example/My Pictures/personal.jpg",
+    "failed ~/My Pictures/personal.jpg",
+  ])("withholds the user path in %s", (message) => {
     const cleaned = sanitizeForShellLog(message);
 
-    expect(cleaned).toContain("failed");
-    expect(cleaned).toContain("<path>");
-    expect(cleaned).not.toMatch(/example|personal/i);
+    expect(cleaned.startsWith("failed")).toBe(true);
+    expect(cleaned).toContain(WITHHELD);
+    expect(cleaned).not.toMatch(/example|personal|pictures/i);
   });
 
-  it("keeps request URLs readable", () => {
-    expect(sanitizeForShellLog("GET http://127.0.0.1:8765/api/health failed")).toBe(
-      "GET http://127.0.0.1:8765/api/health failed",
-    );
+  it.each([
+    "GET http://127.0.0.1:8765/api/health failed",
+    "SyntaxError: Unexpected token < in JSON at position 0",
+    "TypeError: Cannot read properties of undefined (reading 'session')",
+  ])("keeps a message without private markers intact: %s", (message) => {
+    expect(sanitizeForShellLog(message)).toBe(message);
   });
 
   it("bounds the length and flattens new lines", () => {

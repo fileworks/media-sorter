@@ -3,8 +3,8 @@
  *
  * Without this, an uncaught error in the window leaves no trace in the file a
  * user is asked to send: the launcher only knew that the page loaded. Messages
- * are bounded and stripped of anything that looks like a credential or a
- * user path before they leave the page; the shell bounds them again.
+ * are bounded and cut at anything that looks like a credential or a user
+ * path before they leave the page; the shell bounds them again.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -15,25 +15,34 @@ export type ShellLogLevel = "info" | "warn" | "error";
 
 const MAX_CHARS = 1500;
 
-/** Remove tokens and file paths; keep the shape of the message. */
+/**
+ * Where something private may begin. Finding the *end* of a path with spaces or
+ * of an escaped secret is guesswork, so the message is cut at the first marker
+ * instead: what precedes it is kept, everything after it is withheld.
+ */
+const SENSITIVE: readonly RegExp[] = [
+  // A credential assigned or sent: `token=`, `"password":`, `Cookie:`, `Bearer x`.
+  /["']?\b(?:capability|token|api[_-]?key|authorization|password|passwd|secret|cookie|set-cookie|session)["']?\s*[=:]/i,
+  /\b(?:bearer|basic)\s+\S/i,
+  // Paths: drive letters with either separator, `file:` URLs, UNC and
+  // `//server` shares, home-relative and the usual user-data roots.
+  /\b[A-Za-z]:[\\/]/,
+  /\bfile:\//i,
+  /(?<lead>^|[\s"'(=,[{])(?:\\\\|\/\/|~[\\/]|\/(?:Users|home|Volumes|mnt|media|private|run\/media|var\/folders)\/)/,
+];
+
+export const WITHHELD = "[withheld]";
+
+/** Keep the message up to the first credential or path; withhold the rest. */
 export function sanitizeForShellLog(message: string): string {
-  return (
-    message
-      // `key=value`, `Key: Bearer value` and quoted JSON fields such as `"token":"value"`.
-      .replace(
-        /["']?(capability|token|api[_-]?key|authorization|password|secret|cookie)["']?\s*[=:]\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
-        "$1=[REDACTED]",
-      )
-      .replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 [REDACTED]")
-      .replace(/file:\/\/[^\s"')]+/gi, "<path>")
-      // Drive paths with either separator, then UNC and `//server/share` paths.
-      .replace(/\b[A-Za-z]:[\\/][^\s"']+/g, "<path>")
-      .replace(/(^|[\s"'(=])(?:\\\\|\/\/)[^\s"')]+/g, "$1<path>")
-      .replace(/(^|[\s"'(])\/(?:Users|home|Volumes|mnt|media|private)\/[^\s"')]+/g, "$1<path>")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, MAX_CHARS)
-  );
+  const flat = message.replace(/\s+/g, " ").trim();
+  let cut = flat.length;
+  for (const pattern of SENSITIVE) {
+    const match = pattern.exec(flat);
+    if (match !== null) cut = Math.min(cut, match.index + (match.groups?.lead?.length ?? 0));
+  }
+  const kept = cut < flat.length ? `${flat.slice(0, cut).trimEnd()} ${WITHHELD}`.trim() : flat;
+  return kept.slice(0, MAX_CHARS);
 }
 
 export function shellLog(level: ShellLogLevel, message: string): void {

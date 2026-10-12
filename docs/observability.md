@@ -126,7 +126,8 @@ app not start, or why did it stop?" without a debugger.
 - **Panics and UI errors.** A launcher panic is logged with its thread and source
   location and still ends startup with a visible failure. Uncaught errors, rejected
   promises and render crashes in the window are logged as `frontend …` lines,
-  stripped of credentials and user paths and capped per line and per launch.
+  cut at the first credential or user path (the rest reads `[withheld]`) and
+  capped per line and per launch.
 - **Previous launch.** `launcher-run.json` records how far each launch got. The
   next launch logs `previous_run_incomplete` with the last stage and whether the
   window ever appeared when the previous one never reached a clean exit. A launch
