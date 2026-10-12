@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from app.core.config import Config
 from app.core.logging_config import get_logger
 from app.services.ai.encoder_protocol import VisionEncoder
+from app.services.ai.image_embeddings import file_embedding
 from app.services.ai.prompts import anchor_prompts, pool_normalized, prompt_group
 from app.services.ai.video_sampling import (
     VIDEO_FRAME_SAMPLES,
@@ -47,7 +48,6 @@ from app.services.ai.video_sampling import (
     raise_if_stopped,
     sample_frames,
 )
-from app.services.filesystem_service import open_image
 from app.utils.media_utils import is_image, is_video
 
 if TYPE_CHECKING:
@@ -224,14 +224,11 @@ class CategoryClassifierService:
     # ------------------------------------------------------------------ #
 
     def _image_embedding(self, path: Path) -> Any | None:
-        """Raw CLIP embedding for an image file, or ``None``."""
+        """Raw image embedding for a file, shared with tagging (AI-07), or ``None``."""
         embedder = self._embedder
         if embedder is None:
             return None
-        with open_image(path) as img:
-            if img is None:
-                return None
-            return embedder.embed_image(img)
+        return file_embedding(embedder, path)
 
     def _video_embedding(self, path: Path, should_stop: StopCheck | None = None) -> Any | None:
         """Unit mean of the sampled frames' unit embeddings, or ``None``.

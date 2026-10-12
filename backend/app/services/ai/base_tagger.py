@@ -149,11 +149,21 @@ class ZeroShotTagger(AITagger):
         if not self._labels:
             return []
         try:
+            img_raw = self._embedder.embed_image(image)
+        except Exception as exc:
+            logger.warning("Local zero-shot inference failed", error=str(exc))
+            return []
+        if img_raw is None:
+            return []
+        return self.tag_vector(img_raw)
+
+    def tag_vector(self, img_raw: Any) -> list[tuple[str, float]]:
+        """Score labels against an already computed image embedding."""
+        if not self._labels:
+            return []
+        try:
             import numpy as np
 
-            img_raw = self._embedder.embed_image(image)
-            if img_raw is None:
-                return []
             vecs = self._text_embeddings()  # L2-normalised label + anchor matrices
             if vecs is None:
                 return []

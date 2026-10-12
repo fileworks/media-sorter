@@ -45,6 +45,16 @@ IFD0 instead of the Exif sub-IFD. The regression tests use actual encoded EXIF,
 verify English/German output and leave source bytes unchanged. Camera scene mode
 is still only recorded metadata.
 
+## Image embeddings
+
+Preview categorizes a file and proposes its tags from one decode and one vision
+run: the embedding is cached in memory, keyed by the file's identity, size,
+modification time and inode, the model and a preprocessing version. The cache is
+bounded at 64 MB (about 21,000 vectors), drops the least recently used entry, holds
+read-only arrays and is never written to disk, because embeddings are derived
+personal data. A run with a reviewed plan embeds nothing: category and tags come
+from the plan. Each encoder has its own cache, so a model change starts empty.
+
 ## Video frames
 
 Tagging and categorization sample up to five evenly spaced frames. A video tag

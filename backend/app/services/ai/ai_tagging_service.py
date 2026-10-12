@@ -35,6 +35,7 @@ from app.core.rules import normalized_key
 from app.services.ai.base_tagger import AITagger, build_tagger
 from app.services.ai.encoder_protocol import VisionEncoder
 from app.services.ai.geo_lookup import GeoDataError, nearest_place, valid_coordinate
+from app.services.ai.image_embeddings import file_embedding
 from app.services.ai.video_sampling import (
     VIDEO_FRAME_SAMPLES,
     FrameSampling,
@@ -256,6 +257,11 @@ class AITaggingService:
     # ------------------------------------------------------------------ #
 
     def _tag_image(self, provider: AITagger, path: Path) -> list[tuple[str, float]]:
+        # Share the decode and vision run with categorization (AI-07).
+        tag_vector = getattr(provider, "tag_vector", None)
+        if self._embedder is not None and callable(tag_vector):
+            vector = file_embedding(self._embedder, path)
+            return [] if vector is None else list(tag_vector(vector))
         with open_image(path) as img:
             if img is None:
                 return []
