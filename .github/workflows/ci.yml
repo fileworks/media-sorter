@@ -303,6 +303,13 @@ jobs:
       - name: Test cross-platform development entry points
         run: node --test scripts/dev-process.test.mjs
 
+      # Grouped dependency updates may lock npm and crates.io releases that
+      # passed the soak at different times; Tauri needs them in lockstep.
+      - name: Check Tauri npm/crate version alignment
+        run: |
+          node --test scripts/tauri-versions.test.mjs
+          node scripts/tauri-versions.mjs
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci

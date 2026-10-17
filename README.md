@@ -162,11 +162,16 @@ React/TypeScript. Releases bundle the frozen backend plus static ffmpeg and
 ffprobe binaries. Follow the [development guide](docs/development.md#setup) for
 Python/Node/Rust/Tauri prerequisites and the applicable quality gates.
 
-Renovate combines routine non-major updates into one Monday `fix(deps)` pull
-request and squash-merges it only after all checks pass. Routine updates use
-one dependency branch. Major, replacement, and rollback updates stay on
-the Dependency Dashboard until explicitly approved and are never auto-merged.
-Urgent vulnerability updates bypass batching and require review.
+Renovate groups routine non-major updates into Monday `fix(deps)` pull
+requests, one per ecosystem: backend Python, frontend and release-tooling
+JavaScript, Rust, CI actions and images, and Tauri (crates and npm packages
+together). Each squash-merges only after all checks pass, so one failing lane
+does not hold back the others; the `build` check rejects Tauri npm/crate version
+drift. Python updates stay within the backend's `requires-python`. Python and
+Node runtime moves, updates under a deliberate cap such as NumPy's `<2.5`, and
+major, replacement, and rollback updates stay on the Dependency Dashboard until
+explicitly approved and are never auto-merged. Urgent vulnerability updates
+bypass batching and require review.
 
 - [Development guide](docs/development.md)
 - [Architecture](docs/design.md)
