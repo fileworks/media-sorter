@@ -217,6 +217,42 @@ def test_macos_seal_skips_framework_symlinks(
     ]
 
 
+def _flattened_framework(app: Path, root_bytes: bytes) -> tuple[Path, Path]:
+    # Tauri dereferences symlinks when it copies resources into the app.
+    framework = app / "Contents" / "Resources" / "backend" / "_internal" / "Python.framework"
+    library = framework / "Versions" / "3.11" / "Python"
+    library.parent.mkdir(parents=True)
+    library.write_bytes(b"\xcf\xfa\xed\xfe" + b"lib")
+    (framework / "Python").write_bytes(root_bytes)
+    return library, framework / "Python"
+
+
+def test_macos_seal_accepts_a_framework_root_copy_of_a_verified_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = tmp_path / "MediaSorter.app"
+    library, root_copy = _flattened_framework(app, b"\xcf\xfa\xed\xfe" + b"lib")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: commands.append(list(command)))
+
+    assert release_integrity._verify_macos_seal(app) == [library, root_copy]
+    assert commands == [
+        ["codesign", "--verify", "--strict", "--verbose=2", str(library)],
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)],
+    ]
+
+
+def test_macos_seal_refuses_a_framework_root_binary_it_cannot_verify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = tmp_path / "MediaSorter.app"
+    _flattened_framework(app, b"\xcf\xfa\xed\xfe" + b"other")
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: None)
+
+    with pytest.raises(release_integrity.ReleaseIntegrityError, match="match no verified copy"):
+        release_integrity._verify_macos_seal(app)
+
+
 @pytest.mark.parametrize(
     ("name", "architecture"),
     [

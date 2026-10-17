@@ -6,6 +6,7 @@ size; the release flow imports these helpers from there.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -89,11 +90,38 @@ def _require_architecture(paths: Sequence[Path], architecture: str) -> None:
         )
 
 
+def _digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _verify_macos_seal(app: Path) -> list[Path]:
-    """Strictly verify every nested Mach-O, then the whole bundle seal."""
+    """Strictly verify every nested Mach-O, then the whole bundle seal.
+
+    Tauri copies resources with symlinks dereferenced, so the packaged
+    ``Python.framework/Python`` is a real copy of ``Versions/<v>/Python``.
+    ``codesign`` cannot verify a binary at a framework root on its own ("bundle
+    format is ambiguous"); such a copy must instead be byte-identical to a
+    Mach-O that was verified at an unambiguous path.
+    """
     files = _macho_inside_out(app)
+    verified: set[str] = set()
+    framework_roots: list[Path] = []
     for path in files:
+        if path.parent.suffix == ".framework":
+            framework_roots.append(path)
+            continue
         subprocess.run(["codesign", "--verify", "--strict", "--verbose=2", str(path)], check=True)
+        verified.add(_digest(path))
+    unmatched = [path for path in framework_roots if _digest(path) not in verified]
+    if unmatched:
+        raise ReleaseIntegrityError(
+            "framework-root Mach-O files match no verified copy: "
+            + ", ".join(str(path) for path in unmatched)
+        )
     subprocess.run(
         ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True
     )
