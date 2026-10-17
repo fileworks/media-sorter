@@ -65,6 +65,8 @@ export interface Config {
   ai_tagging_enabled: boolean;
   ai_tagging_confidence_threshold: number;
   ai_tagging_max_tags: number;
+  /** Place/country tags from GPS; off for new users. */
+  ai_location_tags_enabled: boolean;
   embed_tags_in_files: boolean;
   ai_tagging_labels: string[];
   ai_tagging_labels_provenance: "bundled" | "custom";
@@ -136,6 +138,8 @@ export interface RecipeSettings {
   ai_tagging_enabled: boolean;
   ai_tagging_confidence_threshold: number;
   ai_tagging_max_tags: number;
+  /** Place/country tags from GPS; off for new users. */
+  ai_location_tags_enabled: boolean;
   embed_tags_in_files: boolean;
   exclude_patterns: string[];
   min_file_size_kb: number | null;
@@ -169,6 +173,12 @@ export type TransferMode = "copy" | "move";
  * promoting a copy also demotes whichever copy the plan was going to place —
  * two actions, not one.
  */
+/** The content tags Review settled on for one file. */
+export interface ReviewedTags {
+  source: string;
+  tags: string[];
+}
+
 export interface ReviewedSet {
   keep: string;
   demote: string[];
@@ -427,7 +437,7 @@ export interface HardwareInfo {
   logical_cpus: number;
   total_ram_gb: number;
   has_accelerator: boolean;
-  /** Probe's recommended tier: "off" | "lite" | "standard" | "max". */
+  /** Probe's recommended tier: "off" or "standard" (older builds also sent "lite"/"max"). */
   recommended_tier: Exclude<AiModelTier, "auto">;
   onnx_providers: string[];
 }
@@ -539,6 +549,8 @@ export interface RuleSet {
 export interface TaskProgress {
   current: number;
   total: number;
+  /** False while `total` is a placeholder; render "unknown", never 0. */
+  total_known?: boolean;
   percentage: number;
   estimated_time_remaining_seconds?: number;
   unit?: "items" | "bytes";
@@ -614,11 +626,17 @@ export interface AiModelPackStatus {
   source: string;
   task_id: string | null;
   error: string | null;
+  /** No longer selectable; an installed copy can only be removed. */
+  retired?: boolean;
+  /** What installing would download after reusing identical installed files. */
+  download_size?: number;
 }
 
 export interface AiModelInventory {
   effective_tier: "off" | "lite" | "standard" | "max";
   required_pack_id: string | null;
+  /** The pack local AI uses now: the required one or a working predecessor. */
+  active_pack_id?: string | null;
   packs: AiModelPackStatus[];
 }
 
@@ -663,6 +681,13 @@ export interface OutcomeProvenance {
     confidence: number | null;
     threshold: number | null;
     passed: boolean | null;
+    /** Lead over the next category and the minimum; absent in older plans. */
+    margin?: number | null;
+    min_margin?: number | null;
+    /** The first gate a rejected file failed; absent in older plans. */
+    rejection?: "weak_match" | "confidence" | "margin" | null;
+    /** Platform screenshot metadata, not the model, chose the folder. */
+    basis?: "file_name" | "embedded_metadata" | null;
   };
   duplicate: {
     evaluated: boolean;
@@ -681,6 +706,11 @@ export interface PreviewItem {
   extracted_date: string | null;
   metadata_source: string;
   tags: string[];
+  /**
+   * Content tags the local model proposed; what a run writes unless Review
+   * edits them. Null when tagging was off for this file.
+   */
+  ai_tags?: string[] | null;
   /** Predicted Smart Categorization folder, or null (→ _uncategorized). */
   category?: string | null;
   /**
@@ -971,6 +1001,8 @@ export interface PlanReviewState {
   viewer_path: string | null;
   search: string;
   tree_path: string | null;
+  /** Content-tag edits; absent in states saved before tags were reviewable. */
+  tag_edits?: ReviewedTags[];
   view: "list" | "grid";
   sort: "name" | "size" | "date";
   keep_policy: KeeperPolicyId;
@@ -1631,7 +1663,11 @@ export class MediaSorterApiClient {
     idempotencyKey?: string,
     expectedConfigFingerprint?: string,
     planId?: string,
-    decisions: { excludedRoots?: string[]; reviewedSets?: ReviewedSet[] } = {},
+    decisions: {
+      excludedRoots?: string[];
+      reviewedSets?: ReviewedSet[];
+      reviewedTags?: ReviewedTags[];
+    } = {},
   ): Promise<string> {
     return this.startTask(
       "/api/sorting/start",
@@ -1641,6 +1677,7 @@ export class MediaSorterApiClient {
         plan_id: planId,
         excluded_roots: decisions.excludedRoots ?? [],
         reviewed_sets: decisions.reviewedSets ?? [],
+        reviewed_tags: decisions.reviewedTags ?? [],
       },
       idempotencyKey,
     );

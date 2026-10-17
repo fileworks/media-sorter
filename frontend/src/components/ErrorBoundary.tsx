@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { storedLocale, translate } from "@/i18n/I18nContext";
+import { logRenderCrash } from "@/lib/shellLog";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -27,6 +28,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // Surface to the console so the crash is diagnosable in dev tools.
     console.error("Uncaught UI error:", error, info.componentStack);
+    // And to the launcher log, which is what a user can send when it matters.
+    logRenderCrash(error, info.componentStack);
   }
 
   // Soft reset: clear the error so the subtree re-mounts in place. Recovers

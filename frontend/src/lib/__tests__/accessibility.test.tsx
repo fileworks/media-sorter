@@ -393,7 +393,6 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
         outcomes={{ sorted: 7172, duplicate: 964, junk: 312, name_collision: 3 }}
         error={null}
         config={ACCESSIBILITY_CONFIG}
-        reportPath="Sorted/_Reports/run.html"
         onCancel={() => undefined}
         onRetry={() => undefined}
       >
@@ -422,14 +421,12 @@ const PANEL_CASES: ReadonlyArray<readonly [string, () => ReactElement]> = [
           copyCount: 1,
           moveCount: 0,
           skipCount: 0,
-          referenceCount: 0,
+          referenceFolders: 0,
           sourceMutations: 0,
           acknowledgedSourceMutations: false,
-          staleGroups: 0,
-          unresolvedGroups: 0,
+          unresolvedFiles: 0,
           freeBytes: null,
           requiredBytes: 1,
-          quarantineWritable: true,
           conversionWithoutOriginals: 0,
           companionsLeftInPlace: 0,
           embeddedTagCount: 0,

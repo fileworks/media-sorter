@@ -5,6 +5,7 @@ import type { SectionProps } from "@/components/config/constants";
 import { AiCapabilityChip, ModelTierSelect } from "@/components/config/fields/AiEngine";
 import { AiTagsInput } from "@/components/config/fields/AiTagsInput";
 import { CategorizeConfidenceSlider } from "@/components/config/fields/CategorizeConfidenceSlider";
+import { CategorySuggestions } from "@/components/config/fields/CategorySuggestions";
 import { CategoryTagsInput } from "@/components/config/fields/CategoryTagsInput";
 import { RuleBuilderInline } from "@/components/RuleBuilder";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,9 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
   const requiredModel = inventory?.packs.find(
     (pack) => pack.pack_id === inventory.required_pack_id,
   );
-  const modelMissing = !localOff && requiredModel?.state !== "ready";
+  // A predecessor pack keeps local AI working until the current one is installed.
+  const modelReady = inventory?.active_pack_id != null || requiredModel?.state === "ready";
+  const modelMissing = !localOff && !modelReady;
 
   const categorizeBlocked = config.preserve_subfolders || localOff || modelMissing;
   const categorizeReason = config.preserve_subfolders
@@ -228,6 +231,20 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
             </Select>
           </SettingRow>
 
+          <SettingRow
+            field="ai_location_tags_enabled"
+            label={t("config.ai.location")}
+            description={t("config.ai.locationHelp")}
+            htmlFor="ai-location"
+          >
+            <Toggle
+              id="ai-location"
+              label={t("config.ai.location")}
+              checked={config.ai_location_tags_enabled}
+              onChange={(value) => updateConfig({ ai_location_tags_enabled: value })}
+            />
+          </SettingRow>
+
           <Disclosure summary={t("config.ai.advanced")}>
             {!localOff && (
               <SettingRow
@@ -355,6 +372,16 @@ export function EnrichGroup({ config, updateConfig, onReset }: SectionProps) {
                 {t("config.vocabulary.restore")}
               </button>
             )}
+            <CategorySuggestions
+              categories={config.categorize_categories}
+              hasSource={Boolean(config.source_directory)}
+              onAdd={(category) =>
+                updateConfig({
+                  categorize_categories: [...config.categorize_categories, category],
+                  categorize_categories_provenance: "custom",
+                })
+              }
+            />
           </SettingRow>
           <SettingRow
             field="categorize_confidence_threshold"

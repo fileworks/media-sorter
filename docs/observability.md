@@ -93,6 +93,54 @@ handler that could not be created leaves `file_logging_active: false` and a
 resolve on its own — see
 [`state-and-recovery.md`](state-and-recovery.md#interrupted-media-operations).
 
+## Launcher diagnostics
+
+The desktop launcher writes `mediasort.log` beside the engine's `backend.log`
+(Windows `%LOCALAPPDATA%\MediaSorter\Logs`, macOS `~/Library/Logs/MediaSorter`,
+Linux `${XDG_STATE_HOME:-~/.local/state}/MediaSorter/log`). It answers "why did the
+app not start, or why did it stop?" without a debugger.
+
+- **One timeline per launch.** Every line carries a UTC timestamp with
+  milliseconds, the level, the launch's random `run=` ID and `+<ms>` since the
+  process started. Stages are logged as `stage=<name>`: `logger_ready`,
+  `window_build`, `window_created`, `backend_spawn`, `backend_ready`, `ui_mounted`,
+  `ui_ready`, `close_requested`, `window_destroyed`, `backend_stop`,
+  `backend_stopped`, `exit`.
+- **Bounded.** The launcher log rotates at 2 MB and keeps five backups (about
+  12 MB). The engine log rotates at 5 MB with three backups. Neither can fill a disk.
+- **Why startup failed.** Each readiness probe records its reason (connection
+  refused, HTTP status, timeout). The whole launch has one 210-second budget and the
+  window stops waiting after 240 seconds, so a stuck start always ends in a logged,
+  visible failure rather than a window that waits forever.
+- **The engine's own last words.** The engine's stdout and stderr are drained
+  through a pipe for its whole life; only the last 16 KB are kept in memory. When it
+  fails to start or exits unexpectedly, those lines are written to the log as
+  `backend| …` with the session secret replaced by `[REDACTED]`. This covers errors
+  that happen before Python's own logging starts.
+- **An engine that dies later is reported.** After readiness a monitor notices an
+  exit nobody requested, logs its status and output, and shows a dialog instead of
+  leaving a window whose requests silently fail.
+- **Shutdown says what happened.** `backend_stopped` records whether the engine
+  accepted the cooperative shutdown, how long it took, the result of terminating
+  the whole process tree, and the final exit status.
+- **Panics and UI errors.** A launcher panic is logged with its thread and source
+  location and still ends startup with a visible failure. Uncaught errors, rejected
+  promises and render crashes in the window are logged as `frontend …` lines,
+  cut at the first credential or user path (the rest reads `[withheld]`) and
+  capped per line and per launch.
+- **Previous launch.** `launcher-run.json` records how far each launch got. The
+  next launch logs `previous_run_incomplete` with the last stage and whether the
+  window ever appeared when the previous one never reached a clean exit. A launch
+  held before any MediaSorter code ran (for example by security software) leaves no
+  marker at all; missing logs alone do not prove that cause.
+- **One instance.** Two engines over one catalog would treat each other's live work
+  as interrupted, so a second launch does not start another engine. It says that
+  MediaSorter is already open, still starting, or — when another process has been
+  starting for more than 90 seconds without a window — names that process ID and
+  how to end it. MediaSorter never terminates another process itself. When the
+  instance lock cannot be opened or taken, the launch stops with an error that
+  names the cause and the log file instead of starting an unguarded engine.
+
 ## Honest progress
 
 `TaskProgress` reports what is actually known rather than a single number:

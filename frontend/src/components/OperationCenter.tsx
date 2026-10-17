@@ -20,6 +20,7 @@ import { formatBytesShort } from "@/lib/formatters";
 import {
   centerBadge,
   centerState,
+  isRunning,
   preflight,
   reportView,
   type OperationSummary,
@@ -40,7 +41,8 @@ interface OperationCenterProps {
   seen?: string[];
   progress?: TaskProgress | null;
   activePath?: string | null;
-  onOpen?: (kind: string, id: string) => void;
+  /** Opens History, where each finished run's report, set-aside files and logs live. */
+  onOpen?: () => void;
 }
 
 export function OperationCenter({
@@ -50,7 +52,7 @@ export function OperationCenter({
   activePath = null,
   onOpen,
 }: OperationCenterProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const state = centerState(operations, seen);
   const badge = centerBadge(state);
@@ -102,7 +104,22 @@ export function OperationCenter({
               kind: t(`operations.kind.${state.active.kind}`),
             })}
           </p>
-          {message && <p className="text-xs text-muted-foreground">{message.message}</p>}
+          {message && (
+            <p className="text-xs text-muted-foreground">
+              {t(message.messageKey, {
+                ...message.params,
+                ...(typeof message.params.current === "number"
+                  ? { current: message.params.current.toLocaleString(locale) }
+                  : {}),
+                ...(typeof message.params.total === "number"
+                  ? { total: message.params.total.toLocaleString(locale) }
+                  : {}),
+                phase: message.phase
+                  ? t(`progress.phase.${message.phase}`, undefined, t("progress.phase.working"))
+                  : "",
+              })}
+            </p>
+          )}
           {view?.determinate && view.percentage !== null && (
             <ProgressBar
               value={view.percentage}
@@ -126,38 +143,37 @@ export function OperationCenter({
                 <li key={operation.operationId} className="px-3 py-2">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="text-sm text-foreground">
-                      {t(`operations.kind.${operation.kind}`)} · {report.headline}
+                      {t(`operations.kind.${operation.kind}`)} · {t(report.headlineKey)}
                     </span>
-                    <span className="text-2xs text-muted-foreground">
-                      {t("operations.written", {
-                        bytes: formatBytesShort(operation.bytesWritten),
-                      })}
-                    </span>
+                    {operation.bytesWritten !== null && (
+                      <span className="text-2xs text-muted-foreground">
+                        {t("operations.written", {
+                          bytes: formatBytesShort(operation.bytesWritten),
+                        })}
+                      </span>
+                    )}
                   </div>
                   {report.facts.length > 0 && (
                     <dl className="mt-1 flex flex-wrap gap-x-3 text-2xs text-muted-foreground">
                       {report.facts.map((fact) => (
-                        <span key={fact.label}>
-                          {fact.label}: {fact.value}
+                        <span key={fact.labelKey}>
+                          {t(fact.labelKey)}: {fact.value.toLocaleString(locale)}
                         </span>
                       ))}
                     </dl>
                   )}
-                  {report.nextSteps.length > 0 && (
-                    <p className="mt-1 text-2xs text-warning">{report.nextSteps[0]}</p>
+                  {report.nextStepKeys.length > 0 && (
+                    <p className="mt-1 text-2xs text-warning">{t(report.nextStepKeys[0])}</p>
                   )}
-                  {onOpen && (
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {report.links.map((link) => (
-                        <button
-                          key={`${link.kind}:${link.id}`}
-                          type="button"
-                          onClick={() => onOpen(link.kind, link.id)}
-                          className="rounded-control border border-border px-2 py-0.5 text-2xs hover:border-primary"
-                        >
-                          {link.kind}
-                        </button>
-                      ))}
+                  {onOpen && !isRunning(operation) && (
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={onOpen}
+                        className="rounded-control border border-border px-2 py-0.5 text-2xs hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {t("operations.openHistory")}
+                      </button>
                     </div>
                   )}
                 </li>
@@ -205,7 +221,7 @@ export function ExecutePreflight({
     ? t("preflight.running")
     : !result.canExecute
       ? t("preflight.cannotExecute")
-      : !input.acknowledgedSourceMutations
+      : !result.executable
         ? t("preflight.needsAcknowledgement")
         : null;
 
@@ -291,11 +307,7 @@ export function ExecutePreflight({
             onChange={(event) => onAcknowledge(event.target.checked)}
             className="mt-0.5 h-4 w-4 shrink-0 rounded-control border-input text-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-border disabled:bg-muted"
           />
-          {result.acknowledgement
-            ? input.sourceMutations > 0
-              ? t("preflight.acknowledge.mutations")
-              : t("preflight.acknowledge")
-            : t("preflight.acknowledge")}
+          {t(result.acknowledgementKey)}
         </label>
         {input.impactState !== "ready" && (
           <p id="preflight-acknowledge-blocked" className="mt-2 text-xs text-muted-foreground">
@@ -312,11 +324,7 @@ export function ExecutePreflight({
           native `title` never appears for a keyboard user and cannot be read at
           all on a control that is disabled. */}
         <div className="mt-4 space-y-2">
-          <Button
-            className="w-full"
-            disabled={!result.canExecute || !input.acknowledgedSourceMutations || busy}
-            onClick={onExecute}
-          >
+          <Button className="w-full" disabled={!result.executable || busy} onClick={onExecute}>
             {busy ? t("preflight.running") : t("preflight.execute")}
           </Button>
           {executeBlockedBecause !== null && (

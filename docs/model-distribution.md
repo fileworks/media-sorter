@@ -1,15 +1,28 @@
 # Optional model distribution
 
-MediaSorter downloads optional CLIP and SigLIP files only after an explicit Install
-action. The application manifest pins every upstream object to an immutable commit, byte
+MediaSorter downloads its optional SigLIP 2 model files only after an explicit Install
+action. The current pack is `siglip-standard-v2` (690 MB: full-precision vision
+tower, int8 text tower, tokenizer). Its predecessor `siglip-standard-v1` (int8
+vision, 413 MB) is retired but keeps local AI working until v2 is installed;
+installing v2 copies v1's identical files after verifying their SHA-256, so the
+upgrade downloads 372 MB, and the UI shows that real download size. Setup offers
+to remove a retired pack whenever local AI is not using it, so v1 becomes removable
+once v2 is ready. The earlier CLIP Lite pack is retired too: it stays in the
+manifest only so an installed copy is listed, and since it is never used, its
+608 MB can be reclaimed at once, for example to make room for the v2 download.
+
+The application manifest pins every upstream object to an immutable commit, byte
 size, and SHA-256 digest. Installed packs remain usable offline and can be removed from
-the settings screen.
+the settings screen. A pack's install directory is named after the digest of its
+manifest entry, so that entry never changes for a released pack: names and
+retirement live in the manifest's separate `presentation` section, and a test pins
+the released digests.
 
 ## Hosting decision
 
 Fileworks will not redistribute these model weights from a first-party GitHub Release or
-CDN for now. The packs are roughly 608 MB and 413 MB, come from separate upstream
-projects with their own licence and notice obligations, and would add a material
+CDN for now. The SigLIP pack is roughly 690 MB, comes from an upstream project with
+its own licence and notice obligations, and would add a material
 bandwidth, availability, and supply-chain maintenance commitment. The immutable Hugging
 Face revisions remain the default source.
 

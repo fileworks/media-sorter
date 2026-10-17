@@ -94,4 +94,27 @@ def test_windows_probe_uses_volume_serial(tmp_path: Path) -> None:
     result = probe_root_identity(tmp_path)
     assert result.availability == "online"
     assert result.identity.volume_id is not None
-    assert result.identity.volume_id.startswith(("windows-volume:", "device:"))
+    assert result.identity.volume_id.startswith("windows-volume:")
+
+
+def test_failed_windows_volume_api_degrades_to_path_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    from app.core import root_identity
+
+    def statvfs_is_posix_only(path: object) -> None:
+        raise AssertionError("statvfs must not be reached on Windows")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(os, "statvfs", statvfs_is_posix_only, raising=False)
+    monkeypatch.setattr(
+        root_identity,
+        "_windows_volume_evidence",
+        lambda path: root_identity._VolumeEvidence(None, None),
+    )
+    result = probe_root_identity(tmp_path)
+    assert result.availability == "online"
+    assert result.identity.volume_id is None
+    assert result.identity.confidence == "path_only"

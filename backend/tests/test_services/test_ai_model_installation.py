@@ -228,11 +228,121 @@ def test_manifest_rejects_path_traversal() -> None:
 def test_bundled_manifest_uses_immutable_revisions_and_exact_sizes(tmp_path: Path) -> None:
     store = AiModelStore(tmp_path, environment={})
 
-    assert set(store.packs) == {"clip-lite-v1", "siglip-standard-v1"}
+    assert set(store.packs) == {"clip-lite-v1", "siglip-standard-v1", "siglip-standard-v2"}
     assert store.packs["clip-lite-v1"].total_size == 608_015_951
+    assert store.packs["clip-lite-v1"].retired is True
+    assert store.packs["siglip-standard-v1"].retired is True
+    assert store.packs["siglip-standard-v2"].retired is False
+    assert store.packs["siglip-standard-v2"].total_size == 689_793_386
     assert store.packs["siglip-standard-v1"].total_size == 412_538_967
     assert all(
         len(component.revision) == 40
         for pack in store.packs.values()
         for component in pack.components
     )
+
+
+def test_existing_installs_keep_their_directory_across_renames(tmp_path: Path) -> None:
+    """The pack digest names the install directory, so presentation edits must not move it.
+
+    Renaming SigLIP inside its hashed entry once changed the digest, and every
+    existing install would have looked missing and downloaded 413 MB again.
+    """
+    store = AiModelStore(tmp_path, environment={})
+
+    assert store.packs["siglip-standard-v1"].digest.startswith("0a33387368d900a7")
+    assert store.packs["clip-lite-v1"].digest.startswith("739ef78b4507d118")
+    assert store.packs["siglip-standard-v1"].display_name == (
+        "SigLIP 2 Standard (previous version)"
+    )
+    assert store.packs["siglip-standard-v2"].display_name == "SigLIP 2 Standard"
+    assert store.packs["clip-lite-v1"].display_name == "CLIP Lite (retired)"
+
+
+def test_presentation_must_be_an_object() -> None:
+    document = json.loads(
+        (Path(__file__).resolve().parents[2] / "app" / "resources" / "ai-models.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    document["presentation"] = ["not", "an", "object"]
+
+    with pytest.raises(ModelManifestError, match="presentation"):
+        parse_manifest(json.dumps(document))
+
+
+def _two_packs(shared: bytes, old_only: bytes, new_only: bytes) -> tuple[ModelPack, ModelPack]:
+    def item(name: str, content: bytes) -> ModelFile:
+        return ModelFile(name, len(content), hashlib.sha256(content).hexdigest())
+
+    def pack(pack_id: str, files: tuple[ModelFile, ...], digest: str) -> ModelPack:
+        return ModelPack(
+            pack_id=pack_id,
+            model_id="test-model",
+            display_name=pack_id,
+            license="MIT",
+            license_url="https://example.invalid/license",
+            total_size=sum(f.size for f in files),
+            components=(ModelComponent("model", "owner/repository", "a" * 40, files),),
+            digest=digest,
+        )
+
+    old = pack("old", (item("shared.bin", shared), item("old.bin", old_only)), "c" * 64)
+    new = pack("new", (item("shared.bin", shared), item("new.bin", new_only)), "d" * 64)
+    return old, new
+
+
+def test_an_upgrade_reuses_identical_verified_files_instead_of_downloading(
+    tmp_path: Path,
+) -> None:
+    shared, old_only, new_only = b"shared tokenizer" * 10, b"old vision", b"new vision"
+    contents = {"shared.bin": shared, "old.bin": old_only, "new.bin": new_only}
+    requested: list[str] = []
+
+    def open_url(request: Request, timeout: float) -> _Response:
+        name = request.full_url.split("?")[0].rsplit("/", 1)[-1]
+        requested.append(name)
+        return _Response(contents[name])
+
+    store = AiModelStore(tmp_path, open_url=open_url, environment={})
+    old, new = _two_packs(shared, old_only, new_only)
+    store.packs = {old.pack_id: old, new.pack_id: new}
+    store._install(Task("old", operation_kind="model_download"), "old")
+    requested.clear()
+
+    assert store.status("new").download_size == len(new_only)
+    store._install(Task("new", operation_kind="model_download"), "new")
+
+    assert requested == ["new.bin"]
+    paths = store.component_paths("new")
+    assert paths is not None
+    assert (paths["model"] / "shared.bin").read_bytes() == shared
+    assert store.status("new").download_size == 0
+
+
+def test_a_damaged_local_copy_is_downloaded_instead(tmp_path: Path) -> None:
+    shared, old_only, new_only = b"shared tokenizer" * 10, b"old vision", b"new vision"
+    contents = {"shared.bin": shared, "old.bin": old_only, "new.bin": new_only}
+    requested: list[str] = []
+
+    def open_url(request: Request, timeout: float) -> _Response:
+        name = request.full_url.split("?")[0].rsplit("/", 1)[-1]
+        requested.append(name)
+        return _Response(contents[name])
+
+    store = AiModelStore(tmp_path, open_url=open_url, environment={})
+    old, new = _two_packs(shared, old_only, new_only)
+    store.packs = {old.pack_id: old, new.pack_id: new}
+    store._install(Task("old", operation_kind="model_download"), "old")
+    old_paths = store.component_paths("old", verify=False)
+    assert old_paths is not None
+    damaged = old_paths["model"] / "shared.bin"
+    damaged.write_bytes(b"X" * len(shared))  # same size, wrong bytes
+    requested.clear()
+
+    store._install(Task("new", operation_kind="model_download"), "new")
+
+    assert sorted(requested) == ["new.bin", "shared.bin"]
+    new_paths = store.component_paths("new")
+    assert new_paths is not None
+    assert (new_paths["model"] / "shared.bin").read_bytes() == shared

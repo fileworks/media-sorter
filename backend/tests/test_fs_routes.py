@@ -114,3 +114,54 @@ def test_writable_agrees_with_the_sorter(client: TestClient, tmp_path: Path) -> 
             validate_target_directory(str(read_only))
     finally:
         read_only.chmod(0o700)
+
+
+def test_a_hanging_root_does_not_hold_up_the_listing() -> None:
+    """MS-12: one offline network drive must not stall the whole root listing."""
+    import threading
+    import time
+
+    from app.api.routes.fs import _probe_concurrently
+
+    release = threading.Event()
+    fast, slow = Path("fast"), Path("slow")
+
+    def probe(path: Path) -> tuple[bool, bool]:
+        if path == slow:
+            release.wait(5)
+        return True, True
+
+    started = time.monotonic()
+    results = _probe_concurrently([fast, slow], probe, budget_seconds=0.2)
+    elapsed = time.monotonic() - started
+    release.set()
+
+    assert elapsed < 1.0
+    assert results[fast] == (True, True)
+    assert results[slow] is None
+
+
+def test_repeated_listings_reuse_the_blocked_probe_of_an_offline_root() -> None:
+    """F1-008: asking again must not pile up one blocked thread per request."""
+    import threading
+
+    from app.api.routes.fs import _probe_concurrently
+
+    release = threading.Event()
+    calls: list[Path] = []
+    offline = Path("offline")
+
+    def probe(path: Path) -> tuple[bool, bool]:
+        calls.append(path)
+        release.wait(5)
+        return True, True
+
+    try:
+        for _ in range(5):
+            assert _probe_concurrently([offline], probe, budget_seconds=0.05)[offline] is None
+        assert len(calls) == 1
+    finally:
+        release.set()
+
+    # Once the drive answers, the next listing sees it and probes afresh later.
+    assert _probe_concurrently([offline], probe, budget_seconds=2.0)[offline] == (True, True)

@@ -48,11 +48,13 @@ describe("classify", () => {
     const classified = classify(artifact({ kind: "result", verified: false, redundant: false }));
 
     expect(classified.classification).toBe("needs_decision");
-    expect(classified.explanation).toMatch(/until you decide/i);
+    expect(classified.explanationKey).toBe("recovery.artifact.needsDecision");
   });
 
   it("treats a quarantined file as safe and restorable", () => {
-    expect(classify(artifact({ kind: "quarantined" })).explanation).toMatch(/restored/i);
+    expect(classify(artifact({ kind: "quarantined" })).explanationKey).toBe(
+      "recovery.artifact.setAside",
+    );
   });
 });
 
@@ -70,20 +72,20 @@ describe("buildRecoveryPlan", () => {
     expect(plan.automatic).toHaveLength(1);
     expect(plan.decisions).toHaveLength(1);
     expect(plan.blocksNewOperations).toBe(true);
-    expect(plan.headline).toMatch(/1 item .* needs your decision/);
+    expect(plan.headlineKey).toBe("recovery.headline.decisions");
   });
 
   it("says nothing was deleted whenever a decision is pending", () => {
     const plan = buildRecoveryPlan(operation({ artifacts: [artifact({ redundant: false })] }));
 
-    expect(plan.guidance).toMatch(/nothing was deleted/i);
+    expect(plan.guidanceKey).toBe("recovery.guidance.decisions");
   });
 
   it("does not block when everything reconciled itself", () => {
     const plan = buildRecoveryPlan(operation());
 
     expect(plan.blocksNewOperations).toBe(false);
-    expect(plan.guidance).toMatch(/no files were lost/i);
+    expect(plan.guidanceKey).toBe("recovery.guidance.reconciled");
   });
 });
 
@@ -92,6 +94,7 @@ describe("startBlock", () => {
     const blocked = startBlock([operation({ artifacts: [artifact({ redundant: false })] })]);
 
     expect(blocked.blocked).toBe(true);
+    expect(blocked.decisionCount).toBe(1);
     expect(blocked.operationId).toBe("op1");
   });
 

@@ -21,16 +21,20 @@ an unresolved set, not an excuse to guess. AI must never authorize removal.
 
 ## What the implementation actually provides
 
-`encoder_factory.py` maps Lite to CLIP ViT-B/32 and both Standard and Max to the
-same quantized SigLIP 2 base/16 256-pixel encoder, with the same acceleration
-setting. Max is not a higher-quality model. The bundled manifest contains about
-608 MB for CLIP and 413 MB for SigLIP, including text towers and tokenizers;
-these are download sizes, not RAM requirements. The interface uses the manifest
+`encoder_factory.py` maps Standard to the SigLIP 2 base/16 256-pixel encoder
+(pack `siglip-standard-v2`: full-precision vision tower, int8 text tower, 690 MB);
+saved Lite and Max values select the same model. An installed v1 pack (int8 vision,
+413 MB) keeps working until v2 is installed, and the upgrade copies its identical
+verified files, so it downloads only the 372 MB vision tower. CLIP ViT-B/32 (Lite)
+was retired on 2026-10-11: it was larger than SigLIP's first pack, scored lower at
+zero-shot matching and understood only English labels.
+Sizes are download sizes, not RAM requirements. The interface uses the manifest
 inventory instead of invented tier-size estimates.
 
-The tagger already uses independent multi-label scores, prompt ensembling,
-localized bundled concepts and background anchors. Categorization has both a
-score and margin gate and an uncategorized fallback. These scores are not
+The tagger uses independent multi-label scores, prompt ensembling, localized
+bundled concepts and a per-language margin over generic background prompts.
+Categorization scores each category's best prompt on the model's own scale and has
+an absolute floor, a score and margin gate and an uncategorized fallback. These scores are not
 calibrated probabilities of a label being correct. Do not tune them by intuition
 or imply that a 99% threshold means 99% accuracy.
 
@@ -43,7 +47,134 @@ loading message.
 A generated JPEG exposed a real metadata bug: SceneCaptureType was read from
 IFD0 instead of the Exif sub-IFD. The regression tests use actual encoded EXIF,
 verify English/German output and leave source bytes unchanged. Camera scene mode
-is still only recorded metadata; nearest-city reverse geocoding is approximate.
+is still only recorded metadata.
+
+## Screenshots from platform metadata
+
+A file whose name starts the way platforms name screenshots ("Screenshot_…",
+"Screen Shot …", "Bildschirmfoto …", "Capture d’écran …" and other languages), or
+whose EXIF/XMP user comment is "Screenshot" (iOS, macOS), is filed into the
+screenshots category and tagged "screenshot" without asking the model. Review says
+which signal decided. Files without these signals go to the model as before. An
+OCR pass for documents was not added: it would need another runtime and an
+explicitly installed model pack, and the evaluated SigLIP path already separates
+documents, receipts, maps and graphs.
+
+## Image embeddings
+
+Preview categorizes a file and proposes its tags from one decode and one vision
+run: the embedding is cached in memory, keyed by the file's identity, size,
+modification time and inode, the model and a preprocessing version. The cache is
+bounded at 64 MB (about 21,000 vectors), drops the least recently used entry, holds
+read-only arrays and is never written to disk, because embeddings are derived
+personal data. A run with a reviewed plan embeds nothing: category and tags come
+from the plan. Each encoder has its own cache, so a model change starts empty.
+
+## Video frames
+
+Tagging and categorization sample up to five evenly spaced frames. A video tag
+needs the label in at least two decoded frames: a count of snapshots, not a share
+of the clip's duration, so a video with fewer than two decoded frames gets no
+content tags. Categorization normalises each frame's embedding before averaging,
+so one frame with a large raw norm cannot decide the video. A missing ffprobe or
+ffmpeg, a timeout, an unusable duration or an undecodable frame is recorded as the
+first failure reason, and a video that yields no frame logs one warning with that
+reason instead of looking like "nothing matched". Cancellation is checked between
+the probe and every frame: preview leaves the interrupted file out of the plan, and
+a run records it as cancelled rather than setting it aside as corrupt.
+
+## Location tags
+
+GPS positions from photo EXIF and video ISO 6709 tags resolve offline against
+`backend/app/resources/geo`: the GeoNames `cities1000` export (CC BY 4.0) without
+city sections or historical, abandoned and destroyed places, plus CLDR country
+names. `scripts/build_geonames_extract.py` rebuilds it; `SOURCE.json` pins the
+checksums the backend verifies before use. A place counts only within 25 km, so
+photos at sea or far from any town of 1,000 people get no location. Coordinates
+must be finite and in range; `(0, 0)` is a real position. Place names are the
+GeoNames primary names; country names follow the interface language. Missing or
+corrupt data logs one warning per run, never the coordinates. The attribution
+ships in `resources/licenses/THIRD-PARTY-DATA.md`, and the packaged smoke check
+fails when the data was not collected.
+
+## Held-out evaluation — 2026-10-12
+
+`scripts/evaluate_local_ai.py` scores the shipped tagger and categorizer, and
+alternatives, against `scripts/ai-eval/commons-manifest.json`: 227 Wikimedia
+Commons thumbnails (640 px) under free licences, each pinned by SHA-256 with its
+licence, author and source page. Images are downloaded on demand into a cache
+outside the repository and never committed. Labels were assigned by visual review:
+`labels` must be found (alternatives such as `sunset|sunrise`), `acceptable` may
+be emitted, and any other vocabulary label counts as a false tag. Ambiguous,
+duplicate and sensitive candidates were excluded. Each fixture carries a frozen
+`split`: parameters were chosen on the `calibration` split only, and the
+`held_out` split (113 images) is scored separately. The split never depends on
+which downloads succeeded, no image appears twice (one Commons file listed in both
+halves was removed from the held-out half on 2026-10-12), and a run with a missing
+or changed fixture refuses to score unless `--allow-incomplete` marks the report
+incomplete. Run it with the backend venv
+and `--model-dir` pointing at an installed pack.
+
+Results on the held-out split, CPU, re-run on 2026-10-12 after the de-duplication.
+"Before" is the earlier recorded measurement with the int8 v1 pack and the
+earlier scoring; the current script's "before" rows reuse the loaded pack's
+embeddings, so they do not reproduce that column. "Shipped" is pack v2 with the
+scoring below. Categorization reports two populations: *expected coverage* counts
+the 80 held-out images that have an expected category; *assigned share* counts
+all 113. Accuracy covers every assignment, including ones where no category was
+expected.
+
+| | Before | Shipped |
+|---|---|---|
+| Tagging, English (recall / precision / F1) | 0.873 / 0.844 / 0.858 | 0.940 / 0.900 / 0.920 |
+| Tagging, German | 0.949 / 0.666 / 0.783 | 0.923 / 0.919 / 0.921 |
+| Categorization expected coverage, English / German | 4.9 % / 0 % | 62.5 % / 62.5 % (of 80) |
+| Categorization assigned share, English / German | not recorded | 59.3 % / 59.3 % (67 of 113) |
+| Categorization accuracy when assigned | 100 % (4 files) / n/a | 97.0 % / 97.0 % (65 of 67) |
+
+What changed, and why:
+
+- **Tag margin per language.** A label must beat the generic background by
+  0.005 (English) or 0.007 (German) cosine. Without it German tagging emitted
+  `indoor`, `graph`, `artwork` and `screenshot` on half the images.
+- **Categorization on SigLIP's own scale.** Each category is scored by its best
+  prompt; the softmax uses the checkpoint's logit scale (112.9, from
+  `google/siglip2-base-patch16-256` at revision `3f9f96cb`); the winner must reach
+  the cosine at which the model's own sigmoid gives 0.0003. The generic "a photo"
+  anchors that rejected nearly everything are gone. The user's confidence (55 %)
+  and margin (15 %) settings keep their meaning.
+- **English prompts for bundled categories.** Folders keep the interface language,
+  but German users' bundled categories are scored with English concept prompts
+  (95 % held-out accuracy against 89 % with German prompts). Custom categories are
+  scored in the interface language.
+- **Templates unchanged (AI-10).** Dropping the article templates that produce
+  "a photo of a pets" did not help (F1 0.876 against 0.878), and SigLIP's
+  documented "This is a photo of {}." alone was worse (0.830).
+- **Native sigmoid for tags not adopted.** The pairwise sigmoid with the learned
+  bias, at any tested threshold, scored below the calibrated anchor-relative
+  score in both languages.
+
+- **Full-precision vision tower (AI-13).** Same pinned upstream revision, same
+  calibration. With the int8 v1 pack held-out F1 was 0.865 (English) and 0.886
+  (German); with the fp32 vision tower 0.921 and 0.923, and categorization
+  accuracy rose from 93.9 % to 97.1 % (measured before the 2026-10-12
+  de-duplication; the re-run gives 0.920, 0.921 and 97.0 %). It costs 13 ms more per image on CPU
+  (181 ms against 168 ms here) and 257 MB more resident memory, still far below
+  the former 2.5 GB peak. The fp16 tower was slower (220 ms) and loads in
+  onnxruntime 1.23 only with reduced graph optimization; the fp16 text tower did
+  not beat int8 text. Re-tuning the offsets for fp32 changed held-out results
+  inconsistently, so one calibration serves both packs.
+- **Colour profiles (AI-NEW-7).** Embedded non-sRGB profiles (Display P3 from
+  phones, Adobe RGB, CMYK) are converted to sRGB on the temporary pixels. With
+  the fixtures re-encoded as Display P3, reading them as sRGB lowered German tag F1
+  from 0.884 to 0.866 and categorized 8 fewer files; converting restored 0.877 and
+  the original 118 correct categories (two more wrong ones). Video frames arrive
+  from ffmpeg as sRGB already; HDR tone mapping is not evaluated.
+
+Limits: 227 images, mostly well-composed photographs; no selfies, birthdays,
+parties or memes; thumbnails only, so full-resolution decoding (and a JPEG draft
+decode) is not measured here. The numbers support these defaults; they do not
+guarantee accuracy on a personal library, which Review exists to check.
 
 ## Candidates, using primary sources
 
@@ -120,10 +251,29 @@ With default bundled vocabularies and thresholds in English and German:
 
 A **non-shipped** experiment split text inference into batches of 16. Peak RSS
 dropped to 1.18 GB; first tagging took 4.52 s / 3.74 s. However, scores and some
-accepted labels changed, including new unsupported German coffee tags. Therefore
-this is not treated as a behavior-preserving memory optimization. The production
-encoder, model, thresholds and batching remain unchanged. Memory tuning needs a
-representative quality comparison, not just a lower RSS measurement.
+accepted labels changed, including new unsupported German coffee tags.
+
+### Text encoding since 2026-10-12
+
+The batch experiment changed scores because the int8 text tower quantizes
+activations per batch: a label's vector depended on which other labels shared its
+batch. Measured on Windows with the pinned pack, the same 80 prompts encoded
+together and one at a time differed by a cosine of up to 0.0021, and the first ten
+prompts changed again when encoded in a batch of ten. Encoding one text at a time
+is the only setting where a label's vector is stable: repeated runs were
+bit-identical. It took the same time (3.08 s against 3.06 s for 80 prompts) and
+avoided a 336 MB resident-memory peak (514 MB against 850 MB after encoding).
+With the bundled English tag vocabulary (475 prompts), the first tag took 21.3 s
+against 20.6 s batched, while process memory after it fell from 2.54 GB to
+548 MB, and to 266 MB once the idle text tower was released. Warm tagging then
+took 0.14 s without reloading it.
+
+The encoder therefore encodes each text alone, caches up to 4096 text vectors as
+read-only arrays, and releases the text tower (about 280 MB resident) after
+30 seconds without text work; a new label reloads it. Loading is locked, so
+concurrent first use builds the sessions once. Thresholds were not retuned for
+this change; the held-out harness compares accepted tags and categories before
+any threshold or template change.
 
 The four-step shell is implemented: Sources → Setup → Review → Execute, with
 optional adjustments inside Setup and an impact summary inside Review. Automatic

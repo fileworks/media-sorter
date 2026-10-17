@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.capabilities import requires_posix_modes
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "release_integrity.py"
 REPO_ROOT = SCRIPT_PATH.parents[1]
 SPEC = importlib.util.spec_from_file_location("release_integrity", SCRIPT_PATH)
@@ -119,8 +121,12 @@ def test_tauri_and_makefile_keep_signing_in_packaging_order() -> None:
     assert (
         'if [ -z "$$APPLE_SIGNING_IDENTITY" ]; then unset APPLE_SIGNING_IDENTITY; fi;' in makefile
     )
+    # NEW-6: only the build step falls back to the ad-hoc identity, after the
+    # credential classification already recorded `unsigned`.
+    assert "export APPLE_SIGNING_IDENTITY=-;" in makefile
 
 
+@requires_posix_modes
 def test_snapshot_detects_content_and_mode_mutation(tmp_path: Path) -> None:
     root = tmp_path / "payload"
     root.mkdir()
@@ -141,6 +147,7 @@ def test_snapshot_detects_content_and_mode_mutation(tmp_path: Path) -> None:
         release_integrity.verify_snapshot(root, snapshot)
 
 
+@requires_posix_modes
 def test_normalize_finishes_modes_before_snapshot(tmp_path: Path) -> None:
     root = tmp_path / "resources"
     backend = root / "backend" / "mediasort-backend"
@@ -154,6 +161,55 @@ def test_normalize_finishes_modes_before_snapshot(tmp_path: Path) -> None:
     assert stat.S_IMODE(backend.stat().st_mode) == 0o755
     assert stat.S_IMODE(regular.stat().st_mode) == 0o644
     assert stat.S_IMODE(backend.parent.stat().st_mode) == 0o755
+
+
+def test_unsigned_macos_payloads_are_sealed_ad_hoc_inside_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "resources"
+    nested = root / "backend" / "_internal" / "libpython.dylib"
+    outer = root / "backend" / "mediasort-backend"
+    nested.parent.mkdir(parents=True)
+    nested.write_bytes(b"\xcf\xfa\xed\xfe" + b"lib")
+    outer.write_bytes(b"\xcf\xfa\xed\xfe" + b"exe")
+    (root / "backend" / "data.json").write_bytes(b"{}")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: commands.append(list(command)))
+    state = release_integrity.classify_signing("macos", {})
+
+    signed = release_integrity.sign_nested_payloads(root, state, {})
+
+    assert signed == [nested, outer]
+    assert commands == [
+        ["codesign", "--force", "--sign", "-", str(nested)],
+        ["codesign", "--force", "--sign", "-", str(outer)],
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name", "architecture"),
+    [
+        ("MediaSorter_1.0.7_aarch64.dmg", "arm64"),
+        ("MediaSorter_1.0.7_x64.dmg", "x86_64"),
+    ],
+)
+def test_the_dmg_name_states_the_required_architecture(name: str, architecture: str) -> None:
+    assert release_integrity._expected_macos_architecture(Path(name)) == architecture
+
+
+def test_a_macho_without_the_target_architecture_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    good, bad = tmp_path / "good", tmp_path / "bad"
+
+    def lipo(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        output = "x86_64 arm64\n" if command[-1] == str(good) else "x86_64\n"
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", lipo)
+    release_integrity._require_architecture([good], "arm64")
+    with pytest.raises(release_integrity.ReleaseIntegrityError, match="lack the arm64"):
+        release_integrity._require_architecture([good, bad], "arm64")
 
 
 def test_unsigned_nested_signing_runs_no_commands(
@@ -237,6 +293,9 @@ def test_packaged_backend_smoke_uses_launch_capability(
         return Response()
 
     backend = tmp_path / "mediasort-backend"
+    for relative in release_integrity.BUNDLED_BACKEND_DATA:
+        (tmp_path / "_internal" / relative).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "_internal" / relative).write_bytes(b"x")
     monkeypatch.setattr(release_integrity.socket, "socket", lambda *_args: Listener())
     monkeypatch.setattr(release_integrity.subprocess, "Popen", popen)
     monkeypatch.setattr(release_integrity.urllib.request, "urlopen", urlopen)
@@ -246,6 +305,14 @@ def test_packaged_backend_smoke_uses_launch_capability(
     assert observed["command"] == [str(backend)]
     assert observed["header"] == observed["capability"]
     assert len(str(observed["capability"])) >= 32
+
+
+def test_packaged_backend_smoke_requires_the_bundled_place_data(tmp_path: Path) -> None:
+    """AI-01: a missing collect rule left location tags empty in every installed build."""
+    backend = tmp_path / "mediasort-backend"
+
+    with pytest.raises(release_integrity.ReleaseIntegrityError, match="geo/SOURCE.json"):
+        release_integrity._smoke_backend(backend)
 
 
 def test_packaged_webview_smoke_requires_frontend_ready_marker(

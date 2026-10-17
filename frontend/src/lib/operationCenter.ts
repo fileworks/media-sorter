@@ -29,7 +29,8 @@ export interface OperationSummary {
     failed: number;
     unresolved: number;
   };
-  bytesWritten: number;
+  /** Bytes the run wrote, or null when no source reports them. Never a guessed 0. */
+  bytesWritten: number | null;
   reportId: string | null;
   recoveryState: "none" | "available" | "required";
 }
@@ -69,7 +70,7 @@ export function operationSummaries(
       failed: operation.files_failed,
       unresolved: operation.remaining_files,
     },
-    bytesWritten: 0,
+    bytesWritten: null,
     reportId: operation.id,
     recoveryState: recoveryOperations.some((item) => item.operation_id === operation.id)
       ? ("required" as const)
@@ -98,7 +99,7 @@ export function operationSummaries(
         failed: 0,
         unresolved: 0,
       },
-      bytesWritten: 0,
+      bytesWritten: null,
       reportId: null,
       recoveryState: "none" as const,
     },
@@ -146,27 +147,22 @@ export interface CenterBadge {
   /** Number shown on the collapsed center; zero means no badge. */
   count: number;
   tone: "neutral" | "info" | "warning" | "error";
-  title: string;
 }
 
 export function centerBadge(state: CenterState): CenterBadge {
   if (state.active) {
-    return { count: 1, tone: "info", title: `${state.active.kind} in progress` };
+    return { count: 1, tone: "info" };
   }
   const needsAttention = state.recent.filter(
     (operation) => operation.recoveryState === "required" || operation.counts.failed > 0,
   );
   if (needsAttention.length > 0) {
-    return {
-      count: needsAttention.length,
-      tone: "error",
-      title: `${needsAttention.length} operation(s) need attention`,
-    };
+    return { count: needsAttention.length, tone: "error" };
   }
   if (state.unread.length > 0) {
-    return { count: state.unread.length, tone: "warning", title: "Finished with warnings" };
+    return { count: state.unread.length, tone: "warning" };
   }
-  return { count: 0, tone: "neutral", title: "Nothing running" };
+  return { count: 0, tone: "neutral" };
 }
 
 // ── Execute preflight ────────────────────────────────────────────────────────
@@ -181,14 +177,13 @@ export interface PreflightInput {
   copyCount: number;
   moveCount: number;
   skipCount: number;
-  referenceCount: number;
+  /** Reference folders this run reads but never writes. */
+  referenceFolders: number;
   /** Actions that change an input folder under Copy mode. */
   sourceMutations: number;
   acknowledgedSourceMutations: boolean;
-  staleGroups: number;
-  unresolvedGroups: number;
-  /** Outcomes preview could not freeze safely; the whole sort must be reviewed again. */
-  unplannedCount?: number;
+  /** Files whose duplicate check preview could not finish; the run leaves them in place. */
+  unresolvedFiles: number;
   freeBytes: number | null;
   /**
    * Bytes the run needs, or `null` when nobody could work it out — no frozen
@@ -197,7 +192,6 @@ export interface PreflightInput {
    * and report an all-clear it had not earned (I-10).
    */
   requiredBytes: number | null;
-  quarantineWritable: boolean;
   /**
    * Permanently 0 since `P0-SAFE-001`: conversion quarantines the file it
    * replaces instead of discarding it, so there is no longer a case where an
@@ -219,13 +213,23 @@ export interface PreflightLine {
 }
 
 export interface Preflight {
+  /** No blocking line remains. */
   canExecute: boolean;
+  /**
+   * The one rule the Execute button follows: nothing blocks and this exact plan
+   * was acknowledged. Every plan needs the acknowledgement, Copy included.
+   */
+  executable: boolean;
   blocking: PreflightLine[];
   summary: PreflightLine[];
   reversible: PreflightLine[];
   irreversible: PreflightLine[];
-  /** Shown when the user must tick something before the button enables. */
-  acknowledgement: string | null;
+  /**
+   * The acknowledgement sentence for this plan. It depends only on what the plan
+   * does, so ticking the box never swaps the warning for a milder one.
+   */
+  acknowledgement: string;
+  acknowledgementKey: "preflight.acknowledge" | "preflight.acknowledge.mutations";
 }
 
 /**
@@ -261,29 +265,9 @@ export function preflight(input: PreflightInput): Preflight {
       messageKey: "preflight.blocking.empty",
     });
   }
-  if (input.staleGroups > 0) {
-    blocking.push({
-      text: `${input.staleGroups} group(s) changed since you reviewed them and must be looked at again.`,
-      tone: "error",
-      messageKey: "preflight.blocking.stale",
-      params: { count: input.staleGroups },
-    });
-  }
-  if ((input.unplannedCount ?? 0) > 0) {
-    blocking.push({
-      text: `${input.unplannedCount} outcome(s) could not be frozen safely; review the plan again before executing.`,
-      tone: "error",
-      messageKey: "preflight.blocking.unplanned",
-      params: { count: input.unplannedCount ?? 0 },
-    });
-  }
-  if (!input.quarantineWritable) {
-    blocking.push({
-      text: "Quarantine is not writable, so nothing can be moved safely.",
-      tone: "error",
-      messageKey: "preflight.blocking.quarantine",
-    });
-  }
+  // A stale plan and an unwritable destination are refused by the backend when
+  // the run starts (plan fingerprints, destination probe); the exact-impact
+  // request above fails for a stale plan. No client-side guess repeats them.
   if (input.requiredBytes === null) {
     blocking.push({
       text: "How much space this run needs is not known yet, so it cannot be checked against the disk.",
@@ -321,7 +305,7 @@ export function preflight(input: PreflightInput): Preflight {
   }
   if (input.quarantineCount > 0) {
     irreversible.push({
-      text: `${input.quarantineCount} file(s) will be relocated to quarantine (${formatBytes(input.quarantineBytes)}); they are never deleted, but this run does not restore them.`,
+      text: `${input.quarantineCount} file(s) will be set aside in the review folders (${formatBytes(input.quarantineBytes)}). They are never deleted, but this run does not put them back.`,
       tone: "warning",
       messageKey: "preflight.irreversible.quarantine",
       params: { count: input.quarantineCount, bytes: formatBytes(input.quarantineBytes) },
@@ -358,97 +342,81 @@ export function preflight(input: PreflightInput): Preflight {
       params: { count: input.skipCount },
     });
   }
-  if (input.referenceCount > 0) {
+  if (input.referenceFolders > 0) {
     reversible.push({
-      text: `${input.referenceCount} reference file(s) will not be touched.`,
+      text: `${input.referenceFolders} reference folder(s) are only read, never changed.`,
       tone: "neutral",
       messageKey: "preflight.reversible.reference",
-      params: { count: input.referenceCount },
+      params: { count: input.referenceFolders },
     });
   }
-  if (input.unresolvedGroups > 0) {
+  if (input.unresolvedFiles > 0) {
     reversible.push({
-      text: `${input.unresolvedGroups} group(s) are still unresolved and are not part of this run.`,
+      text: `${input.unresolvedFiles} file(s) could not be checked for duplicates; this run leaves them where they are.`,
       tone: "warning",
       messageKey: "preflight.reversible.unresolved",
-      params: { count: input.unresolvedGroups },
+      params: { count: input.unresolvedFiles },
     });
   }
   if (reversible.length === 0) {
     reversible.push({
-      text: "No effects in this group.",
+      text: "Nothing in this list.",
       tone: "neutral",
       messageKey: "preflight.reversible.none",
     });
   }
 
   return {
-    canExecute:
-      blocking.length === 0 && (input.sourceMutations === 0 || input.acknowledgedSourceMutations),
+    canExecute: blocking.length === 0,
+    executable: blocking.length === 0 && input.acknowledgedSourceMutations,
     blocking,
     summary: [...reversible, ...irreversible],
     reversible,
     irreversible,
-    acknowledgement: input.acknowledgedSourceMutations
-      ? null
-      : input.sourceMutations > 0
-        ? "I reviewed both groups, including changes to input folders, and want to execute this exact plan"
-        : "I reviewed both groups and want to execute this exact plan",
+    acknowledgement:
+      input.sourceMutations > 0
+        ? "I reviewed both lists, including changes to input folders, and want to execute this exact plan"
+        : "I reviewed both lists and want to execute this exact plan",
+    acknowledgementKey:
+      input.sourceMutations > 0 ? "preflight.acknowledge.mutations" : "preflight.acknowledge",
   };
 }
 
 // ── Final report ─────────────────────────────────────────────────────────────
 
 export interface ReportView {
-  headline: string;
-  facts: { label: string; value: string }[];
-  nextSteps: string[];
-  links: { kind: "report" | "quarantine" | "logs" | "recovery"; id: string }[];
+  /** Translation key of the headline. */
+  headlineKey: string;
+  /** Non-zero counts only; each label is a translation key. */
+  facts: { labelKey: string; value: number }[];
+  /** Translation keys, most urgent first. */
+  nextStepKeys: string[];
 }
 
 /** What the report says once the run is over — outcomes, not mechanisms. */
 export function reportView(operation: OperationSummary): ReportView {
   const counts = operation.counts;
   const facts = [
-    { label: "Organized", value: counts.verified_success.toLocaleString() },
-    { label: "Quarantined", value: counts.quarantined.toLocaleString() },
-    { label: "Skipped", value: counts.skipped.toLocaleString() },
-    { label: "Warnings", value: counts.warnings.toLocaleString() },
-    { label: "Failed", value: counts.failed.toLocaleString() },
-    { label: "Needs review", value: counts.unresolved.toLocaleString() },
-  ].filter((fact) => fact.value !== "0");
+    { labelKey: "operations.fact.organized", value: counts.verified_success },
+    { labelKey: "operations.fact.quarantined", value: counts.quarantined },
+    { labelKey: "operations.fact.skipped", value: counts.skipped },
+    { labelKey: "operations.fact.warnings", value: counts.warnings },
+    { labelKey: "operations.fact.failed", value: counts.failed },
+    { labelKey: "operations.fact.needsReview", value: counts.unresolved },
+  ].filter((fact) => fact.value !== 0);
 
-  const nextSteps: string[] = [];
-  if (counts.quarantined > 0) {
-    nextSteps.push("Quarantined originals are still there — nothing was deleted.");
-  }
-  if (counts.unresolved > 0) {
-    nextSteps.push("Some files need a decision before this run is complete.");
-  }
-  if (counts.failed > 0) {
-    nextSteps.push("Failed actions left their sources untouched; the report says why.");
-  }
-  if (operation.recoveryState === "required") {
-    nextSteps.push("Finish reviewing the interrupted operation before starting another.");
-  }
-
-  const links: ReportView["links"] = [];
-  if (operation.reportId) links.push({ kind: "report", id: operation.reportId });
-  if (counts.quarantined > 0) links.push({ kind: "quarantine", id: operation.operationId });
-  if (operation.recoveryState !== "none") {
-    links.push({ kind: "recovery", id: operation.operationId });
-  }
-  links.push({ kind: "logs", id: operation.operationId });
+  const nextStepKeys: string[] = [];
+  if (operation.recoveryState === "required") nextStepKeys.push("operations.next.recovery");
+  if (counts.failed > 0) nextStepKeys.push("operations.next.failed");
+  if (counts.unresolved > 0) nextStepKeys.push("operations.next.unresolved");
+  if (counts.quarantined > 0) nextStepKeys.push("operations.next.quarantined");
 
   return {
-    headline:
+    headlineKey:
       operation.outcome === null
-        ? "Still running"
-        : operation.outcome === "completed"
-          ? "Finished"
-          : operation.outcome.replace(/_/g, " "),
+        ? "operations.stillRunning"
+        : `report.outcome.${operation.outcome}`,
     facts,
-    nextSteps,
-    links,
+    nextStepKeys,
   };
 }

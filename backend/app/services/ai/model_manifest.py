@@ -45,6 +45,8 @@ class ModelPack:
     total_size: int
     components: tuple[ModelComponent, ...]
     digest: str
+    #: No longer selectable; kept only so an installed copy can be removed.
+    retired: bool = False
 
 
 def _safe_relative(value: object) -> str:
@@ -82,6 +84,13 @@ def parse_manifest(raw: str) -> tuple[str, dict[str, ModelPack]]:
     if not isinstance(raw_packs, dict) or not raw_packs:
         raise ModelManifestError("AI model manifest has no packs")
 
+    # Names and retirement are presentation, kept outside the hashed pack entries:
+    # the pack digest names the install directory, so editing a label inside a
+    # pack would make every existing install look missing and re-download it.
+    raw_presentation = document.get("presentation", {})
+    if not isinstance(raw_presentation, dict):
+        raise ModelManifestError("invalid AI model presentation")
+
     packs: dict[str, ModelPack] = {}
     for pack_id, raw_pack in raw_packs.items():
         if not isinstance(pack_id, str) or not re.fullmatch(r"[a-z0-9-]+", pack_id):
@@ -95,15 +104,19 @@ def parse_manifest(raw: str) -> tuple[str, dict[str, ModelPack]]:
                 f"model pack size mismatch for {pack_id}: {declared_total!r} != {measured_total}"
             )
         canonical = json.dumps(raw_pack, sort_keys=True, separators=(",", ":")).encode()
+        presentation = raw_presentation.get(pack_id, {})
+        if not isinstance(presentation, dict):
+            raise ModelManifestError(f"invalid presentation for {pack_id}")
         packs[pack_id] = ModelPack(
             pack_id=pack_id,
             model_id=str(raw_pack.get("model_id", "")),
-            display_name=str(raw_pack.get("display_name", "")),
+            display_name=str(presentation.get("display_name") or raw_pack.get("display_name", "")),
             license=str(raw_pack.get("license", "")),
             license_url=str(raw_pack.get("license_url", "")),
             total_size=measured_total,
             components=components,
             digest=hashlib.sha256(canonical).hexdigest(),
+            retired=presentation.get("retired") is True,
         )
     return source.rstrip("/"), packs
 
@@ -160,9 +173,23 @@ def _parse_component(name: str, raw_component: object) -> tuple[ModelComponent, 
     )
 
 
+#: The pack each tier installs. v2 carries the full-precision vision tower: on
+#: the held-out fixtures it raised tag F1 to 0.92 in English and German for
+#: about 13 ms more per image (docs/local-ai-evaluation.md).
+CURRENT_PACK = "siglip-standard-v2"
+#: Installed packs a tier may keep using until its current pack is installed,
+#: so an upgrade never switches local AI off.
+FALLBACK_PACKS: tuple[str, ...] = ("siglip-standard-v1",)
+
+
 def pack_for_tier(tier: str) -> str | None:
-    if tier == "lite":
-        return "clip-lite-v1"
-    if tier in ("standard", "max"):
-        return "siglip-standard-v1"
+    # "lite" and "max" are saved-setting aliases for the one shipped model.
+    if tier in ("standard", "lite", "max"):
+        return CURRENT_PACK
     return None
+
+
+def candidate_packs_for_tier(tier: str) -> tuple[str, ...]:
+    """The current pack first, then installed predecessors that still work."""
+    current = pack_for_tier(tier)
+    return () if current is None else (current, *FALLBACK_PACKS)

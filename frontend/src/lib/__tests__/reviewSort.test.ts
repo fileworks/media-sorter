@@ -36,6 +36,7 @@ function row(name: string, sizeBytes: number, date: string | null): ReviewRow {
     dateSource: "exif",
     category: null,
     tags: [],
+    aiTags: null,
     unitId: null,
     unitPrimary: true,
     companionCount: 0,

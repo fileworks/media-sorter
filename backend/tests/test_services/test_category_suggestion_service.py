@@ -1,6 +1,7 @@
 """Unit tests for CategorySuggestionService.
 
-These tests that require fastembed use pytest.importorskip to skip cleanly in CI.
+A deterministic stand-in encoder maps each vocabulary word to its own axis, so
+clustering and naming can be checked without a model.
 """
 
 from pathlib import Path
@@ -59,33 +60,59 @@ def test_kmeans_centroids_fewer_points_than_k() -> None:
     assert centroids.shape == (2, 16)
 
 
-def test_suggest_deduplicates_labels(tmp_path: Path) -> None:
-    """Even if k-means returns the same vocab label twice, output is deduplicated."""
-    # Create a tiny image file to iterate over
-    img_path = tmp_path / "test.jpg"
-    img_path.touch()
+def _one_hot_encoder() -> MagicMock:
+    from app.services.ai.category_suggestion_service import _VOCABULARY
 
     enc = MagicMock()
-    # Always return the same embedding — every cluster will map to the same vocab word
-    enc.embed_image.return_value = [0.1] * 512
-    enc.embed_texts.return_value = [[0.1] * 512] * 60  # 60 vocab embeddings
+    enc.embed_texts.side_effect = lambda texts: np.eye(
+        len(texts), len(_VOCABULARY), dtype=np.float32
+    )
+    return enc
 
-    cfg = _mock_config(str(tmp_path))
-    cfg.recursive_scan = False
 
-    from PIL import Image
+def _axis(word: str) -> np.ndarray:
+    from app.services.ai.category_suggestion_service import _VOCABULARY
 
-    mock_img = Image.new("RGB", (16, 16))
+    vector = np.zeros(len(_VOCABULARY), dtype=np.float32)
+    vector[_VOCABULARY.index(word)] = 1.0
+    return vector
+
+
+def _suggest(tmp_path: Path, words: list[str], cfg: Config, n: int = 3) -> list[str]:
+    for index in range(len(words)):
+        (tmp_path / f"{index}.jpg").touch()
+    by_name = {f"{index}.jpg": _axis(word) for index, word in enumerate(words)}
     with (
         patch("app.services.ai.category_suggestion_service.is_image", return_value=True),
-        patch("app.services.ai.category_suggestion_service.open_image") as mock_open,
+        patch(
+            "app.services.ai.category_suggestion_service.file_embedding",
+            side_effect=lambda _enc, path: by_name[path.name],
+        ),
     ):
-        mock_open.return_value.__enter__ = lambda s: mock_img
-        mock_open.return_value.__exit__ = MagicMock(return_value=False)
-        svc = CategorySuggestionService(config=cfg, encoder=enc)
-        result = svc.suggest(3)
+        return CategorySuggestionService(config=cfg, encoder=_one_hot_encoder()).suggest(n)
 
-    # All labels would map to same word, so deduplication should yield 1 unique label
-    assert len(result) <= 1
-    if result:
-        assert isinstance(result[0], str)
+
+def test_suggest_deduplicates_labels(tmp_path: Path) -> None:
+    """Every sample shows the same subject: one suggestion, not three copies."""
+    cfg = _mock_config(str(tmp_path))
+    cfg.categorize_categories = ["work"]
+    cfg.categorize_categories_provenance = "custom"
+
+    assert _suggest(tmp_path, ["coffee"] * 4, cfg) == ["coffee"]
+
+
+def test_suggestions_skip_categories_the_user_already_has(tmp_path: Path) -> None:
+    cfg = _mock_config(str(tmp_path))
+    cfg.categorize_categories = ["Coffee"]
+    cfg.categorize_categories_provenance = "custom"
+
+    assert _suggest(tmp_path, ["coffee"] * 4, cfg) == []
+
+
+def test_german_interfaces_get_german_folder_names(tmp_path: Path) -> None:
+    cfg = _mock_config(str(tmp_path))
+    cfg.language = "de"
+    cfg.categorize_categories = ["Arbeit"]
+    cfg.categorize_categories_provenance = "custom"
+
+    assert _suggest(tmp_path, ["coffee"] * 4, cfg) == ["Kaffee"]

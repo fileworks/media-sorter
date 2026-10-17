@@ -49,9 +49,6 @@ export const en = {
   "review.detail.infoFailed": "The file information could not be loaded.",
   "review.detail.provenanceLoading": "Loading the destination explanation…",
   "review.detail.provenanceFailed": "The destination explanation could not be loaded.",
-  // The chip names itself: without this the tooltip supplies the accessible
-  // name, so the visible "Junk 2" was announced as its help text instead —
-  // WCAG 2.5.3 wants the visible label inside the accessible one.
   "review.view.grid": "Grid view",
   "review.keepRule.scope": "Applies to this run only; it does not change your settings.",
   // Named after the rule it runs, not as a second algorithm standing beside it.
@@ -87,10 +84,10 @@ export const en = {
   "review.bulk.notDuplicates": "Mark as not duplicates",
   "review.partialIndex.title": "Some files could not be read while indexing",
   "review.partialIndex.detail":
-    "A folder\u2019s last scan finished without reading everything in it, so a stack below may be missing copies that exist on disk. Re-scan before deleting anything you cannot replace.",
-  "review.truncated.title": "Showing the first {count} stacks",
+    "A folder’s last scan did not read everything in it, so a set below may be missing copies that exist on disk. Check the scan issues and scan again before you decide.",
+  "review.truncated.title": "Showing the first {count} sets",
   "review.truncated.detail":
-    "This library has more duplicate stacks than one review session loads. The counts here describe what is shown, not the whole library.",
+    "This library has more duplicate sets than one review session loads. The counts here describe what is shown, not the whole library.",
   "review.bulk.consequence.keep":
     "One copy per set is selected for sorting. {setAside} extra copies ({bytes}) are preserved under _copies/. No files are deleted.",
   "review.bulk.consequence.keepAll":
@@ -108,7 +105,7 @@ export const en = {
   "review.bulk.applyRule.help":
     "Keeps the copy that \u201c{rule}\u201d ranks first in each selected set. Every result stays changeable afterwards.",
   "review.bulk.notDuplicates.help":
-    "Treats each selected set as a group of distinct files. Every copy is then planned on its own merits and none is set aside.",
+    "Treats the files in each selected set as distinct. Every file is then planned on its own and none is set aside.",
   "review.bulk.keepFromFolder.help":
     "Keeps the copy that came from one chosen source folder. A set is only decided where exactly one of its copies is in that folder \u2014 no copy, or several, and the set is left alone.",
   "review.bulk.folder": "Preferred folder",
@@ -180,7 +177,7 @@ export const en = {
   "review.flag.name_clash.help": "Another file wants this name. A suffix is added automatically.",
   "review.flag.duplicate_pending": "Not checked yet",
   "review.flag.duplicate_pending.help":
-    "This preview has not completed the duplicate check for this file. The run checks it again before deciding its destination. This is not an error.",
+    "The preview could not finish the duplicate check for this file. This run leaves it where it is; run a new preview later to sort it.",
   "review.flag.unit_member": "file group",
   "review.flag.unit_member.help":
     "This photo/video and its associated files (such as an XMP or Live Photo video) are handled as one group. This does not select the duplicate keeper.",
@@ -207,8 +204,8 @@ export const en = {
     "This run plans no file action for these files; they remain at their source paths.",
   "config.runMode": "Run mode",
   "config.runMode.help": "What this run is for.",
-  "config.runMode.organize": "Organise into folders",
-  "config.runMode.deduplicate_only": "Only remove duplicates (keep my structure)",
+  "config.runMode.organize": "Organize into folders",
+  "config.runMode.deduplicate_only": "Only set duplicates aside (keep my structure)",
   "config.runMode.deduplicateCopyNote":
     "Files that are not duplicates stay in their source folders. Duplicate copies are copied to _copies in the destination; the source copies remain untouched.",
   "config.runMode.deduplicateMoveNote":
@@ -232,19 +229,20 @@ export const en = {
     "Keeps the shortest filename — often the one without a \u201ccopy\u201d suffix.",
   "config.keeper.manual.help": "Chooses nothing. Every set waits for you in Review.",
   "config.keeper.smart": "Keep the likely original (recommended)",
-  "config.keeper.smart.short": "Likely original",
+  "config.keeper.smart.short": "Keep likely original",
   "config.keeper.best_quality": "Keep the best quality",
-  "config.keeper.best_quality.short": "Keep best",
+  "config.keeper.best_quality.short": "Keep best quality",
   "config.keeper.longest_filename": "Keep the longest filename",
   "config.keeper.longest_filename.short": "Keep longest name",
   "config.keeper.shortest_filename": "Keep the shortest filename",
   "config.keeper.shortest_filename.short": "Keep shortest name",
-  "config.keeper.manual": "Decide each group myself",
+  "config.keeper.manual": "Decide each set myself",
   "config.keeper.manual.short": "Decide myself",
   "preflight.cannotExecute": "This plan cannot be executed as it stands.",
   "preflight.needsAcknowledgement": "Acknowledge what this run changes first.",
   "footer.busy": "Wait for the current operation to finish.",
-  "recipes.discardsPlan": "The computed plan for this run is discarded; a new one will be taken.",
+  "recipes.discardsPlan":
+    "The computed plan for this run is discarded; you will need to preview again.",
   "recipes.noChanges": "This recipe matches your current settings — nothing would change.",
   "recipes.inForce": "This is the recipe your settings are on now.",
   "recipes.difference.none": "No recipe chosen",
@@ -323,8 +321,7 @@ export const en = {
   "config.source.not_found": "Source folder not found: “{path}”. Check the path and try again.",
   "config.target.required": "Pick where your sorted files should go.",
   "config.integrity.authorization_required":
-    "Some settings would change the contents of your files, which Organize Only does not " +
-    "allow. Switch tag embedding, metadata overwriting, repair, and conversion off to continue.",
+    "Some settings would change the contents of your files, which this run does not allow. To continue, turn off Fix dates in metadata, Repair corrupted files, Convert images, Convert videos and storing tags into the image files.",
   "config.validation.invalid": "This setting is invalid.",
   "config.filters.minimum_negative": "Minimum file size cannot be negative.",
   "rules.title": "Deterministic rules",
@@ -382,13 +379,13 @@ export const en = {
   "progress.files": "{current} / {total} files · {percentage}%",
   "progress.remaining": "About {duration} remaining",
   "sort.milestone.25": "25% sorted — {current} of {total} files",
-  "sort.milestone.50": "Halfway! {current} of {total} files sorted",
+  "sort.milestone.50": "Halfway: {current} of {total} files sorted",
   "sort.milestone.75": "Almost done — {current} of {total} files sorted",
   "sort.notificationTitle": "MediaSorter — sort complete",
   "sort.notificationBody": "{sorted} files sorted",
   "sort.notificationBodyFailed": "{sorted} files sorted, {failed} failed",
   "sort.reportMissing": "Sort completed, but no report record was found.",
-  "sort.reportReady": "Sorting complete! Report is ready.",
+  "sort.reportReady": "Sorting complete. The report is ready.",
   "sort.cancelledReportReady": "Cancelled run report is ready.",
   "sort.reportLoadFailed": "Sort completed but report could not be loaded.",
   "sort.failedDetails": "Sort failed. Check logs for details.",
@@ -396,8 +393,9 @@ export const en = {
   "sort.cancelFailed": "Failed to cancel",
   "sort.cancelRequested": "Cancellation requested.",
   "sort.statusFailed": "Sort status could not be read.",
-  "help.aiModelTier": "Auto selects a suitable local CLIP or SigLIP model for this machine.",
-  "help.aiAllowGpu": "Use CoreML, CUDA, or DirectML acceleration when available.",
+  "help.aiModelTier": "Auto uses the local SigLIP 2 model when this machine can run it.",
+  "help.aiAllowGpu":
+    "Use CoreML (macOS) or CUDA acceleration when available. On Windows, local AI runs on the CPU.",
   "app.tagline": "Review first. Organize with confidence.",
   "app.history": "History",
   "app.back": "Back",
@@ -438,10 +436,10 @@ export const en = {
   "report.noStatistics": "No statistics data.",
   "report.unknown": "Unknown",
   "report.filter.all": "All",
-  "report.filter.sorted": "✓ Sorted",
-  "report.filter.quarantined": "⚠ Quarantined",
-  "report.filter.duplicates": "≈ Duplicates",
-  "report.filter.failed": "✕ Failed",
+  "report.filter.sorted": "Sorted",
+  "report.filter.quarantined": "Set aside",
+  "report.filter.duplicates": "Duplicates",
+  "report.filter.failed": "Failed",
   "report.searchPlaceholder": "Search by path…",
   "report.searchLabel": "Search report files by path",
   "report.suspiciousDates.one":
@@ -462,19 +460,19 @@ export const en = {
   "report.unit.primaryUnknown": "Main photo/video unknown",
   "report.unit.id": "Unit {id}",
   "report.noFilterMatch": "No files match the current filter.",
-  "report.status.sorted": "✓ sorted",
-  "report.status.unknownDate": "? unknown date",
-  "report.status.futureDate": "future date",
-  "report.status.duplicate": "≈ duplicate",
-  "report.status.failed": "✕ failed",
-  "report.status.corrupted": "⚠ corrupted",
-  "report.status.junk": "⊘ junk",
-  "report.status.inDestination": "≈ in destination",
-  "report.status.keptInPlace": "kept in place",
-  "report.status.incompleteUnit": "✕ incomplete media set",
-  "report.status.unmatchedCompanion": "⚠ companion left unmatched",
-  "report.status.cancelled": "cancelled before processing",
-  "report.status.blocked": "✕ blocked",
+  "report.status.sorted": "Sorted",
+  "report.status.unknownDate": "Unknown date",
+  "report.status.futureDate": "Future date",
+  "report.status.duplicate": "Duplicate",
+  "report.status.failed": "Failed",
+  "report.status.corrupted": "Corrupted",
+  "report.status.junk": "Junk",
+  "report.status.inDestination": "Already in destination",
+  "report.status.keptInPlace": "Kept in place",
+  "report.status.incompleteUnit": "Incomplete media set",
+  "report.status.unmatchedCompanion": "Companion left unmatched",
+  "report.status.cancelled": "Cancelled before processing",
+  "report.status.blocked": "Blocked",
   "report.duplicateOf": "Duplicate of {path}",
   "report.pagination.one": "1 file · showing {from}–{to}",
   "report.pagination": "{count} files · showing {from}–{to}",
@@ -484,7 +482,7 @@ export const en = {
   "report.exportSuccess": "Report exported successfully",
   "report.exportFailed": "Export failed — try again",
   "report.summary.sorted": "Sorted",
-  "report.summary.quarantined": "Quarantined",
+  "report.summary.quarantined": "Set aside",
   "report.summary.duplicates": "Duplicates",
   "report.summary.skipped": "Skipped",
   "report.summary.attention": "Needs attention",
@@ -545,7 +543,7 @@ export const en = {
   "config.bursts.window": "Maximum seconds between frames",
   "config.bursts.distance": "Maximum perceptual distance",
   "config.bursts.reviewFirst":
-    "Off by default. Every group requires review; non-selected media units go to quarantine, never deletion.",
+    "Off by default. Every burst needs your review; photos and videos you do not choose are set aside, never deleted.",
   "config.duplicates.threshold": "Similarity threshold",
   "config.filters.recursive": "Scan subfolders",
   "config.filters.minSize": "Minimum file size (KB)",
@@ -579,6 +577,9 @@ export const en = {
   "config.ai.enabled": "Tag media by content",
   "config.ai.labels": "Labels to detect",
   "config.ai.maxTags": "Maximum tags per file",
+  "config.ai.location": "Add place names from GPS",
+  "config.ai.locationHelp":
+    "Adds the nearest town and the country for photos and videos with a GPS position. Location is personal: these tags travel with the files and sidecars you share.",
   "config.ai.confidence": "Confidence (0–1)",
   "config.ai.embed": "Store generated tags",
   "config.input.addLabel": "Add label…",
@@ -617,9 +618,7 @@ export const en = {
   "config.ai.model": "Local AI model",
   "config.ai.gpu": "Use GPU acceleration",
   "config.ai.tier.auto": "Auto — use {tier} (recommended)",
-  "config.ai.tier.lite": "Lite — CLIP{slow}",
   "config.ai.tier.standard": "Standard — SigLIP 2{slow}",
-  "config.ai.tier.max": "Max — same SigLIP 2 model as Standard{slow}",
   "config.ai.tier.off": "Off — disable the local model",
   "config.ai.slow": " · may be slow",
   "config.ai.download":
@@ -647,6 +646,11 @@ export const en = {
   "config.ai.modelRetry": "Retry download",
   "config.ai.modelRemove": "Remove files",
   "config.ai.modelConfirmRemove": "Remove model files",
+  "config.ai.retired.title": "An older AI model is still installed",
+  "config.ai.upgradeAvailable":
+    "An improved version of the model is available. The installed one keeps working until you install it.",
+  "config.ai.downloadPartial": "{download} to download ({total} in total)",
+  "config.ai.retired.detail": "{name} ({size}) is no longer used. Remove it to free the space.",
   "config.slider.lenient": "More lenient (85%)",
   "config.slider.strict": "Stricter (100%)",
   "config.slider.pixel": "Nearly pixel-perfect — safest, fewest false positives",
@@ -681,7 +685,7 @@ export const en = {
     "{changed} changed · {skipped} skipped · {attention} need attention · {remaining} remaining",
   "history.export": "↓ Export",
   "history.view": "View",
-  "history.previous": "← Prev",
+  "history.previous": "← Previous",
   "history.next": "Next →",
   "history.page": "Page {page} of {pages}",
   "update.available": "{product} is available — you're on {current}.",
@@ -710,15 +714,6 @@ export const en = {
   "preflight.blocking.impactLoading": "Calculating the exact impact of these decisions…",
   "preflight.blocking.impactError":
     "The exact impact could not be verified. Return to Review and try again.",
-  "preflight.blocking.stale.one":
-    "1 group changed since you reviewed it and must be looked at again.",
-  "preflight.blocking.stale":
-    "{count} groups changed since you reviewed them and must be looked at again.",
-  "preflight.blocking.unplanned.one":
-    "1 outcome could not be frozen safely. Review the plan again before executing.",
-  "preflight.blocking.unplanned":
-    "{count} outcomes could not be frozen safely. Review the plan again before executing.",
-  "preflight.blocking.quarantine": "Quarantine is not writable, so nothing can be moved safely.",
   "preflight.blocking.space": "Not enough free space: {required} needed, {available} available.",
   "preflight.blocking.spaceUnknown":
     "How much space this run needs is not known yet, so it cannot be checked against the disk.",
@@ -726,20 +721,21 @@ export const en = {
   "preflight.reversible.copy": "{count} files copied; the source remains available for re-running.",
   "preflight.reversible.skip.one": "1 file left exactly where it is.",
   "preflight.reversible.skip": "{count} files left exactly where they are.",
-  "preflight.reversible.reference.one": "1 reference file will not be touched.",
-  "preflight.reversible.reference": "{count} reference files will not be touched.",
-  "preflight.reversible.unresolved.one": "1 group is still unresolved and is not part of this run.",
+  "preflight.reversible.reference.one": "1 reference folder is only read, never changed.",
+  "preflight.reversible.reference": "{count} reference folders are only read, never changed.",
+  "preflight.reversible.unresolved.one":
+    "1 file could not be checked for duplicates. This run leaves it where it is.",
   "preflight.reversible.unresolved":
-    "{count} groups are still unresolved and are not part of this run.",
-  "preflight.reversible.none": "No effects in this group.",
+    "{count} files could not be checked for duplicates. This run leaves them where they are.",
+  "preflight.reversible.none": "Nothing in this list.",
   "preflight.irreversible.move.one":
     "1 source file will be removed only after the destination is verified.",
   "preflight.irreversible.move":
     "{count} source files will be removed only after the destination is verified.",
   "preflight.irreversible.quarantine.one":
-    "1 file will be relocated to quarantine ({bytes}); it is never deleted, but this run does not restore it.",
+    "1 file will be set aside in the review folders (_copies/, _junk/, _undated/, _corrupted/) ({bytes}). It is never deleted, but this run does not put it back.",
   "preflight.irreversible.quarantine":
-    "{count} files will be relocated to quarantine ({bytes}); they are never deleted, but this run does not restore them.",
+    "{count} files will be set aside in the review folders (_copies/, _junk/, _undated/, _corrupted/) ({bytes}). They are never deleted, but this run does not put them back.",
   "preflight.irreversible.conversion.one": "1 original file will not be retained after conversion.",
   "preflight.irreversible.conversion":
     "{count} original files will not be retained after conversion.",
@@ -752,9 +748,9 @@ export const en = {
   "preflight.irreversible.tags":
     "Tags will be embedded into up to {count} files, changing their contents.",
   "preflight.irreversible.none": "This plan has no effects that remove or rewrite originals.",
-  "preflight.acknowledge": "I reviewed both groups and want to execute this exact plan",
+  "preflight.acknowledge": "I reviewed both lists and want to execute this exact plan",
   "preflight.acknowledge.mutations":
-    "I reviewed both groups, including changes to input folders, and want to execute this exact plan",
+    "I reviewed both lists, including changes to input folders, and want to execute this exact plan",
   "preflight.running": "Running…",
   "preflight.execute": "Execute the reviewed plan",
   "stage.navigation": "Stages",
@@ -774,8 +770,9 @@ export const en = {
   "plan.recalculate": "Recalculate",
   "plan.complete": "Plan complete",
   "plan.summary.title": "{count} files are ready for review",
-  "plan.summary.detail.one": "1 duplicate set will be visible in the review workspace.",
-  "plan.summary.detail": "{count} duplicate sets will be visible in the review workspace.",
+  "plan.summary.detail.one": "1 file looks like a duplicate and is shown in the review workspace.",
+  "plan.summary.detail":
+    "{count} files look like duplicates and are shown in the review workspace.",
   "plan.metric.files": "Files",
   "plan.metric.files.help":
     "Every file the scan found in the selected folders. The plan was calculated over all of them.",
@@ -808,9 +805,9 @@ export const en = {
   "plan.sequence.organize.detail.one": "Prepare 1 actionable file group for its destination.",
   "plan.sequence.organize.detail": "Prepare {count} actionable file groups for their destinations.",
   "plan.sequence.duplicates.title": "Decide duplicates",
-  "plan.sequence.duplicates.detail.one": "Keep 1 duplicate set visible for an explicit decision.",
+  "plan.sequence.duplicates.detail.one": "Show 1 likely duplicate file for an explicit decision.",
   "plan.sequence.duplicates.detail":
-    "Keep {count} duplicate sets visible for an explicit decision.",
+    "Show {count} likely duplicate files for an explicit decision.",
   "plan.sequence.write.title": "Write to one destination",
   "plan.sequence.write.detail.one": "After approval, transfer and verify 1 planned file.",
   "plan.sequence.write.detail": "After approval, transfer and verify {count} planned files.",
@@ -861,6 +858,7 @@ export const en = {
   "sources.role.destination.description": "Where organized files are written.",
   "sources.copyPath": "Copy path",
   "sources.pathCopied": "Copied",
+  "sources.showInFolder": "Show in folder",
   "sources.locate": "Locate…",
   "sources.includeNextRun": "Include this run",
   "sources.skipRun": "Skip this run",
@@ -902,6 +900,56 @@ export const en = {
   "operations.kind.review": "Review",
   "operations.kind.cleanup": "Cleanup",
   "operations.kind.restore": "Restore",
+  "operations.stillRunning": "Still running",
+  "operations.fact.organized": "Organized",
+  "operations.fact.quarantined": "Set aside",
+  "operations.fact.skipped": "Skipped",
+  "operations.fact.warnings": "Warnings",
+  "operations.fact.failed": "Failed",
+  "operations.fact.needsReview": "Needs review",
+  "operations.next.recovery":
+    "Finish reviewing the interrupted operation before you start another.",
+  "operations.next.failed": "Failed actions left their sources untouched; the report says why.",
+  "operations.next.unresolved": "Some files still need a decision before this run is complete.",
+  "operations.next.quarantined": "Set-aside originals are still there; nothing was deleted.",
+  "operations.openHistory": "Open in History",
+  "recovery.headline.decisions.one": "1 item from an interrupted run needs your decision",
+  "recovery.headline.decisions": "{count} items from an interrupted run need your decision",
+  "recovery.headline.reconciled": "An interrupted run was reconciled automatically",
+  "recovery.guidance.decisions":
+    "Nothing was deleted. Review each item and choose whether to keep or discard it before you start new work.",
+  "recovery.guidance.reconciled":
+    "Every leftover was matched to a verified copy. No files were lost and nothing needs to be done.",
+  "recovery.automatic.one": "1 leftover was resolved automatically.",
+  "recovery.automatic": "{count} leftovers were resolved automatically.",
+  "recovery.artifact.stageRedundant": "A partial copy whose content is already verified elsewhere.",
+  "recovery.artifact.resultVerified": "A finished, verified file. Nothing further is needed.",
+  "recovery.artifact.originalVerified": "Your original, verified and untouched.",
+  "recovery.artifact.setAside": "Set aside. It can be restored at any time.",
+  "recovery.artifact.needsDecision":
+    "This could not be matched to a verified copy, so it is kept until you decide what it is.",
+  "recovery.keep": "Keep",
+  "recovery.discard": "Discard",
+  "recovery.openReport": "Open the report",
+  "progress.stopping": "Stopping at the next safe point…",
+  "progress.stalled": "No change for {seconds} s. This can happen on network drives.",
+  "progress.stalledAt":
+    "No change for {seconds} s. This can happen on network drives. Still working on {path}.",
+  "progress.found": "{phase}: {current} found so far",
+  "progress.counted": "{phase}: {current} of {total}",
+  "progress.phase.working": "Working",
+  "progress.phase.validating": "Checking settings",
+  "progress.phase.scanning_source": "Scanning sources",
+  "progress.phase.indexing_destination": "Indexing the destination",
+  "progress.phase.ranking": "Ranking copies",
+  "progress.phase.analyzing": "Analyzing",
+  "progress.phase.previewing": "Building the preview",
+  "progress.phase.sorting": "Organizing",
+  "progress.phase.auditing": "Auditing",
+  "progress.phase.reconciling": "Reconciling",
+  "progress.phase.downloading_model": "Downloading the AI model",
+  "progress.phase.verifying_model": "Verifying the AI model",
+  "progress.phase.publishing_model": "Installing the AI model",
   "recipes.title": "Start with a recipe",
   "recipes.help": "Optional starting points. Every changed setting remains editable afterwards.",
   "recipes.resetOthers": "Also reset everything else to defaults",
@@ -929,7 +977,7 @@ export const en = {
   "stage.gate.duplicates": "Decide the {count} outstanding duplicate sets before executing.",
   "footer.sources":
     "Nothing changes until you confirm in step 4. Copy mode never touches your originals; Move relocates them only after each file verifies.",
-  "footer.toSetup": "Continue to setup",
+  "footer.toSetup": "Continue to Setup",
   "footer.estimate": "Estimated: {files} files organized · {duration} · {size}",
   "footer.estimateUnknown": "The estimate appears once the folders have been scanned.",
   "footer.preview": "Preview changes",
@@ -970,15 +1018,15 @@ export const en = {
   "recipes.consolidate.description":
     "Combine scattered folders or add new photos and videos to your library. Copy into year and month folders, keeping original filenames.",
   "recipes.consolidate.consequence":
-    "Copies into Year / Month without renaming. Review duplicate suggestions before running; similar photos need your acceptance. Unwanted copies go under _copies/, junk under _junk/. Source and reference folders stay unchanged. Renaming and preserved event folders are optional in Configure.",
+    "Copies into Year / Month without renaming. Review duplicate suggestions before running; similar photos need your acceptance. Unwanted copies go under _copies/, junk under _junk/. Source and reference folders stay unchanged. Renaming and preserved event folders are optional in Setup.",
   "recipes.tidyLibrary.label": "Clean up a library",
   "recipes.tidyLibrary.description":
     "The folders are already the shape you want. Find the duplicates and the junk, and leave everything else exactly where it is.",
   "recipes.tidyLibrary.consequence":
     "Nothing is filed by date and nothing is renamed. Only duplicate copies and junk leave where they were found, into _copies/ and _junk/ for you to review. No file contents are rewritten.",
-  "recipes.archiveNormalize.label": "Archive and normalise",
+  "recipes.archiveNormalize.label": "Archive and normalize",
   "recipes.archiveNormalize.description":
-    "Bring folders together and standardise what is in them: HEIC and odd formats to JPEG, video to MP4, damaged files repaired.",
+    "Bring folders together and standardize what is in them: HEIC and odd formats to JPEG, video to MP4, damaged files repaired.",
   "recipes.archiveNormalize.consequence":
     "This one rewrites image and video files. Copies into Year / Month, renames, converts to JPEG and MP4 and repairs what it can. Every original is retained under review until its replacement verifies. Nothing in the input folders is deleted.",
   "recipes.scratch.label": "Start from scratch",
@@ -1018,7 +1066,7 @@ export const en = {
   "config.group.sort.label": "Sort",
   "config.group.sort.description": "how files travel and land",
   "config.group.clean.label": "Clean",
-  "config.group.clean.description": "duplicates and junk — nothing is ever deleted",
+  "config.group.clean.description": "duplicates and junk — set aside, never deleted",
   "config.group.enrich.label": "Enrich",
   "config.group.enrich.description": "optional — convert and tag while sorting",
   "config.transfer.copyNeeds":
@@ -1040,6 +1088,17 @@ export const en = {
   "config.folder.categorizeHelp":
     "Route each file into a topic folder, decided offline on this computer.",
   "config.folder.categoriesHelp": "The topics files may be routed into.",
+  "config.folder.suggest": "Suggest from my photos",
+  "config.folder.suggestHelp":
+    "Looks at up to 150 photos from the input folder on this computer and proposes folder names. Nothing changes until you add one.",
+  "config.folder.suggestRunning": "Looking at a sample of your photos…",
+  "config.folder.suggestNone":
+    "No new names to suggest — your categories already cover what the sample shows.",
+  "config.folder.suggestNeedsSource":
+    "Choose an input folder first; suggestions come from its photos.",
+  "config.folder.suggestFailed": "Suggestions are unavailable right now.",
+  "config.folder.suggestions": "Suggested categories",
+  "config.folder.suggestAdd": "Add {name} as a category",
   "config.example.destination": "Sorted",
   "config.example.subfolder": "Holiday 2019",
   "config.folder.previewTitle": "What the destination will look like",
@@ -1069,8 +1128,7 @@ export const en = {
   "config.duplicates.thresholdHelp":
     "How similar two images must be before they count as near-duplicates.",
   "config.duplicates.keepRule": "Default keep rule",
-  "config.duplicates.keepRuleHelp":
-    "Only a default — override any group, or all of them, in Review.",
+  "config.duplicates.keepRuleHelp": "Only a default — override any set, or all of them, in Review.",
   "config.duplicates.setAside": "Set-aside location",
   "config.duplicates.setAsideHelp":
     "Extra copies are verified under _copies/ at the destination root, mirroring the selected file’s folders, for example _copies/2025/07/14/.",
@@ -1083,9 +1141,9 @@ export const en = {
   "config.keeper.oldest.short": "Keep oldest",
   "config.keeper.largest.short": "Keep largest",
   "config.keeper.smallest.short": "Keep smallest",
-  "config.keeper.highest_resolution.short": "Keep highest res",
+  "config.keeper.highest_resolution.short": "Keep highest resolution",
   "config.filters.junkHelp":
-    "Screenshots, thumbnails and tiny files are moved to _junk/ inside the destination. Nothing is deleted.",
+    "Screenshots, thumbnails and tiny files go to _junk/ in the destination instead of the dated folders, copied or moved like every other file. This step never deletes anything.",
   "config.filters.junkSizeHelp": "Anything smaller than this counts as junk.",
   "config.filters.resolutionHelp": "Images with a shorter edge below this count as junk.",
   "config.filters.junkPatternsHelp": "Filenames matching these patterns count as junk.",
@@ -1437,8 +1495,27 @@ export const en = {
   "review.detail.categoryPassed":
     "{label} passed at {confidence}; the required confidence was {threshold}.",
   "review.detail.categoryRejected":
+    "No category folder was produced: the best match ({confidence}) did not pass every check — at least {threshold} confidence, a clear lead over the next category, and a clear enough fit.",
+  "review.detail.categoryRejected.confidence":
     "No category folder was produced: confidence {confidence} did not reach {threshold}.",
+  "review.detail.categoryRejected.margin":
+    "No category folder was produced: the best category led the next one by only {margin}; at least {minMargin} is required.",
+  "review.detail.categoryRejected.weak_match":
+    "No category folder was produced: no category fitted this file clearly enough.",
   "review.detail.noRouteRule": "No route rule matched this file.",
+  "review.detail.categoryScreenshot.file_name":
+    "{label}: the file name says this is a screenshot, so the model was not asked.",
+  "review.detail.categoryScreenshot.embedded_metadata":
+    "{label}: the device marked this file as a screenshot, so the model was not asked.",
+  "review.tags.title": "Content tags",
+  "review.tags.help":
+    "Proposed by the local model and not guaranteed to be right. The run writes exactly these tags; remove or add any before you start.",
+  "review.tags.none": "No content tags will be written for this file.",
+  "review.tags.remove": "Remove tag {tag}",
+  "review.tags.add": "Add a content tag",
+  "review.tags.placeholder": "Add a tag",
+  "review.tags.addButton": "Add",
+  "review.tags.reset": "Restore proposed tags",
   "review.detail.routeWinner": "Rule “{name}” won and added “{folder}”.",
   "review.detail.routeLost": "Rule “{name}” also matched but lost at priority {priority}.",
   "review.detail.tagRules": "Matching tag rules: {names}.",
@@ -1478,7 +1555,7 @@ export const en = {
     "These two are not one duplicate set, so there is no keeper to choose between them.",
   "review.compare.noPartner":
     "This set has only one copy left to compare — nothing to put beside it.",
-  "review.tree.collapseAll": "collapse all",
+  "review.tree.collapseAll": "Collapse all",
   "review.tree.filter": "Filter folders…",
   "review.tree.empty": "No folders yet — the plan places nothing.",
   "review.tree.noMatches": "No folder matches “{query}”.",
@@ -1490,7 +1567,7 @@ export const en = {
   // folders is what made the pair read as duplicates of each other.
   "review.search": "Filter by filename…",
   "review.browse.livePlacement":
-    "Confirmed copies appear in their planned folders, including _copies/. Files move or copy only when you execute the plan. You can change a decision in the duplicate tab.",
+    "Confirmed copies appear in their planned folders, including _copies/. Files move or copy only when you execute the plan. You can change a decision under Decide the duplicates.",
   "review.compare.applied": "Applied",
   "setup.optionalHelp":
     "Optional: fine-tune folder structure, filenames, duplicate rules and local tagging.",
@@ -1535,7 +1612,7 @@ export const en = {
   "review.compare.wins.stronger": "the stronger evidence",
   "review.compare.wins.longer": "the longer recording",
   "review.compare.provenanceUnknown": "source unknown",
-  "review.compare.scopeNote": "Applies to this group only.",
+  "review.compare.scopeNote": "Applies to this set only.",
   "review.compare.referenceLocked":
     "This protected reference remains the keeper. You can compare the files without changing the decision.",
   "review.compare.nothingSelected": "Nothing selected yet — this comparison changes nothing.",
@@ -1565,19 +1642,22 @@ export const en = {
   "execute.title": "Organizing your library",
   "execute.titleDone": "The run is finished",
   "execute.confirmedCopy": "Confirmed: copy {files} files, verifying every one.",
+  "execute.confirmedCopyUncounted": "Confirmed: copy the reviewed files, verifying every one.",
+  "execute.confirmedMoveUncounted":
+    "Confirmed: move the reviewed files, verifying every one before the original leaves.",
   "execute.confirmedMove":
     "Confirmed: move {files} files, verifying every one before the original leaves.",
   "execute.phase.check": "Checking",
   "execute.phase.scan": "Scanning",
   "execute.phase.duplicates": "Finding duplicates",
-  "execute.phase.organize": "Copying & verifying",
+  "execute.phase.organize": "Transferring & verifying",
   "execute.phase.done": "Done",
   "execute.phase.failed": "Stopped by an error",
   "execute.phase.cancelled": "Cancelled",
   "execute.step.check": "Check",
   "execute.step.scan": "Scan",
   "execute.step.duplicates": "Duplicates",
-  "execute.step.organize": "Copy & verify",
+  "execute.step.organize": "Transfer & verify",
   "execute.organizeIncludes": "Conversion and tagging happen as part of this step, file by file.",
   "execute.timeLeft": "about {duration} left",
   "execute.counts": "{done} of {total} files · {errors} errors",
@@ -1712,13 +1792,13 @@ export const de: Record<MessageKey, string> = {
   "review.bulk.recommendScope": "{count} Gruppen in diesem Plan sind noch offen.",
   "review.bulk.acceptRecommendations": "Empfehlungen \u00fcbernehmen",
   "review.bulk.acceptRecommendations.help":
-    "Wählt in jeder noch offenen Gruppe die von „{rule}“ empfohlene Datei zum Einsortieren. Weitere Kopien bleiben unter _copies/ erhalten. Bereits bestätigte Entscheidungen bleiben bestehen; Referenzdateien werden nie verändert.",
+    "Behält in jeder noch offenen Duplikatgruppe die Kopie, die „{rule}“ an erste Stelle setzt. Gruppen, die du selbst entschieden hast, bleiben genau so, und eine Referenzkopie gewinnt ihre Gruppe immer.",
   "review.bulk.applyRule.help":
-    "Wählt in jeder ausgewählten Gruppe die von „{rule}“ empfohlene Datei zum Einsortieren. Weitere Kopien bleiben unter _copies/ erhalten. Du kannst die Entscheidung danach ändern.",
+    "Behält in jeder ausgewählten Duplikatgruppe die Kopie, die „{rule}“ an erste Stelle setzt. Jedes Ergebnis bleibt danach änderbar.",
   "review.bulk.notDuplicates.help":
-    "Plant alle Dateien in den ausgewählten Gruppen als eigenständige Dateien. Jede erhält ihr eigenes Sortierziel; keine kommt allein wegen dieser Gruppe nach _copies/.",
+    "Behandelt die Dateien jeder ausgewählten Duplikatgruppe als eigenständig. Jede wird für sich geplant, und keine wird beiseitegelegt.",
   "review.bulk.keepFromFolder.help":
-    "Wählt die Datei aus dem gewählten Quellordner zum Einsortieren. Eine Gruppe wird nur entschieden, wenn genau eine ihrer Kopien dort liegt. Die anderen bleiben unter _copies/ erhalten.",
+    "Behält die Kopie aus einem gewählten Quellordner. Eine Duplikatgruppe wird nur entschieden, wenn genau eine ihrer Kopien in diesem Ordner liegt – liegt keine oder liegen mehrere dort, bleibt die Gruppe unverändert.",
   "review.bulk.folder": "Bevorzugter Ordner",
   "review.bulk.keepFromFolder": "Aus Ordner behalten",
   "review.bulk.impactShort": "{decide} von {total}",
@@ -1793,7 +1873,7 @@ export const de: Record<MessageKey, string> = {
     "Eine andere Datei möchte diesen Namen. Ein Suffix wird automatisch angehängt.",
   "review.flag.duplicate_pending": "Noch ungeprüft",
   "review.flag.duplicate_pending.help":
-    "Diese Vorschau hat die Duplikatprüfung für diese Datei noch nicht abgeschlossen. Der Durchlauf prüft sie vor der Zielentscheidung erneut. Das ist kein Fehler.",
+    "Die Vorschau konnte die Duplikatprüfung für diese Datei nicht abschließen. Dieser Lauf lässt sie an ihrem Platz; starte später eine neue Vorschau, um sie einzusortieren.",
   "review.flag.unit_member": "Datei mit Begleitdateien",
   "review.flag.unit_member.help":
     "Dieses Foto/Video und zugehörige Dateien (z. B. XMP oder Live-Photo-Video) werden zusammen behandelt. Das bestimmt nicht, welche Duplikatkopie einsortiert wird.",
@@ -1821,7 +1901,7 @@ export const de: Record<MessageKey, string> = {
   "config.runMode": "Modus",
   "config.runMode.help": "Wofür dieser Durchlauf gedacht ist.",
   "config.runMode.organize": "In Ordner einsortieren",
-  "config.runMode.deduplicate_only": "Nur Duplikate entfernen (Struktur behalten)",
+  "config.runMode.deduplicate_only": "Nur Duplikate beiseitelegen (Struktur behalten)",
   "config.runMode.deduplicateCopyNote":
     "Dateien, die keine Duplikate sind, bleiben in ihren Quellordnern. Duplikatkopien werden nach _copies im Ziel kopiert; die Quelldateien bleiben unverändert.",
   "config.runMode.deduplicateMoveNote":
@@ -1843,22 +1923,23 @@ export const de: Record<MessageKey, string> = {
     "Behält den längsten Dateinamen, der meist die meisten Angaben enthält.",
   "config.keeper.shortest_filename.help":
     "Behält den kürzesten Dateinamen — oft den ohne „Kopie“-Zusatz.",
-  "config.keeper.manual.help": "Wählt nichts aus. Jede Gruppe wartet in der Prüfung auf dich.",
+  "config.keeper.manual.help":
+    "Wählt nichts aus. Jede Duplikatgruppe wartet in der Prüfung auf dich.",
   "config.keeper.smart": "Vermutliches Original behalten (empfohlen)",
-  "config.keeper.smart.short": "Vermutl. Original",
+  "config.keeper.smart.short": "Vermutliches Original behalten",
   "config.keeper.best_quality": "Beste Qualität behalten",
-  "config.keeper.best_quality.short": "Beste behalten",
+  "config.keeper.best_quality.short": "Beste Qualität behalten",
   "config.keeper.longest_filename": "Längsten Dateinamen behalten",
-  "config.keeper.longest_filename.short": "Längster Name",
+  "config.keeper.longest_filename.short": "Längsten Namen behalten",
   "config.keeper.shortest_filename": "Kürzesten Dateinamen behalten",
-  "config.keeper.shortest_filename.short": "Kürzester Name",
-  "config.keeper.manual": "Jede Gruppe selbst entscheiden",
+  "config.keeper.shortest_filename.short": "Kürzesten Namen behalten",
+  "config.keeper.manual": "Jede Duplikatgruppe selbst entscheiden",
   "config.keeper.manual.short": "Selbst entscheiden",
   "preflight.cannotExecute": "Der Plan kann so nicht ausgeführt werden.",
   "preflight.needsAcknowledgement": "Bestätige zuerst, was dieser Durchlauf verändert.",
   "footer.busy": "Warte, bis der laufende Vorgang abgeschlossen ist.",
   "recipes.discardsPlan":
-    "Der berechnete Plan für diesen Durchlauf wird verworfen; ein neuer wird erstellt.",
+    "Der berechnete Plan für diesen Durchlauf wird verworfen; du musst die Vorschau erneut erstellen.",
   "recipes.noChanges":
     "Dieses Rezept entspricht deinen aktuellen Einstellungen — es würde sich nichts ändern.",
   "recipes.inForce": "Auf diesem Rezept stehen deine Einstellungen gerade.",
@@ -1940,11 +2021,10 @@ export const de: Record<MessageKey, string> = {
   "config.group.cleanup": "Bereinigung",
   "config.group.extras": "Extras",
   "config.source.not_found":
-    "Quellordner nicht gefunden: „{path}“. Pfad prüfen und erneut versuchen.",
+    "Quellordner nicht gefunden: „{path}“. Prüfe den Pfad und versuche es erneut.",
   "config.target.required": "Wähle das Ziel für die sortierten Dateien.",
   "config.integrity.authorization_required":
-    "Einige Einstellungen würden Dateiinhalte verändern, was „Nur organisieren“ nicht erlaubt. " +
-    "Schalte Tag-Einbettung, Metadaten-Überschreiben, Reparatur und Konvertierung aus.",
+    "Einige Einstellungen würden Dateiinhalte verändern, was dieser Lauf nicht erlaubt. Schalte zum Fortfahren „Datumsangaben in Metadaten korrigieren“, „Beschädigte Dateien reparieren“, „Bilder konvertieren“, „Videos konvertieren“ und das Speichern von Tags in die Bilddateien aus.",
   "config.validation.invalid": "Diese Einstellung ist ungültig.",
   "config.filters.minimum_negative": "Die minimale Dateigröße darf nicht negativ sein.",
   "rules.title": "Deterministische Regeln",
@@ -2002,13 +2082,13 @@ export const de: Record<MessageKey, string> = {
   "progress.files": "{current} / {total} Dateien · {percentage} %",
   "progress.remaining": "Noch etwa {duration}",
   "sort.milestone.25": "25 % sortiert — {current} von {total} Dateien",
-  "sort.milestone.50": "Halbzeit! {current} von {total} Dateien sortiert",
+  "sort.milestone.50": "Halbzeit: {current} von {total} Dateien sortiert",
   "sort.milestone.75": "Fast fertig — {current} von {total} Dateien sortiert",
   "sort.notificationTitle": "MediaSorter — Sortierung abgeschlossen",
   "sort.notificationBody": "{sorted} Dateien sortiert",
   "sort.notificationBodyFailed": "{sorted} Dateien sortiert, {failed} fehlgeschlagen",
   "sort.reportMissing": "Sortierung abgeschlossen, aber es wurde kein Berichtseintrag gefunden.",
-  "sort.reportReady": "Sortierung abgeschlossen! Der Bericht ist bereit.",
+  "sort.reportReady": "Sortierung abgeschlossen. Der Bericht ist bereit.",
   "sort.cancelledReportReady": "Der Bericht zum abgebrochenen Durchlauf ist bereit.",
   "sort.reportLoadFailed":
     "Sortierung abgeschlossen, aber der Bericht konnte nicht geladen werden.",
@@ -2017,8 +2097,10 @@ export const de: Record<MessageKey, string> = {
   "sort.cancelFailed": "Abbruch fehlgeschlagen",
   "sort.cancelRequested": "Abbruch angefordert.",
   "sort.statusFailed": "Der Sortierstatus konnte nicht gelesen werden.",
-  "help.aiModelTier": "Automatisch wählt ein passendes lokales CLIP- oder SigLIP-Modell.",
-  "help.aiAllowGpu": "Wenn verfügbar CoreML-, CUDA- oder DirectML-Beschleunigung verwenden.",
+  "help.aiModelTier":
+    "Automatisch verwendet das lokale SigLIP-2-Modell, wenn dieser Rechner es ausführen kann.",
+  "help.aiAllowGpu":
+    "Wenn verfügbar CoreML- (macOS) oder CUDA-Beschleunigung verwenden. Unter Windows läuft die lokale KI auf dem Prozessor.",
   "app.tagline": "Erst prüfen. Dann sicher organisieren.",
   "app.history": "Verlauf",
   "app.back": "Zurück",
@@ -2030,7 +2112,7 @@ export const de: Record<MessageKey, string> = {
   "backend.lost":
     "Verbindung zur MediaSorter-Engine verloren. Zum erneuten Verbinden neu laden; falls das wiederholt passiert, die App neu starten.",
   "backend.browserLost":
-    "Backend nicht erreichbar. Sicherstellen, dass es läuft (`make backend`), und neu laden.",
+    "Backend nicht erreichbar. Stelle sicher, dass es läuft (`make backend`), und lade neu.",
   "analysis.failed": "Analyse fehlgeschlagen",
   "analysis.noResult": "Die Analyse lieferte kein Ergebnis.",
   "analysis.statusFailed": "Der Analysestatus konnte nicht gelesen werden.",
@@ -2059,10 +2141,10 @@ export const de: Record<MessageKey, string> = {
   "report.noStatistics": "Keine Statistikdaten.",
   "report.unknown": "Unbekannt",
   "report.filter.all": "Alle",
-  "report.filter.sorted": "✓ Sortiert",
-  "report.filter.quarantined": "⚠ Quarantäne",
-  "report.filter.duplicates": "≈ Duplikate",
-  "report.filter.failed": "✕ Fehlgeschlagen",
+  "report.filter.sorted": "Sortiert",
+  "report.filter.quarantined": "Beiseitegelegt",
+  "report.filter.duplicates": "Duplikate",
+  "report.filter.failed": "Fehlgeschlagen",
   "report.searchPlaceholder": "Nach Pfad suchen…",
   "report.searchLabel": "Berichtsdateien nach Pfad durchsuchen",
   "report.suspiciousDates.one":
@@ -2083,19 +2165,19 @@ export const de: Record<MessageKey, string> = {
   "report.unit.primaryUnknown": "Hauptfoto/-video unbekannt",
   "report.unit.id": "Einheit {id}",
   "report.noFilterMatch": "Keine Dateien entsprechen dem aktuellen Filter.",
-  "report.status.sorted": "✓ sortiert",
-  "report.status.unknownDate": "? Datum unbekannt",
-  "report.status.futureDate": "zukünftiges Datum",
-  "report.status.duplicate": "≈ Duplikat",
-  "report.status.failed": "✕ fehlgeschlagen",
-  "report.status.corrupted": "⚠ beschädigt",
-  "report.status.junk": "⊘ Datenmüll",
-  "report.status.inDestination": "≈ bereits am Ziel",
-  "report.status.keptInPlace": "am Ort belassen",
-  "report.status.incompleteUnit": "✕ unvollständiger Mediensatz",
-  "report.status.unmatchedCompanion": "⚠ Begleitdatei ohne Zuordnung",
-  "report.status.cancelled": "vor Verarbeitung abgebrochen",
-  "report.status.blocked": "✕ blockiert",
+  "report.status.sorted": "Sortiert",
+  "report.status.unknownDate": "Datum unbekannt",
+  "report.status.futureDate": "Datum in der Zukunft",
+  "report.status.duplicate": "Duplikat",
+  "report.status.failed": "Fehlgeschlagen",
+  "report.status.corrupted": "Beschädigt",
+  "report.status.junk": "Ausschuss",
+  "report.status.inDestination": "Bereits im Ziel",
+  "report.status.keptInPlace": "Am Ort belassen",
+  "report.status.incompleteUnit": "Unvollständiger Mediensatz",
+  "report.status.unmatchedCompanion": "Begleitdatei ohne Zuordnung",
+  "report.status.cancelled": "Vor der Verarbeitung abgebrochen",
+  "report.status.blocked": "Blockiert",
   "report.duplicateOf": "Duplikat von {path}",
   "report.pagination.one": "1 Datei · angezeigt {from}–{to}",
   "report.pagination": "{count} Dateien · angezeigt {from}–{to}",
@@ -2105,7 +2187,7 @@ export const de: Record<MessageKey, string> = {
   "report.exportSuccess": "Bericht erfolgreich exportiert",
   "report.exportFailed": "Export fehlgeschlagen — erneut versuchen",
   "report.summary.sorted": "Sortiert",
-  "report.summary.quarantined": "Quarantäne",
+  "report.summary.quarantined": "Beiseitegelegt",
   "report.summary.duplicates": "Duplikate",
   "report.summary.skipped": "Übersprungen",
   "report.summary.attention": "Aufmerksamkeit nötig",
@@ -2167,7 +2249,7 @@ export const de: Record<MessageKey, string> = {
   "config.bursts.window": "Maximale Sekunden zwischen Bildern",
   "config.bursts.distance": "Maximale perzeptuelle Distanz",
   "config.bursts.reviewFirst":
-    "Standardmäßig aus. Jede Gruppe muss geprüft werden. Nicht ausgewählte Fotos/Videos und ihre zugehörigen Dateien bleiben in Quarantäne erhalten; sie werden nie gelöscht.",
+    "Standardmäßig aus. Jede Serie braucht deine Prüfung; Fotos und Videos, die du nicht wählst, werden beiseitegelegt und nie gelöscht.",
   "config.duplicates.threshold": "Ähnlichkeitsschwelle",
   "config.filters.recursive": "Unterordner durchsuchen",
   "config.filters.minSize": "Minimale Dateigröße (KB)",
@@ -2175,10 +2257,10 @@ export const de: Record<MessageKey, string> = {
   "config.filters.noMinimum": "Kein Minimum",
   "config.filters.noMaximum": "Kein Maximum",
   "config.filters.exclude": "Ausschlussmuster",
-  "config.filters.junk": "Datenmüll-/Vorschaubildfilter",
-  "config.filters.junkSize": "Mindestgröße für Datenmüll (KB)",
+  "config.filters.junk": "Ausschuss-/Vorschaubildfilter",
+  "config.filters.junkSize": "Mindestgröße für Ausschuss (KB)",
   "config.filters.resolution": "Auflösungsgrenze (px)",
-  "config.filters.junkPatterns": "Namensmuster für Datenmüll",
+  "config.filters.junkPatterns": "Namensmuster für Ausschuss",
   "config.conversion.images": "Bilder konvertieren",
   "config.conversion.imageFormat": "Bildformat",
   "config.conversion.videos": "Videos konvertieren",
@@ -2201,6 +2283,9 @@ export const de: Record<MessageKey, string> = {
   "config.ai.enabled": "Medien nach Inhalt taggen",
   "config.ai.labels": "Zu erkennende Bezeichnungen",
   "config.ai.maxTags": "Maximale Tags pro Datei",
+  "config.ai.location": "Ortsnamen aus GPS hinzufügen",
+  "config.ai.locationHelp":
+    "Ergänzt den nächstgelegenen Ort und das Land für Fotos und Videos mit GPS-Position. Der Aufnahmeort ist persönlich: Diese Tags wandern mit den Dateien und Sidecars, die du teilst.",
   "config.ai.confidence": "Konfidenz (0–1)",
   "config.ai.embed": "Erzeugte Tags speichern",
   "config.input.addLabel": "Bezeichnung hinzufügen…",
@@ -2239,9 +2324,7 @@ export const de: Record<MessageKey, string> = {
   "config.ai.model": "Lokales KI-Modell",
   "config.ai.gpu": "GPU-Beschleunigung verwenden",
   "config.ai.tier.auto": "Automatisch — {tier} verwenden (empfohlen)",
-  "config.ai.tier.lite": "Lite — CLIP{slow}",
   "config.ai.tier.standard": "Standard — SigLIP 2{slow}",
-  "config.ai.tier.max": "Max — dasselbe SigLIP-2-Modell wie Standard{slow}",
   "config.ai.tier.off": "Aus — lokales Modell deaktivieren",
   "config.ai.slow": " · möglicherweise langsam",
   "config.ai.download":
@@ -2270,6 +2353,12 @@ export const de: Record<MessageKey, string> = {
   "config.ai.modelRetry": "Download wiederholen",
   "config.ai.modelRemove": "Dateien entfernen",
   "config.ai.modelConfirmRemove": "Modelldateien entfernen",
+  "config.ai.retired.title": "Ein älteres KI-Modell ist noch installiert",
+  "config.ai.upgradeAvailable":
+    "Eine verbesserte Version des Modells ist verfügbar. Das installierte Modell funktioniert weiter, bis du sie installierst.",
+  "config.ai.downloadPartial": "{download} zum Herunterladen ({total} insgesamt)",
+  "config.ai.retired.detail":
+    "{name} ({size}) wird nicht mehr verwendet. Entferne es, um den Speicher freizugeben.",
   "config.slider.lenient": "Großzügiger (85 %)",
   "config.slider.strict": "Strenger (100 %)",
   "config.slider.pixel": "Nahezu pixelgenau — am sichersten, wenigste Fehlalarme",
@@ -2282,7 +2371,7 @@ export const de: Record<MessageKey, string> = {
   "rules.width": "Breite",
   "rules.height": "Höhe",
   "history.reportTitle": "Sortierbericht — {id}",
-  "history.loadFailed": "Bericht konnte nicht geladen werden. Erneut versuchen.",
+  "history.loadFailed": "Bericht konnte nicht geladen werden. Versuche es erneut.",
   "history.listFailed": "Der Verlauf konnte nicht geladen werden.",
   "history.cleared": "Verlauf gelöscht",
   "history.clearFailed": "Verlauf konnte nicht gelöscht werden — erneut versuchen",
@@ -2294,7 +2383,7 @@ export const de: Record<MessageKey, string> = {
   "history.exportFailed": "Export fehlgeschlagen",
   "history.empty": "Noch keine Sortierungen",
   "history.emptyHelp": "Nach der ersten Sortierung erscheint der Verlauf hier.",
-  "history.title": "Durchlaufverlauf",
+  "history.title": "Verlauf",
   "history.subtitle":
     "Zeigt, was ausgeführt wurde, welche Quellen verwendet wurden und was noch zu prüfen ist.",
   "history.searchPlaceholder": "Nach Pfad suchen…",
@@ -2338,16 +2427,6 @@ export const de: Record<MessageKey, string> = {
     "Die genauen Auswirkungen dieser Entscheidungen werden berechnet…",
   "preflight.blocking.impactError":
     "Die genauen Auswirkungen konnten nicht bestätigt werden. Kehre zur Prüfung zurück und versuche es erneut.",
-  "preflight.blocking.stale.one":
-    "1 Gruppe hat sich seit der Prüfung geändert und muss erneut geprüft werden.",
-  "preflight.blocking.stale":
-    "{count} Gruppen haben sich seit der Prüfung geändert und müssen erneut geprüft werden.",
-  "preflight.blocking.unplanned.one":
-    "1 Ergebnis konnte nicht sicher festgeschrieben werden. Prüfe den Plan vor der Ausführung erneut.",
-  "preflight.blocking.unplanned":
-    "{count} Ergebnis(se) konnten nicht sicher festgeschrieben werden. Prüfe den Plan vor der Ausführung erneut.",
-  "preflight.blocking.quarantine":
-    "Die Quarantäne ist nicht beschreibbar; daher kann nichts sicher verschoben werden.",
   "preflight.blocking.space":
     "Nicht genug freier Speicher: {required} benötigt, {available} verfügbar.",
   "preflight.blocking.spaceUnknown":
@@ -2358,19 +2437,20 @@ export const de: Record<MessageKey, string> = {
     "{count} Dateien werden kopiert; die Quelle bleibt für eine erneute Ausführung erhalten.",
   "preflight.reversible.skip.one": "1 Datei bleibt unverändert an ihrem Ort.",
   "preflight.reversible.skip": "{count} Dateien bleiben unverändert an ihrem Ort.",
-  "preflight.reversible.reference.one": "1 Referenzdatei wird nicht verändert.",
-  "preflight.reversible.reference": "{count} Referenzdateien werden nicht verändert.",
-  "preflight.reversible.unresolved.one": "1 Gruppe ist noch ungeklärt und nicht Teil dieses Laufs.",
+  "preflight.reversible.reference.one": "1 Referenzordner wird nur gelesen, nie verändert.",
+  "preflight.reversible.reference": "{count} Referenzordner werden nur gelesen, nie verändert.",
+  "preflight.reversible.unresolved.one":
+    "1 Datei konnte nicht auf Duplikate geprüft werden. Dieser Lauf lässt sie an ihrem Platz.",
   "preflight.reversible.unresolved":
-    "{count} Gruppen sind noch ungeklärt und nicht Teil dieses Laufs.",
-  "preflight.reversible.none": "Keine Auswirkungen in dieser Gruppe.",
+    "{count} Dateien konnten nicht auf Duplikate geprüft werden. Dieser Lauf lässt sie an ihrem Platz.",
+  "preflight.reversible.none": "Nichts in dieser Liste.",
   "preflight.irreversible.move.one": "1 Quelldatei wird erst nach Prüfung des Ziels entfernt.",
   "preflight.irreversible.move":
     "{count} Quelldateien werden erst nach Prüfung des Ziels entfernt.",
   "preflight.irreversible.quarantine.one":
-    "1 Datei wird in die Quarantäne verschoben ({bytes}); sie wird nie gelöscht, aber dieser Lauf stellt sie nicht wieder her.",
+    "1 Datei wird in die Prüfordner (_copies/, _junk/, _undated/, _corrupted/) beiseitegelegt ({bytes}). Sie wird nie gelöscht, aber dieser Lauf legt sie nicht zurück.",
   "preflight.irreversible.quarantine":
-    "{count} Dateien werden in die Quarantäne verschoben ({bytes}); sie werden nie gelöscht, aber dieser Lauf stellt sie nicht wieder her.",
+    "{count} Dateien werden in die Prüfordner (_copies/, _junk/, _undated/, _corrupted/) beiseitegelegt ({bytes}). Sie werden nie gelöscht, aber dieser Lauf legt sie nicht zurück.",
   "preflight.irreversible.conversion.one":
     "1 Originaldatei wird nach der Konvertierung nicht aufbewahrt.",
   "preflight.irreversible.conversion":
@@ -2384,9 +2464,9 @@ export const de: Record<MessageKey, string> = {
   "preflight.irreversible.tags":
     "In bis zu {count} Dateien werden Tags eingebettet; dadurch ändert sich ihr Inhalt.",
   "preflight.irreversible.none": "Dieser Plan entfernt oder überschreibt keine Originale.",
-  "preflight.acknowledge": "Ich habe beide Gruppen geprüft und möchte genau diesen Plan ausführen",
+  "preflight.acknowledge": "Ich habe beide Listen geprüft und möchte genau diesen Plan ausführen",
   "preflight.acknowledge.mutations":
-    "Ich habe beide Gruppen einschließlich der Änderungen an Eingabeordnern geprüft und möchte genau diesen Plan ausführen",
+    "Ich habe beide Listen einschließlich der Änderungen an Eingabeordnern geprüft und möchte genau diesen Plan ausführen",
   "preflight.running": "Wird ausgeführt…",
   "preflight.execute": "Geprüften Plan ausführen",
   "stage.navigation": "Phasen",
@@ -2403,8 +2483,10 @@ export const de: Record<MessageKey, string> = {
   "plan.recalculate": "Neu berechnen",
   "plan.complete": "Plan vollständig",
   "plan.summary.title": "{count} Dateien sind bereit zur Prüfung",
-  "plan.summary.detail.one": "1 Duplikatgruppe wird in der Prüfoberfläche sichtbar.",
-  "plan.summary.detail": "{count} Duplikatgruppen werden in der Prüfoberfläche sichtbar.",
+  "plan.summary.detail.one":
+    "1 Datei sieht nach einem Duplikat aus und wird in der Prüfoberfläche angezeigt.",
+  "plan.summary.detail":
+    "{count} Dateien sehen nach Duplikaten aus und werden in der Prüfoberfläche angezeigt.",
   "plan.metric.files": "Dateien",
   "plan.metric.files.help":
     "Alle Dateien, die der Scan in den gewählten Ordnern gefunden hat. Der Plan wurde über alle davon berechnet.",
@@ -2437,9 +2519,9 @@ export const de: Record<MessageKey, string> = {
   "plan.sequence.organize.detail": "{count} ausführbare Dateigruppen für ihre Ziele vorbereiten.",
   "plan.sequence.duplicates.title": "Duplikate entscheiden",
   "plan.sequence.duplicates.detail.one":
-    "1 Duplikatgruppe für eine bewusste Entscheidung sichtbar halten.",
+    "1 mögliche Duplikatdatei für eine bewusste Entscheidung anzeigen.",
   "plan.sequence.duplicates.detail":
-    "{count} Duplikatgruppen für eine bewusste Entscheidung sichtbar halten.",
+    "{count} mögliche Duplikatdateien für eine bewusste Entscheidung anzeigen.",
   "plan.sequence.write.title": "In ein Ziel schreiben",
   "plan.sequence.write.detail.one":
     "Nach der Freigabe 1 geplante Datei übertragen und verifizieren.",
@@ -2493,6 +2575,7 @@ export const de: Record<MessageKey, string> = {
   "sources.role.destination.description": "Hierhin werden organisierte Dateien geschrieben.",
   "sources.copyPath": "Pfad kopieren",
   "sources.pathCopied": "Kopiert",
+  "sources.showInFolder": "Im Ordner zeigen",
   "sources.locate": "Suchen…",
   "sources.includeNextRun": "In diesen Durchlauf aufnehmen",
   "sources.skipRun": "Diesen Lauf überspringen",
@@ -2537,6 +2620,62 @@ export const de: Record<MessageKey, string> = {
   "operations.kind.review": "Prüfung",
   "operations.kind.cleanup": "Bereinigung",
   "operations.kind.restore": "Wiederherstellung",
+  "operations.stillRunning": "Läuft noch",
+  "operations.fact.organized": "Einsortiert",
+  "operations.fact.quarantined": "Beiseitegelegt",
+  "operations.fact.skipped": "Übersprungen",
+  "operations.fact.warnings": "Warnungen",
+  "operations.fact.failed": "Fehlgeschlagen",
+  "operations.fact.needsReview": "Braucht Entscheidung",
+  "operations.next.recovery":
+    "Schließ die Prüfung des unterbrochenen Vorgangs ab, bevor du einen neuen startest.",
+  "operations.next.failed":
+    "Fehlgeschlagene Aktionen haben ihre Quellen unverändert gelassen; der Bericht nennt den Grund.",
+  "operations.next.unresolved":
+    "Einige Dateien brauchen noch eine Entscheidung, bevor dieser Lauf vollständig ist.",
+  "operations.next.quarantined":
+    "Beiseitegelegte Originale sind noch vorhanden; nichts wurde gelöscht.",
+  "operations.openHistory": "Im Verlauf öffnen",
+  "recovery.headline.decisions.one":
+    "1 Element aus einem unterbrochenen Lauf braucht deine Entscheidung",
+  "recovery.headline.decisions":
+    "{count} Elemente aus einem unterbrochenen Lauf brauchen deine Entscheidung",
+  "recovery.headline.reconciled": "Ein unterbrochener Lauf wurde automatisch abgeglichen",
+  "recovery.guidance.decisions":
+    "Nichts wurde gelöscht. Prüfe jedes Element und entscheide, ob du es behältst oder verwirfst, bevor du neue Arbeit startest.",
+  "recovery.guidance.reconciled":
+    "Jeder Rest wurde einer geprüften Kopie zugeordnet. Keine Datei ging verloren, und es ist nichts zu tun.",
+  "recovery.automatic.one": "1 Rest wurde automatisch aufgelöst.",
+  "recovery.automatic": "{count} Reste wurden automatisch aufgelöst.",
+  "recovery.artifact.stageRedundant":
+    "Eine unvollständige Kopie, deren Inhalt bereits anderswo geprüft vorliegt.",
+  "recovery.artifact.resultVerified": "Eine fertige, geprüfte Datei. Es ist nichts weiter nötig.",
+  "recovery.artifact.originalVerified": "Dein Original, geprüft und unverändert.",
+  "recovery.artifact.setAside": "Beiseitegelegt. Es kann jederzeit wiederhergestellt werden.",
+  "recovery.artifact.needsDecision":
+    "Das ließ sich keiner geprüften Kopie zuordnen und bleibt daher erhalten, bis du entscheidest, was es ist.",
+  "recovery.keep": "Behalten",
+  "recovery.discard": "Verwerfen",
+  "recovery.openReport": "Bericht öffnen",
+  "progress.stopping": "Wird am nächsten sicheren Punkt angehalten …",
+  "progress.stalled": "Seit {seconds} s keine Änderung. Das kann bei Netzlaufwerken vorkommen.",
+  "progress.stalledAt":
+    "Seit {seconds} s keine Änderung. Das kann bei Netzlaufwerken vorkommen. Arbeitet noch an {path}.",
+  "progress.found": "{phase}: bisher {current} gefunden",
+  "progress.counted": "{phase}: {current} von {total}",
+  "progress.phase.working": "In Arbeit",
+  "progress.phase.validating": "Einstellungen werden geprüft",
+  "progress.phase.scanning_source": "Quellen werden gescannt",
+  "progress.phase.indexing_destination": "Ziel wird indiziert",
+  "progress.phase.ranking": "Kopien werden bewertet",
+  "progress.phase.analyzing": "Analyse läuft",
+  "progress.phase.previewing": "Vorschau wird erstellt",
+  "progress.phase.sorting": "Einsortieren",
+  "progress.phase.auditing": "Prüfung läuft",
+  "progress.phase.reconciling": "Abgleich läuft",
+  "progress.phase.downloading_model": "KI-Modell wird heruntergeladen",
+  "progress.phase.verifying_model": "KI-Modell wird geprüft",
+  "progress.phase.publishing_model": "KI-Modell wird installiert",
   "recipes.title": "Mit einem Rezept beginnen",
   "recipes.help":
     "Optionale Ausgangspunkte. Jede geänderte Einstellung bleibt anschließend bearbeitbar.",
@@ -2568,7 +2707,7 @@ export const de: Record<MessageKey, string> = {
     "Entscheide die {count} ausstehenden Duplikatgruppen vor der Ausführung.",
   "footer.sources":
     "Bis zur Bestätigung in Schritt 4 ändert sich nichts. Der Kopiermodus lässt Originale unangetastet; Verschieben bewegt sie erst nach erfolgreicher Prüfung.",
-  "footer.toSetup": "Weiter zum Rezept",
+  "footer.toSetup": "Weiter zu Einrichten",
   "footer.estimate": "Geschätzt: {files} Dateien sortiert · {duration} · {size}",
   "footer.estimateUnknown": "Die Schätzung erscheint, sobald die Ordner gescannt wurden.",
   "footer.preview": "Änderungen berechnen",
@@ -2609,7 +2748,7 @@ export const de: Record<MessageKey, string> = {
   "recipes.consolidate.description":
     "Verstreute Ordner zusammenführen oder neue Fotos und Videos zur Bibliothek hinzufügen. Nach Jahr und Monat kopieren und die Dateinamen behalten.",
   "recipes.consolidate.consequence":
-    "Kopiert nach Jahr / Monat ohne Umbenennen. Duplikatvorschläge vor dem Start prüfen; ähnliche Fotos brauchen deine Zustimmung. Überzählige Kopien landen unter _copies/, Ausschuss unter _junk/. Quell- und Referenzordner bleiben unverändert. Umbenennen und vorhandene Ereignisordner sind unter Konfigurieren optional.",
+    "Kopiert nach Jahr / Monat ohne Umbenennen. Prüfe die Duplikatvorschläge vor dem Start; ähnliche Fotos brauchen deine Zustimmung. Überzählige Kopien landen unter _copies/, Ausschuss unter _junk/. Quell- und Referenzordner bleiben unverändert. Umbenennen und vorhandene Ereignisordner sind unter Einrichten optional.",
   "recipes.tidyLibrary.label": "Bibliothek aufräumen",
   "recipes.tidyLibrary.description":
     "Die Ordner haben bereits die gewünschte Form. Duplikate und Ausschuss finden und alles andere genau dort lassen, wo es ist.",
@@ -2659,7 +2798,7 @@ export const de: Record<MessageKey, string> = {
   "config.group.sort.label": "Sortieren",
   "config.group.sort.description": "wie Dateien übertragen und abgelegt werden",
   "config.group.clean.label": "Bereinigen",
-  "config.group.clean.description": "Duplikate und Ausschuss — nichts wird je gelöscht",
+  "config.group.clean.description": "Duplikate und Ausschuss — beiseitegelegt, nie gelöscht",
   "config.group.enrich.label": "Anreichern",
   "config.group.enrich.description": "optional — beim Sortieren umwandeln und verschlagworten",
   "config.transfer.copyNeeds":
@@ -2683,6 +2822,17 @@ export const de: Record<MessageKey, string> = {
   "config.folder.categorizeHelp":
     "Jede Datei in einen Themenordner einsortieren, offline auf diesem Rechner entschieden.",
   "config.folder.categoriesHelp": "Die Themen, in die Dateien einsortiert werden können.",
+  "config.folder.suggest": "Aus meinen Fotos vorschlagen",
+  "config.folder.suggestHelp":
+    "Sieht sich bis zu 150 Fotos aus dem Eingangsordner auf diesem Computer an und schlägt Ordnernamen vor. Nichts ändert sich, bis du einen hinzufügst.",
+  "config.folder.suggestRunning": "Eine Auswahl deiner Fotos wird angesehen …",
+  "config.folder.suggestNone":
+    "Keine neuen Namen — deine Kategorien decken bereits ab, was die Auswahl zeigt.",
+  "config.folder.suggestNeedsSource":
+    "Wähle zuerst einen Eingangsordner; die Vorschläge stammen aus seinen Fotos.",
+  "config.folder.suggestFailed": "Vorschläge sind gerade nicht verfügbar.",
+  "config.folder.suggestions": "Vorgeschlagene Kategorien",
+  "config.folder.suggestAdd": "{name} als Kategorie hinzufügen",
   "config.example.destination": "Sortiert",
   "config.example.subfolder": "Urlaub 2019",
   "config.folder.previewTitle": "So wird der Zielordner aussehen",
@@ -2723,13 +2873,13 @@ export const de: Record<MessageKey, string> = {
   "config.keeper.largest": "Größte behalten",
   "config.keeper.smallest": "Kleinste behalten",
   "config.keeper.highest_resolution": "Höchste Auflösung behalten",
-  "config.keeper.newest.short": "Neueste",
-  "config.keeper.oldest.short": "Älteste",
-  "config.keeper.largest.short": "Größte",
-  "config.keeper.smallest.short": "Kleinste",
-  "config.keeper.highest_resolution.short": "Höchste Auflösung",
+  "config.keeper.newest.short": "Neueste behalten",
+  "config.keeper.oldest.short": "Älteste behalten",
+  "config.keeper.largest.short": "Größte behalten",
+  "config.keeper.smallest.short": "Kleinste behalten",
+  "config.keeper.highest_resolution.short": "Höchste Auflösung behalten",
   "config.filters.junkHelp":
-    "Screenshots, Vorschaubilder und Winzdateien werden nach _junk/ im Zielordner verschoben. Nichts wird gelöscht.",
+    "Screenshots, Vorschaubilder und Winzdateien kommen statt in die Datumsordner nach _junk/ im Ziel – kopiert oder verschoben wie jede andere Datei. Dieser Schritt löscht nie etwas.",
   "config.filters.junkSizeHelp": "Alles darunter gilt als Ausschuss.",
   "config.filters.resolutionHelp": "Bilder mit kürzerer Kante darunter gelten als Ausschuss.",
   "config.filters.junkPatternsHelp":
@@ -2906,7 +3056,7 @@ export const de: Record<MessageKey, string> = {
   "review.resolve.noDate": "kein Datum gelesen",
   "review.resolve.dated": "{date} · {source}",
   "review.resolve.keyboardHelp":
-    "Zifferntasten wählen eine Datei · ← und → wechseln zwischen Gruppen.",
+    "Zifferntasten behalten eine Kopie · ← und → wechseln zwischen Duplikatgruppen · hier brauchst du keine Maus.",
   "review.resolve.individualOnly.one":
     "1 Gruppe enthält ähnliche Fotos/Videos und braucht deine Einzelentscheidung. Ähnlichkeit beweist keine identischen Inhalte.",
   "review.resolve.individualOnly":
@@ -3086,8 +3236,27 @@ export const de: Record<MessageKey, string> = {
   "review.detail.categoryPassed":
     "{label} bestand mit {confidence}; erforderlich waren {threshold}.",
   "review.detail.categoryRejected":
+    "Kein Kategorieordner entstand: Der beste Treffer ({confidence}) bestand nicht jede Prüfung — mindestens {threshold} Sicherheit, ein klarer Vorsprung vor der nächsten Kategorie und eine ausreichend deutliche Passung.",
+  "review.detail.categoryRejected.confidence":
     "Kein Kategorieordner entstand: {confidence} erreichte den Grenzwert {threshold} nicht.",
+  "review.detail.categoryRejected.margin":
+    "Kein Kategorieordner entstand: Die beste Kategorie lag nur {margin} vor der nächsten; mindestens {minMargin} sind nötig.",
+  "review.detail.categoryRejected.weak_match":
+    "Kein Kategorieordner entstand: Keine Kategorie passte deutlich genug zu dieser Datei.",
   "review.detail.noRouteRule": "Keine Weiterleitungsregel passte auf diese Datei.",
+  "review.detail.categoryScreenshot.file_name":
+    "{label}: Der Dateiname weist es als Bildschirmfoto aus, daher wurde das Modell nicht gefragt.",
+  "review.detail.categoryScreenshot.embedded_metadata":
+    "{label}: Das Gerät hat diese Datei als Bildschirmfoto markiert, daher wurde das Modell nicht gefragt.",
+  "review.tags.title": "Inhalts-Tags",
+  "review.tags.help":
+    "Vom lokalen Modell vorgeschlagen und nicht garantiert richtig. Der Lauf schreibt genau diese Tags; entferne oder ergänze sie vor dem Start.",
+  "review.tags.none": "Für diese Datei werden keine Inhalts-Tags geschrieben.",
+  "review.tags.remove": "Tag {tag} entfernen",
+  "review.tags.add": "Inhalts-Tag hinzufügen",
+  "review.tags.placeholder": "Tag hinzufügen",
+  "review.tags.addButton": "Hinzufügen",
+  "review.tags.reset": "Vorgeschlagene Tags wiederherstellen",
   "review.detail.routeWinner": "Die Regel „{name}“ gewann und ergänzte „{folder}“.",
   "review.detail.routeLost":
     "Die Regel „{name}“ passte ebenfalls, verlor aber mit Priorität {priority}.",
@@ -3129,7 +3298,7 @@ export const de: Record<MessageKey, string> = {
     "Diese beiden bilden keine Duplikatgruppe, es gibt also nichts zwischen ihnen zu wählen.",
   "review.compare.noPartner":
     "In dieser Gruppe ist nur noch eine Kopie da — es gibt nichts danebenzustellen.",
-  "review.tree.collapseAll": "alle einklappen",
+  "review.tree.collapseAll": "Alle einklappen",
   "review.tree.filter": "Ordner filtern…",
   "review.tree.empty": "Noch keine Ordner — der Plan legt nichts ab.",
   "review.tree.noMatches": "Kein Ordner passt zu „{query}“.",
@@ -3138,7 +3307,7 @@ export const de: Record<MessageKey, string> = {
   "review.view.list": "Liste",
   "review.search": "Nach Dateiname filtern…",
   "review.browse.livePlacement":
-    "Bestätigte Kopien erscheinen in ihren geplanten Ordnern, auch unter _copies/. Erst beim Ausführen werden Dateien kopiert oder verschoben. Im Duplikat-Tab kannst du Entscheidungen ändern.",
+    "Bestätigte Kopien erscheinen in ihren geplanten Ordnern, auch unter _copies/. Erst beim Ausführen werden Dateien kopiert oder verschoben. Unter „Duplikate entscheiden“ kannst du Entscheidungen ändern.",
   "review.compare.applied": "Übernommen",
   "setup.optionalHelp":
     "Optional: Ordnerstruktur, Dateinamen, Duplikatregeln und lokale Tags anpassen.",
@@ -3184,7 +3353,7 @@ export const de: Record<MessageKey, string> = {
   "review.compare.wins.stronger": "der stärkere Beleg",
   "review.compare.wins.longer": "die längere Aufnahme",
   "review.compare.provenanceUnknown": "Quelle unbekannt",
-  "review.compare.scopeNote": "Gilt nur für diese Gruppe.",
+  "review.compare.scopeNote": "Gilt nur für diese Duplikatgruppe.",
   "review.compare.referenceLocked":
     "Diese geschützte Referenz bleibt erhalten. Du kannst die Dateien vergleichen, ohne die Entscheidung zu ändern.",
   "review.compare.nothingSelected": "Noch keine Datei ausgewählt — der Vergleich ändert nichts.",
@@ -3215,19 +3384,23 @@ export const de: Record<MessageKey, string> = {
   "execute.title": "Bibliothek wird sortiert",
   "execute.titleDone": "Der Durchlauf ist abgeschlossen",
   "execute.confirmedCopy": "Bestätigt: {files} Dateien kopieren, jede einzeln geprüft.",
+  "execute.confirmedCopyUncounted":
+    "Bestätigt: die geprüften Dateien kopieren, jede einzeln geprüft.",
+  "execute.confirmedMoveUncounted":
+    "Bestätigt: die geprüften Dateien verschieben, jede geprüft, bevor das Original weggeht.",
   "execute.confirmedMove":
     "Bestätigt: {files} Dateien verschieben, jede geprüft, bevor das Original weggeht.",
   "execute.phase.check": "Wird geprüft",
   "execute.phase.scan": "Wird gescannt",
   "execute.phase.duplicates": "Duplikate werden gesucht",
-  "execute.phase.organize": "Kopieren & prüfen",
+  "execute.phase.organize": "Übertragen & prüfen",
   "execute.phase.done": "Fertig",
   "execute.phase.failed": "Durch einen Fehler gestoppt",
   "execute.phase.cancelled": "Abgebrochen",
   "execute.step.check": "Prüfen",
   "execute.step.scan": "Scannen",
   "execute.step.duplicates": "Duplikate",
-  "execute.step.organize": "Kopieren & prüfen",
+  "execute.step.organize": "Übertragen & prüfen",
   "execute.organizeIncludes":
     "Umwandlung und Verschlagwortung passieren Datei für Datei in diesem Schritt.",
   "execute.timeLeft": "noch etwa {duration}",

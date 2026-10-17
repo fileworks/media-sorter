@@ -219,6 +219,29 @@ test("the page under test is actually populated", async ({ page }) => {
 
 test.describe("1.4.3 contrast", () => {
   for (const theme of ["light", "dark"] as const) {
+    test(`Review's content-tag editor is legible and operable in ${theme}`, async ({ page }) => {
+      await page.evaluate((value) => localStorage.setItem("mediasort_theme", value), theme);
+      await page.reload();
+      await goToReview(page);
+      await page.getByRole("tab", { name: /browse the result/i }).click();
+      const file = page.getByRole("button", { name: "IMG_0001.jpg", exact: true });
+      if ((await file.count()) === 0) {
+        await page.getByRole("button", { name: /^IMG_0001\.jpg · / }).click();
+      }
+      await file.click();
+      const detail = page.getByRole("dialog", { name: "IMG_0001.jpg" });
+      await expect(detail).toBeVisible();
+      const tags = detail.getByRole("region", { name: "Content tags" });
+      await expect(tags).toBeVisible();
+      await tags.getByRole("button", { name: "Remove tag beach" }).click();
+      await tags.getByRole("textbox", { name: "Add a content tag" }).fill("Lake");
+      await tags.getByRole("textbox", { name: "Add a content tag" }).press("Enter");
+      await expect(tags.getByText("Lake")).toBeVisible();
+      await expect(tags.getByRole("button", { name: "Restore proposed tags" })).toBeVisible();
+      await settleRendering(page);
+      expect(await contrastViolations(page)).toEqual([]);
+    });
+
     test(`a failed review save keeps Retry legible on hover in ${theme}`, async ({ page }) => {
       await page.evaluate((value) => localStorage.setItem("mediasort_theme", value), theme);
       await page.reload();

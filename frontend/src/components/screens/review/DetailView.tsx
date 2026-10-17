@@ -3,6 +3,7 @@
 import { FiArrowLeft, FiArrowRight, FiExternalLink, FiMaximize } from "react-icons/fi";
 
 import { DestinationExplanation } from "@/components/screens/review/DestinationExplanation";
+import { TagEditor } from "@/components/screens/review/TagEditor";
 import { StateView } from "@/components/StateView";
 import { Button } from "@/components/ui/button";
 import { MediaVideo } from "@/components/ui/media-video";
@@ -40,6 +41,11 @@ interface DetailViewProps {
   /** Rebuild provenance when the plan that recorded it has been superseded. */
   onRerunPreview: () => void;
   onClose: () => void;
+  /** Content tags the run will write; null when tagging was off for this file. */
+  aiTags?: string[] | null;
+  aiTagsEdited?: boolean;
+  onAiTagsChange?: (tags: string[]) => void;
+  onAiTagsReset?: () => void;
 }
 
 /** One labelled value in the planned-state definition list. */
@@ -99,6 +105,10 @@ export function DetailView({
   onOpenSetting,
   onRerunPreview,
   onClose,
+  aiTags = null,
+  aiTagsEdited = false,
+  onAiTagsChange,
+  onAiTagsReset,
 }: DetailViewProps) {
   const { t, locale } = useI18n();
   const info = useMediaInfo(row.source);
@@ -306,6 +316,16 @@ export function DetailView({
             )}
           </aside>
         </div>
+
+        {aiTags !== null && onAiTagsChange !== undefined && (
+          <TagEditor
+            key={row.source}
+            tags={aiTags}
+            edited={aiTagsEdited}
+            onChange={onAiTagsChange}
+            onReset={() => onAiTagsReset?.()}
+          />
+        )}
 
         {/* Superseded previews never fabricate provenance. */}
         <div className="border-t border-border px-3 py-3">

@@ -148,7 +148,7 @@ def destination_fingerprint(root: Path) -> str:
                 entries.append(
                     f"other:{relative}:{stat.S_IFMT(observed.st_mode):o}:"
                     f"{observed.st_dev}:{observed.st_ino}:"
-                    f"{observed.st_rdev}:{observed.st_size}"
+                    f"{getattr(observed, 'st_rdev', 0)}:{observed.st_size}"
                 )
     payload = "\n".join(sorted(entries)).encode("utf-8")
     return "destination-v1:" + hashlib.sha256(payload).hexdigest()
@@ -177,6 +177,11 @@ class FrozenSortAction(BaseModel):
     resolved_date: str | None = None
     would_be_destination_path: str | None = None
     keeper_path: str | None = None
+    #: Content tags the local model proposed during preview, as Review shows
+    #: them (AI-05). The run writes exactly these, after Review's edits, and
+    #: never runs the model again. ``None``: tagging was off for this file, or
+    #: the plan predates reviewed tags; either way no AI tag is written.
+    ai_tags: tuple[str, ...] | None = None
 
     @property
     def identity(self) -> str:
@@ -221,6 +226,38 @@ class FrozenSortImpact(BaseModel):
     unresolved_count: int
 
 
+#: Bounds for Review's tag edits: generous for people, finite for a request.
+MAX_REVIEWED_TAGS_PER_FILE = 50
+MAX_REVIEWED_TAG_LENGTH = 100
+
+
+class ReviewedTags(BaseModel):
+    """The content tags Review settled on for one file, replacing the proposal."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str = Field(min_length=1, max_length=4096)
+    tags: tuple[str, ...] = Field(default=(), max_length=MAX_REVIEWED_TAGS_PER_FILE)
+
+
+def clean_reviewed_tags(tags: Sequence[str]) -> tuple[str, ...]:
+    """Trimmed, non-empty, case-insensitively unique tags in the order given."""
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in tags:
+        tag = " ".join(str(raw).split())
+        if not tag:
+            continue
+        if len(tag) > MAX_REVIEWED_TAG_LENGTH or any(ord(char) < 32 for char in tag):
+            raise ValueError("a reviewed tag is too long or contains control characters")
+        key = tag.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(tag)
+    return tuple(cleaned)
+
+
 class ReviewedSet(BaseModel):
     """One duplicate set, and which copy Review decided to keep.
 
@@ -256,6 +293,11 @@ class FrozenSortPlan(BaseModel):
     #: skipped, and one it could not resolve stays unresolved.
     skip_count: int = 0
     unresolved_count: int = 0
+    #: Sources whose duplicate check could not finish during preview. The run
+    #: leaves each one, with its companions, exactly where it is instead of
+    #: choosing a destination nobody reviewed. Empty for plans written before
+    #: this field existed, which therefore keep their former behavior.
+    unresolved_sources: tuple[str, ...] = ()
     companions_left_in_place: int = 0
     #: The three configuration answers the impact depends on, carried so a
     #: derived plan can recompute its own impact without the Config.
@@ -280,6 +322,35 @@ class FrozenSortPlan(BaseModel):
 
     def action_map(self) -> dict[str, FrozenSortAction]:
         return {action.identity: action for action in self.actions}
+
+    def with_reviewed_tags(self, edits: Sequence[ReviewedTags]) -> FrozenSortPlan:
+        """A new plan whose files carry the tags Review settled on.
+
+        Only a file the plan proposed tags for can be edited, and only its
+        primary action; companions never carry content tags. The stored plan is
+        never mutated: edits belong to one run, like duplicate decisions.
+        """
+        if not edits:
+            return self
+        wanted: dict[str, tuple[str, ...]] = {}
+        for edit in edits:
+            key = path_identity_key(edit.source)
+            if key in wanted:
+                raise ValueError("each file may have only one reviewed tag list")
+            wanted[key] = clean_reviewed_tags(edit.tags)
+        rewritten = list(self.actions)
+        found: set[str] = set()
+        for index, action in enumerate(rewritten):
+            key = path_identity_key(action.source_path)
+            if key not in wanted or action.companion_role is not None:
+                continue
+            if action.ai_tags is None:
+                raise ValueError("reviewed tags name a file the plan does not tag")
+            rewritten[index] = action.model_copy(update={"ai_tags": wanted[key]})
+            found.add(key)
+        if found != set(wanted):
+            raise ValueError("reviewed tags name a file that is not in the plan")
+        return self.model_copy(update={"actions": tuple(rewritten)})
 
     def with_reviewed_sets(
         self,
@@ -734,6 +805,7 @@ def build_frozen_sort_plan(
     actions: list[FrozenSortAction] = []
     skipped = 0
     unresolved = 0
+    unresolved_sources: list[str] = []
     companions_left = 0
     quarantine_statuses = PLANNED_QUARANTINE_STATUSES
     for item in items:
@@ -742,6 +814,8 @@ def build_frozen_sort_plan(
         source = item.get("source")
         if status == "duplicate_unknown":
             unresolved += 1
+            if source:
+                unresolved_sources.append(str(source))
         elif not source or not destination or status not in {"sort", *quarantine_statuses}:
             skipped += 1
         if source and destination and status in {"sort", *quarantine_statuses}:
@@ -810,6 +884,11 @@ def build_frozen_sort_plan(
                     keeper_path=(
                         str(item["duplicate_of"])
                         if status in quarantine_statuses and item.get("duplicate_of") is not None
+                        else None
+                    ),
+                    ai_tags=(
+                        tuple(str(tag) for tag in item["ai_tags"])
+                        if isinstance(item.get("ai_tags"), list)
                         else None
                     ),
                 )
@@ -887,6 +966,7 @@ def build_frozen_sort_plan(
         ),
         skip_count=skipped,
         unresolved_count=unresolved,
+        unresolved_sources=tuple(unresolved_sources),
         companions_left_in_place=companions_left,
         copy_mode=config.copy_instead_of_move,
         converts_media=converts_media,

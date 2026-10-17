@@ -50,6 +50,13 @@ SOURCES_MANIFEST = REPO_ROOT / "scripts" / "ffmpeg-sources.json"
 # as a script, where its own directory is already on `sys.path`.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from macos_signing import (  # noqa: E402
+    _ad_hoc_sign_macho,
+    _expected_macos_architecture,
+    _is_macho,
+    _require_architecture,
+    _verify_macos_seal,
+)
 from native_provenance import (  # noqa: E402
     ReleaseIntegrityError,
     _verify_native_provenance,
@@ -89,16 +96,6 @@ WINDOWS_PROVIDER_REQUIRED = {
         "WINDOWS_CERTIFICATE_BASE64",
         "WINDOWS_CERTIFICATE_PASSWORD",
     ),
-}
-MACHO_MAGICS = {
-    b"\xfe\xed\xfa\xce",
-    b"\xce\xfa\xed\xfe",
-    b"\xfe\xed\xfa\xcf",
-    b"\xcf\xfa\xed\xfe",
-    b"\xca\xfe\xba\xbe",
-    b"\xbe\xba\xfe\xca",
-    b"\xca\xfe\xba\xbf",
-    b"\xbf\xba\xfe\xca",
 }
 ENV_PLACEHOLDER = re.compile(r"\{env:([A-Z][A-Z0-9_]*)\}")
 WINDOWS_GUI_SUBSYSTEM = 2
@@ -245,14 +242,6 @@ def verify_snapshot(root: Path, snapshot: Path) -> None:
         )
 
 
-def _is_macho(path: Path) -> bool:
-    try:
-        with path.open("rb") as handle:
-            return handle.read(4) in MACHO_MAGICS
-    except OSError:
-        return False
-
-
 def _is_pe(path: Path) -> bool:
     try:
         with path.open("rb") as handle:
@@ -317,6 +306,13 @@ def sign_nested_payloads(
     environment: Mapping[str, str] | None = None,
 ) -> list[Path]:
     env = os.environ if environment is None else environment
+    if state.mode == "unsigned" and state.platform == "macos":
+        # Without a Developer ID every Mach-O still needs a valid signature:
+        # Apple Silicon refuses to execute unsigned code, and a bundle whose
+        # executable is only linker-signed fails `codesign --verify` with "code
+        # has no resources but signature indicates they must be present". Seal
+        # each nested binary ad hoc, innermost first; Tauri then seals the app.
+        return _ad_hoc_sign_macho(root)
     if state.mode == "unsigned":
         print(f"Signing mode: explicitly unsigned ({state.platform})", flush=True)
         return []
@@ -553,7 +549,21 @@ def _smoke_program(path: Path, arguments: Sequence[str]) -> None:
         raise ReleaseIntegrityError(f"smoke invocation failed: {path}") from error
 
 
+#: Data the frozen backend reads at runtime; a missing collect rule once left
+#: location tags silently empty in every installed build (AI-01).
+BUNDLED_BACKEND_DATA = ("app/resources/geo/SOURCE.json", "app/resources/geo/cities.tsv.gz")
+
+
+def _require_bundled_data(path: Path) -> None:
+    for relative in BUNDLED_BACKEND_DATA:
+        if not any(
+            (root / relative).is_file() for root in (path.parent / "_internal", path.parent)
+        ):
+            raise ReleaseIntegrityError(f"packaged backend lacks {relative}: {path}")
+
+
 def _smoke_backend(path: Path) -> None:
+    _require_bundled_data(path)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -825,20 +835,12 @@ def verify_release(
                 if not os.access(path, os.X_OK):
                     raise ReleaseIntegrityError(f"packaged executable mode is missing: {path}")
             _verify_native_provenance(payload / "ffmpeg", "darwin")
+            # The app inside the final DMG must carry a valid seal in every
+            # mode: ad hoc without a Developer ID, Developer ID otherwise. A
+            # broken seal is what made the native app refuse to open (NEW-6).
+            machos = _verify_macos_seal(app)
+            _require_architecture(machos, _expected_macos_architecture(dmg))
             if state.mode == "signed":
-                for path in sorted(
-                    (item for item in app.rglob("*") if item.is_file() and _is_macho(item)),
-                    key=lambda item: len(item.parts),
-                    reverse=True,
-                ):
-                    subprocess.run(
-                        ["codesign", "--verify", "--strict", "--verbose=2", str(path)],
-                        check=True,
-                    )
-                subprocess.run(
-                    ["codesign", "--verify", "--deep", "--strict", str(app)],
-                    check=True,
-                )
                 subprocess.run(["xcrun", "stapler", "validate", str(dmg)], check=True)
             if run_smoke:
                 _smoke_program(ffmpeg, ("-version",))

@@ -1,0 +1,5584 @@
+{
+ "schema_version": 1,
+ "description": "Public evaluation fixtures for local AI tagging and categorization: 640 px thumbnails of Wikimedia Commons files, each under its own free licence. Images are downloaded on demand and verified by SHA-256; none are stored in the repository. Labels were assigned by visual review on 2026-10-12. 'labels' must be found (alternatives separated by '|'); 'acceptable' may be emitted; any other vocabulary label counts as a false positive. 'category' is the expected folder (null: no category is expected) and 'acceptable_categories' are not errors.",
+ "retrieved": "2026-10-12",
+ "images": [
+  {
+   "id": "beach-0",
+   "title": "File:Rügen, Beach at Sellin -- 2009 -- 1173.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:R%C3%BCgen,_Beach_at_Sellin_--_2009_--_1173.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/R%C3%BCgen%2C_Beach_at_Sellin_--_2009_--_1173.jpg/960px-R%C3%BCgen%2C_Beach_at_Sellin_--_2009_--_1173.jpg",
+   "sha256": "63fa6125567433851eedef6f01cc406df85cda336b64e812dd5392c9ddf1a5ad",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Dietmar Rabich",
+   "labels": [
+    "beach"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "beach-1",
+   "title": "File:Parasols, Evening, Beach, Rincon de la Victoria, Andalusia, Spain.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Parasols,_Evening,_Beach,_Rincon_de_la_Victoria,_Andalusia,_Spain.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Parasols%2C_Evening%2C_Beach%2C_Rincon_de_la_Victoria%2C_Andalusia%2C_Spain.jpg/960px-Parasols%2C_Evening%2C_Beach%2C_Rincon_de_la_Victoria%2C_Andalusia%2C_Spain.jpg",
+   "sha256": "c34f632966b79e70e35514663a468ddf6d16270708a5fdc6f3de71656691deb3",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Jebulon",
+   "labels": [
+    "beach"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "beach-2",
+   "title": "File:The sun and the moon in South New Brighton's beach, New Zealand.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:The_sun_and_the_moon_in_South_New_Brighton%27s_beach,_New_Zealand.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/The_sun_and_the_moon_in_South_New_Brighton%27s_beach%2C_New_Zealand.jpg/960px-The_sun_and_the_moon_in_South_New_Brighton%27s_beach%2C_New_Zealand.jpg",
+   "sha256": "7872cc614bd5d40f3d84271cccec4f396480faffb1474f32338d86fc69364f51",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "beach",
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "beach-3",
+   "title": "File:Beach of Cape Fiolent, Crimea.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Beach_of_Cape_Fiolent,_Crimea.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Beach_of_Cape_Fiolent%2C_Crimea.jpg/960px-Beach_of_Cape_Fiolent%2C_Crimea.jpg",
+   "sha256": "0eb2533fc7ff38b2076e8e93f600723c075ce89811039790fbb4023a42a54644",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "beach",
+    "mountain"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "beach-4",
+   "title": "File:Beach, New Brighton, New Zealand 06.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Beach,_New_Brighton,_New_Zealand_06.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Beach%2C_New_Brighton%2C_New_Zealand_06.jpg/960px-Beach%2C_New_Brighton%2C_New_Zealand_06.jpg",
+   "sha256": "1b85b14ae0e7d7a23c4ac3f0c4a54c6ff2473a6a1b61e3e13b6387a0a57a3ca5",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "beach"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "beach-5",
+   "title": "File:Seal Rocks, Ocean Beach, San Francisco.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Seal_Rocks,_Ocean_Beach,_San_Francisco.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/Seal_Rocks%2C_Ocean_Beach%2C_San_Francisco.jpg/960px-Seal_Rocks%2C_Ocean_Beach%2C_San_Francisco.jpg",
+   "sha256": "4bb17cd8daeebe7fb5850f2c3587a36d6c3cbb310290c4eee90bbc1d259bac40",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Radomianin",
+   "labels": [
+    "beach"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "beach-6",
+   "title": "File:Havelock Island, Mangrove tree on the beach, Andaman Islands.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Havelock_Island,_Mangrove_tree_on_the_beach,_Andaman_Islands.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/51/Havelock_Island%2C_Mangrove_tree_on_the_beach%2C_Andaman_Islands.jpg/960px-Havelock_Island%2C_Mangrove_tree_on_the_beach%2C_Andaman_Islands.jpg",
+   "sha256": "f995a7e916e0e966cc1b753dbbecd0539fddc8bf9556703f3ddd7c853f5fedd6",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "beach"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "beach-7",
+   "title": "File:Preveli Palm Beach Panorama 02.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Preveli_Palm_Beach_Panorama_02.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0c/Preveli_Palm_Beach_Panorama_02.JPG/960px-Preveli_Palm_Beach_Panorama_02.JPG",
+   "sha256": "4b6249f6ab5e615d65e47afaffbf0bf45ac2b600bde49bfd620ff6cc271f4ea9",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Uoaei1",
+   "labels": [
+    "landscape"
+   ],
+   "acceptable": [
+    "water",
+    "outdoor",
+    "sky",
+    "travel",
+    "mountain",
+    "beach",
+    "hiking"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "mountain-0",
+   "title": "File:Mountain Peak, Alaska (1999).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Mountain_Peak,_Alaska_(1999).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/Mountain_Peak%2C_Alaska_%281999%29.jpg/960px-Mountain_Peak%2C_Alaska_%281999%29.jpg",
+   "sha256": "d3f4f69d200f49ba318a879746dea148c785d060ee25bbdebdf4542e69659ba0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Godot13",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "mountain-1",
+   "title": "File:Cholatse Peak, Nepal, Himalayas.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cholatse_Peak,_Nepal,_Himalayas.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Cholatse_Peak%2C_Nepal%2C_Himalayas.jpg/960px-Cholatse_Peak%2C_Nepal%2C_Himalayas.jpg",
+   "sha256": "abc15cd42a8c99d9700baeb723efa0e9b00fa71c5088df744f69040c63090392",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "mountain-2",
+   "title": "File:Evans Peak Panorama.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Evans_Peak_Panorama.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Evans_Peak_Panorama.jpg/960px-Evans_Peak_Panorama.jpg",
+   "sha256": "3ae65f809f2997bdb7f12c33899756a95ed871d6e9ff91e65437c0ad24a614f9",
+   "license": "CC BY-SA 2.5 ca",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5/ca/deed.en",
+   "author": "The Cosmonaut",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "mountain-3",
+   "title": "File:Ergaki, Peak Molodezhnyy, Sayan Mountains, Russia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Ergaki,_Peak_Molodezhnyy,_Sayan_Mountains,_Russia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/29/Ergaki%2C_Peak_Molodezhnyy%2C_Sayan_Mountains%2C_Russia.jpg/960px-Ergaki%2C_Peak_Molodezhnyy%2C_Sayan_Mountains%2C_Russia.jpg",
+   "sha256": "b773e5f5549b2379a8e48b66350f6152526c6bc76eb9b4acee7d2afaf27a9268",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "mountain-4",
+   "title": "File:Lady Peak panorama2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Lady_Peak_panorama2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Lady_Peak_panorama2.jpg/960px-Lady_Peak_panorama2.jpg",
+   "sha256": "b125e8e7d1ffc7df7778f07499cbfb889ad89042808598066486364e240aa779",
+   "license": "CC BY-SA 2.5 ca",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5/ca/deed.en",
+   "author": "The Cosmonaut",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "mountain-5",
+   "title": "File:Luza, Kangtega and Thamserku mountain peaks, Machhermo, Nepal.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Luza,_Kangtega_and_Thamserku_mountain_peaks,_Machhermo,_Nepal.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Luza%2C_Kangtega_and_Thamserku_mountain_peaks%2C_Machhermo%2C_Nepal.jpg/960px-Luza%2C_Kangtega_and_Thamserku_mountain_peaks%2C_Machhermo%2C_Nepal.jpg",
+   "sha256": "4ebeea6022d4632acf63adda2231d899359101e3d490176dee2e940087834307",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "mountain-6",
+   "title": "File:Pumori Peak, Nepal, Asia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pumori_Peak,_Nepal,_Asia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Pumori_Peak%2C_Nepal%2C_Asia.jpg/960px-Pumori_Peak%2C_Nepal%2C_Asia.jpg",
+   "sha256": "0a35c86ffa7510b83916c23caf8b684848057be136a53456be36d60d607ceae2",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "mountain-7",
+   "title": "File:Peak Sakharny Pseashkho.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Peak_Sakharny_Pseashkho.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Peak_Sakharny_Pseashkho.JPG/960px-Peak_Sakharny_Pseashkho.JPG",
+   "sha256": "7af5bbafd932ce0c576e54161f77db797322b8b1bdeeccad7632a0b73b2ec3b6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "SKas",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "forest",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "forest-0",
+   "title": "File:Spring forest Yyteri 3.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Spring_forest_Yyteri_3.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/Spring_forest_Yyteri_3.jpg/960px-Spring_forest_Yyteri_3.jpg",
+   "sha256": "4aa869492fb7a31b4d023deb61d741e21951f8671390f00915e32f9e65155628",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "kallerna",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "forest-1",
+   "title": "File:Forest road Slavne 2017 BW G9.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Forest_road_Slavne_2017_BW_G9.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Forest_road_Slavne_2017_BW_G9.jpg/960px-Forest_road_Slavne_2017_BW_G9.jpg",
+   "sha256": "34d8708efc3a627165a2fc9d997243ea08f254b1a07538eb6eed22f999979752",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "George Chernilevsky",
+   "labels": [
+    "snow",
+    "forest"
+   ],
+   "acceptable": [
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "forest-2",
+   "title": "File:Forest road Slavne 2017 G8.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Forest_road_Slavne_2017_G8.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/Forest_road_Slavne_2017_G8.jpg/960px-Forest_road_Slavne_2017_G8.jpg",
+   "sha256": "526d201404bf332777140487b1d7ea36eb1a6bbf5eddcda909347122e75bafe6",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "George Chernilevsky",
+   "labels": [
+    "snow",
+    "forest"
+   ],
+   "acceptable": [
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "forest-4",
+   "title": "File:Mezmay, Forest, Trees, Russia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Mezmay,_Forest,_Trees,_Russia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/Mezmay%2C_Forest%2C_Trees%2C_Russia.jpg/960px-Mezmay%2C_Forest%2C_Trees%2C_Russia.jpg",
+   "sha256": "54be0d1893c21610d564e9e8ed6a3368dc0635f4519ba4b2f5ec025a58bb7e59",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "forest-5",
+   "title": "File:Beech forest Mátra in winter.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Beech_forest_M%C3%A1tra_in_winter.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/47/Beech_forest_M%C3%A1tra_in_winter.jpg/960px-Beech_forest_M%C3%A1tra_in_winter.jpg",
+   "sha256": "49392ae31847eacd392b31cf29610efcae773d5cfaea7deae725c13fe487c4e0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Susulyka",
+   "labels": [
+    "forest",
+    "snow"
+   ],
+   "acceptable": [
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel",
+    "sunrise",
+    "sunset"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "forest-6",
+   "title": "File:Møns Klint beech trees in gorge 2015-04-01-4864.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:M%C3%B8ns_Klint_beech_trees_in_gorge_2015-04-01-4864.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/M%C3%B8ns_Klint_beech_trees_in_gorge_2015-04-01-4864.jpg/960px-M%C3%B8ns_Klint_beech_trees_in_gorge_2015-04-01-4864.jpg",
+   "sha256": "8bf6568f10959d0ec2fd5dbcae91e49163bc838b53b0264094d9fc7ddc49f5c0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Slaunger",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "forest-7",
+   "title": "File:Bali, Forest, Trees, East Bali, Indonesia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Bali,_Forest,_Trees,_East_Bali,_Indonesia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/Bali%2C_Forest%2C_Trees%2C_East_Bali%2C_Indonesia.jpg/960px-Bali%2C_Forest%2C_Trees%2C_East_Bali%2C_Indonesia.jpg",
+   "sha256": "347fa89ca1db976383ac4d564798ee9ffb2296bcd0df7cb5c975636293b84f46",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Vyacheslav Argenberg",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "snow",
+    "hiking",
+    "street",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel",
+    "mountain"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "city-0",
+   "title": "File:Lower Manhattan from Jersey City November 2014 panorama 3.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Lower_Manhattan_from_Jersey_City_November_2014_panorama_3.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b6/Lower_Manhattan_from_Jersey_City_November_2014_panorama_3.jpg/960px-Lower_Manhattan_from_Jersey_City_November_2014_panorama_3.jpg",
+   "sha256": "f5b5f0c6e451aa2a048da5d8124cd4249f608616287d7edf722d6eff0f7de9d4",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "King of Hearts",
+   "labels": [
+    "city"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "city-1",
+   "title": "File:Skyline Frankfurt am Main.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Skyline_Frankfurt_am_Main.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Skyline_Frankfurt_am_Main.jpg/960px-Skyline_Frankfurt_am_Main.jpg",
+   "sha256": "51449934d833237edccab3bc8248d499f4f375f006719e453f4691fb5ca7f860",
+   "license": "CC BY-SA 2.5",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+   "author": "Nicolas Scheuer",
+   "labels": [
+    "city"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "city-2",
+   "title": "File:Frankfurter Altstadt mit Skyline 2012-04.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Frankfurter_Altstadt_mit_Skyline_2012-04.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Frankfurter_Altstadt_mit_Skyline_2012-04.jpg/960px-Frankfurter_Altstadt_mit_Skyline_2012-04.jpg",
+   "sha256": "5e3e05918d6f3214a44e017081ed6528e1efff3ef645414a3b0c51cca4369b56",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Thomas Wolf , www.foto-tw.de",
+   "labels": [
+    "city"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "city-3",
+   "title": "File:Long Island City New York May 2015 panorama 3.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Long_Island_City_New_York_May_2015_panorama_3.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dd/Long_Island_City_New_York_May_2015_panorama_3.jpg/960px-Long_Island_City_New_York_May_2015_panorama_3.jpg",
+   "sha256": "569c1042f1b3dea7d62e7d1192220c2142cecdd4d943b147c99bd17d93ff35e9",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "King of Hearts",
+   "labels": [
+    "city"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "city-4",
+   "title": "File:Frankfurt Skyline 2022 bei Nacht.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Frankfurt_Skyline_2022_bei_Nacht.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Frankfurt_Skyline_2022_bei_Nacht.jpg/960px-Frankfurt_Skyline_2022_bei_Nacht.jpg",
+   "sha256": "eb8ad94eb609a3cc667beb92ddd27a42b17d61b7f823ba17e26658c0b84ea2d2",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jörg Braukmann",
+   "labels": [
+    "city",
+    "night"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "city-5",
+   "title": "File:Boston skyline from Cambridge November 2015 panorama 1.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Boston_skyline_from_Cambridge_November_2015_panorama_1.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Boston_skyline_from_Cambridge_November_2015_panorama_1.jpg/960px-Boston_skyline_from_Cambridge_November_2015_panorama_1.jpg",
+   "sha256": "a71816743d43bc7eea70eaf0ba20516d22f29e1027ad2b245ec91dd2c9a77a38",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "King of Hearts",
+   "labels": [
+    "city"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "city-6",
+   "title": "File:Snow-covered Quebec City skyline in fog.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Snow-covered_Quebec_City_skyline_in_fog.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/Snow-covered_Quebec_City_skyline_in_fog.jpg/960px-Snow-covered_Quebec_City_skyline_in_fog.jpg",
+   "sha256": "a49d02c0a95ace49f6a09556fc8a9195cb8e6522805c41954e71673e7787a81e",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Wilfredor",
+   "labels": [
+    "city",
+    "snow"
+   ],
+   "acceptable": [
+    "building",
+    "night",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "city-7",
+   "title": "File:Skyline of the Central Business District of Singapore with Esplanade Bridge.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Skyline_of_the_Central_Business_District_of_Singapore_with_Esplanade_Bridge.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Skyline_of_the_Central_Business_District_of_Singapore_with_Esplanade_Bridge.jpg/960px-Skyline_of_the_Central_Business_District_of_Singapore_with_Esplanade_Bridge.jpg",
+   "sha256": "a8679539c2a67972d56f855013905c84b7d7f71fef9287b0ba7dc9e53df8846e",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "city",
+    "night"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "street",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sunset-0",
+   "title": "File:Sunset 2007-1.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sunset_2007-1.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Sunset_2007-1.jpg/960px-Sunset_2007-1.jpg",
+   "sha256": "fb695842d16909dff82d8908e597d58d0d65e22022c326fc2da03e73a292fe25",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Alvesgaspar",
+   "labels": [
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sunset-1",
+   "title": "File:Kitesurfer at sunset, Workum, may 2017.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Kitesurfer_at_sunset,_Workum,_may_2017.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6a/Kitesurfer_at_sunset%2C_Workum%2C_may_2017.jpg/960px-Kitesurfer_at_sunset%2C_Workum%2C_may_2017.jpg",
+   "sha256": "bde20fbbec1f20ff1277311378dfa21643baa50524c9d2d69aea6cd772ba3ed6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Villy Fink Isaksen",
+   "labels": [
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sunset-2",
+   "title": "File:Rapanui Rock during sunset, Sumner, Christchurch, New Zealand.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Rapanui_Rock_during_sunset,_Sumner,_Christchurch,_New_Zealand.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/Rapanui_Rock_during_sunset%2C_Sumner%2C_Christchurch%2C_New_Zealand.jpg/960px-Rapanui_Rock_during_sunset%2C_Sumner%2C_Christchurch%2C_New_Zealand.jpg",
+   "sha256": "e97b1c55e9b470392816ed321c8120d170a451960b2a71e7c5cb41d5f6ef4d3f",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sunset-3",
+   "title": "File:Pirogue running on the Mekong at sunset with pink clouds in Don Det Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pirogue_running_on_the_Mekong_at_sunset_with_pink_clouds_in_Don_Det_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Pirogue_running_on_the_Mekong_at_sunset_with_pink_clouds_in_Don_Det_Laos.jpg/960px-Pirogue_running_on_the_Mekong_at_sunset_with_pink_clouds_in_Don_Det_Laos.jpg",
+   "sha256": "bf25238283aba6c6201c0f2597ab97175da91c39317e8046b555932b3c40aa19",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "sunset",
+    "sunrise"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sunset-4",
+   "title": "File:Tad Hang waterfalls at sunset, Tad Lo village, Bolaven Plateau, Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tad_Hang_waterfalls_at_sunset,_Tad_Lo_village,_Bolaven_Plateau,_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ad/Tad_Hang_waterfalls_at_sunset%2C_Tad_Lo_village%2C_Bolaven_Plateau%2C_Laos.jpg/960px-Tad_Hang_waterfalls_at_sunset%2C_Tad_Lo_village%2C_Bolaven_Plateau%2C_Laos.jpg",
+   "sha256": "69eab12f6fc4940a9599879bb4bbc1ab04d7827a6715e67167f8a830ea87917d",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "sunset",
+    "sunrise"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sunset-5",
+   "title": "File:Sunset in The Trossachs, Scotland.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sunset_in_The_Trossachs,_Scotland.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/Sunset_in_The_Trossachs%2C_Scotland.jpg/960px-Sunset_in_The_Trossachs%2C_Scotland.jpg",
+   "sha256": "e4484ec7bdbfd7389710e0d6185693b78c68d023064e3a74c898d973d50965a6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "landscape"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "sky",
+    "water",
+    "travel",
+    "sunset",
+    "sunrise"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sunset-7",
+   "title": "File:Sunset at Dorum with Obereversand lighthouse.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sunset_at_Dorum_with_Obereversand_lighthouse.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Sunset_at_Dorum_with_Obereversand_lighthouse.jpg/960px-Sunset_at_Dorum_with_Obereversand_lighthouse.jpg",
+   "sha256": "f14d1337f03bb9fc39ef8968d59d383a2ee251e0511cc7b564ef837faed43527",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Steffen Flor",
+   "labels": [
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "beach",
+    "boat",
+    "forest",
+    "mountain",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel",
+    "landmark",
+    "building"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "snow-0",
+   "title": "File:Angelus Hut in the winter, Nelson Lakes National Park, New Zealand.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Angelus_Hut_in_the_winter,_Nelson_Lakes_National_Park,_New_Zealand.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Angelus_Hut_in_the_winter%2C_Nelson_Lakes_National_Park%2C_New_Zealand.jpg/960px-Angelus_Hut_in_the_winter%2C_Nelson_Lakes_National_Park%2C_New_Zealand.jpg",
+   "sha256": "8f0204ee8fa79dd9ed1d088d5fa0db4265d601f42097845afea507c7404e99f9",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "snow-1",
+   "title": "File:Winter auf dem Himmeldunkberg.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Winter_auf_dem_Himmeldunkberg.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/Winter_auf_dem_Himmeldunkberg.jpg/960px-Winter_auf_dem_Himmeldunkberg.jpg",
+   "sha256": "b9191b609ea0c93d43d596318f7c6061886c31cb794b37c711737b4f41d24739",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jörg Braukmann",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "snow-2",
+   "title": "File:Kolomenskoe in white - Dec12 - 03 snow.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Kolomenskoe_in_white_-_Dec12_-_03_snow.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/Kolomenskoe_in_white_-_Dec12_-_03_snow.jpg/960px-Kolomenskoe_in_white_-_Dec12_-_03_snow.jpg",
+   "sha256": "53b471c787052085bd02da99b83a458b42390b3777ee4ff7aabbe8e9330dfbe2",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "A.Savin",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "snow-3",
+   "title": "File:Viru Bog at winter.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Viru_Bog_at_winter.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Viru_Bog_at_winter.jpg/960px-Viru_Bog_at_winter.jpg",
+   "sha256": "83fcd336da2bea27abfa3a4f1df75134f5e3ecdd50d4d13cbb5bb184dea83ee4",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Abrget47j",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "snow-4",
+   "title": "File:Winter in der Rhön.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Winter_in_der_Rh%C3%B6n.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Winter_in_der_Rh%C3%B6n.jpg/960px-Winter_in_der_Rh%C3%B6n.jpg",
+   "sha256": "6b32e791fbfb7083c0bcecb345e7cace93b7d382bd644ffa4dc3b301561a387b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jörg Braukmann",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "snow-5",
+   "title": "File:Winter auf dem Melpertser Rasenberg.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Winter_auf_dem_Melpertser_Rasenberg.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Winter_auf_dem_Melpertser_Rasenberg.jpg/960px-Winter_auf_dem_Melpertser_Rasenberg.jpg",
+   "sha256": "fab3bce0457813928c532a0696ee6f986e972518a1a16bda34b382704632990b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jörg Braukmann",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "snow-6",
+   "title": "File:Silesian - Moravian Beskids in winter 2014.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Silesian_-_Moravian_Beskids_in_winter_2014.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Silesian_-_Moravian_Beskids_in_winter_2014.JPG/960px-Silesian_-_Moravian_Beskids_in_winter_2014.JPG",
+   "sha256": "ee2585c295ace022789e037ec8426b596d5486c82568593c233ecce8d9ec8393",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Pudelek (Marcin Szala)",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "snow-7",
+   "title": "File:Sninský kameň (v zime) 001.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sninsk%C3%BD_kame%C5%88_(v_zime)_001.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/Sninsk%C3%BD_kame%C5%88_%28v_zime%29_001.jpg/960px-Sninsk%C3%BD_kame%C5%88_%28v_zime%29_001.jpg",
+   "sha256": "bd1bef91dd2400adcb194f40cec400ef36d3e6ce449da3aeb45f4a784126f9d0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Milan Bališin",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "forest",
+    "mountain",
+    "hiking",
+    "sunset",
+    "sunrise",
+    "building",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "food-0",
+   "title": "File:Lunch dish (pumpkin sauce, potatoes and chicken steak).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Lunch_dish_(pumpkin_sauce,_potatoes_and_chicken_steak).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Lunch_dish_%28pumpkin_sauce%2C_potatoes_and_chicken_steak%29.jpg/960px-Lunch_dish_%28pumpkin_sauce%2C_potatoes_and_chicken_steak%29.jpg",
+   "sha256": "30d0eb9341da92b410698491f656f3f1eb7ae858d9fd91623a052f9cbc3274fd",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Petar Milošević",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "food-1",
+   "title": "File:13-09-01-kochtreffen-wien-RalfR-02.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:13-09-01-kochtreffen-wien-RalfR-02.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/13-09-01-kochtreffen-wien-RalfR-02.jpg/960px-13-09-01-kochtreffen-wien-RalfR-02.jpg",
+   "sha256": "452e671c49a24ef9398b79ac36e1c2b5cb3d510bfb5baf0c467f71c9e1338786",
+   "license": "CC BY 3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "food-2",
+   "title": "File:Christmas table (Serbian cuisine).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Christmas_table_(Serbian_cuisine).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Christmas_table_%28Serbian_cuisine%29.jpg/960px-Christmas_table_%28Serbian_cuisine%29.jpg",
+   "sha256": "28329e84af338aab1a19277101df137823b8bb84f50a572cecc0da7033b84701",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Petar Milošević",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "food-3",
+   "title": "File:A Brazilian family in Rio de Janeiro by Jean-Baptiste Debret 1839.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:A_Brazilian_family_in_Rio_de_Janeiro_by_Jean-Baptiste_Debret_1839.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/A_Brazilian_family_in_Rio_de_Janeiro_by_Jean-Baptiste_Debret_1839.jpg/960px-A_Brazilian_family_in_Rio_de_Janeiro_by_Jean-Baptiste_Debret_1839.jpg",
+   "sha256": "972ebbe48ecfd42926ae5c9a2e1367fae8278aee54fac6b23c3b71c49972f9d9",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Jean-Baptiste Debret",
+   "labels": [
+    "artwork"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor",
+    "food",
+    "portrait"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "people",
+    "food"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "food-4",
+   "title": "File:Parboiled rice with chicken, peppers, cucurbita, peas and tomato.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Parboiled_rice_with_chicken,_peppers,_cucurbita,_peas_and_tomato.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d0/Parboiled_rice_with_chicken%2C_peppers%2C_cucurbita%2C_peas_and_tomato.jpg/960px-Parboiled_rice_with_chicken%2C_peppers%2C_cucurbita%2C_peas_and_tomato.jpg",
+   "sha256": "8c1b23ffee3481ceca7b0536c6138c6880096dc6f5b27de25475e83b57f712a3",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Petar Milošević",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "food-5",
+   "title": "File:Dish with fruits.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Dish_with_fruits.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Dish_with_fruits.jpg/960px-Dish_with_fruits.jpg",
+   "sha256": "33954e71516c097de5421d8e8db937e0439a1e0c43b87fe14c86f2959126196f",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Petar Milošević",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "food-6",
+   "title": "File:Egyptian food Koshary.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Egyptian_food_Koshary.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Egyptian_food_Koshary.jpg/960px-Egyptian_food_Koshary.jpg",
+   "sha256": "2581efe842a07ce7f883bd114565e7aef0a06aed19b0d4ee35565021299e0698",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Dina Said",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "food-7",
+   "title": "File:Sunday roast vegetable side dish at The Stag, Little Easton, Essex, England.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sunday_roast_vegetable_side_dish_at_The_Stag,_Little_Easton,_Essex,_England.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Sunday_roast_vegetable_side_dish_at_The_Stag%2C_Little_Easton%2C_Essex%2C_England.jpg/960px-Sunday_roast_vegetable_side_dish_at_The_Stag%2C_Little_Easton%2C_Essex%2C_England.jpg",
+   "sha256": "44195a38db86dc40679218d95bd3c7974cd2977a0b12c3c1aee05f0f483d5cee",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Acabashi",
+   "labels": [
+    "food"
+   ],
+   "acceptable": [
+    "drink",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "dog-0",
+   "title": "File:Human–canine friendship - girl hugging her dog tightly at golden hour in Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Human%E2%80%93canine_friendship_-_girl_hugging_her_dog_tightly_at_golden_hour_in_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Human%E2%80%93canine_friendship_-_girl_hugging_her_dog_tightly_at_golden_hour_in_Laos.jpg/960px-Human%E2%80%93canine_friendship_-_girl_hugging_her_dog_tightly_at_golden_hour_in_Laos.jpg",
+   "sha256": "47c3c9667dee4bbe9d3e14d03e5d3af75560fd3a5002aeff7758d9c44922c79c",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "dog-1",
+   "title": "File:Dhole(Asiatic wild dog).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Dhole(Asiatic_wild_dog).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Dhole%28Asiatic_wild_dog%29.jpg/960px-Dhole%28Asiatic_wild_dog%29.jpg",
+   "sha256": "08641bbc053e6d4db00b364655a687e1b690bf0dc17a0fb7920261b28a365186",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Davidvraju",
+   "labels": [
+    "wildlife"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait",
+    "dog",
+    "forest"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "dog-2",
+   "title": "File:DSC09611a Search and Rescue Dog, Austrian Red Cross Perchtoldsdorf, 2024-10.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:DSC09611a_Search_and_Rescue_Dog,_Austrian_Red_Cross_Perchtoldsdorf,_2024-10.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/DSC09611a_Search_and_Rescue_Dog%2C_Austrian_Red_Cross_Perchtoldsdorf%2C_2024-10.jpg/960px-DSC09611a_Search_and_Rescue_Dog%2C_Austrian_Red_Cross_Perchtoldsdorf%2C_2024-10.jpg",
+   "sha256": "c0ac0d25a9527a078489ea6eaf998e192ab2a01eb0a19a65f91805ed3066752c",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Aciarium",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "dog-3",
+   "title": "File:White dog sleeping on the floor with puppies after nursing in Don Det Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:White_dog_sleeping_on_the_floor_with_puppies_after_nursing_in_Don_Det_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/White_dog_sleeping_on_the_floor_with_puppies_after_nursing_in_Don_Det_Laos.jpg/960px-White_dog_sleeping_on_the_floor_with_puppies_after_nursing_in_Don_Det_Laos.jpg",
+   "sha256": "92b05ecc54237ea82ff3f3b2edfa1fb63441276051f4010ae80e92340e447c88",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "dog-4",
+   "title": "File:Liver yellow dog in the water looking at viewer at golden hour in Don Det Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Liver_yellow_dog_in_the_water_looking_at_viewer_at_golden_hour_in_Don_Det_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Liver_yellow_dog_in_the_water_looking_at_viewer_at_golden_hour_in_Don_Det_Laos.jpg/960px-Liver_yellow_dog_in_the_water_looking_at_viewer_at_golden_hour_in_Don_Det_Laos.jpg",
+   "sha256": "882c465a65109fd73f4f0a330b86d340d55cfa494ccfc48a0d981ab556af0cfa",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "dog-5",
+   "title": "File:Cane corso głowa profil 493o.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cane_corso_g%C5%82owa_profil_493o.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Cane_corso_g%C5%82owa_profil_493o.jpg/960px-Cane_corso_g%C5%82owa_profil_493o.jpg",
+   "sha256": "acee3294ac36611dcabc7021486af0364aff35f487f648eb17f97f894c3283bb",
+   "license": "CC BY-SA 3.0",
+   "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+   "author": "Pleple2000",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "dog-6",
+   "title": "File:20110425 German Shepherd Dog 8505.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:20110425_German_Shepherd_Dog_8505.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/61/20110425_German_Shepherd_Dog_8505.jpg/960px-20110425_German_Shepherd_Dog_8505.jpg",
+   "sha256": "c84d894446cc3d6f684b73b295743e541675d6de759bfc3236c0dbed2b3e2634",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jakub Hałun",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "dog-7",
+   "title": "File:Chinese crested dog on the beach (13200).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Chinese_crested_dog_on_the_beach_(13200).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3e/Chinese_crested_dog_on_the_beach_%2813200%29.jpg/960px-Chinese_crested_dog_on_the_beach_%2813200%29.jpg",
+   "sha256": "f5cef8586d368864151aea2c618ab3aabe8446fc5ff5fcce94899e30c91b4f81",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Rhododendrites",
+   "labels": [
+    "dog"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "water",
+    "beach",
+    "portrait"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "cat-0",
+   "title": "File:Felis catus-cat on snow.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Felis_catus-cat_on_snow.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b6/Felis_catus-cat_on_snow.jpg/960px-Felis_catus-cat_on_snow.jpg",
+   "sha256": "a34ee05fe8cb1badd2d7ffbeec2257c79f3683bd3ea0aef2b4ec709e42878734",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Von.grzanka",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "cat-1",
+   "title": "File:Cat playing with a lizard.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cat_playing_with_a_lizard.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/72/Cat_playing_with_a_lizard.jpg/960px-Cat_playing_with_a_lizard.jpg",
+   "sha256": "97c55377437bd41b798853dc0530186bedbe0917b21583192684eecbd1dab226",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "cat-2",
+   "title": "File:Tabby cats of Ōizumi Ryokuchi Park, January 2019 - 8816.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tabby_cats_of_%C5%8Cizumi_Ryokuchi_Park,_January_2019_-_8816.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/Tabby_cats_of_%C5%8Cizumi_Ryokuchi_Park%2C_January_2019_-_8816.jpg/960px-Tabby_cats_of_%C5%8Cizumi_Ryokuchi_Park%2C_January_2019_-_8816.jpg",
+   "sha256": "300e6f7d59fd0b5a626938c35a0017230dce8a7145147fb60ebb3773ebefe9a7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Laitche",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "cat-3",
+   "title": "File:20231125 housecat south meadows PD100306.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:20231125_housecat_south_meadows_PD100306.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/20231125_housecat_south_meadows_PD100306.jpg/960px-20231125_housecat_south_meadows_PD100306.jpg",
+   "sha256": "ceab6a295379cf63b430c5e081b1d4e192ed5c214e2d0f0a5989b328873da402",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Paul Danese",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "cat-4",
+   "title": "File:Calico cat, - Assisi, Italy.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Calico_cat,_-_Assisi,_Italy.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/Calico_cat%2C_-_Assisi%2C_Italy.jpg/960px-Calico_cat%2C_-_Assisi%2C_Italy.jpg",
+   "sha256": "9ad90bf664358e29872169ed84a034baaeeb53ac83f64774bc7a5c965107c42e",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Terragio67",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "cat-5",
+   "title": "File:Cat Sphynx. Kittens. img 11.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cat_Sphynx._Kittens._img_11.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/29/Cat_Sphynx._Kittens._img_11.jpg/960px-Cat_Sphynx._Kittens._img_11.jpg",
+   "sha256": "7fd40f9897af2d77aac857f948a4b317aa24af47ad269226e385d0ac305c1a63",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Dmitry Makeev",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "cat-6",
+   "title": "File:Domestic Cat Face Shot.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Domestic_Cat_Face_Shot.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5e/Domestic_Cat_Face_Shot.jpg/960px-Domestic_Cat_Face_Shot.jpg",
+   "sha256": "4c469c91b9aa874347304e88d9280fcd5ad412041d5d9fe0aa46be78323d7508",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Augustus Binu : flickr",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "cat-7",
+   "title": "File:Domestic cat 2011 G02.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Domestic_cat_2011_G02.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Domestic_cat_2011_G02.jpg/960px-Domestic_cat_2011_G02.jpg",
+   "sha256": "e9f17a07d12b1336af053bae1eb5ef3bb3b68a9530b77f650033b1937ca6ffba",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "George Chernilevsky",
+   "labels": [
+    "cat"
+   ],
+   "acceptable": [
+    "pet",
+    "outdoor",
+    "indoor",
+    "snow"
+   ],
+   "category": "pets",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "bird-0",
+   "title": "File:Ploceus velatus beak open.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Ploceus_velatus_beak_open.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Ploceus_velatus_beak_open.jpg/960px-Ploceus_velatus_beak_open.jpg",
+   "sha256": "46852e4d97c529e4decba794388f568895024c93db50eb3fb86e67c35fa6d9a8",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Prosthetic Head",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "bird-1",
+   "title": "File:Female house sparrow at Kodai.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Female_house_sparrow_at_Kodai.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b3/Female_house_sparrow_at_Kodai.jpg/960px-Female_house_sparrow_at_Kodai.jpg",
+   "sha256": "ea3427e6c8b00ed067205e60bca83e1f8d3a1a03919cfd4ee59842f722be9372",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Deepak Sundar",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "bird-2",
+   "title": "File:Swallow-tailed bee-eater (Merops hirundineus chrysolaimus).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Swallow-tailed_bee-eater_(Merops_hirundineus_chrysolaimus).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Swallow-tailed_bee-eater_%28Merops_hirundineus_chrysolaimus%29.jpg/960px-Swallow-tailed_bee-eater_%28Merops_hirundineus_chrysolaimus%29.jpg",
+   "sha256": "9531d1b0299cccd839b6ad1bbde372de54aedeb1ed85927a30309d03cfc17403",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Charles J. Sharp",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "bird-3",
+   "title": "File:Cattle tyrant (Machetornis rixosa) on Capybara.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cattle_tyrant_(Machetornis_rixosa)_on_Capybara.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Cattle_tyrant_%28Machetornis_rixosa%29_on_Capybara.jpg/960px-Cattle_tyrant_%28Machetornis_rixosa%29_on_Capybara.jpg",
+   "sha256": "ab5c28957ce9233220422021bcdfca05127ec77c1b8825a4ee9692c6f78067a6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Charles J. Sharp",
+   "labels": [
+    "wildlife"
+   ],
+   "acceptable": [
+    "outdoor",
+    "water",
+    "flower",
+    "bird"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "bird-4",
+   "title": "File:Asian pied starlings (Gracupica contra).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Asian_pied_starlings_(Gracupica_contra).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Asian_pied_starlings_%28Gracupica_contra%29.jpg/960px-Asian_pied_starlings_%28Gracupica_contra%29.jpg",
+   "sha256": "2609e98ceb93bca300ce7ec9a17917053829170379b41843e2de3899563020db",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Charles J. Sharp",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "bird-5",
+   "title": "File:Green heron in PP (14296).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Green_heron_in_PP_(14296).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Green_heron_in_PP_%2814296%29.jpg/960px-Green_heron_in_PP_%2814296%29.jpg",
+   "sha256": "d97eeea5daf0d42936b28005cb932293a63463809c3381e11fe9564ac13567fd",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Rhododendrites",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "bird-6",
+   "title": "File:Grey-breasted mountain toucan (Andigena hypoglauca) Caldas.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Grey-breasted_mountain_toucan_(Andigena_hypoglauca)_Caldas.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Grey-breasted_mountain_toucan_%28Andigena_hypoglauca%29_Caldas.jpg/960px-Grey-breasted_mountain_toucan_%28Andigena_hypoglauca%29_Caldas.jpg",
+   "sha256": "3b0c6eddcfaf3f63492f3e890beb396d9a88545f02d6f858e97937c78438d7f7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Charles J. Sharp",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "bird-7",
+   "title": "File:Bank myna (Acridotheres ginginianus).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Bank_myna_(Acridotheres_ginginianus).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Bank_myna_%28Acridotheres_ginginianus%29.jpg/960px-Bank_myna_%28Acridotheres_ginginianus%29.jpg",
+   "sha256": "c43f3d22bce04c59fc497756d608ff119ebbed6dc5254b53d3fc4945becaeb6b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Charles J. Sharp",
+   "labels": [
+    "bird"
+   ],
+   "acceptable": [
+    "wildlife",
+    "outdoor",
+    "water",
+    "flower"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "pets"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "flower-0",
+   "title": "File:Bee on Lavender Blossom 2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Bee_on_Lavender_Blossom_2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Bee_on_Lavender_Blossom_2.jpg/960px-Bee_on_Lavender_Blossom_2.jpg",
+   "sha256": "57f4ce8a7c579f000933837808c51f9ba54d6c9ccfd2dc1ea5e7a713b28aefef",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Martin Falbisoner",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "flower-1",
+   "title": "File:Blossom of Mirabelle plum.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Blossom_of_Mirabelle_plum.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/Blossom_of_Mirabelle_plum.jpg/960px-Blossom_of_Mirabelle_plum.jpg",
+   "sha256": "38d29da679e65655953b5eff31c2ed3f16b271ad0ea4522489652e6e8d85cd5e",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Trachemys",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "flower-2",
+   "title": "File:Blossom of appletree.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Blossom_of_appletree.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Blossom_of_appletree.jpg/960px-Blossom_of_appletree.jpg",
+   "sha256": "62f9be1f5c181ab82a81458a2c6cf2eaae6a24e49a2fe343b1d2ad71fd895f6b",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ввласенко",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "flower-3",
+   "title": "File:Hosta flower-20230730-RM-112817-2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hosta_flower-20230730-RM-112817-2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Hosta_flower-20230730-RM-112817-2.jpg/960px-Hosta_flower-20230730-RM-112817-2.jpg",
+   "sha256": "6f543a6dc00a973c4dc50184617ec714cb0c017602300fcaaabe6e2517f4feb8",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Ermell",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "flower-4",
+   "title": "File:Cherry Blossom in El Retiro Park, Madrid, Spain.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cherry_Blossom_in_El_Retiro_Park,_Madrid,_Spain.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/Cherry_Blossom_in_El_Retiro_Park%2C_Madrid%2C_Spain.jpg/960px-Cherry_Blossom_in_El_Retiro_Park%2C_Madrid%2C_Spain.jpg",
+   "sha256": "93e34d0cfac81273d1b230856dbd0e145e079eb0efb0be240b5152d6eeccae85",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Satdeep Gill",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "flower-5",
+   "title": "File:Almond blossom at El Calvari 01.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Almond_blossom_at_El_Calvari_01.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a5/Almond_blossom_at_El_Calvari_01.jpg/960px-Almond_blossom_at_El_Calvari_01.jpg",
+   "sha256": "d030f575556076f3d79b12ca494a16622cc0b2a3dc93afea5b808982f26b5261",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Kritzolina",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "flower-6",
+   "title": "File:Anchusa officinalis.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Anchusa_officinalis.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/Anchusa_officinalis.jpg/960px-Anchusa_officinalis.jpg",
+   "sha256": "f8c138bd232ceb9c38c50587745cd3ca3096772daeba7483ed3129f7c457162d",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Petar Milošević",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "flower-7",
+   "title": "File:Halictus bee on flower-2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Halictus_bee_on_flower-2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b9/Halictus_bee_on_flower-2.jpg/960px-Halictus_bee_on_flower-2.jpg",
+   "sha256": "ddf9576fc4a150c7811f6b999340b8e1e1e376ded8dfa0dfa0d0092de8181487",
+   "license": "CC BY 2.5",
+   "license_url": "https://creativecommons.org/licenses/by/2.5",
+   "author": "Alvesgaspar",
+   "labels": [
+    "flower"
+   ],
+   "acceptable": [
+    "outdoor",
+    "wildlife"
+   ],
+   "category": "nature",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "car-2",
+   "title": "File:AvMalecon-LaHabanaCuba-04735.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:AvMalecon-LaHabanaCuba-04735.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/AvMalecon-LaHabanaCuba-04735.jpg/960px-AvMalecon-LaHabanaCuba-04735.jpg",
+   "sha256": "ccf6caf3bc841ac7c37228893694584d0e875094c637a8fae92b3830ceb6c955",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Ezarate This is a retouched picture , which means that it has been digitally altered from its original version. Modifications: rebuild from raw fixing light compensation in shadows and lights, White b",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "car-3",
+   "title": "File:DTM car mercedes2006 Haekkinen racing.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:DTM_car_mercedes2006_Haekkinen_racing.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/DTM_car_mercedes2006_Haekkinen_racing.jpg/960px-DTM_car_mercedes2006_Haekkinen_racing.jpg",
+   "sha256": "e490beeb69e00ceb919cbbd7cd17c4e301da2264587d90c3f5dbbdf289c45025",
+   "license": "CC BY-SA 2.5",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+   "author": "user:AngMoKio",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "car-4",
+   "title": "File:Porsche race car Verschuur amk.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Porsche_race_car_Verschuur_amk.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Porsche_race_car_Verschuur_amk.jpg/960px-Porsche_race_car_Verschuur_amk.jpg",
+   "sha256": "8e80882f6f454ec1d5c9ff6bb6282a9b0fe343ead6cf5d6c64cbedb58304eeb1",
+   "license": "CC BY-SA 2.5",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+   "author": "user:AngMoKio",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "car-5",
+   "title": "File:DTM car mercedes2006 Alesi.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:DTM_car_mercedes2006_Alesi.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/DTM_car_mercedes2006_Alesi.jpg/960px-DTM_car_mercedes2006_Alesi.jpg",
+   "sha256": "9f4d29130eb91daf49c08146b038239b37ae14d6263b5796e57a390fc40c66f9",
+   "license": "CC BY-SA 2.5",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+   "author": "user:AngMoKio",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "car-6",
+   "title": "File:Formel3 racing car 2 amk.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Formel3_racing_car_2_amk.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/Formel3_racing_car_2_amk.jpg/960px-Formel3_racing_car_2_amk.jpg",
+   "sha256": "286d8951f4684c6accdb9428f60d7f14111895cb29670f821bb141b7454896af",
+   "license": "CC BY-SA 2.5",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+   "author": "user:AngMoKio",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "car-7",
+   "title": "File:DTM Mercedes W204 DiResta09 amk.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:DTM_Mercedes_W204_DiResta09_amk.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/DTM_Mercedes_W204_DiResta09_amk.jpg/960px-DTM_Mercedes_W204_DiResta09_amk.jpg",
+   "sha256": "007c98c08827acabec2a7029e398d6684cf0c7040b3608523b03c87079f82a67",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "AngMoKio",
+   "labels": [
+    "car"
+   ],
+   "acceptable": [
+    "street",
+    "city",
+    "sport",
+    "outdoor",
+    "travel",
+    "sky"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "sports",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "boat-0",
+   "title": "File:Rowing boat on a house roof - Fira - Santorini - Greece - 02.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Rowing_boat_on_a_house_roof_-_Fira_-_Santorini_-_Greece_-_02.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/Rowing_boat_on_a_house_roof_-_Fira_-_Santorini_-_Greece_-_02.jpg/960px-Rowing_boat_on_a_house_roof_-_Fira_-_Santorini_-_Greece_-_02.jpg",
+   "sha256": "cf8376df124e559bd031b76e4c2ad7022a5e0f8b950ee1db839a62e1fbb9abf0",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Norbert Nagel",
+   "labels": [
+    "boat"
+   ],
+   "acceptable": [
+    "water",
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "boat-1",
+   "title": "File:Pilot boat at Landsort April 2012.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pilot_boat_at_Landsort_April_2012.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/Pilot_boat_at_Landsort_April_2012.jpg/960px-Pilot_boat_at_Landsort_April_2012.jpg",
+   "sha256": "b2ce38e399c891283cfe84142c554cee570de8793f5749aaf46252eebe744e4b",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Arild Vågen",
+   "labels": [
+    "boat"
+   ],
+   "acceptable": [
+    "water",
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "boat-2",
+   "title": "File:Fishing boat Nørre Vorupør 2012-11-18 cropped.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Fishing_boat_N%C3%B8rre_Vorup%C3%B8r_2012-11-18_cropped.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Fishing_boat_N%C3%B8rre_Vorup%C3%B8r_2012-11-18_cropped.jpg/960px-Fishing_boat_N%C3%B8rre_Vorup%C3%B8r_2012-11-18_cropped.jpg",
+   "sha256": "d648d8123e7c8016543983c355a07dedb770d99da00f4103590d8841872381e1",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Slaunger",
+   "labels": [
+    "boat"
+   ],
+   "acceptable": [
+    "water",
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "boat-3",
+   "title": "File:Pirogue and boat on the Mekong with colorful sky at sunset in Luang Prabang Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pirogue_and_boat_on_the_Mekong_with_colorful_sky_at_sunset_in_Luang_Prabang_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f8/Pirogue_and_boat_on_the_Mekong_with_colorful_sky_at_sunset_in_Luang_Prabang_Laos.jpg/960px-Pirogue_and_boat_on_the_Mekong_with_colorful_sky_at_sunset_in_Luang_Prabang_Laos.jpg",
+   "sha256": "34430b801212cf5084992c4e52f811aa7682154d61b60bb1959aa009767a1524",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "boat"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "boat-4",
+   "title": "File:Boat with autumny mountains at Digermulen, Hinnøya, Norway, Norway, 2015 September.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Boat_with_autumny_mountains_at_Digermulen,_Hinn%C3%B8ya,_Norway,_Norway,_2015_September.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Boat_with_autumny_mountains_at_Digermulen%2C_Hinn%C3%B8ya%2C_Norway%2C_Norway%2C_2015_September.jpg/960px-Boat_with_autumny_mountains_at_Digermulen%2C_Hinn%C3%B8ya%2C_Norway%2C_Norway%2C_2015_September.jpg",
+   "sha256": "382c41d50cdc2ea9df5d29e208dc23fdeb349fc3b22897f5852195c249c5bccb",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ximonic (Simo Räsänen)",
+   "labels": [
+    "mountain",
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "boat"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "boat-5",
+   "title": "File:Water reflection of sunset with gray and orange clouds and boats moored to the bank in Pakse Laos.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Water_reflection_of_sunset_with_gray_and_orange_clouds_and_boats_moored_to_the_bank_in_Pakse_Laos.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Water_reflection_of_sunset_with_gray_and_orange_clouds_and_boats_moored_to_the_bank_in_Pakse_Laos.jpg/960px-Water_reflection_of_sunset_with_gray_and_orange_clouds_and_boats_moored_to_the_bank_in_Pakse_Laos.jpg",
+   "sha256": "5036453ac029c1b2f44eba14b1644419de3b21ff9e977d45f0f2a4b814caecd2",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "boat"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "boat-6",
+   "title": "File:Tourist Boat in Sundarbans, West Bengal, India 03.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tourist_Boat_in_Sundarbans,_West_Bengal,_India_03.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Tourist_Boat_in_Sundarbans%2C_West_Bengal%2C_India_03.jpg/960px-Tourist_Boat_in_Sundarbans%2C_West_Bengal%2C_India_03.jpg",
+   "sha256": "32a6141fd494d2e956e4218e3f0f44a9e93466ccf0116888f409219a0a23514a",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Kingshuk Mondal",
+   "labels": [
+    "boat"
+   ],
+   "acceptable": [
+    "water",
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "boat-7",
+   "title": "File:A boat rests unused near the Acheloos river delta.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:A_boat_rests_unused_near_the_Acheloos_river_delta.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/A_boat_rests_unused_near_the_Acheloos_river_delta.jpg/960px-A_boat_rests_unused_near_the_Acheloos_river_delta.jpg",
+   "sha256": "5ec697c5560045d6f01e19b1a62929cfa5da58a704e416985a0fef5053c5e160",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Dimitrios Tzortzis",
+   "labels": [
+    "water"
+   ],
+   "acceptable": [
+    "beach",
+    "mountain",
+    "sunset",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "boat"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "nature",
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "airplane-0",
+   "title": "File:2017-09-12 Atlantic Airways (Faroe Islands) Airbus A319 aircraft (OY-RCG) at Narsarsuaq, Greenland.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2017-09-12_Atlantic_Airways_(Faroe_Islands)_Airbus_A319_aircraft_(OY-RCG)_at_Narsarsuaq,_Greenland.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/43/2017-09-12_Atlantic_Airways_%28Faroe_Islands%29_Airbus_A319_aircraft_%28OY-RCG%29_at_Narsarsuaq%2C_Greenland.jpg/960px-2017-09-12_Atlantic_Airways_%28Faroe_Islands%29_Airbus_A319_aircraft_%28OY-RCG%29_at_Narsarsuaq%2C_Greenland.jpg",
+   "sha256": "918a71314cc05a16cd1a20665a97caf6e20e38a57089f30900719398516e51a9",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Gordon Leggett",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "airplane-1",
+   "title": "File:A beautiful sunset with the silhoutte of an airplane flying across the image frame.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:A_beautiful_sunset_with_the_silhoutte_of_an_airplane_flying_across_the_image_frame.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/A_beautiful_sunset_with_the_silhoutte_of_an_airplane_flying_across_the_image_frame.jpg/960px-A_beautiful_sunset_with_the_silhoutte_of_an_airplane_flying_across_the_image_frame.jpg",
+   "sha256": "bf9a5e312213b3e7e97a46cef68aa049ebf1fe1b55b46212c578c9d89748b9f6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Subhrajyoti07",
+   "labels": [
+    "sunset|sunrise"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel",
+    "airplane"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "airplane-2",
+   "title": "File:Aeroflot Airbus A330 Kustov.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Aeroflot_Airbus_A330_Kustov.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/Aeroflot_Airbus_A330_Kustov.jpg/960px-Aeroflot_Airbus_A330_Kustov.jpg",
+   "sha256": "77ef2b26f8eb7f6ddc88a8057df6220df34cae2091aa3351a07e9ed60309da3d",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Sergey Kustov",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "airplane-3",
+   "title": "File:Blériot XI Thulin A Mikael Carlson OTT 2013 10 silhouette.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Bl%C3%A9riot_XI_Thulin_A_Mikael_Carlson_OTT_2013_10_silhouette.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Bl%C3%A9riot_XI_Thulin_A_Mikael_Carlson_OTT_2013_10_silhouette.jpg/960px-Bl%C3%A9riot_XI_Thulin_A_Mikael_Carlson_OTT_2013_10_silhouette.jpg",
+   "sha256": "7df890aa9c81361579ddd4efc72944af7c4df5c2fc0748e24c4838aeb4d04e3b",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Julian Herzog ( Website )",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "airplane-4",
+   "title": "File:Playing in the Nuba mountains.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Playing_in_the_Nuba_mountains.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Playing_in_the_Nuba_mountains.jpg/960px-Playing_in_the_Nuba_mountains.jpg",
+   "sha256": "084483b5a79c61c66a9db30b5a594680214c5fbc9a1b1f6c68abffb0a22a02ae",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Marco Gualazzini",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel",
+    "portrait",
+    "group photo"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "airplane-5",
+   "title": "File:Patrouille de France Radom 3 1.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Patrouille_de_France_Radom_3_1.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Patrouille_de_France_Radom_3_1.JPG/960px-Patrouille_de_France_Radom_3_1.JPG",
+   "sha256": "2901e39fac86fc7953f83f85f83556de5d66ce81ae687d1d92bcbae17d4d5168",
+   "license": "Attribution",
+   "license_url": "",
+   "author": "Łukasz Golowanow",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "airplane-6",
+   "title": "File:105 Polish Air Force MiG-29A Fulcrum ILA Berlin 2016 10.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:105_Polish_Air_Force_MiG-29A_Fulcrum_ILA_Berlin_2016_10.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/105_Polish_Air_Force_MiG-29A_Fulcrum_ILA_Berlin_2016_10.jpg/960px-105_Polish_Air_Force_MiG-29A_Fulcrum_ILA_Berlin_2016_10.jpg",
+   "sha256": "b8b3258ce2acce462b1001cb58b6f34944d4cb54062206e9b577277c95d109b4",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Julian Herzog ( Website )",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "airplane-7",
+   "title": "File:Airbus A350-941 F-WWCF MSN002 ILA Berlin 2016 17.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Airbus_A350-941_F-WWCF_MSN002_ILA_Berlin_2016_17.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3f/Airbus_A350-941_F-WWCF_MSN002_ILA_Berlin_2016_17.jpg/960px-Airbus_A350-941_F-WWCF_MSN002_ILA_Berlin_2016_17.jpg",
+   "sha256": "202b5ac77c20c181700b5e97334763c3a4c8b631a54c49940be89c53dab422a3",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Julian Herzog ( Website )",
+   "labels": [
+    "airplane"
+   ],
+   "acceptable": [
+    "sky",
+    "outdoor",
+    "mountain",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "portrait-0",
+   "title": "File:Portrait of a young woman wearing a gray balaclava.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Portrait_of_a_young_woman_wearing_a_gray_balaclava.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/21/Portrait_of_a_young_woman_wearing_a_gray_balaclava.jpg/960px-Portrait_of_a_young_woman_wearing_a_gray_balaclava.jpg",
+   "sha256": "62ca4ec395951b7566d7e130e458e01132582997b70fa9f2353ec6b9f3319e25",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "portrait"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel"
+   ],
+   "category": "people",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "portrait-1",
+   "title": "File:Woman of Bolivarian Armed Forces in a presidential meeting.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Woman_of_Bolivarian_Armed_Forces_in_a_presidential_meeting.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Woman_of_Bolivarian_Armed_Forces_in_a_presidential_meeting.jpg/960px-Woman_of_Bolivarian_Armed_Forces_in_a_presidential_meeting.jpg",
+   "sha256": "c7d1d0fa20c8f79772864902e65044d3eb43646c2cd0674618879e6114a4c472",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Wilfredor",
+   "labels": [
+    "portrait"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel"
+   ],
+   "category": "people",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "portrait-2",
+   "title": "File:Tachileik Myanmar Kayan-People-Woman-03.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tachileik_Myanmar_Kayan-People-Woman-03.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/Tachileik_Myanmar_Kayan-People-Woman-03.jpg/960px-Tachileik_Myanmar_Kayan-People-Woman-03.jpg",
+   "sha256": "4dfa396c4fb151555e8297043490a8f0726cb5b64fed431f056ffbd591ad1a72",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "CEphoto, Uwe Aranas",
+   "labels": [],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel",
+    "portrait"
+   ],
+   "category": "people",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "portrait-3",
+   "title": "File:Portrait of a young woman - Raphael (Raffaello Santi).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Portrait_of_a_young_woman_-_Raphael_(Raffaello_Santi).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Portrait_of_a_young_woman_-_Raphael_%28Raffaello_Santi%29.jpg/960px-Portrait_of_a_young_woman_-_Raphael_%28Raffaello_Santi%29.jpg",
+   "sha256": "674e65e2b0a7dd57201bdad28bd662f6b6c34c5ff912ee086c63518045522ea2",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "GoldenArtists",
+   "labels": [
+    "artwork"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel",
+    "portrait"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "portrait-4",
+   "title": "File:Portrait of a young woman - Titian.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Portrait_of_a_young_woman_-_Titian.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Portrait_of_a_young_woman_-_Titian.jpg/960px-Portrait_of_a_young_woman_-_Titian.jpg",
+   "sha256": "fa79e75167dca03e2c960e0bb9f840785fe805894c69f12fbac1745cf0a268ed",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Titian",
+   "labels": [
+    "artwork"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel",
+    "portrait"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "portrait-5",
+   "title": "File:Russia. portrait of a woman with dark hair.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Russia._portrait_of_a_woman_with_dark_hair.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/Russia._portrait_of_a_woman_with_dark_hair.jpg/960px-Russia._portrait_of_a_woman_with_dark_hair.jpg",
+   "sha256": "d33d95ee2dca9f2eea5c2ae1682b0d3d47fa673526c2e57a53480537a1f4abf9",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Dmitry Makeev",
+   "labels": [
+    "portrait"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel"
+   ],
+   "category": "people",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "portrait-6",
+   "title": "File:Portrait of an old woman - Peter Paul Rubens.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Portrait_of_an_old_woman_-_Peter_Paul_Rubens.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Portrait_of_an_old_woman_-_Peter_Paul_Rubens.jpg/960px-Portrait_of_an_old_woman_-_Peter_Paul_Rubens.jpg",
+   "sha256": "f4f671d04f47fd59ac653c023cfc43674890d213c9a6cd6f0feaf18b5a79515a",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "GoldenArtists",
+   "labels": [
+    "artwork"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel",
+    "portrait"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "portrait-7",
+   "title": "File:Young muslim woman in the Thar desert near Jaisalmer, India.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Young_muslim_woman_in_the_Thar_desert_near_Jaisalmer,_India.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/Young_muslim_woman_in_the_Thar_desert_near_Jaisalmer%2C_India.jpg/960px-Young_muslim_woman_in_the_Thar_desert_near_Jaisalmer%2C_India.jpg",
+   "sha256": "0b3d71ad5953f0f56f4ac7a77513bb0be33239e4f4896a5c228869bd12c3964a",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Paulrudd",
+   "labels": [
+    "portrait"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "travel"
+   ],
+   "category": "people",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "concert-0",
+   "title": "File:Rock’s Cool on stage (DSC01466).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Rock%E2%80%99s_Cool_on_stage_(DSC01466).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Rock%E2%80%99s_Cool_on_stage_%28DSC01466%29.jpg/960px-Rock%E2%80%99s_Cool_on_stage_%28DSC01466%29.jpg",
+   "sha256": "059ca9ed3f1b40e53f11a65478b03e484adda94e68908e8b977be973baaacbdc",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Trougnouf (Benoit Brummer)",
+   "labels": [
+    "concert"
+   ],
+   "acceptable": [
+    "portrait",
+    "night",
+    "indoor",
+    "outdoor",
+    "party"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "concert-2",
+   "title": "File:2022-05-22 50. Internationales Dixieland Festival Dresden 1DX 2056 by Stepro-2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2022-05-22_50._Internationales_Dixieland_Festival_Dresden_1DX_2056_by_Stepro-2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/2022-05-22_50._Internationales_Dixieland_Festival_Dresden_1DX_2056_by_Stepro-2.jpg/960px-2022-05-22_50._Internationales_Dixieland_Festival_Dresden_1DX_2056_by_Stepro-2.jpg",
+   "sha256": "5982b3f57c880d069c1b9253162fd35b9ba2adc7e1b5dc0e2c08618ec6fdc6c9",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Steffen Prößdorf",
+   "labels": [],
+   "acceptable": [
+    "portrait",
+    "night",
+    "indoor",
+    "outdoor",
+    "party",
+    "concert"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "concert-3",
+   "title": "File:Festival du bout du Monde 2011 - Professor en concert le 6 août- 003.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Festival_du_bout_du_Monde_2011_-_Professor_en_concert_le_6_ao%C3%BBt-_003.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/Festival_du_bout_du_Monde_2011_-_Professor_en_concert_le_6_ao%C3%BBt-_003.jpg/960px-Festival_du_bout_du_Monde_2011_-_Professor_en_concert_le_6_ao%C3%BBt-_003.jpg",
+   "sha256": "44de52d2b2ee8ecef372688e496d8a93feec4b11f9768db8e23142fbfd3a512f",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Thesupermat",
+   "labels": [],
+   "acceptable": [
+    "portrait",
+    "night",
+    "indoor",
+    "outdoor",
+    "party",
+    "concert"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "concert-4",
+   "title": "File:Moriarty-IMG 6846.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Moriarty-IMG_6846.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e2/Moriarty-IMG_6846.jpg/960px-Moriarty-IMG_6846.jpg",
+   "sha256": "3cdb8bc785538527259e9f3df6dfdb11b1ca1ee270d7fc91a870266db36353fd",
+   "license": "CC BY-SA 2.0 fr",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.0/fr/deed.en",
+   "author": "Rama",
+   "labels": [
+    "concert"
+   ],
+   "acceptable": [
+    "portrait",
+    "night",
+    "indoor",
+    "outdoor",
+    "party"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "concert-6",
+   "title": "File:Aziz Sahmaoui & University of Gnawa - Festival du bout du monde 2012 - 001.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Aziz_Sahmaoui_%26_University_of_Gnawa_-_Festival_du_bout_du_monde_2012_-_001.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Aziz_Sahmaoui_%26_University_of_Gnawa_-_Festival_du_bout_du_monde_2012_-_001.jpg/960px-Aziz_Sahmaoui_%26_University_of_Gnawa_-_Festival_du_bout_du_monde_2012_-_001.jpg",
+   "sha256": "2db4305bb50d1cf5514e8b5c7afc0b6162e87c0a083d3cb96b5f862852e53aac",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Thesupermat",
+   "labels": [],
+   "acceptable": [
+    "portrait",
+    "night",
+    "indoor",
+    "outdoor",
+    "party",
+    "concert"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sport-0",
+   "title": "File:Football Match Chandigre West Garo Oct24 A7CR 03548.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Football_Match_Chandigre_West_Garo_Oct24_A7CR_03548.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Football_Match_Chandigre_West_Garo_Oct24_A7CR_03548.jpg/960px-Football_Match_Chandigre_West_Garo_Oct24_A7CR_03548.jpg",
+   "sha256": "a1f5003fba1512d83b9f454e5abd9f5407257cd0ad6d57927c8afc0f0b78cdb6",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "This Photo was taken by Timothy A. Gonsalves . Feel free to use my photos, but please mention me as the author. I would much appreciate if you send me an email tagooty@yahoo.com or write on my talk pa",
+   "labels": [
+    "sport"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sport-1",
+   "title": "File:ST vs Gloucester - Match - 23.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:ST_vs_Gloucester_-_Match_-_23.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/ST_vs_Gloucester_-_Match_-_23.JPG/960px-ST_vs_Gloucester_-_Match_-_23.JPG",
+   "sha256": "7cf60611f0a5e6a1eeccf8084b09c65738e1826540d403fe2e015e2d0472e4ae",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "PierreSelim",
+   "labels": [
+    "sport"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sport-2",
+   "title": "File:2014-05-30 Austria - Iceland football match, Viðar Kjartansson 0372.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2014-05-30_Austria_-_Iceland_football_match,_Vi%C3%B0ar_Kjartansson_0372.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/2014-05-30_Austria_-_Iceland_football_match%2C_Vi%C3%B0ar_Kjartansson_0372.jpg/960px-2014-05-30_Austria_-_Iceland_football_match%2C_Vi%C3%B0ar_Kjartansson_0372.jpg",
+   "sha256": "e146cfec53593e3c28d9014b0ef2c6552a51deba97e739e3e41dad015e069f83",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Please attribute as: \"Wikipedia / Tobias Klenze\" (user page link optional). Remember that you must also mention the license (and link to it). So for example, if this picture is licensed under CC-BY-SA",
+   "labels": [
+    "sport"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sport-3",
+   "title": "File:Bulgarian national football team.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Bulgarian_national_football_team.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f4/Bulgarian_national_football_team.JPG/960px-Bulgarian_national_football_team.JPG",
+   "sha256": "064ccde71547c4a63bcc296a20c5c96328f50d05a5ec63b46896917c596d4ef3",
+   "license": "CC BY 3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0",
+   "author": "Biso",
+   "labels": [
+    "sport",
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sport-4",
+   "title": "File:20180610 FIFA Friendly Match Austria vs. Brazil Thiago Silva 850 1582.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Thiago_Silva_850_1582.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Thiago_Silva_850_1582.jpg/960px-20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Thiago_Silva_850_1582.jpg",
+   "sha256": "e1e0b6020f65c854181e0ac39bae0412fa7c2294bf223f72153fe6473b5232a8",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Granada",
+   "labels": [
+    "portrait"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "sport"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "sport-6",
+   "title": "File:20180610 FIFA Friendly Match Austria vs. Brazil 850 2206.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:20180610_FIFA_Friendly_Match_Austria_vs._Brazil_850_2206.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/20180610_FIFA_Friendly_Match_Austria_vs._Brazil_850_2206.jpg/960px-20180610_FIFA_Friendly_Match_Austria_vs._Brazil_850_2206.jpg",
+   "sha256": "82d9e98dd86c4813bf68f0626edc4fbfcbbc431f27586f4696cd217197515614",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Granada",
+   "labels": [
+    "sport"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "sport-7",
+   "title": "File:20180610 FIFA Friendly Match Austria vs. Brazil Arnautović Miranda 850 1946.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Arnautovi%C4%87_Miranda_850_1946.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f4/20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Arnautovi%C4%87_Miranda_850_1946.jpg/960px-20180610_FIFA_Friendly_Match_Austria_vs._Brazil_Arnautovi%C4%87_Miranda_850_1946.jpg",
+   "sha256": "471641479eba2659f55936a9f411dcc762ce3ecdf76fb7c1919127ea000d862b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Granada",
+   "labels": [
+    "sport"
+   ],
+   "acceptable": [
+    "outdoor",
+    "group photo",
+    "portrait"
+   ],
+   "category": "sports",
+   "acceptable_categories": [
+    "people",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "drink-0",
+   "title": "File:16-09-17-WikiLovesCocktails-Drink-Img0277 1.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:16-09-17-WikiLovesCocktails-Drink-Img0277_1.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/16-09-17-WikiLovesCocktails-Drink-Img0277_1.jpg/960px-16-09-17-WikiLovesCocktails-Drink-Img0277_1.jpg",
+   "sha256": "1d07e1b063f89b1e65eb91ffdb5d81def46a96521c10d2a9b153853bcaa9a8dc",
+   "license": "GFDL 1.2",
+   "license_url": "http://www.gnu.org/licenses/old-licenses/fdl-1.2.html",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "drink-1",
+   "title": "File:15-09-26-RalfR-WLC-0098 - Coca-Cola glass bottle (Germany).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:15-09-26-RalfR-WLC-0098_-_Coca-Cola_glass_bottle_(Germany).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/15-09-26-RalfR-WLC-0098_-_Coca-Cola_glass_bottle_%28Germany%29.jpg/960px-15-09-26-RalfR-WLC-0098_-_Coca-Cola_glass_bottle_%28Germany%29.jpg",
+   "sha256": "e843d782d82555ea56669673b25860488b4b14dddea13f7a8fa936509bae63cf",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "drink-2",
+   "title": "File:15-09-26-RalfR-WLC-0120.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:15-09-26-RalfR-WLC-0120.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/15-09-26-RalfR-WLC-0120.jpg/960px-15-09-26-RalfR-WLC-0120.jpg",
+   "sha256": "90fc2318870aa0e338d62e66c06b85d2664290f7b492bac27335c2879018af15",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "drink-4",
+   "title": "File:16-09-17-WikiLovesCocktails-Flaschen-Img0035.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:16-09-17-WikiLovesCocktails-Flaschen-Img0035.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/16-09-17-WikiLovesCocktails-Flaschen-Img0035.jpg/960px-16-09-17-WikiLovesCocktails-Flaschen-Img0035.jpg",
+   "sha256": "e2d4774f6daefd9ea16ed22d28da2d607558d4a9ce098d7a4f864b5859002997",
+   "license": "GFDL 1.2",
+   "license_url": "http://www.gnu.org/licenses/old-licenses/fdl-1.2.html",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "drink-6",
+   "title": "File:Schwappender Wein.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Schwappender_Wein.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Schwappender_Wein.jpg/960px-Schwappender_Wein.jpg",
+   "sha256": "3aa13267edb58efce8b195bdfe90d9f2359952ab2548b669c7fdfb94355bfac8",
+   "license": "CC BY 3.0 de",
+   "license_url": "https://creativecommons.org/licenses/by/3.0/de/deed.en",
+   "author": "Stefan Krause, Germany",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "drink-7",
+   "title": "File:15-09-26-RalfR-WLC-0244.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:15-09-26-RalfR-WLC-0244.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/15-09-26-RalfR-WLC-0244.jpg/960px-15-09-26-RalfR-WLC-0244.jpg",
+   "sha256": "42b37a2a16ad8ea383b6bdb9c87e8655cc518d39b7be5a9b6085e14cfb2d0abb",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ralf Roletschek",
+   "labels": [
+    "drink"
+   ],
+   "acceptable": [
+    "food",
+    "indoor"
+   ],
+   "category": "food",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "street-0",
+   "title": "File:Wooden and bamboo facades of dwellings with sudare in a cobbled street of Gion, perspective effect with vanishing point, Kyoto, Japan.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion,_perspective_effect_with_vanishing_point,_Kyoto,_Japan.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg/960px-Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg",
+   "sha256": "fc921b096a6fd35d73f65333180ac4ab3feb4485b426fed081fba0ec1dc666ef",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "street-1",
+   "title": "File:Жаркент, пешеходная часть улицы Юлдашева.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:%D0%96%D0%B0%D1%80%D0%BA%D0%B5%D0%BD%D1%82,_%D0%BF%D0%B5%D1%88%D0%B5%D1%85%D0%BE%D0%B4%D0%BD%D0%B0%D1%8F_%D1%87%D0%B0%D1%81%D1%82%D1%8C_%D1%83%D0%BB%D0%B8%D1%86%D1%8B_%D0%AE%D0%BB%D0%B4%D0%B0%D1%88%D0%B5%D0%B2%D0%B0.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/%D0%96%D0%B0%D1%80%D0%BA%D0%B5%D0%BD%D1%82%2C_%D0%BF%D0%B5%D1%88%D0%B5%D1%85%D0%BE%D0%B4%D0%BD%D0%B0%D1%8F_%D1%87%D0%B0%D1%81%D1%82%D1%8C_%D1%83%D0%BB%D0%B8%D1%86%D1%8B_%D0%AE%D0%BB%D0%B4%D0%B0%D1%88%D0%B5%D0%B2%D0%B0.jpg/960px-%D0%96%D0%B0%D1%80%D0%BA%D0%B5%D0%BD%D1%82%2C_%D0%BF%D0%B5%D1%88%D0%B5%D1%85%D0%BE%D0%B4%D0%BD%D0%B0%D1%8F_%D1%87%D0%B0%D1%81%D1%82%D1%8C_%D1%83%D0%BB%D0%B8%D1%86%D1%8B_%D0%AE%D0%BB%D0%B4%D0%B0%D1%88%D0%B5%D0%B2%D0%B0.jpg",
+   "sha256": "8a106e1517682417ae6fad94b398aed30b7084a0ba080270aaf98de402bf6767",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Nikolai Bulykin",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "street-2",
+   "title": "File:Shangxiajiu Pedestrian Street Guangzhou 2026 dllu.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Shangxiajiu_Pedestrian_Street_Guangzhou_2026_dllu.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Shangxiajiu_Pedestrian_Street_Guangzhou_2026_dllu.jpg/960px-Shangxiajiu_Pedestrian_Street_Guangzhou_2026_dllu.jpg",
+   "sha256": "e3fa9f1c5c9d8e4f74988c5868e66c6abe1342259fed8817cdc18635e7df97eb",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Daniel Lu ( User:dllu )",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "street-3",
+   "title": "File:Pedestrian road with pavements and paper umbrellas, Higashiyama-ku, Kyoto, Japan, early morning.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pedestrian_road_with_pavements_and_paper_umbrellas,_Higashiyama-ku,_Kyoto,_Japan,_early_morning.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/Pedestrian_road_with_pavements_and_paper_umbrellas%2C_Higashiyama-ku%2C_Kyoto%2C_Japan%2C_early_morning.jpg/960px-Pedestrian_road_with_pavements_and_paper_umbrellas%2C_Higashiyama-ku%2C_Kyoto%2C_Japan%2C_early_morning.jpg",
+   "sha256": "51a5510a479e8db42a1c60710ed7e4c42203a0fa27c37da5a673f0253439dce0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "street-5",
+   "title": "File:Rue du Souterrain depuis la rue des Rondes à Pérouges en avril 2021.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Rue_du_Souterrain_depuis_la_rue_des_Rondes_%C3%A0_P%C3%A9rouges_en_avril_2021.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Rue_du_Souterrain_depuis_la_rue_des_Rondes_%C3%A0_P%C3%A9rouges_en_avril_2021.jpg/960px-Rue_du_Souterrain_depuis_la_rue_des_Rondes_%C3%A0_P%C3%A9rouges_en_avril_2021.jpg",
+   "sha256": "4841a5f705bd23bce6f82bfb228ce98db277d0784376705619ea6b7ddc3d5d9f",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Benoît Prieur",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "street-6",
+   "title": "File:Cardiff MMB 29 Caroline Street.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Cardiff_MMB_29_Caroline_Street.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Cardiff_MMB_29_Caroline_Street.jpg/960px-Cardiff_MMB_29_Caroline_Street.jpg",
+   "sha256": "0879a091b193489cf367cf807d4147ff501f22e832be8d22e6e619ef2c24cbe7",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "mattbuck ( category )",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "street-7",
+   "title": "File:Rue du Bourg Monthey 2020.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Rue_du_Bourg_Monthey_2020.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Rue_du_Bourg_Monthey_2020.jpg/960px-Rue_du_Bourg_Monthey_2020.jpg",
+   "sha256": "d78a42c72a80616376109bdb4aa963cd3b19510af6db7e676f763c55a2ec8cba",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Espandero",
+   "labels": [
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "outdoor",
+    "travel",
+    "landmark"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "indoor-0",
+   "title": "File:A room in Tabatabai House, Kashan, Iran.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:A_room_in_Tabatabai_House,_Kashan,_Iran.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5e/A_room_in_Tabatabai_House%2C_Kashan%2C_Iran.jpg/960px-A_room_in_Tabatabai_House%2C_Kashan%2C_Iran.jpg",
+   "sha256": "19afcb7afc6438e307a2c7f01f65cad35a4170e6301ca2df49bcc2f6045e78f7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Amir Pashaei",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "indoor-1",
+   "title": "File:British Museum Reading Room Panorama Feb 2006.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:British_Museum_Reading_Room_Panorama_Feb_2006.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/British_Museum_Reading_Room_Panorama_Feb_2006.jpg/960px-British_Museum_Reading_Room_Panorama_Feb_2006.jpg",
+   "sha256": "d89e6f195fd29dfb019d741f393b12954e3193b742806c53076d74fa8aaeb65e",
+   "license": "CC BY 2.5",
+   "license_url": "https://creativecommons.org/licenses/by/2.5",
+   "author": "Diliff",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "indoor-2",
+   "title": "File:Long Room Interior, Trinity College Dublin, Ireland - Diliff.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Long_Room_Interior,_Trinity_College_Dublin,_Ireland_-_Diliff.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/Long_Room_Interior%2C_Trinity_College_Dublin%2C_Ireland_-_Diliff.jpg/960px-Long_Room_Interior%2C_Trinity_College_Dublin%2C_Ireland_-_Diliff.jpg",
+   "sha256": "a0fff485e45eb335f575a683950c104f364075c2eeaa55187234d9a311c1bade",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Diliff",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "indoor-3",
+   "title": "File:Living room of a typical rural house in northeast Brazil.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Living_room_of_a_typical_rural_house_in_northeast_Brazil.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Living_room_of_a_typical_rural_house_in_northeast_Brazil.jpg/960px-Living_room_of_a_typical_rural_house_in_northeast_Brazil.jpg",
+   "sha256": "bfb813b1a10dcc56ef9f4111d64383753f074d827e3751527aa8a9e7060a2a8e",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Wilfredor",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel",
+    "artwork"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "indoor-4",
+   "title": "File:Worcester Guildhall Assembly Room.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Worcester_Guildhall_Assembly_Room.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Worcester_Guildhall_Assembly_Room.jpg/960px-Worcester_Guildhall_Assembly_Room.jpg",
+   "sha256": "00e9309c8f28707b09818b608af529403be192a8b5ae59bb253fc12225a42db6",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Michael D Beckwith",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "indoor-5",
+   "title": "File:Living room in apartment of Condomínio do Edifício Zaher, Le Blond, Rio de Janeiro, Brazil.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher,_Le_Blond,_Rio_de_Janeiro,_Brazil.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg/960px-Living_room_in_apartment_of_Condom%C3%ADnio_do_Edif%C3%ADcio_Zaher%2C_Le_Blond%2C_Rio_de_Janeiro%2C_Brazil.jpg",
+   "sha256": "92aa60ca84956e5117786665894c2796bba9551fd457bf9343a062da18026d3c",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Wilfredor",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "indoor-6",
+   "title": "File:NYC Public Library Research Room Jan 2006-1- 3.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:NYC_Public_Library_Research_Room_Jan_2006-1-_3.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/NYC_Public_Library_Research_Room_Jan_2006-1-_3.jpg/960px-NYC_Public_Library_Research_Room_Jan_2006-1-_3.jpg",
+   "sha256": "0c5dc445b6223f53201de005824278f88a0fbba85e7a975d9e683166b189444d",
+   "license": "CC BY 2.5",
+   "license_url": "https://creativecommons.org/licenses/by/2.5",
+   "author": "Diliff",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "indoor-7",
+   "title": "File:Dining room at the inn Dans les bras de Morphée, located on Île d'Orléans.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Dining_room_at_the_inn_Dans_les_bras_de_Morph%C3%A9e,_located_on_%C3%8Ele_d%27Orl%C3%A9ans.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/Dining_room_at_the_inn_Dans_les_bras_de_Morph%C3%A9e%2C_located_on_%C3%8Ele_d%27Orl%C3%A9ans.jpg/960px-Dining_room_at_the_inn_Dans_les_bras_de_Morph%C3%A9e%2C_located_on_%C3%8Ele_d%27Orl%C3%A9ans.jpg",
+   "sha256": "4c72bb230f0e14fa2bdd398acde42bc68f7b8dc91e22e8752984bd7b9af6f9d8",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Wilfredor",
+   "labels": [
+    "indoor"
+   ],
+   "acceptable": [
+    "building",
+    "landmark",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "screenshot-0",
+   "title": "File:Nyarch Linux GNOME 50 Desktop Screenshot.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Nyarch_Linux_GNOME_50_Desktop_Screenshot.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Nyarch_Linux_GNOME_50_Desktop_Screenshot.png/960px-Nyarch_Linux_GNOME_50_Desktop_Screenshot.png",
+   "sha256": "1fe99d467d72f0b68abf540bac6f56b9a4a7bd08010380c71e8c2af6eb8db53d",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "The GNOME Project and Nyarch Linux Developers",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "screenshot-2",
+   "title": "File:Fedora Linux 38 Workstation default GNOME desktop - English.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Fedora_Linux_38_Workstation_default_GNOME_desktop_-_English.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/24/Fedora_Linux_38_Workstation_default_GNOME_desktop_-_English.png/960px-Fedora_Linux_38_Workstation_default_GNOME_desktop_-_English.png",
+   "sha256": "e1bec7b66078f65e4a9bd38fd5431ad4e9652082df8d3bf35416f6cf10c1e83c",
+   "license": "GPL",
+   "license_url": "http://www.gnu.org/licenses/gpl.html",
+   "author": "The Fedora Project",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "screenshot-3",
+   "title": "File:SUSE Linux Enterprise Desktop 10.1 - showing the Novell gnome-slab menu--2006, 11.png",
+   "page": "https://commons.wikimedia.org/wiki/File:SUSE_Linux_Enterprise_Desktop_10.1_-_showing_the_Novell_gnome-slab_menu--2006,_11.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a9/SUSE_Linux_Enterprise_Desktop_10.1_-_showing_the_Novell_gnome-slab_menu--2006%2C_11.png/960px-SUSE_Linux_Enterprise_Desktop_10.1_-_showing_the_Novell_gnome-slab_menu--2006%2C_11.png",
+   "sha256": "cd4866574976627efee15e8f29cd81a13a2f28ccd69274ca9f83a7f75b8486d5",
+   "license": "GPL",
+   "license_url": "http://www.gnu.org/licenses/gpl.html",
+   "author": "Jbarker uk at English Wikipedia",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "screenshot-4",
+   "title": "File:Clear Linux OS GNOME Desktop.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Clear_Linux_OS_GNOME_Desktop.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Clear_Linux_OS_GNOME_Desktop.png/960px-Clear_Linux_OS_GNOME_Desktop.png",
+   "sha256": "61ed1972ef7df1b8d39e950ec95a4fd3a8d09265b3f4b2e61bb3f61e754b456b",
+   "license": "GPL",
+   "license_url": "http://www.gnu.org/licenses/gpl.html",
+   "author": "Dr.Phil~ukwiki",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "screenshot-5",
+   "title": "File:Calculate Linux Desktop GNOME English.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Calculate_Linux_Desktop_GNOME_English.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Calculate_Linux_Desktop_GNOME_English.png/960px-Calculate_Linux_Desktop_GNOME_English.png",
+   "sha256": "756dab0615c63eb5b0a3e5c08b68705c5bb6cb3b2053b599698a0447e3a782ab",
+   "license": "GPL",
+   "license_url": "http://www.gnu.org/licenses/gpl.html",
+   "author": "Lautre",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "screenshot-6",
+   "title": "File:Rocky Linux 8.4 Workstation Activities Overview, default desktop screenshot.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Rocky_Linux_8.4_Workstation_Activities_Overview,_default_desktop_screenshot.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Rocky_Linux_8.4_Workstation_Activities_Overview%2C_default_desktop_screenshot.png/960px-Rocky_Linux_8.4_Workstation_Activities_Overview%2C_default_desktop_screenshot.png",
+   "sha256": "f38249195d3e2d8eecf1350173aa6c9a64d1c808f2d9df14da793085a5c12fb6",
+   "license": "GPLv2",
+   "license_url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+   "author": "The GNOME Project, Rocky Enterprise Software Foundation",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "screenshot-7",
+   "title": "File:AlmaLinux 9.3 GNOME default desktop - English.png",
+   "page": "https://commons.wikimedia.org/wiki/File:AlmaLinux_9.3_GNOME_default_desktop_-_English.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/AlmaLinux_9.3_GNOME_default_desktop_-_English.png/960px-AlmaLinux_9.3_GNOME_default_desktop_-_English.png",
+   "sha256": "10d7790e3f47b927c2f780054bf67dbf0e96c002b759bfe99296763b20f6f419",
+   "license": "GPL",
+   "license_url": "http://www.gnu.org/licenses/gpl.html",
+   "author": "AlmaLinux OS Foundation",
+   "labels": [
+    "screenshot"
+   ],
+   "acceptable": [
+    "text"
+   ],
+   "category": "screenshots",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "receipt-0",
+   "title": "File:Abbott and Holder receipt - 21 August 1969.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Abbott_and_Holder_receipt_-_21_August_1969.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Abbott_and_Holder_receipt_-_21_August_1969.jpg/960px-Abbott_and_Holder_receipt_-_21_August_1969.jpg",
+   "sha256": "701796b48e6ada05b3916aa53e55d978ac8c02a07665cceec684b546c4b03961",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Eric Holder",
+   "labels": [
+    "document"
+   ],
+   "acceptable": [
+    "text",
+    "receipt"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "receipt-1",
+   "title": "File:US-BEP-Receipt for currency (23 July 1915).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:US-BEP-Receipt_for_currency_(23_July_1915).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/US-BEP-Receipt_for_currency_%2823_July_1915%29.jpg/960px-US-BEP-Receipt_for_currency_%2823_July_1915%29.jpg",
+   "sha256": "b13839d7b292bac125d103ec8ddba3145813cc7cd108d35cf36760164be5d144",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "National Museum of American History",
+   "labels": [
+    "document"
+   ],
+   "acceptable": [
+    "text",
+    "receipt"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "receipt-2",
+   "title": "File:Receipt for temporary bonds.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Receipt_for_temporary_bonds.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Receipt_for_temporary_bonds.jpg/960px-Receipt_for_temporary_bonds.jpg",
+   "sha256": "5f992d8f4acea1b8535047556a8a67f073fdda2477834f9f912b5a9f4ae8aa95",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Butler County State Bank",
+   "labels": [
+    "document"
+   ],
+   "acceptable": [
+    "text",
+    "receipt"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "receipt-3",
+   "title": "File:Receipt from Josiah Wedgwood 1770.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Receipt_from_Josiah_Wedgwood_1770.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Receipt_from_Josiah_Wedgwood_1770.jpg",
+   "sha256": "6961987b41e18e6b21d5b4fb642541a5c0af9fafe1fc9c53ba1889318d90f6db",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Josiah Wedgwood",
+   "labels": [
+    "document"
+   ],
+   "acceptable": [
+    "text",
+    "receipt"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "receipt-4",
+   "title": "File:Shell-Gas-Station-Receipt-MasterCard.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Shell-Gas-Station-Receipt-MasterCard.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/3/34/Shell-Gas-Station-Receipt-MasterCard.jpg",
+   "sha256": "dfa430c8f9d7fa63c29a8c42c9d933b82790012421fc540c218d39edd81bc73c",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Mrmiscellanious~enwiki at English Wikipedia",
+   "labels": [
+    "receipt"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "receipt-5",
+   "title": "File:Tesco grocery receipt Finchley 1994.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tesco_grocery_receipt_Finchley_1994.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/4/45/Tesco_grocery_receipt_Finchley_1994.jpg",
+   "sha256": "872bdc5f0abee92cc71b04ba8f3e908d27468828b09f3f6b4c8c9d11e6d39425",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Tesco",
+   "labels": [
+    "receipt"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "receipt-6",
+   "title": "File:LBOT ATM TX receipt 20161226.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:LBOT_ATM_TX_receipt_20161226.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/LBOT_ATM_TX_receipt_20161226.jpg/960px-LBOT_ATM_TX_receipt_20161226.jpg",
+   "sha256": "35ce6f0b6c648e016657629b07f95b346a6e974d653c57d5eebc000f446eed72",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Solomon203",
+   "labels": [
+    "receipt"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "receipt-7",
+   "title": "File:Tower records Dublin receipt 2016.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tower_records_Dublin_receipt_2016.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/64/Tower_records_Dublin_receipt_2016.jpg/960px-Tower_records_Dublin_receipt_2016.jpg",
+   "sha256": "f223044f8b017ab49b99db1638804602784bdbef54826a11877ae9e841930397",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Joehawkins",
+   "labels": [
+    "receipt"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "receipts",
+   "acceptable_categories": [
+    "documents"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "whiteboard-0",
+   "title": "File:Blank whiteboard.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Blank_whiteboard.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Blank_whiteboard.JPG/960px-Blank_whiteboard.JPG",
+   "sha256": "f9caf1e4b1700f372ac2853e7d6408027996f6992b7d010327423e12c8c48ece",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "BrokenSphere",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "whiteboard-1",
+   "title": "File:Whiteboard marker and eraser.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Whiteboard_marker_and_eraser.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Whiteboard_marker_and_eraser.jpg/960px-Whiteboard_marker_and_eraser.jpg",
+   "sha256": "3c16bea75a3c66fe573f06ebf3f97e92a0fa80ec1ba50f99d486edb124522e7b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Zv0486~commonswiki",
+   "labels": [
+    "text"
+   ],
+   "acceptable": [
+    "indoor",
+    "document",
+    "whiteboard"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "whiteboard-2",
+   "title": "File:Combo whiteboard and bulletin board.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Combo_whiteboard_and_bulletin_board.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/20/Combo_whiteboard_and_bulletin_board.JPG/960px-Combo_whiteboard_and_bulletin_board.JPG",
+   "sha256": "9dcc07dcb67e50d599b5b8dbe75cf8b9f9fb278bc101ec5aef905dd91fa99113",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "BrokenSphere",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "whiteboard-3",
+   "title": "File:Glass whiteboard.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Glass_whiteboard.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/Glass_whiteboard.JPG/960px-Glass_whiteboard.JPG",
+   "sha256": "1d08daa515501d11f2bed7bedb150af5e7d69a15e5e7253b3b710990af743abc",
+   "license": "CC BY-SA 3.0",
+   "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+   "author": "BrokenSphere",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "whiteboard-4",
+   "title": "File:Find your voice. express yourself. creative writing..jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Find_your_voice._express_yourself._creative_writing..jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Find_your_voice._express_yourself._creative_writing..jpg/960px-Find_your_voice._express_yourself._creative_writing..jpg",
+   "sha256": "3ddafdfd226e0bd3ea58449110e852c4bb494156c0734fb9b7710c12c3a5530b",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "North.jvta",
+   "labels": [
+    "whiteboard|text"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "whiteboard-5",
+   "title": "File:College whiteboard.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:College_whiteboard.jpg",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/0/0f/College_whiteboard.jpg",
+   "sha256": "fac0b72a6b9cd7d18c90a197292a8a69ef3a291119321b37409f9b096a024069",
+   "license": "CC BY 3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0",
+   "author": "Kwsn",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document",
+    "artwork"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "whiteboard-6",
+   "title": "File:Change management whiteboard.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Change_management_whiteboard.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Change_management_whiteboard.jpg/960px-Change_management_whiteboard.jpg",
+   "sha256": "3671d24125a1879ca0bb9e726dea3c858e1313c9ba43730d71ef5121acb621f5",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Birkenkrahe",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document",
+    "graph"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "whiteboard-7",
+   "title": "File:67 Whiteboard 2025-11-09.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:67_Whiteboard_2025-11-09.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/67_Whiteboard_2025-11-09.jpg/960px-67_Whiteboard_2025-11-09.jpg",
+   "sha256": "87a09dbca8c9a2a6753f553d4f014819f23042dd3a86170ba206097b574a0068",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "GuiltyGearFan37",
+   "labels": [
+    "whiteboard"
+   ],
+   "acceptable": [
+    "text",
+    "indoor",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "map-0",
+   "title": "File:Deutschland Übersichtskarte.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Deutschland_%C3%9Cbersichtskarte.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Deutschland_%C3%9Cbersichtskarte.png/960px-Deutschland_%C3%9Cbersichtskarte.png",
+   "sha256": "7dbee5b8329472941e9271f7a476a4b7d7b3ea44527a5e54f6315b0d845476ef",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Lencer and NordNordWest",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "map-2",
+   "title": "File:After Action Report - Freiburg - NARA - 100384909.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:After_Action_Report_-_Freiburg_-_NARA_-_100384909.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/After_Action_Report_-_Freiburg_-_NARA_-_100384909.jpg/960px-After_Action_Report_-_Freiburg_-_NARA_-_100384909.jpg",
+   "sha256": "d2935419befe4226ab829aa6864f8d965e2dc977d33dd9da781ab52117dab4ef",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Unknown author Unknown author or not provided",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "map-3",
+   "title": "File:Deutschland topo cropped.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Deutschland_topo_cropped.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Deutschland_topo_cropped.jpg/960px-Deutschland_topo_cropped.jpg",
+   "sha256": "2d20ee2637f2cbf3cc43cd9e766d8fe803bdb6e06a5eb784577f46c68a92f3ad",
+   "license": "CC BY-SA 3.0",
+   "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+   "author": "Deutschland_topo.jpg : User:Botaurus-stellaris derivative work: Bourrichon ( talk )",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "map-4",
+   "title": "File:Sydow-Wagners Methodischer Schul-Atlas 1904 (138940794).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Sydow-Wagners_Methodischer_Schul-Atlas_1904_(138940794).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Sydow-Wagners_Methodischer_Schul-Atlas_1904_%28138940794%29.jpg/960px-Sydow-Wagners_Methodischer_Schul-Atlas_1904_%28138940794%29.jpg",
+   "sha256": "a00e3f5fe1d1ebec8160a357854bb903964c06da65b305681d2d6c4b83ae16e0",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Emil von Sydow",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "map-5",
+   "title": "File:Berchtesgadener Alpen.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Berchtesgadener_Alpen.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Berchtesgadener_Alpen.png/960px-Berchtesgadener_Alpen.png",
+   "sha256": "6954bfa92555eb47f6204f514ed59394072c67d98ff99a25e9087439f331a887",
+   "license": "CC BY-SA 2.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
+   "author": "Hauptkarte: Pechristener Austria location map.svg : NordNordWest , Lencer",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "map-6",
+   "title": "File:Reliefkarte von Mittel-Europa zu Deutschlands Ranmschicksal - von Dr. Hans Pflug - btv1b53121242r.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Reliefkarte_von_Mittel-Europa_zu_Deutschlands_Ranmschicksal_-_von_Dr._Hans_Pflug_-_btv1b53121242r.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Reliefkarte_von_Mittel-Europa_zu_Deutschlands_Ranmschicksal_-_von_Dr._Hans_Pflug_-_btv1b53121242r.jpg/960px-Reliefkarte_von_Mittel-Europa_zu_Deutschlands_Ranmschicksal_-_von_Dr._Hans_Pflug_-_btv1b53121242r.jpg",
+   "sha256": "e3769ce63fdfd2ac355940582190635c0013b00354413d7dc7053545c6e98e65",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "Pflug, Hans. Auteur du texte",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "map-7",
+   "title": "File:Reliefkarte Deutschland ohne Grenzen.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Reliefkarte_Deutschland_ohne_Grenzen.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/43/Reliefkarte_Deutschland_ohne_Grenzen.png/960px-Reliefkarte_Deutschland_ohne_Grenzen.png",
+   "sha256": "e08e21ea0c5fc4786bfff4a3efe6a4f7051c9417c92be38495308aa0bc915a0a",
+   "license": "CC BY-SA 3.0",
+   "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+   "author": "Tschubby",
+   "labels": [
+    "map"
+   ],
+   "acceptable": [
+    "document",
+    "text"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "graph-0",
+   "title": "File:Line chart for 3D & 4D printing market.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Line_chart_for_3D_%26_4D_printing_market.png",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/8/81/Line_chart_for_3D_%26_4D_printing_market.png",
+   "sha256": "a2279bdf1ba4d95af2947d4ec0b219f63425d4a816c2df5006563797765d1912",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "UditMistry207",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "graph-1",
+   "title": "File:Line Graph GDP and Year.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Line_Graph_GDP_and_Year.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Line_Graph_GDP_and_Year.png/960px-Line_Graph_GDP_and_Year.png",
+   "sha256": "8da0a3729b6921244ddde29db3834ca8dc387a0851306d25c8b1d2773a403d4c",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "User46200",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "graph-2",
+   "title": "File:Plot Line Graph Ver.2.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Plot_Line_Graph_Ver.2.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2f/Plot_Line_Graph_Ver.2.png/960px-Plot_Line_Graph_Ver.2.png",
+   "sha256": "69d499a9f2a3869feff6d9f22919fbc06b6da491ae48c1ef3090b0034b8639c9",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Kamchatka",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "graph-3",
+   "title": "File:Line chart graph 2.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Line_chart_graph_2.png",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/Line_chart_graph_2.png",
+   "sha256": "de834703c1774e5b29d2d7e16fad078486eababf37717be16db39125a6d150a2",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Safwat.alshazly",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "graph-4",
+   "title": "File:Ansøgnings- og optagelsesstatistik for danske velfærdsuddannelser.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Ans%C3%B8gnings-_og_optagelsesstatistik_for_danske_velf%C3%A6rdsuddannelser.png",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/Ans%C3%B8gnings-_og_optagelsesstatistik_for_danske_velf%C3%A6rdsuddannelser.png/960px-Ans%C3%B8gnings-_og_optagelsesstatistik_for_danske_velf%C3%A6rdsuddannelser.png",
+   "sha256": "57f8fc16404882e8a97ad27aa33f5d01d430d2dfd5f7f5c056d660c5344be647",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Kefr4000",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "graph-5",
+   "title": "File:Translation editor monthly stats 2014-2023.png",
+   "page": "https://commons.wikimedia.org/wiki/File:Translation_editor_monthly_stats_2014-2023.png",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/e/e5/Translation_editor_monthly_stats_2014-2023.png",
+   "sha256": "fbdf8190a958d50193f6be1f0d1115afd5dd327de36294e63cf8c1ed3c6d9ec0",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Automatik",
+   "labels": [
+    "graph"
+   ],
+   "acceptable": [
+    "text",
+    "document"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  },
+  {
+   "id": "wedding-0",
+   "title": "File:Bride and groom at Sri Senpaga Vinayagar temple.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Bride_and_groom_at_Sri_Senpaga_Vinayagar_temple.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Bride_and_groom_at_Sri_Senpaga_Vinayagar_temple.jpg/960px-Bride_and_groom_at_Sri_Senpaga_Vinayagar_temple.jpg",
+   "sha256": "5e058a8a50099bd4a59841a2b3fc555f4f21a06325fbb6b0ebfe93a7ff006ebb",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "wedding"
+   ],
+   "acceptable": [
+    "portrait",
+    "group photo",
+    "outdoor",
+    "travel",
+    "city"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "wedding-1",
+   "title": "File:Nepali hindu bride.JPG",
+   "page": "https://commons.wikimedia.org/wiki/File:Nepali_hindu_bride.JPG",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Nepali_hindu_bride.JPG/960px-Nepali_hindu_bride.JPG",
+   "sha256": "eeec93ae592dc3d3d4e9a5df3e39c34f2f930d3a572541aa157f1bbfbfed03d2",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Nirmal Dulal",
+   "labels": [],
+   "acceptable": [
+    "portrait",
+    "group photo",
+    "outdoor",
+    "travel",
+    "city",
+    "wedding"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "wedding-2",
+   "title": "File:Nepai wedding engagement IMG 6889.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Nepai_wedding_engagement_IMG_6889.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/Nepai_wedding_engagement_IMG_6889.jpg/960px-Nepai_wedding_engagement_IMG_6889.jpg",
+   "sha256": "1e8393ddeed809fbe6cc8c6e68d64c0f72d9c0ba9ebe3bc7858705320ebe6b7b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Bijaya2043",
+   "labels": [],
+   "acceptable": [
+    "portrait",
+    "group photo",
+    "outdoor",
+    "travel",
+    "city",
+    "wedding"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "wedding-5",
+   "title": "File:Just married place de la Concorde 2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Just_married_place_de_la_Concorde_2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/21/Just_married_place_de_la_Concorde_2.jpg/960px-Just_married_place_de_la_Concorde_2.jpg",
+   "sha256": "0684307e6d43b536e39e63d852425d007454830ecbf18d80b26b6974e87f14e7",
+   "license": "CC0",
+   "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "author": "Jebulon",
+   "labels": [
+    "wedding"
+   ],
+   "acceptable": [
+    "portrait",
+    "group photo",
+    "outdoor",
+    "travel",
+    "city"
+   ],
+   "category": "events",
+   "acceptable_categories": [
+    "people"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "group-0",
+   "title": "File:Photographer taking a group photograph of smiling students in front of the Tokyo station, Marunouchi, Japan.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Photographer_taking_a_group_photograph_of_smiling_students_in_front_of_the_Tokyo_station,_Marunouchi,_Japan.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Photographer_taking_a_group_photograph_of_smiling_students_in_front_of_the_Tokyo_station%2C_Marunouchi%2C_Japan.jpg/960px-Photographer_taking_a_group_photograph_of_smiling_students_in_front_of_the_Tokyo_station%2C_Marunouchi%2C_Japan.jpg",
+   "sha256": "d334019a09e156098f7933d51901bc99e51c39c41e799ac9e1577c6d29833ad7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "group-1",
+   "title": "File:2008-03-29 people posing for group photo before the Lizejian Bridge.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2008-03-29_people_posing_for_group_photo_before_the_Lizejian_Bridge.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/2008-03-29_people_posing_for_group_photo_before_the_Lizejian_Bridge.jpg/960px-2008-03-29_people_posing_for_group_photo_before_the_Lizejian_Bridge.jpg",
+   "sha256": "6e684a296f6b2ef65193372022a71d6a31d185eb8bcb0073b6438c25fc377971",
+   "license": "CC BY-SA 2.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
+   "author": "Person Lin",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "group-2",
+   "title": "File:People attending UM physics symposium pose for group photo Summer 1931.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:People_attending_UM_physics_symposium_pose_for_group_photo_Summer_1931.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/People_attending_UM_physics_symposium_pose_for_group_photo_Summer_1931.jpg/960px-People_attending_UM_physics_symposium_pose_for_group_photo_Summer_1931.jpg",
+   "sha256": "8ec66244aca7b6e5e241e2450791297a31acb2d044faefe654e8ed9b1b058818",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Ivory Photo",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "group-3",
+   "title": "File:2006-12-15 people on trip posing for group photo at Taitung.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2006-12-15_people_on_trip_posing_for_group_photo_at_Taitung.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/2006-12-15_people_on_trip_posing_for_group_photo_at_Taitung.jpg/960px-2006-12-15_people_on_trip_posing_for_group_photo_at_Taitung.jpg",
+   "sha256": "891499a0419a21b633ca6980bb27434fee78c01acf3ed3651e645caf694c6767",
+   "license": "CC BY 2.0",
+   "license_url": "https://creativecommons.org/licenses/by/2.0",
+   "author": "Alec @ Taiwan",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "group-4",
+   "title": "File:Group photo seven men are posing for the camera.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Group_photo_seven_men_are_posing_for_the_camera.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/Group_photo_seven_men_are_posing_for_the_camera.jpg/960px-Group_photo_seven_men_are_posing_for_the_camera.jpg",
+   "sha256": "f759d58b37a6d7a3b0e2096450d64508a1af610360586c4a948fe1bf2456c6a9",
+   "license": "Public domain",
+   "license_url": "",
+   "author": "U.S. Fish and Wildlife Service",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "group-5",
+   "title": "File:FC Cincinnati starters group photo (29125666664) (cropped).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:FC_Cincinnati_starters_group_photo_(29125666664)_(cropped).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/FC_Cincinnati_starters_group_photo_%2829125666664%29_%28cropped%29.jpg/960px-FC_Cincinnati_starters_group_photo_%2829125666664%29_%28cropped%29.jpg",
+   "sha256": "73dba056311dbf0068fd922a37c96810c57b1fb66f3c63ecc6c8e49f4faf8ffb",
+   "license": "CC BY 2.0",
+   "license_url": "https://creativecommons.org/licenses/by/2.0",
+   "author": "Hayden Schiff from Cincinnati, USA",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events",
+    "sports"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "group-6",
+   "title": "File:Goa Union of Journalists, programme in Goa, 2025. Journalists seen posing for a group photo.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Goa_Union_of_Journalists,_programme_in_Goa,_2025._Journalists_seen_posing_for_a_group_photo.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Goa_Union_of_Journalists%2C_programme_in_Goa%2C_2025._Journalists_seen_posing_for_a_group_photo.jpg/960px-Goa_Union_of_Journalists%2C_programme_in_Goa%2C_2025._Journalists_seen_posing_for_a_group_photo.jpg",
+   "sha256": "c0fa96f01152a84dfaeb4f63932eebadeeb630af80abbe525095419e2ef1a0b7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Fredericknoronha",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "group-7",
+   "title": "File:WikiWomen posing for group photo at Wikimania 2014.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:WikiWomen_posing_for_group_photo_at_Wikimania_2014.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/WikiWomen_posing_for_group_photo_at_Wikimania_2014.jpg/960px-WikiWomen_posing_for_group_photo_at_Wikimania_2014.jpg",
+   "sha256": "4014231c4f72bb5ffed5ddf21c6f3f2ffc18a01298b2ae9a1dcf4127ee6a6a34",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Daniel Case",
+   "labels": [
+    "group photo"
+   ],
+   "acceptable": [
+    "outdoor",
+    "indoor",
+    "portrait",
+    "party",
+    "sport"
+   ],
+   "category": "people",
+   "acceptable_categories": [
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "landmark-0",
+   "title": "File:View of the Cathedral facade from the Baptistry (Pisa).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:View_of_the_Cathedral_facade_from_the_Baptistry_(Pisa).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/View_of_the_Cathedral_facade_from_the_Baptistry_%28Pisa%29.jpg/960px-View_of_the_Cathedral_facade_from_the_Baptistry_%28Pisa%29.jpg",
+   "sha256": "d1f9512a0368b637a4d733e2be86a3da3195eaca6001f8e44de802a569782fac",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "PaestumPaestum",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "landmark-1",
+   "title": "File:Siena Cathedral. Fragment of the facade. Italy.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Siena_Cathedral._Fragment_of_the_facade._Italy.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Siena_Cathedral._Fragment_of_the_facade._Italy.jpg/960px-Siena_Cathedral._Fragment_of_the_facade._Italy.jpg",
+   "sha256": "77482f262f96549b167b221b195cc2e5efee00a4b76217de6255b8caf368d824",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ввласенко",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "landmark-2",
+   "title": "File:Naval Cathedral of St Nicholas in Kronstadt 02.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Naval_Cathedral_of_St_Nicholas_in_Kronstadt_02.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Naval_Cathedral_of_St_Nicholas_in_Kronstadt_02.jpg/960px-Naval_Cathedral_of_St_Nicholas_in_Kronstadt_02.jpg",
+   "sha256": "88e63dd0ae898c75b928ff11c2a27d14ddfcffdd7faa43f3a50b9f4a7734b843",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Florstein ( Telegram: WikiPhoto.Space )",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "landmark-3",
+   "title": "File:West facade of Burgos Cathedral at night, Burgos, Spain, 20260813 2155 5657.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:West_facade_of_Burgos_Cathedral_at_night,_Burgos,_Spain,_20260813_2155_5657.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/West_facade_of_Burgos_Cathedral_at_night%2C_Burgos%2C_Spain%2C_20260813_2155_5657.jpg/960px-West_facade_of_Burgos_Cathedral_at_night%2C_Burgos%2C_Spain%2C_20260813_2155_5657.jpg",
+   "sha256": "c942fbbc7f606a83f113a58a48c966cb5ce19d46b2a82f45bb3610e2d80fc2b4",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Jakub Hałun",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "landmark-4",
+   "title": "File:Magdeburg Cathedral West Facade 2019-09-24 15-42.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Magdeburg_Cathedral_West_Facade_2019-09-24_15-42.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Magdeburg_Cathedral_West_Facade_2019-09-24_15-42.jpg/960px-Magdeburg_Cathedral_West_Facade_2019-09-24_15-42.jpg",
+   "sha256": "0225f2c92997a8e2b2a713bdef9578267e8371719374454cebcc9ddb738266dc",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Axel Tschentscher",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "landmark-5",
+   "title": "File:2025 Facade towers of the Cathedral of Santiago from the Garden of the Speaking Stones. Galicia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:2025_Facade_towers_of_the_Cathedral_of_Santiago_from_the_Garden_of_the_Speaking_Stones._Galicia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/2025_Facade_towers_of_the_Cathedral_of_Santiago_from_the_Garden_of_the_Speaking_Stones._Galicia.jpg/960px-2025_Facade_towers_of_the_Cathedral_of_Santiago_from_the_Garden_of_the_Speaking_Stones._Galicia.jpg",
+   "sha256": "4187181834370bd53ca4f1f4715362189266304e38472cf532fac15c34bdf97d",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Lmbuga",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "landmark-6",
+   "title": "File:Naples Cathedral - Duomo di Napoli, Façade (5315-Pan).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Naples_Cathedral_-_Duomo_di_Napoli,_Fa%C3%A7ade_(5315-Pan).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ad/Naples_Cathedral_-_Duomo_di_Napoli%2C_Fa%C3%A7ade_%285315-Pan%29.jpg/960px-Naples_Cathedral_-_Duomo_di_Napoli%2C_Fa%C3%A7ade_%285315-Pan%29.jpg",
+   "sha256": "371fb121406cbcceb66a83f8a1f9590a0e1c1f56c124656c1c09d2247bd40d60",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Marco Ober",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "landmark-7",
+   "title": "File:Pisa - Cathedral - Facade 1052.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Pisa_-_Cathedral_-_Facade_1052.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f6/Pisa_-_Cathedral_-_Facade_1052.jpg/960px-Pisa_-_Cathedral_-_Facade_1052.jpg",
+   "sha256": "85f4e5205f7a6676adf403f1dc40810f92f4b4fc7f2d71b259d602cb4d0f09d8",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "NormanB",
+   "labels": [
+    "landmark|building"
+   ],
+   "acceptable": [
+    "travel",
+    "city",
+    "sky",
+    "night",
+    "street"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "night-0",
+   "title": "File:Colorful illuminated facades of buildings at night, with green, blue and pink lights, Kabukicho, Shinjuku, Tokyo.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Colorful_illuminated_facades_of_buildings_at_night,_with_green,_blue_and_pink_lights,_Kabukicho,_Shinjuku,_Tokyo.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9c/Colorful_illuminated_facades_of_buildings_at_night%2C_with_green%2C_blue_and_pink_lights%2C_Kabukicho%2C_Shinjuku%2C_Tokyo.jpg/960px-Colorful_illuminated_facades_of_buildings_at_night%2C_with_green%2C_blue_and_pink_lights%2C_Kabukicho%2C_Shinjuku%2C_Tokyo.jpg",
+   "sha256": "76aea8876a5f5d956af2ddb74be1500193ee5a704dad9af99561c295516140b2",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Basile Morin",
+   "labels": [
+    "night",
+    "city"
+   ],
+   "acceptable": [
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "night-1",
+   "title": "File:Esztergom by night 01 - Simor János utca.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Esztergom_by_night_01_-_Simor_J%C3%A1nos_utca.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Esztergom_by_night_01_-_Simor_J%C3%A1nos_utca.jpg/960px-Esztergom_by_night_01_-_Simor_J%C3%A1nos_utca.jpg",
+   "sha256": "d4df0c1b3473ef7e94d4e071b7a854fc1caf25346d9b1fde1c3fa90512e28f03",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Pudelek",
+   "labels": [
+    "night",
+    "street"
+   ],
+   "acceptable": [
+    "city",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "night-2",
+   "title": "File:Dotonbori, Osaka, at night, November 2016.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Dotonbori,_Osaka,_at_night,_November_2016.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/47/Dotonbori%2C_Osaka%2C_at_night%2C_November_2016.jpg/960px-Dotonbori%2C_Osaka%2C_at_night%2C_November_2016.jpg",
+   "sha256": "36bd1f8040467495b03efc9cfa0d59f94afd27d9caca3af519efdf0dfe30f671",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Martin Falbisoner",
+   "labels": [
+    "night",
+    "city"
+   ],
+   "acceptable": [
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "night-3",
+   "title": "File:Dyker Lights (62317).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Dyker_Lights_(62317).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/19/Dyker_Lights_%2862317%29.jpg/960px-Dyker_Lights_%2862317%29.jpg",
+   "sha256": "ed48f6ba515926773686973689df675a39ec697812aee90258e2df5ce184dc90",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Rhododendrites",
+   "labels": [
+    "night"
+   ],
+   "acceptable": [
+    "city",
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "night-4",
+   "title": "File:Albert Bridge at night, London, UK - Diliff.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Albert_Bridge_at_night,_London,_UK_-_Diliff.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Albert_Bridge_at_night%2C_London%2C_UK_-_Diliff.jpg/960px-Albert_Bridge_at_night%2C_London%2C_UK_-_Diliff.jpg",
+   "sha256": "b346f0aa2f162e1ad7a8d31143d2e9ca5cf0bfddc2ec7804a3bb416592c2d093",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Diliff",
+   "labels": [
+    "night"
+   ],
+   "acceptable": [
+    "city",
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "night-5",
+   "title": "File:039 Northern lights over Mývatn (Iceland) Photo by Giles Laurent.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:039_Northern_lights_over_M%C3%BDvatn_(Iceland)_Photo_by_Giles_Laurent.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/039_Northern_lights_over_M%C3%BDvatn_%28Iceland%29_Photo_by_Giles_Laurent.jpg/960px-039_Northern_lights_over_M%C3%BDvatn_%28Iceland%29_Photo_by_Giles_Laurent.jpg",
+   "sha256": "f083097f0a1ddce28d1298aa352ed714f11412e9d05a2c55cfcaa0be2ea0453f",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Giles Laurent",
+   "labels": [
+    "night",
+    "sky"
+   ],
+   "acceptable": [
+    "city",
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "travel",
+    "landscape"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel",
+    "nature"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "night-6",
+   "title": "File:Festival of Lights 2012 - Französischer Dom.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Festival_of_Lights_2012_-_Franz%C3%B6sischer_Dom.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Festival_of_Lights_2012_-_Franz%C3%B6sischer_Dom.jpg/960px-Festival_of_Lights_2012_-_Franz%C3%B6sischer_Dom.jpg",
+   "sha256": "b416d1cce0b7427a1acb4b589b93fb28f60f5c5a92a96693f4a9985e165214dd",
+   "license": "CC BY-SA 3.0 de",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/de/deed.en",
+   "author": "Thomas Wolf , www.foto-tw.de",
+   "labels": [
+    "night",
+    "landmark|building"
+   ],
+   "acceptable": [
+    "city",
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "night-7",
+   "title": "File:Boat passing under Elgin Bridge during blue hour (2023)-L1003785.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Boat_passing_under_Elgin_Bridge_during_blue_hour_(2023)-L1003785.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Boat_passing_under_Elgin_Bridge_during_blue_hour_%282023%29-L1003785.jpg/960px-Boat_passing_under_Elgin_Bridge_during_blue_hour_%282023%29-L1003785.jpg",
+   "sha256": "88aec20bb456fec44ab83dc5bd2d6011f6b4f03b6b4bf246c8c8e93bfa58064e",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Frank Schulenburg",
+   "labels": [
+    "night"
+   ],
+   "acceptable": [
+    "city",
+    "street",
+    "building",
+    "landmark",
+    "water",
+    "sky",
+    "travel"
+   ],
+   "category": null,
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "camping-0",
+   "title": "File:Campement - 20150802 15h44 (10723).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Campement_-_20150802_15h44_(10723).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Campement_-_20150802_15h44_%2810723%29.jpg/960px-Campement_-_20150802_15h44_%2810723%29.jpg",
+   "sha256": "b9daa91367f0eafb55dd9d6dc4dcda152c5c134c1cb7f30c37922434201a7d66",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Another one of my pictures: This photograph was taken by Medium69 (William Crochot) and released under the license stated below. You are free to use it for any purpose as long as you credit the author",
+   "labels": [
+    "camping"
+   ],
+   "acceptable": [
+    "forest",
+    "outdoor",
+    "night",
+    "sky",
+    "hiking",
+    "building"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "camping-1",
+   "title": "File:Tent camping along the Sulayr trail in La Taha, Sierra Nevada National Park (DSCF5147).jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tent_camping_along_the_Sulayr_trail_in_La_Taha,_Sierra_Nevada_National_Park_(DSCF5147).jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/73/Tent_camping_along_the_Sulayr_trail_in_La_Taha%2C_Sierra_Nevada_National_Park_%28DSCF5147%29.jpg/960px-Tent_camping_along_the_Sulayr_trail_in_La_Taha%2C_Sierra_Nevada_National_Park_%28DSCF5147%29.jpg",
+   "sha256": "2c6145caffbda0288510dffa47bc800e7ff18ff4a76e39bab84973da7c5a6c9d",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Trougnouf (Benoit Brummer)",
+   "labels": [
+    "camping",
+    "forest"
+   ],
+   "acceptable": [
+    "outdoor",
+    "night",
+    "sky",
+    "hiking",
+    "building"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel",
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "camping-3",
+   "title": "File:Copper Breaks State Park with the Milky Way Galaxy.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Copper_Breaks_State_Park_with_the_Milky_Way_Galaxy.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b9/Copper_Breaks_State_Park_with_the_Milky_Way_Galaxy.jpg/960px-Copper_Breaks_State_Park_with_the_Milky_Way_Galaxy.jpg",
+   "sha256": "992279d22b31f5fc25333b03a5fd78e7e8f6dbeecefa6c6660bd3b3d7476b55f",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Matthew T Rader",
+   "labels": [
+    "night"
+   ],
+   "acceptable": [
+    "forest",
+    "outdoor",
+    "sky",
+    "hiking",
+    "building",
+    "camping"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "camping-4",
+   "title": "File:Tent Camp, Kahurangi National Park, New Zealand 20.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tent_Camp,_Kahurangi_National_Park,_New_Zealand_20.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Tent_Camp%2C_Kahurangi_National_Park%2C_New_Zealand_20.jpg/960px-Tent_Camp%2C_Kahurangi_National_Park%2C_New_Zealand_20.jpg",
+   "sha256": "495308e31eed870f6e20420b78c47ceeed760d9374b55cea058a34df0d42053b",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "outdoor",
+    "night",
+    "sky",
+    "hiking",
+    "building",
+    "camping"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel",
+    "events"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "camping-5",
+   "title": "File:Tent Camp, Kahurangi National Park, New Zealand 19.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Tent_Camp,_Kahurangi_National_Park,_New_Zealand_19.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Tent_Camp%2C_Kahurangi_National_Park%2C_New_Zealand_19.jpg/960px-Tent_Camp%2C_Kahurangi_National_Park%2C_New_Zealand_19.jpg",
+   "sha256": "8d80805dae7d751c8a74ec41369aa19bfdb70ad2057d7c0f3ab79018ee398afd",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Michal Klajban",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "outdoor",
+    "night",
+    "sky",
+    "hiking",
+    "building",
+    "camping"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel",
+    "events"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "hiking-0",
+   "title": "File:Hiking trail to Biskupská kupa, Czechia.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hiking_trail_to_Biskupsk%C3%A1_kupa,_Czechia.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3d/Hiking_trail_to_Biskupsk%C3%A1_kupa%2C_Czechia.jpg/960px-Hiking_trail_to_Biskupsk%C3%A1_kupa%2C_Czechia.jpg",
+   "sha256": "8639d6ba149ec108948282a0588bea88f9c8894613682e5b4c6f65e1290290a7",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Pudelek",
+   "labels": [
+    "forest"
+   ],
+   "acceptable": [
+    "hiking",
+    "mountain",
+    "snow",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "hiking-2",
+   "title": "File:Hiking path on the peninsula La Victòria 01.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_01.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8a/Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_01.jpg/960px-Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_01.jpg",
+   "sha256": "fa3604ac33bc14ea2e8c5352ab4635f7e414bffe440a5738890f55d32bf8866c",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Kritzolina",
+   "labels": [],
+   "acceptable": [
+    "hiking",
+    "forest",
+    "mountain",
+    "snow",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "hiking-3",
+   "title": "File:Hiking path on the peninsula La Victòria 02.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_02.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_02.jpg/960px-Hiking_path_on_the_peninsula_La_Vict%C3%B2ria_02.jpg",
+   "sha256": "f52b54deee7ae939b95bb2f3c6dc4d389871b98ff5d68d389f7f5a4b446e6252",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Kritzolina",
+   "labels": [],
+   "acceptable": [
+    "hiking",
+    "forest",
+    "mountain",
+    "snow",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "water",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "hiking-4",
+   "title": "File:Babia Góra, 20230304 0651 3162.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Babia_G%C3%B3ra,_20230304_0651_3162.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f8/Babia_G%C3%B3ra%2C_20230304_0651_3162.jpg/960px-Babia_G%C3%B3ra%2C_20230304_0651_3162.jpg",
+   "sha256": "e617aae2a800dc95fe47f5222b561acb644a80341d69449aa0aff6bdc577989d",
+   "license": "CC BY-SA 4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "author": "Jakub Hałun",
+   "labels": [
+    "snow"
+   ],
+   "acceptable": [
+    "hiking",
+    "forest",
+    "mountain",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel",
+    "sunrise",
+    "sunset"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "hiking-5",
+   "title": "File:Trail to Morteratsch Glacier in 2012 July.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Trail_to_Morteratsch_Glacier_in_2012_July.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9c/Trail_to_Morteratsch_Glacier_in_2012_July.jpg/960px-Trail_to_Morteratsch_Glacier_in_2012_July.jpg",
+   "sha256": "d5e1f1bdf3e57ccae97eed1b182e5c9562690e05fc264b8c8498f4195e76386c",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+   "author": "Ximonic (Simo Räsänen)",
+   "labels": [
+    "mountain"
+   ],
+   "acceptable": [
+    "hiking",
+    "forest",
+    "snow",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "hiking-6",
+   "title": "File:Hiking trail on Mount Obidowiec, Gorce, 20260103 1214 6780.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hiking_trail_on_Mount_Obidowiec,_Gorce,_20260103_1214_6780.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/29/Hiking_trail_on_Mount_Obidowiec%2C_Gorce%2C_20260103_1214_6780.jpg/960px-Hiking_trail_on_Mount_Obidowiec%2C_Gorce%2C_20260103_1214_6780.jpg",
+   "sha256": "8d9ed41c55cc27be05f6ebb8e9a828e5d5ba7c9213598bf2179b285d61662efb",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Jakub Hałun",
+   "labels": [
+    "snow",
+    "forest"
+   ],
+   "acceptable": [
+    "hiking",
+    "mountain",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "calibration"
+  },
+  {
+   "id": "hiking-7",
+   "title": "File:Hiking trail on Mount Obidowiec, Gorce, 20260103 1217 6784.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Hiking_trail_on_Mount_Obidowiec,_Gorce,_20260103_1217_6784.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Hiking_trail_on_Mount_Obidowiec%2C_Gorce%2C_20260103_1217_6784.jpg/960px-Hiking_trail_on_Mount_Obidowiec%2C_Gorce%2C_20260103_1217_6784.jpg",
+   "sha256": "b64693d0e15d083cd300037bc3126558e8a4aa3182aa16ed59e35bb91257301a",
+   "license": "CC BY 4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0",
+   "author": "Jakub Hałun",
+   "labels": [
+    "snow",
+    "forest"
+   ],
+   "acceptable": [
+    "hiking",
+    "mountain",
+    "water",
+    "outdoor",
+    "landscape",
+    "sky",
+    "travel"
+   ],
+   "category": "nature",
+   "acceptable_categories": [
+    "travel"
+   ],
+   "split": "held_out"
+  },
+  {
+   "id": "text-0",
+   "title": "File:Liji 2.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Liji_2.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Liji_2.jpg/960px-Liji_2.jpg",
+   "sha256": "6588fa23d44120cbd445f2e9a63f9469b4caa7256791cc3c5437a17d9789e86e",
+   "license": "CC BY-SA 2.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
+   "author": "user:snowyowls",
+   "labels": [
+    "document|text"
+   ],
+   "acceptable": [
+    "indoor"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "calibration"
+  },
+  {
+   "id": "text-6",
+   "title": "File:Latin dictionary.jpg",
+   "page": "https://commons.wikimedia.org/wiki/File:Latin_dictionary.jpg",
+   "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/Latin_dictionary.jpg/960px-Latin_dictionary.jpg",
+   "sha256": "ef91311ee8a7f7b04805bda642837d44d5ccc1447607014b7362094f08549fe1",
+   "license": "CC BY-SA 3.0",
+   "license_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+   "author": "Dr. Marcus Gossler",
+   "labels": [
+    "document|text"
+   ],
+   "acceptable": [
+    "indoor"
+   ],
+   "category": "documents",
+   "acceptable_categories": [],
+   "split": "held_out"
+  }
+ ]
+}

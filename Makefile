@@ -325,7 +325,6 @@ bundle-backend:
 		--collect-all=pydantic \
 		--collect-all=fastapi \
 		--collect-all=app.resources \
-		--collect-all=fastembed \
 		--collect-all=onnxruntime \
 		--collect-all=tokenizers \
 		--collect-all=huggingface_hub \
@@ -477,6 +476,10 @@ build-tauri:
 	@echo "Building Tauri app…"
 	cd $(FRONTEND) && \
 		if [ -z "$$APPLE_SIGNING_IDENTITY" ]; then unset APPLE_SIGNING_IDENTITY; fi; \
+		if [ "$$(uname)" = "Darwin" ] && [ -z "$${APPLE_SIGNING_IDENTITY:-}" ]; then \
+			export APPLE_SIGNING_IDENTITY=-; \
+			echo "No Developer ID: sealing the app ad hoc so its signature verifies"; \
+		fi; \
 		PATH="$(CURDIR)/$(BACKEND)/.venv/$(VENV_BIN):$(DEV_PATH)" \
 		PYTHONPATH="$(CURDIR)" \
 		npm run tauri build

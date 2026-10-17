@@ -7,6 +7,7 @@ import hashlib
 import os
 import shutil
 import stat
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -812,8 +813,9 @@ def test_windows_sharing_violation_is_reported_as_a_lock(
 
     def locked_open(path: Path, mode: str = "r", *args: object, **kwargs: object) -> Any:
         if mode == "xb":
-            locked = OSError(errno.EACCES, "sharing violation")
-            locked.winerror = 32  # type: ignore[attr-defined]
+            locked = OSError(errno.EACCES, "sharing violation", None, 32)
+            if sys.platform != "win32":
+                locked.winerror = 32  # type: ignore[attr-defined]
             raise locked
         return real_open(path, mode, *args, **kwargs)  # type: ignore[call-overload]  # forwarding a caller's *args to an overloaded builtin
 

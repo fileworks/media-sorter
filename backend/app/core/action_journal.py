@@ -70,7 +70,7 @@ class DurableActionJournal:
 
     def _open_handle(self, *, exclusive: bool = False) -> None:
         try:
-            self._handle = self.path.open("x" if exclusive else "a", encoding="utf-8")
+            self._handle = self.path.open("x" if exclusive else "a", encoding="utf-8", newline="\n")
         except OSError as exc:
             raise JournalDurabilityError(f"Cannot open action journal {self.path}: {exc}") from exc
 
@@ -414,7 +414,7 @@ def store_manifest(root: Path, manifest: MutationManifest) -> Path:
         return path
     temporary = path.with_name(f".{path.name}.tmp")
     try:
-        with temporary.open("x", encoding="utf-8") as handle:
+        with temporary.open("x", encoding="utf-8", newline="\n") as handle:
             handle.write(manifest.model_dump_json())
             handle.flush()
             os.fsync(handle.fileno())
@@ -447,7 +447,7 @@ def store_manifest_action(root: Path, operation_id: str, action: MutationManifes
     path = action_log_path(root, operation_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with path.open("a", encoding="utf-8") as handle:
+        with path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(action.model_dump_json() + "\n")
             handle.flush()
             os.fsync(handle.fileno())

@@ -12,6 +12,7 @@ const REQUIRED_FIELDS = [
   "ai_allow_gpu",
   "ai_model_tier",
   "ai_tagging_confidence_threshold",
+  "ai_location_tags_enabled",
   "ai_tagging_labels",
   "ai_tagging_max_tags",
   "camera_subfolder_enabled",

@@ -60,7 +60,8 @@ and are still tested; each file says so at the top.
 
 Review uses `GET /api/media/info` for the open inspector and
 `POST /api/review/outcomes` for complete plan provenance. Keeper choices stay in
-client run state and are sent as `reviewed_sets` to `POST /api/sorting/start`.
+client run state and are sent as `reviewed_sets` to `POST /api/sorting/start`;
+content-tag edits travel the same way as `reviewed_tags`.
 The older server-side review-decision and policy endpoints remain tested for API
 compatibility but are not used by the desktop interface.
 
@@ -71,6 +72,6 @@ compatibility but are not used by the desktop interface.
 | [install.md](install.md) | public desktop installer selection, checksums and updates |
 | [headless.md](headless.md) | source-built Docker API and CLI prerequisites |
 | [dependency-security.md](dependency-security.md) | the dependency audit policy and its suppression file |
-| [model-distribution.md](model-distribution.md) | optional CLIP/SigLIP packs, pinned digests, the mirror escape hatch |
+| [model-distribution.md](model-distribution.md) | optional SigLIP packs, pinned digests, the mirror escape hatch |
 | [release-signing.md](release-signing.md) | signing credentials and the declared signed/unsigned state |
 | [release-smoke-checklist.md](release-smoke-checklist.md) | the clean-machine confidence pass after a release |

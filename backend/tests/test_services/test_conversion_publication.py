@@ -36,6 +36,7 @@ from app.services.conversion_publication import (
     stage_directory,
 )
 from app.services.quarantine import QuarantineStore
+from tests.capabilities import requires_symlinks
 
 PIL_Image = pytest.importorskip("PIL.Image")
 
@@ -132,6 +133,7 @@ class TestImageProof:
         with pytest.raises(ConversionCandidateRejected, match="not the planned"):
             validate_converted_image(original, candidate, expected_suffix=".jpg")
 
+    @requires_symlinks
     def test_a_symlink_candidate_is_refused(self, tmp_path: Path) -> None:
         original = _png(tmp_path / "a.png")
         real = _png(tmp_path / "real.jpg")

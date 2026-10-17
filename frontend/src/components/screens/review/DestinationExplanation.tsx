@@ -220,28 +220,45 @@ export function DestinationExplanation({ provenance, onOpenSetting }: Destinatio
           <EvidenceRow label={t("review.detail.evidence.category")}>
             {!provenance.categorization.enabled
               ? t("review.detail.categoryDisabled")
-              : provenance.categorization.passed
-                ? t("review.detail.categoryPassed", {
+              : provenance.categorization.passed && provenance.categorization.basis
+                ? t(`review.detail.categoryScreenshot.${provenance.categorization.basis}`, {
                     label: provenance.categorization.label ?? unknown,
-                    confidence:
-                      provenance.categorization.confidence === null
-                        ? unknown
-                        : percent.format(provenance.categorization.confidence),
-                    threshold:
-                      provenance.categorization.threshold === null
-                        ? unknown
-                        : percent.format(provenance.categorization.threshold),
                   })
-                : t("review.detail.categoryRejected", {
-                    confidence:
-                      provenance.categorization.confidence === null
-                        ? unknown
-                        : percent.format(provenance.categorization.confidence),
-                    threshold:
-                      provenance.categorization.threshold === null
-                        ? unknown
-                        : percent.format(provenance.categorization.threshold),
-                  })}
+                : provenance.categorization.passed
+                  ? t("review.detail.categoryPassed", {
+                      label: provenance.categorization.label ?? unknown,
+                      confidence:
+                        provenance.categorization.confidence === null
+                          ? unknown
+                          : percent.format(provenance.categorization.confidence),
+                      threshold:
+                        provenance.categorization.threshold === null
+                          ? unknown
+                          : percent.format(provenance.categorization.threshold),
+                    })
+                  : t(
+                      provenance.categorization.rejection
+                        ? `review.detail.categoryRejected.${provenance.categorization.rejection}`
+                        : "review.detail.categoryRejected",
+                      {
+                        confidence:
+                          provenance.categorization.confidence === null
+                            ? unknown
+                            : percent.format(provenance.categorization.confidence),
+                        threshold:
+                          provenance.categorization.threshold === null
+                            ? unknown
+                            : percent.format(provenance.categorization.threshold),
+                        margin:
+                          provenance.categorization.margin == null
+                            ? unknown
+                            : percent.format(provenance.categorization.margin),
+                        minMargin:
+                          provenance.categorization.min_margin == null
+                            ? unknown
+                            : percent.format(provenance.categorization.min_margin),
+                      },
+                    )}
           </EvidenceRow>
 
           <EvidenceRow label={t("review.detail.evidence.rules")}>

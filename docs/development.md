@@ -16,7 +16,9 @@ Makefile    every dev/build command
 
 ## Setup
 
-Use Python 3.12+ for the full locked development environment, Node 24, uv and
+Use Python 3.12+ for the full locked development environment, Node 24 (declared
+in `package.json` `engines` and `.nvmrc`/`.node-version`; Vitest does not run on
+older Node), uv and
 Rust stable. Core backend metadata permits Python 3.10+, but optional AI/native
 packaging uses the fuller environment. Follow [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 for your OS (Windows needs MSVC build tools/WebView2; macOS Xcode tools; Linux

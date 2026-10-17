@@ -35,6 +35,7 @@ import {
   type SetEntry,
 } from "@/lib/reviewBrowse";
 import { sortEntries, sortRows, sortSets } from "@/lib/reviewSort";
+import { editableAiTags } from "@/lib/reviewTags";
 import {
   catalogGroupsForRun,
   comparePair,
@@ -59,7 +60,7 @@ import {
   type DuplicateGroup,
 } from "@/lib/reviewWorkbench";
 import type { PlanPersistenceState } from "@/hooks/usePreview";
-import type { PlanReviewState } from "@/services/api";
+import type { PlanReviewState, ReviewedTags } from "@/services/api";
 import type { Config, PreviewResult } from "@/types/api";
 
 interface ReviewScreenProps {
@@ -78,6 +79,7 @@ interface ReviewScreenProps {
   /** Run-scoped decisions, lifted so Execute can send them with the run. */
   onDecisionsChange?: (decisions: {
     reviewedSets: { keep: string; demote: string[]; keep_all?: boolean }[];
+    reviewedTags: ReviewedTags[];
     outstandingSets: number;
     proposedSets: number;
     undecidedSets: number;
@@ -187,6 +189,7 @@ export function ReviewScreen({
     if (groups.isLoading || groups.isError) return;
     onDecisionsChange?.({
       reviewedSets: surface.reviewedSets,
+      reviewedTags: surface.reviewedTags,
       outstandingSets: stats.outstanding,
       proposedSets: stats.proposed,
       undecidedSets: stats.undecided,
@@ -204,6 +207,7 @@ export function ReviewScreen({
     surface.persistenceError,
     surface.persistenceState,
     surface.reviewedSets,
+    surface.reviewedTags,
     surface.durableState,
   ]);
   // Every set the panel lists, in the order it lists them: "Set 3 of 15" names
@@ -1064,6 +1068,10 @@ export function ReviewScreen({
         <DetailView
           row={detailRow}
           set={detailSet}
+          aiTags={editableAiTags(detailRow, surface.tagEdits)}
+          aiTagsEdited={surface.tagEdits.has(detailRow.source)}
+          onAiTagsChange={(tags) => surface.setAiTags(detailRow.source, tags)}
+          onAiTagsReset={() => surface.resetAiTags(detailRow.source)}
           scope={
             detailSet !== null
               ? { kind: "set", index: detailIndex, total: detailScope.length }

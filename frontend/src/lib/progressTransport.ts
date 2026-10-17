@@ -26,6 +26,8 @@ export interface ProgressSnapshot {
 
 export interface ProgressView {
   phase: string;
+  current: number;
+  total: number | null;
   determinate: boolean;
   percentage: number | null;
   /** e.g. "1,204 of 8,900 files" or "1,204 files found so far". */
@@ -68,6 +70,8 @@ export function progressView(snapshot: ProgressSnapshot, now: number): ProgressV
 
   return {
     phase: snapshot.phase,
+    current: snapshot.current,
+    total: snapshot.total,
     determinate,
     percentage,
     countLabel,
@@ -127,24 +131,46 @@ export function resumeFrom(snapshot: ProgressSnapshot | null): number {
 }
 
 export interface LivenessMessage {
-  message: string;
+  /** Translation key; the caller renders it in the active locale. */
+  messageKey: string;
+  params: Record<string, string | number>;
+  /** Backend phase id, translated by the caller as `progress.phase.<phase>`. */
+  phase: string | null;
   /** Whether to render a spinner rather than a bar. */
   indeterminate: boolean;
 }
 
 export function livenessMessage(view: ProgressView, activePath: string | null): LivenessMessage {
   if (view.cancelState === "requested") {
-    return { message: "Stopping at the next safe point…", indeterminate: true };
+    return { messageKey: "progress.stopping", params: {}, phase: null, indeterminate: true };
   }
   if (!view.live) {
-    const where = activePath ? ` Still working on ${activePath}.` : "";
+    return activePath
+      ? {
+          messageKey: "progress.stalledAt",
+          params: { seconds: view.stalledForSeconds, path: activePath },
+          phase: null,
+          indeterminate: true,
+        }
+      : {
+          messageKey: "progress.stalled",
+          params: { seconds: view.stalledForSeconds },
+          phase: null,
+          indeterminate: true,
+        };
+  }
+  if (!view.determinate) {
     return {
-      message: `No change for ${view.stalledForSeconds}s — this can happen on network drives.${where}`,
+      messageKey: "progress.found",
+      params: { current: view.current },
+      phase: view.phase,
       indeterminate: true,
     };
   }
-  if (!view.determinate) {
-    return { message: `${view.phase}: ${view.countLabel}`, indeterminate: true };
-  }
-  return { message: `${view.phase}: ${view.countLabel}`, indeterminate: false };
+  return {
+    messageKey: "progress.counted",
+    params: { current: view.current, total: view.total ?? 0 },
+    phase: view.phase,
+    indeterminate: false,
+  };
 }

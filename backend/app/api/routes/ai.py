@@ -15,6 +15,7 @@ from app.api.schemas import (
 )
 from app.background_tasks.task_manager import Task, TaskManager
 from app.core.exceptions import ConflictError, MediaSortException, TaskNotFoundError
+from app.services.ai.encoder_factory import installed_pack
 from app.services.ai.model_installation import AiModelStore
 from app.services.ai.model_manifest import pack_for_tier
 
@@ -41,11 +42,16 @@ class ModelStatusResponse(BaseModel):
     source: str
     task_id: str | None = None
     error: str | None = None
+    retired: bool = False
+    download_size: int = 0
 
 
 class ModelInventoryResponse(BaseModel):
     effective_tier: str
     required_pack_id: str | None
+    #: The installed pack local AI actually uses: the required one, or a
+    #: predecessor that keeps working until the required one is installed.
+    active_pack_id: str | None = None
     packs: list[ModelStatusResponse]
 
 
@@ -76,6 +82,7 @@ async def model_inventory(
     return ModelInventoryResponse(
         effective_tier=tier,
         required_pack_id=required,
+        active_pack_id=installed_pack(tier, container.ai_model_store),
         packs=[ModelStatusResponse.model_validate(status.to_dict()) for status in statuses],
     )
 
@@ -95,6 +102,14 @@ async def install_model(
     body: TaskStartRequest | None = None,
 ) -> TaskStartResponse:
     request = body or TaskStartRequest()
+    pack = container.ai_model_store.packs.get(pack_id)
+    if pack is not None and pack.retired:
+        raise MediaSortException(
+            status_code=409,
+            message="This local AI model is retired and can only be removed.",
+            code="MODEL_PACK_RETIRED",
+            details={"pack_id": pack_id},
+        )
     existing = _pack_task(container, pack_id)
     if existing is not None and existing.status in ("pending", "running"):
         return TaskStartResponse(

@@ -33,8 +33,9 @@ from app.core.integrity import (
 from app.core.integrity_policy import MutationAuthorization
 from app.core.logging_config import get_logger
 from app.core.media_units import CompanionRole
+from app.core.paths import path_identity_key
 from app.core.provenance import OutcomeProvenance
-from app.core.sort_plan import FrozenPlanGuard, FrozenSortPlan
+from app.core.sort_plan import FrozenPlanGuard, FrozenSortAction, FrozenSortPlan
 from app.services.mutation_planner import build_placement_action
 from app.services.verified_transfer import TransferResult, execute_transfer
 
@@ -63,6 +64,7 @@ class OperationExecution:
     bytes_read: int = 0
     bytes_written: int = 0
     started_at: datetime = field(default_factory=utc_now)
+    _planned_primaries: dict[str, FrozenSortAction] | None = field(default=None, repr=False)
 
     @classmethod
     def start(
@@ -241,6 +243,18 @@ class OperationExecution:
                 reason=result.reduced_guarantee,
             )
         return result
+
+    def planned_action(self, source: Path) -> FrozenSortAction | None:
+        """The reviewed primary action for *source*, or ``None`` without a plan entry."""
+        if self.frozen_plan is None:
+            return None
+        if self._planned_primaries is None:
+            self._planned_primaries = {
+                path_identity_key(action.source_path): action
+                for action in self.frozen_plan.actions
+                if action.companion_role is None
+            }
+        return self._planned_primaries.get(path_identity_key(str(source)))
 
     def verify_reviewed_destination(
         self,

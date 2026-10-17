@@ -57,6 +57,10 @@ class ModelStatus:
     source: str
     task_id: str | None = None
     error: str | None = None
+    retired: bool = False
+    #: Bytes an install would actually fetch, after reusing identical verified
+    #: files from other installed packs. Equals ``total_size`` when none match.
+    download_size: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -71,6 +75,8 @@ class ModelStatus:
             "source": self.source,
             "task_id": self.task_id,
             "error": self.error,
+            "retired": self.retired,
+            "download_size": self.download_size,
         }
 
 
@@ -175,6 +181,10 @@ class AiModelStore:
             source=self.source_label,
             task_id=task.id if task is not None else None,
             error=error,
+            retired=pack.retired,
+            download_size=0
+            if state == "ready"
+            else pack.total_size - sum(item.size for item in self._reusable_files(pack)),
         )
 
     def component_paths(self, pack_id: str, *, verify: bool = True) -> dict[str, Path] | None:
@@ -191,6 +201,13 @@ class AiModelStore:
 
     def _install(self, task: Task, pack_id: str) -> dict[str, object]:
         pack = self._pack(pack_id)
+        if pack.retired:
+            raise MediaSortException(
+                status_code=409,
+                message="This local AI model is retired and can only be removed.",
+                code="MODEL_PACK_RETIRED",
+                details={"pack_id": pack_id},
+            )
         with self._lock:
             if self._installed(pack, full=True):
                 task.update_progress(
@@ -223,7 +240,8 @@ class AiModelStore:
                             raise RuntimeError("model installation cancelled")
                         target = staging / component.name / item.path
                         target.parent.mkdir(parents=True, exist_ok=True)
-                        self._download(task, pack, component, item, target, done)
+                        if not self._copy_verified(pack, item, target):
+                            self._download(task, pack, component, item, target, done)
                         done += item.size
                         task.update_progress(
                             done,
@@ -373,6 +391,41 @@ class AiModelStore:
         return (
             f"{self._source}/{repository}/resolve/{component.revision}/{encoded_path}?download=true"
         )
+
+    def _reusable_files(self, pack: ModelPack) -> list[ModelFile]:
+        """Files of *pack* another installed pack already holds with the same digest."""
+        return [
+            item
+            for component in pack.components
+            for item in component.files
+            if self._installed_copy(pack, item) is not None
+        ]
+
+    def _installed_copy(self, pack: ModelPack, item: ModelFile) -> Path | None:
+        for other in self.packs.values():
+            if other.pack_id == pack.pack_id or not self._installed(other, full=False):
+                continue
+            for component in other.components:
+                for candidate in component.files:
+                    if candidate.sha256 == item.sha256 and candidate.size == item.size:
+                        return self._pack_directory(other) / component.name / candidate.path
+        return None
+
+    def _copy_verified(self, pack: ModelPack, item: ModelFile, target: Path) -> bool:
+        """Copy an identical installed file instead of downloading it, if it verifies."""
+        source = self._installed_copy(pack, item)
+        if source is None:
+            return False
+        try:
+            shutil.copyfile(source, target)
+        except OSError:
+            target.unlink(missing_ok=True)
+            return False
+        if target.stat().st_size != item.size or _sha256(target) != item.sha256:
+            target.unlink(missing_ok=True)
+            return False
+        logger.info("Reused a verified model file", pack_id=pack.pack_id, path=item.path)
+        return True
 
     def _verify_staging(self, pack: ModelPack, staging: Path) -> None:
         for component in pack.components:

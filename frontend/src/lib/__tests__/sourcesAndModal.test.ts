@@ -376,14 +376,12 @@ describe("execute preflight", () => {
     copyCount: 2,
     moveCount: 0,
     skipCount: 1,
-    referenceCount: 1,
+    referenceFolders: 1,
     sourceMutations: 0,
     acknowledgedSourceMutations: false,
-    staleGroups: 0,
-    unresolvedGroups: 0,
+    unresolvedFiles: 0,
     freeBytes: 1_000_000,
     requiredBytes: 10_000,
-    quarantineWritable: true,
     conversionWithoutOriginals: 0,
     companionsLeftInPlace: 0,
     embeddedTagCount: 0,
@@ -395,7 +393,7 @@ describe("execute preflight", () => {
     expect(result.canExecute).toBe(true);
     expect(result.summary.map((line) => line.text).join(" ")).toMatch(/never deleted/i);
     expect(result.summary.map((line) => line.text).join(" ")).toMatch(
-      /reference file\(s\) will not be touched/i,
+      /1 reference folder\(s\) are only read, never changed/i,
     );
   });
 
@@ -420,13 +418,6 @@ describe("execute preflight", () => {
     expect(result.blocking[0].messageKey).toBe("preflight.blocking.empty");
   });
 
-  it("blocks on stale review", () => {
-    const result = preflight({ ...base, staleGroups: 2 });
-
-    expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/changed since you reviewed/i);
-  });
-
   it("blocks on insufficient space and says both sizes in human units", () => {
     const result = preflight({ ...base, freeBytes: 1, requiredBytes: 5_000 });
 
@@ -440,10 +431,6 @@ describe("execute preflight", () => {
     });
   });
 
-  it("blocks on an unwritable quarantine", () => {
-    expect(preflight({ ...base, quarantineWritable: false }).canExecute).toBe(false);
-  });
-
   it("requires an acknowledgement for source mutations, then allows it", () => {
     const pending = preflight({ ...base, sourceMutations: 3 });
     const acknowledged = preflight({
@@ -452,28 +439,37 @@ describe("execute preflight", () => {
       acknowledgedSourceMutations: true,
     });
 
-    expect(pending.canExecute).toBe(false);
+    expect(pending.canExecute).toBe(true);
+    expect(pending.executable).toBe(false);
     expect(pending.acknowledgement).toMatch(/input folders/i);
-    expect(acknowledged.canExecute).toBe(true);
-    expect(acknowledged.acknowledgement).toBeNull();
+    expect(acknowledged.executable).toBe(true);
+    // MS-03: the warning stays visible once it is accepted.
+    expect(acknowledged.acknowledgement).toBe(pending.acknowledgement);
+    expect(acknowledged.acknowledgementKey).toBe("preflight.acknowledge.mutations");
+  });
+
+  it("requires the acknowledgement for every plan, Copy included", () => {
+    expect(preflight(base).executable).toBe(false);
+    expect(preflight({ ...base, acknowledgedSourceMutations: true }).executable).toBe(true);
+    expect(preflight(base).acknowledgementKey).toBe("preflight.acknowledge");
   });
 
   it("refuses to run when nothing was decided", () => {
     expect(preflight({ ...base, actionableGroups: 0 }).canExecute).toBe(false);
   });
 
-  it("mentions unresolved groups without blocking on them", () => {
-    const result = preflight({ ...base, unresolvedGroups: 5 });
+  it("leaves files with an unfinished duplicate check in place without blocking", () => {
+    // MS-01: the run keeps these files where they are, so Execute stays available
+    // and the line counts files, not groups.
+    const result = preflight({ ...base, unresolvedFiles: 5 });
 
     expect(result.canExecute).toBe(true);
-    expect(result.summary.some((line) => line.tone === "warning")).toBe(true);
-  });
-
-  it("blocks when preview could not freeze every sort outcome", () => {
-    const result = preflight({ ...base, unplannedCount: 2 });
-
-    expect(result.canExecute).toBe(false);
-    expect(result.blocking[0].text).toMatch(/could not be frozen safely/i);
+    expect(result.blocking).toEqual([]);
+    const line = result.reversible.find(
+      (item) => item.messageKey === "preflight.reversible.unresolved",
+    );
+    expect(line?.params).toEqual({ count: 5 });
+    expect(line?.text).toMatch(/5 file\(s\).*leaves them where they are/);
   });
 
   it("names every configured irreversible consequence", () => {
@@ -487,7 +483,7 @@ describe("execute preflight", () => {
     expect(text).toMatch(/source file\(s\) will be removed/i);
     expect(text).toMatch(/companion file\(s\).*remain/i);
     expect(text).toMatch(/embedded/i);
-    expect(text).toMatch(/quarantine/i);
+    expect(text).toMatch(/set aside/i);
   });
 
   /**
@@ -522,22 +518,31 @@ describe("execute preflight", () => {
 });
 
 describe("reportView", () => {
-  it("drops zero counts and links to what exists", () => {
+  it("drops zero counts and names the next step by key", () => {
     const view = reportView(operation({ counts: { ...operation().counts, quarantined: 3 } }));
 
-    expect(view.facts.map((fact) => fact.label)).toEqual(["Organized", "Quarantined"]);
-    expect(view.links.map((link) => link.kind)).toEqual(["report", "quarantine", "logs"]);
-    expect(view.nextSteps.join(" ")).toMatch(/nothing was deleted/i);
+    expect(view.facts.map((fact) => fact.labelKey)).toEqual([
+      "operations.fact.organized",
+      "operations.fact.quarantined",
+    ]);
+    expect(view.nextStepKeys).toEqual(["operations.next.quarantined"]);
   });
 
-  it("links to recovery when a run needs it", () => {
-    const view = reportView(operation({ recoveryState: "required" }));
+  it("puts an interrupted run's recovery first", () => {
+    const view = reportView(
+      operation({ recoveryState: "required", counts: { ...operation().counts, failed: 1 } }),
+    );
 
-    expect(view.links.some((link) => link.kind === "recovery")).toBe(true);
-    expect(view.nextSteps.join(" ")).toMatch(/interrupted/i);
+    expect(view.nextStepKeys[0]).toBe("operations.next.recovery");
   });
 
   it("says a running operation is still running", () => {
-    expect(reportView(operation({ outcome: null })).headline).toBe("Still running");
+    expect(reportView(operation({ outcome: null })).headlineKey).toBe("operations.stillRunning");
+  });
+
+  it("uses the shared outcome wording for finished runs", () => {
+    expect(reportView(operation({ outcome: "partial" })).headlineKey).toBe(
+      "report.outcome.partial",
+    );
   });
 });

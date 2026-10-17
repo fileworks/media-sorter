@@ -371,3 +371,59 @@ for (const locked of [false, true]) {
     });
   }
 }
+
+// MS-13: the desktop window's minimum size is the smallest size every stage is
+// checked to fit. Below it nothing is promised, so the shell refuses to shrink.
+for (const locale of ["en", "de"] as const) {
+  test(`every stage fits the minimum window size: ${locale}, 640x480`, async ({ page }) => {
+    await stubBackend(page);
+    await page.addInitScript(
+      ({ result, analysis }) => {
+        localStorage.setItem(
+          "mediasort_completed_plan",
+          JSON.stringify({
+            schemaVersion: 3,
+            planId: result.plan_id,
+            configFingerprint: result.config_fingerprint,
+            analysis,
+          }),
+        );
+      },
+      { result: E2E_PREVIEW_RESULT, analysis: E2E_ANALYSIS },
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    // A reviewed plan first, so Review and Execute are reachable rather than skipped.
+    await openSurface(page, "plan");
+    await page.locator('[data-stage-id="review"]').click();
+    await page.getByRole("tab", { name: /decide the duplicates/i }).click();
+    await page.getByRole("button", { name: /these are not duplicates/i }).click();
+    await page.getByRole("button", { name: /to execute/i }).click();
+    await openSurface(page, "configure");
+    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption(locale);
+    await expect(page.locator("html")).toHaveAttribute("lang", locale);
+
+    // The window can be shrunk on any stage, so each is reached wide and then
+    // narrowed (below 768 px the stepper intentionally shows only the current stage).
+    const stages = ["sources", "configure", "review", "execute"];
+    const visited: string[] = [];
+    for (const stage of stages) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const step = page.locator(`[data-stage-id="${stage}"]`);
+      await expect(step, `${stage} is reachable`).toBeEnabled();
+      await step.click();
+      await expect(step).toHaveAttribute("aria-current", "step");
+      visited.push(stage);
+      await page.setViewportSize({ width: 640, height: 480 });
+      const overflow = await page.locator("main").evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `${stage} overflows horizontally`).toBeLessThanOrEqual(1);
+      const pageOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(pageOverflow, `${stage} scrolls the page sideways`).toBeLessThanOrEqual(1);
+      const mainHeight = (await page.locator("main").boundingBox())?.height ?? 0;
+      expect(mainHeight, `${stage} leaves no room for content`).toBeGreaterThan(160);
+    }
+    expect(visited).toEqual(stages);
+  });
+}

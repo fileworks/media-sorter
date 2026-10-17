@@ -264,8 +264,19 @@ def test_truncation_measures_bytes_not_characters(tmp_path: Path) -> None:
     path = tmp_path / "multibyte.journal.jsonl"
     complete = '{"record":"entry","note":"Grüße 🌍"}\n'
     torn = '{"record":"entry","note":"Ausseng'
-    path.write_text(complete + torn, encoding="utf-8")
+    path.write_text(complete + torn, encoding="utf-8", newline="\n")
 
     _truncate_to_last_complete_record(path)
 
     assert path.read_bytes() == complete.encode("utf-8")
+
+
+def test_journal_records_end_in_lf_on_every_platform(tmp_path: Path) -> None:
+    """MS-09: the journal format is byte-identical across operating systems."""
+    with DurableActionJournal.open(tmp_path, _manifest()) as journal:
+        journal.record("action-1", "staged", source_safety="source_retained")
+
+    [path] = list_journals(tmp_path)
+    raw = path.read_bytes()
+    assert raw.count(b"\n") >= 2
+    assert b"\r" not in raw

@@ -139,33 +139,28 @@ jobs:
           uv pip install --system -r requirements.ci.txt
           uv pip install --system -e . --no-deps
 
-      # `test_root_identity.py` was absent from this list while three of its
-      # contracts are `skipif(os.name != "nt")` — so they were skipped on every
-      # runner and executed on none. A skip is never a pass (`P2-TEST-002`).
-      # `test_catalog.py` holds the future-schema preflight contract: the
-      # catalog must refuse a newer `user_version` *before* a writable open,
-      # leaving the database and any pre-existing `-wal`/`-shm`/hot-journal
-      # sibling byte- and stat-identical. That guarantee is filesystem
-      # behaviour, so proving it on macOS and Linux says nothing about NTFS.
-      # `test_filesystem_capabilities.py` and `test_integrity_contracts.py`
-      # cover the timestamp granularity and metadata preservation that go
-      # through Windows' own `SetFileTime` rather than POSIX `utime`.
-      - name: Run Windows identity and provider tests
+      # The whole suite runs on Windows. An allowlist let Windows-only
+      # contracts (`skipif(os.name != "nt")`) skip on every runner and let the
+      # rest of the suite drift on NTFS unnoticed; a skip is never a pass
+      # (`P2-TEST-002`). Tests that need a host capability (symlinks,
+      # chmod-based unreadability, POSIX mode bits, long paths) skip with that
+      # capability named, and `test_capability_guards.py` fails if a POSIX
+      # host would skip them. GitHub's Windows runners can create symlinks, so
+      # those proofs run here too. The job keeps its protected check name.
+      # The video-signature and grouping suites decode real clips. Use the same
+      # pinned, SHA-256-verified ffmpeg the Windows package bundles rather than
+      # whatever a package manager currently serves.
+      - name: Provide the pinned ffmpeg
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python scripts/fetch_ffmpeg.py --dest "$RUNNER_TEMP/ffmpeg"
+          echo "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
+
+      - name: Run the full backend suite on Windows
         working-directory: backend
-        run: >-
-          python -m pytest
-          tests/test_utils/test_path_utils.py
-          tests/test_services/test_hardware.py
-          tests/test_root_identity.py
-          tests/test_catalog.py
-          tests/test_filesystem_capabilities.py
-          tests/test_integrity_contracts.py
-          tests/test_verified_transfer.py
-          tests/test_source_removal_races.py
-          tests/test_plan_store.py
-          tests/test_quarantine_removal.py
-          tests/test_windows_packaged_startup.py
-          -v
+        run: python -m pytest -q -ra
 
   backend-macos:
     name: Backend — macOS transfer and path semantics
@@ -469,7 +464,8 @@ jobs:
           licenses="frontend/src-tauri/target/release/bundle/macos/MediaSorter.app/Contents/Resources/resources/licenses"
           test -s "$licenses/COPYING.GPLv3"
           test -s "$licenses/FFMPEG-LICENSE-AND-SOURCE-OFFER.md"
-          echo "GPL licence and written offer are present in the bundle"
+          test -s "$licenses/THIRD-PARTY-DATA.md"
+          echo "GPL licence, written offer and data attributions are present in the bundle"
 
   native:
     name: native

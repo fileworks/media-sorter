@@ -34,6 +34,7 @@ from app.core.sort_plan import (
     FrozenSortImpact,
     FrozenSortPlan,
     ReviewedSet,
+    ReviewedTags,
     destination_fingerprint,
     source_fingerprint,
 )
@@ -111,6 +112,9 @@ class StartSortRequest(TaskStartRequest):
     #: around. Replaces `reviewed_keepers`, which could name a winner but not
     #: the losers whose planned actions have to change with it.
     reviewed_sets: list[ReviewedSet] = Field(default_factory=list)
+    #: Content tags Review settled on, per file. Replaces the proposal for that
+    #: file in this run only; the stored plan keeps what preview proposed.
+    reviewed_tags: list[ReviewedTags] = Field(default_factory=list, max_length=100_000)
 
 
 class PlanImpactRequest(TaskStartRequest):
@@ -164,6 +168,8 @@ class PlanReviewState(BaseModel):
     viewer_path: str | None = Field(default=None, max_length=4096)
     search: str = Field(max_length=4096)
     tree_path: str | None = Field(default=None, max_length=4096)
+    #: Content-tag edits, kept with the plan so a restart does not lose them.
+    tag_edits: list[ReviewedTags] = Field(default_factory=list, max_length=100_000)
     view: Literal["list", "grid"]
     sort: Literal["name", "size", "date"]
     keep_policy: Literal[
@@ -455,6 +461,14 @@ async def start_sorting(
                 request.reviewed_sets,
                 source_root=scope.config.source_directory,
             )
+        if request.reviewed_tags:
+            try:
+                frozen_plan = frozen_plan.with_reviewed_tags(request.reviewed_tags)
+            except ValueError as exc:
+                raise ConflictError(
+                    "Review's tag changes do not match this plan; generate preview again.",
+                    details={"reason": "invalid_reviewed_tags", "plan_id": request.plan_id},
+                ) from exc
         # C-07: `quarantine.preflight()` existed but nothing called it, so a run
         # whose destination could not hold it started anyway and failed part-way
         # through — the worst moment to discover it, because half the library

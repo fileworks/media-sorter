@@ -1,9 +1,16 @@
 //! Own the child from creation through shutdown, including an unfinished startup.
 use std::process::ExitStatus;
 use std::sync::{Condvar, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::{ApiSession, OwnedBackend, StartupError, StartupStage};
+
+/// The longest the UI waits for the engine before it reports a startup failure.
+///
+/// Generous on purpose: the first launch after an update can be slowed by
+/// security software scanning the unpacked engine. A stuck startup still ends
+/// with a visible, logged failure instead of a window that waits forever.
+pub(super) const SESSION_DEADLINE: Duration = Duration::from_secs(240);
 
 #[derive(Default)]
 struct Inner {
@@ -72,10 +79,30 @@ impl BackendStartup {
             .child
             .take();
         if let Some(mut child) = child {
-            super::write_log("INFO", "Shutting down backend process");
-            child.stop();
-            super::write_log("INFO", "Backend process stopped");
+            super::lifecycle::stage("backend_stop", &format!("pid={}", child.id()));
+            let report = child.stop();
+            let level = if report.exit == "still_running" || report.forced.contains("failed") {
+                "WARN"
+            } else {
+                "INFO"
+            };
+            super::write_log(
+                level,
+                &format!(
+                    "stage=backend_stopped cooperative={} cooperative_ms={} forced=[{}] exit={}",
+                    report.cooperative, report.cooperative_ms, report.forced, report.exit
+                ),
+            );
         }
+    }
+
+    /// Recent engine output with *secret* redacted, for failure reports.
+    pub(super) fn output_tail(&self, secret: &str) -> Option<String> {
+        let inner = self.inner.lock().expect("backend startup mutex");
+        inner
+            .child
+            .as_ref()
+            .map(|child| child.output().text(secret))
     }
 
     pub(super) fn finish(&self, session: Result<ApiSession, StartupError>) {
@@ -87,12 +114,31 @@ impl BackendStartup {
     }
 
     pub(super) fn session(&self) -> Result<ApiSession, StartupError> {
+        self.session_within(SESSION_DEADLINE)
+    }
+
+    /// Wait for the startup result, but never longer than *deadline*.
+    pub(super) fn session_within(&self, deadline: Duration) -> Result<ApiSession, StartupError> {
+        let give_up = Instant::now() + deadline;
         let mut inner = self.inner.lock().expect("backend startup mutex");
         loop {
             if let Some(session) = &inner.session {
                 return session.clone();
             }
-            inner = self.changed.wait(inner).expect("backend startup mutex");
+            let remaining = give_up.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(StartupError::new(
+                    StartupStage::Readiness,
+                    "The MediaSorter engine did not finish starting in time.",
+                    format!("session_deadline_s={}", deadline.as_secs()),
+                    super::log_dir().join("mediasort.log"),
+                ));
+            }
+            inner = self
+                .changed
+                .wait_timeout(inner, remaining)
+                .expect("backend startup mutex")
+                .0;
         }
     }
 
@@ -164,6 +210,18 @@ mod tests {
     }
 
     #[test]
+    fn a_startup_that_never_finishes_ends_at_the_deadline() {
+        let state = BackendStartup::default();
+        let started = std::time::Instant::now();
+        let error = state
+            .session_within(Duration::from_millis(100))
+            .expect_err("no result was published");
+        assert!(started.elapsed() >= Duration::from_millis(100));
+        assert_eq!(error.stage, StartupStage::Readiness);
+        assert!(error.detail.contains("session_deadline_s"));
+    }
+
+    #[test]
     fn startup_failure_is_delivered_to_pending_ipc() {
         let state = BackendStartup::default();
         let error = StartupError::new(
@@ -206,6 +264,48 @@ mod tests {
         state.close();
         assert!(state.inner.lock().expect("mutex").child.is_none());
         assert!(state.session().is_err());
+    }
+
+    #[test]
+    fn early_backend_output_is_kept_and_redacted() {
+        let state = BackendStartup::default();
+        let mut command =
+            std::process::Command::new(std::env::current_exe().expect("test executable"));
+        command.args([
+            "--exact",
+            "backend_state::tests::boot_failure_fixture",
+            "--ignored",
+            "--nocapture",
+        ]);
+        state
+            .spawn(|| {
+                super::super::spawn_with_startup_error(
+                    &mut command,
+                    "fixture",
+                    "fixture".into(),
+                    std::path::Path::new("/tmp/log"),
+                )
+            })
+            .expect("spawn fixture");
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        let mut tail = String::new();
+        while std::time::Instant::now() < deadline {
+            tail = state.output_tail("s3cret-capability").unwrap_or_default();
+            if tail.contains("boot-failure-marker") && matches!(state.probe(), Ok(Some(_))) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        state.close();
+        assert!(tail.contains("boot-failure-marker"), "tail was: {tail}");
+        assert!(tail.contains("[REDACTED]"));
+        assert!(!tail.contains("s3cret-capability"));
+    }
+
+    #[test]
+    #[ignore = "only launched as the controlled child of early_backend_output_is_kept_and_redacted"]
+    fn boot_failure_fixture() {
+        eprintln!("boot-failure-marker before logging starts token=s3cret-capability");
     }
 
     #[test]

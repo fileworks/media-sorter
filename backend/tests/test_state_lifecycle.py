@@ -28,6 +28,7 @@ from app.core.paths import (
     resolve_legacy_paths,
 )
 from app.core.state_migration import StateMigrationError, migrate_legacy_state
+from tests.capabilities import requires_symlinks
 
 
 class FakeDirs:
@@ -162,6 +163,7 @@ def test_historical_paths_preserve_lowercase_identity_and_split_logs() -> None:
     assert paths.log_dir == Path("/legacy/data/mediasort/logs")
 
 
+@requires_symlinks
 def test_same_path_detection_handles_aliases_and_case_folding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -320,6 +320,28 @@ class TestTheRewrittenPlanDescribesTheRun:
         assert actions["b.jpg"].destination_path == run["b.jpg"][1]
         assert actions["a.jpg"].destination_path == run["a.jpg"][1]
 
+    def test_a_promoted_copy_carries_its_own_reviewed_tag_proposal(
+        self, tmp_path: Path, two_copies: tuple[Path, Path]
+    ) -> None:
+        # Review hides the tag editor on a set-aside copy (F1-005); the
+        # proposal must therefore survive until Review makes that copy the keeper.
+        first, second = two_copies
+        config = _config(tmp_path)
+        service = _service(config)
+        items = _preview(service, config, tmp_path, [first, second])
+        items[0]["ai_tags"] = ["first"]
+        items[1]["ai_tags"] = ["second"]
+        plan = build_frozen_sort_plan(items, config)
+
+        derived = plan.with_reviewed_sets(
+            [ReviewedSet(keep=str(second), demote=(str(first),))],
+            source_root=config.source_directory,
+        )
+        actions = {Path(a.source_path).name: a for a in derived.actions}
+
+        assert actions["b.jpg"].disposition == "sort"
+        assert actions["b.jpg"].ai_tags == ("second",)
+
     def test_the_guard_authorizes_the_swapped_actions(
         self, tmp_path: Path, two_copies: tuple[Path, Path]
     ) -> None:

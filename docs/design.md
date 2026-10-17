@@ -165,16 +165,18 @@ gymnastics.
 Two decisions are worth knowing because the code alone does not explain them:
 
 - **Independent probabilities, not softmax.** Each label scores
-  `sigmoid(slope · (cos(label) − cos(background)))`. A competing softmax would
-  make co-occurring tags cannibalise each other's probability budget.
-- **Emitted labels are separate from model prompts.** CLIP may keep English
-  prompts for bundled concepts where that measurably helps, while emitting German
-  labels; SigLIP uses per-locale templates. Custom labels are always verbatim.
+  `sigmoid(slope · (cos(label) − cos(background) − offset))`, with a per-language
+  offset calibrated on held-out fixtures. A competing softmax would make
+  co-occurring tags cannibalise each other's probability budget.
+- **Emitted labels are separate from model prompts.** Tags are scored with
+  per-locale templates; bundled categories are scored with their English concept
+  prompts, which measurably helped German users, while folders keep the interface
+  language. Custom labels are always verbatim.
   Model failures yield no tags with a warning rather than failing the sort.
 
 ## Smart Categorization
 
-The same CLIP model, a different job: `categorize_enabled` decides *where a file lands*
+The same SigLIP model, a different job: `categorize_enabled` decides *where a file lands*
 (`…/Y/M/D/<category>/`), where tagging decides what it is *called*. They share the
 embedder so the model loads once, and are configured, conditioned and tested
 independently.
@@ -183,14 +185,15 @@ independently.
 |---|---|---|
 | Writes | descriptive metadata | nothing — it picks a folder |
 | Moves files | never | yes, it is a placement decision |
-| Runs in preview | no | **yes** — a dry run must show the predicted folder |
+| Runs in preview | **yes** — Review shows and edits the tags a run writes | **yes** — a dry run must show the predicted folder |
 
-**Confidence gating** keeps bad classifications out. A file is filed only when it
-clears an anchor-relative cosine floor *and* both halves of a dual gate: top-1
-probability ≥ `categorize_confidence_threshold` (0.55) and a minimum margin over second
-place. Everything else goes to `_uncategorized/` — correctly dated and sorted, just not
-topic-binned. The softmax temperature is ≈40, deliberately *not* the shared CLIP logit
-scale of 100, so the gate means something instead of sitting pinned near 1.0.
+**Confidence gating** keeps bad classifications out. Each category scores its best
+prompt; a file is filed only when the winner reaches the encoder's absolute cosine
+floor *and* both halves of a dual gate: top-1 probability ≥
+`categorize_confidence_threshold` (0.55) and a minimum margin over second place, with
+the softmax on SigLIP's own logit scale. Everything else goes to `_uncategorized/` —
+correctly dated and sorted, just not topic-binned. The calibration and its held-out
+numbers live in [local AI evaluation](local-ai-evaluation.md#held-out-evaluation--2026-10-12).
 
 Mutually exclusive with `preserve_subfolders` — both impose structure under the date
 folder. The UI disables whichever conflicts and the backend encodes the precedence, so a

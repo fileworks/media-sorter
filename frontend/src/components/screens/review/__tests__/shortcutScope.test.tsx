@@ -38,6 +38,7 @@ function row(id: string, source: string, index: number, size: number): ReviewRow
     dateSource: "none",
     category: null,
     tags: [],
+    aiTags: null,
     unitId: null,
     unitPrimary: true,
     companionCount: 0,

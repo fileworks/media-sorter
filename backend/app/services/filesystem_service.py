@@ -206,7 +206,9 @@ def open_image(path: Path) -> Iterator[Image | None]:
     - Everything else: PIL.Image.open.
 
     Always use as a context manager. The yielded image is closed on exit.
-    Never raises — yields None on failure and logs at debug.
+    Opening never raises — an unreadable file yields None and logs at debug.
+    An exception raised by the code inside the ``with`` block is the caller's
+    and propagates unchanged (cancellation included).
     """
     suffix = path.suffix.lower()
     img: Image | None = None
@@ -222,10 +224,11 @@ def open_image(path: Path) -> Iterator[Image | None]:
             from PIL import Image
 
             img = Image.open(path)
-        yield img
     except Exception as exc:
         logger.debug("open_image failed", path=str(path), error=str(exc))
-        yield None
+        img = None
+    try:
+        yield img
     finally:
         if img is not None:
             with contextlib.suppress(Exception):

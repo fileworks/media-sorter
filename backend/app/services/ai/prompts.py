@@ -1,7 +1,7 @@
-"""Shared CLIP prompt construction for AI tagging and Smart Categorization.
+"""Shared prompt construction for AI tagging and Smart Categorization.
 
-Zero-shot CLIP separates classes far better when each class is represented by an
-*ensemble* of prompt templates averaged together (CLIP's standard zero-shot
+Zero-shot image-text models separate classes far better when each class is represented by an
+*ensemble* of prompt templates averaged together (the standard zero-shot
 trick), and — for categorisation — when well-known but visually-distinctive
 topics carry a short descriptive phrase rather than a bare folder name. These
 helpers centralise that prompt-building so the tagger and the categoriser stay
@@ -60,12 +60,12 @@ GERMAN_ANCHOR_PROMPTS: tuple[str, ...] = (
 )
 
 # Short descriptions for visually-distinctive topics whose bare folder name is a
-# weak CLIP prompt. The *folder* keeps the user's chosen name; only the CLIP
+# weak prompt. The *folder* keeps the user's chosen name; only the model
 # prompt is enriched. Keyed by the lower-cased category name.
 #
 # Coverage spans both the Smart-Categorization defaults *and* the default AI
 # tagging vocabulary, so the same label gets a sharper, less ambiguous prompt in
-# either feature. Each description names the concrete subject CLIP separates best
+# either feature. Each description names the concrete subject the model separates best
 # on (a "sandy beach by the sea" beats a bare "beach").
 DESCRIPTIONS: dict[str, str] = {
     # ── Document/screen types ──────────────────────────────────────────────────

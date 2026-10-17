@@ -151,7 +151,7 @@ const TONE_CLASSES: Record<StatusTone | "neutral", string> = {
 
 function outcomeChipClass(outcome: OperationOutcome): string {
   if (outcome === "unknown") return TONE_CLASSES.neutral;
-  return TONE_CLASSES[presentOutcome(outcome, 0).tone];
+  return TONE_CLASSES[presentOutcome(outcome).tone];
 }
 
 export function HistoryPanel() {

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
+import pytest
 from PIL import Image
 
 from app.background_tasks.task_manager import Task
@@ -383,3 +384,127 @@ class TestPreviewParity:
             else:
                 assert item["destination"] is not None
                 assert Path(item["destination"]).is_file(), item
+
+
+# ------------------------------------------------------------------ #
+# AI-05 — Review sees the tags a run writes, and nothing else          #
+# ------------------------------------------------------------------ #
+
+
+class _ProposingTagger:
+    """Stand-in for the local tagger: fixed proposals, and a count of calls."""
+
+    def __init__(self, tags: list[str]) -> None:
+        self.tags = tags
+        self.calls: list[Path] = []
+
+    def for_operation(self, _config: Config) -> _ProposingTagger:
+        return self
+
+    def tag_file(self, path: Path, should_stop: Any = None) -> list[str]:
+        self.calls.append(path)
+        return list(self.tags)
+
+
+class TestReviewedTags:
+    def _preview(self, tmp_path: Path, **overrides: Any) -> tuple[Config, PreviewService, Any]:
+        cfg = _config(tmp_path, ai_tagging_enabled=True, **overrides)
+        _photo(tmp_path / "source" / "2024-05-05_beach.jpg", seed=7)
+        previewer = _preview_service()
+        previewer._ai = cast(Any, _ProposingTagger(["beach", "sea"]))
+        return cfg, previewer, asyncio.run(previewer.preview(cfg))
+
+    def test_preview_proposes_tags_and_the_plan_freezes_them(self, tmp_path: Path) -> None:
+        _cfg, previewer, preview = self._preview(tmp_path)
+
+        assert preview["items"][0]["ai_tags"] == ["beach", "sea"]
+        plan = previewer.frozen_plan(preview["plan_id"])
+        assert plan is not None
+        assert plan.actions[0].ai_tags == ("beach", "sea")
+
+    def test_without_tagging_nothing_is_proposed(self, tmp_path: Path) -> None:
+        cfg = _config(tmp_path)
+        _photo(tmp_path / "source" / "2024-05-05_beach.jpg", seed=7)
+        previewer = _preview_service()
+        tagger = _ProposingTagger(["beach"])
+        previewer._ai = cast(Any, tagger)
+
+        preview = asyncio.run(previewer.preview(cfg))
+
+        assert preview["items"][0]["ai_tags"] is None
+        assert tagger.calls == []
+
+    def test_a_run_writes_the_reviewed_tags_without_running_the_model(self, tmp_path: Path) -> None:
+        from app.core.sort_plan import ReviewedTags
+
+        cfg, previewer, preview = self._preview(tmp_path)
+        plan = previewer.frozen_plan(preview["plan_id"])
+        assert plan is not None
+        source = preview["items"][0]["source"]
+        plan = plan.with_reviewed_tags([ReviewedTags(source=source, tags=("Beach", " sunset "))])
+        sorter = _service(cfg)
+        execution_tagger = _ProposingTagger(["unreviewed"])
+        sorter._ai = cast(Any, execution_tagger)
+        written: list[list[str]] = []
+        original = sorter._write_derived_tags
+
+        def capture(dest: Path, tags: list[str], **kwargs: Any) -> str:
+            written.append(list(tags))
+            return original(dest, tags, **kwargs)
+
+        with patch.object(sorter, "_write_derived_tags", side_effect=capture):
+            asyncio.run(sorter.run(cast("Task", _FakeTask()), dry_run=False, frozen_plan=plan))
+
+        assert execution_tagger.calls == []
+        assert written == [["Beach", "sunset"]]
+
+
+class TestReviewedTagEdits:
+    def _plan(self, tmp_path: Path) -> Any:
+        cfg = _config(tmp_path, ai_tagging_enabled=True)
+        _photo(tmp_path / "source" / "2024-05-05_beach.jpg", seed=7)
+        previewer = _preview_service()
+        previewer._ai = cast(Any, _ProposingTagger(["beach"]))
+        preview = asyncio.run(previewer.preview(cfg))
+        return previewer.frozen_plan(preview["plan_id"]), preview["items"][0]["source"]
+
+    def test_edits_are_cleaned_and_never_change_the_stored_plan(self, tmp_path: Path) -> None:
+        from app.core.sort_plan import ReviewedTags
+
+        plan, source = self._plan(tmp_path)
+        edited = plan.with_reviewed_tags(
+            [ReviewedTags(source=source, tags=("  Lake ", "lake", "", "Mountains  high"))]
+        )
+
+        assert edited.actions[0].ai_tags == ("Lake", "Mountains high")
+        assert plan.actions[0].ai_tags == ("beach",)
+
+    def test_removing_every_tag_is_a_valid_review(self, tmp_path: Path) -> None:
+        from app.core.sort_plan import ReviewedTags
+
+        plan, source = self._plan(tmp_path)
+
+        assert plan.with_reviewed_tags([ReviewedTags(source=source)]).actions[0].ai_tags == ()
+
+    @pytest.mark.parametrize(
+        "edits",
+        [
+            [("elsewhere.jpg", ("x",))],
+            [("SOURCE", ("a",)), ("SOURCE", ("b",))],
+            [("SOURCE", ("bad\x07tag",))],
+            [("SOURCE", ("x" * 101,))],
+        ],
+    )
+    def test_edits_that_do_not_fit_the_plan_are_refused(
+        self, tmp_path: Path, edits: list[tuple[str, tuple[str, ...]]]
+    ) -> None:
+        from app.core.sort_plan import ReviewedTags
+
+        plan, source = self._plan(tmp_path)
+        reviewed = [
+            ReviewedTags(source=source if name == "SOURCE" else name, tags=tags)
+            for name, tags in edits
+        ]
+
+        with pytest.raises(ValueError):
+            plan.with_reviewed_tags(reviewed)

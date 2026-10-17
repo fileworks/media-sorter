@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import os
 import tempfile
@@ -22,13 +21,14 @@ from app.core.exceptions import IntegrityTransferError, PlanAuthorizationError
 from app.core.integrity_policy import authorize_config_mutations
 from app.core.library_validation import validate_configured_library
 from app.core.logging_config import get_logger
-from app.core.media_units import CompanionRole, MediaUnit
+from app.core.media_units import MediaUnit
 from app.core.paths import path_identity_key, resolve_app_paths
 from app.core.rules import normalized_key
 from app.core.run_scope import apply_run_scope
 from app.core.sort_plan import FrozenSortPlan, destination_fingerprint
 from app.services.ai.ai_tagging_service import AITaggingService
 from app.services.ai.category_classifier_service import CategoryClassifierService, CategoryResult
+from app.services.ai.video_sampling import InferenceCancelled, stop_check
 from app.services.config_service import ConfigService
 from app.services.conversion_guard import MediaClass
 from app.services.conversion_publication import (
@@ -75,6 +75,8 @@ from app.services.rule_engine_service import RuleEngineService
 from app.services.sorting_support import (
     SortingSupportMixin,
     operation_outcome,
+    planned_category,
+    reviewed_ai_tags,
     root_identifier,
 )
 from app.services.transfer_failures import (
@@ -509,6 +511,13 @@ class SortingService(SortingSupportMixin):
             if frozen_plan is not None
             else {}
         )
+        # Files the preview could not resolve as duplicate or not stay in place:
+        # the plan holds no reviewed destination for them (MS-01).
+        unresolved_sources: set[str] = (
+            {path_identity_key(source) for source in frozen_plan.unresolved_sources}
+            if frozen_plan is not None
+            else set()
+        )
         bytes_done = 0
         # Snapshot locale-sensitive dependencies. A config update can replace
         # the container's live services while this coroutine is running; these
@@ -568,6 +577,7 @@ class SortingService(SortingSupportMixin):
                 cancel_signal=cancel_signal,
                 execution=execution,
                 force_distinct=str(units[idx].primary) in distinct_sources,
+                left_unresolved=path_identity_key(str(units[idx].primary)) in unresolved_sources,
             )
             record = unit_records[0]
             if record["status"] == "cancelled":
@@ -709,8 +719,13 @@ class SortingService(SortingSupportMixin):
         cancel_signal: Any,
         execution: OperationExecution | None,
         force_distinct: bool = False,
+        left_unresolved: bool = False,
     ) -> list[dict[str, Any]]:
         """Process a primary first, then place its companions beside the result."""
+        if left_unresolved:
+            # The reviewed plan promised no destination for this unit, so the
+            # run must not invent one. Nothing is read, written or moved.
+            return self._unresolved_unit_records(unit, operation_id, config, source_root)
         if planned_destinations is None:
             planned_destinations = {}
         primary = self._process_file(
@@ -828,50 +843,6 @@ class SortingService(SortingSupportMixin):
                 can_place = False
                 continue
         return records
-
-    def _new_companion_record(
-        self,
-        path: Path,
-        role: CompanionRole | None,
-        unit: MediaUnit,
-        operation_id: str,
-        config: Config,
-        source_root: Path,
-    ) -> dict[str, Any]:
-        extracted_date: str | None = None
-        with contextlib.suppress(Exception):
-            detail = self._extraction.extract_detailed(path, check_suspicious=False)
-            if detail.extracted_date is not None:
-                extracted_date = str(detail.extracted_date)
-        return {
-            "id": str(uuid.uuid4()),
-            "operation_id": operation_id,
-            "source_path": str(path),
-            "dest_path": None,
-            "extracted_date": extracted_date,
-            "metadata_source": "report_only",
-            "action": "copy" if config.copy_instead_of_move else "move",
-            "status": "failed",
-            "error_message": None,
-            "file_size": self._safe_stat(path),
-            "file_type": path.suffix.lower(),
-            "tags": [],
-            "category": None,
-            "camera_model": None,
-            "duplicate_type": None,
-            "duplicate_similarity": None,
-            "duplicate_of": None,
-            "suspicious": False,
-            "unit_id": unit.unit_id,
-            "companion_role": role,
-            "unit_primary_path": str(unit.primary),
-            "content_sha256": None,
-            "commit_method": None,
-            "source_safety": "source_retained",
-            "preservation_warnings": [],
-            "source_root": str(source_root),
-            "would_be_destination": None,
-        }
 
     def _process_file(
         self,
@@ -1078,7 +1049,9 @@ class SortingService(SortingSupportMixin):
                     )
                 else:
                     if config.categorize_enabled and classifier is not None:
-                        duplicate_category_result = classifier.classify_file(file_path)
+                        duplicate_category_result = planned_category(
+                            execution, file_path, own=True
+                        ) or classifier.classify_file(file_path, stop_check(cancel_signal))
                         duplicate_category = duplicate_category_result.category
                     if config.camera_subfolder_enabled:
                         duplicate_camera = sanitize_path_segment(
@@ -1306,11 +1279,13 @@ class SortingService(SortingSupportMixin):
 
             # Smart Categorization: classify the SOURCE file (it hasn't moved
             # yet) into a topic folder before building the destination. Runs in
-            # this worker thread, so CLIP inference never blocks the event loop.
+            # this worker thread, so model inference never blocks the event loop.
             category: str | None = None
             category_result = CategoryResult(None, 0.0, 0.0)
             if config.categorize_enabled and classifier is not None:
-                category_result = classifier.classify_file(file_path)
+                category_result = planned_category(
+                    execution, file_path
+                ) or classifier.classify_file(file_path, stop_check(cancel_signal))
                 category = category_result.category
             record["category"] = category
 
@@ -1479,11 +1454,16 @@ class SortingService(SortingSupportMixin):
                 # them into the file itself (EXIF / video metadata / XMP sidecar).
                 # Runs before the utime sync (a metadata rewrite changes mtime)
                 # and before validation (so a bad write is still caught).
-                if config.ai_tagging_enabled and ai is not None:
+                reviewed_tags = reviewed_ai_tags(execution, file_path)
+                if reviewed_tags is not None:
+                    record["tags"] = _merge_tags([*record["tags"], *reviewed_tags])
+                elif config.ai_tagging_enabled and ai is not None:
                     try:
-                        ai_tags = ai.tag_file(dest)
+                        ai_tags = ai.tag_file(dest, stop_check(cancel_signal))
                         if ai_tags:
                             record["tags"] = _merge_tags([*record["tags"], *ai_tags])
+                    except InferenceCancelled:
+                        logger.info("AI tagging skipped after cancellation", path=str(dest))
                     except Exception as exc:
                         logger.warning("AI tagging step failed", path=str(dest), error=str(exc))
                 record["tags_written"] = self._write_derived_tags(
@@ -1537,7 +1517,7 @@ class SortingService(SortingSupportMixin):
             # failure evidence (the `suspicious` fields keep the reason).
             record.update(status="success", dest_path=str(dest), error_message=None)
 
-        except DuplicateCheckCancelled:
+        except (DuplicateCheckCancelled, InferenceCancelled):
             record["status"] = "cancelled"
             return record
         except PlanAuthorizationError as exc:

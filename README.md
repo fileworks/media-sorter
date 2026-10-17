@@ -110,7 +110,7 @@ failures that happen later. The complete contract is in
 | Duplicate review | SHA-256 exact matches, perceptual image/video groups, keyboard Resolve queue, and side-by-side comparison |
 | Companion media | One placement, rename, collision, and duplicate outcome per media unit |
 | Rules | Typed tagging and safe relative routing with previewed effects |
-| Local AI | Optional checksum-pinned CLIP/SigLIP model packs for offline tagging and categorization |
+| Local AI | An optional checksum-pinned SigLIP 2 model pack for offline tagging and categorization |
 | Reporting | Live progress, SQLite history, detailed provenance, and CSV/JSON export |
 | Recovery | Startup reconciliation, support bundles, and explicit operator decisions for uncertain outcomes |
 | Languages | Complete English and German interfaces |
@@ -185,8 +185,8 @@ instructions belong in ignored `CLAUDE.local.md`.
   root is readable. Unreachable roots now produce a blocking explanation.
 - **The window stays blank:** inspect the platform log directory; a static
   splash should appear before React starts.
-- **Windows local AI misses the GPU:** diagnostics must list
-  `DmlExecutionProvider`.
+- **Local AI is slow on Windows:** the Windows build runs local AI on the CPU;
+  it ships no GPU (DirectML) runtime. Keep the batch small or switch AI off.
 - **A previous operation needs review:** resolve the startup recovery card.
   Nothing is deleted while its outcome is uncertain.
 

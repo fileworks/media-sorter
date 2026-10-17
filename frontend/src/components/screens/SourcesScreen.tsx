@@ -29,7 +29,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/I18nContext";
 import { formatBytes } from "@/lib/formatters";
-import { cn } from "@/lib/utils";
+import { copyPath, revealPath } from "@/lib/reveal";
+import { cn, isTauri } from "@/lib/utils";
 import {
   ROLE_DESCRIPTION,
   ROLE_LABEL,
@@ -201,14 +202,11 @@ function FolderCard({
   const ownConflict = conflicts.find((conflict) => conflict.rootIds.includes(card.rootId));
   const offline = card.state === "offline" || card.state === "unreadable";
 
-  const copyPath = async () => {
-    try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(card.path);
+  const copyCardPath = async () => {
+    // Copying a path is a convenience; failing at it is not worth a toast.
+    if (await copyPath(card.path)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Copying a path is a convenience; failing at it is not worth a toast.
     }
   };
 
@@ -313,9 +311,16 @@ function FolderCard({
           )}
           <IconButton
             label={copied ? t("sources.pathCopied") : t("sources.copyPath")}
-            onClick={() => void copyPath()}
+            onClick={() => void copyCardPath()}
             icon={copied ? FiCheck : FiClipboard}
           />
+          {isTauri && !offline && (
+            <IconButton
+              label={t("sources.showInFolder")}
+              onClick={() => void revealPath(card.path)}
+              icon={FiFolder}
+            />
+          )}
           {onToggleExcluded && (
             <IconButton
               label={t(excluded ? "sources.includeNextRun" : "sources.skipRun")}

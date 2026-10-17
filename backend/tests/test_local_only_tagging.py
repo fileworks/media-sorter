@@ -76,7 +76,7 @@ class TestNoCloudTaggerExists:
             and obj is not base_tagger.AITagger
             and not getattr(obj, "__abstractmethods__", None)
         }
-        assert concrete == {"LocalClipTagger"}
+        assert concrete == {"ZeroShotTagger"}
 
     def test_tagger_module_has_no_http_client(self) -> None:
         assert not (_imported_roots(Path(base_tagger.__file__)) & _NETWORK_MODULES)

@@ -8,12 +8,15 @@ no model download or onnxruntime is required.
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from app.services.ai import siglip_encoder
 from app.services.ai.siglip_encoder import SiglipOnnxEncoder
 
 
@@ -75,7 +78,7 @@ def _make_encoder(
     text = _FakeSession(
         inputs=text_inputs or ["input_ids"],
         outputs=["last_hidden_state", "pooler_output"],
-        emit=text_emit or (lambda feeds: np.ones((2, 4), dtype=np.float32)),
+        emit=text_emit or (lambda feeds: np.ones((len(feeds["input_ids"]), 4), dtype=np.float32)),
     )
     tok = _FakeTokenizer()
     enc = SiglipOnnxEncoder(vision_session=vision, text_session=text, tokenizer=tok)
@@ -90,9 +93,14 @@ def test_available_with_injected_components() -> None:
 def test_model_id_and_calibration_constants() -> None:
     enc, *_ = _make_encoder()
     assert enc.model_id == "siglip2-base-patch16-256"
-    # SigLIP-specific calibration (distinct from CLIP's 100/40).
+    # Calibration evaluated on held-out public fixtures (scripts/evaluate_local_ai.py).
     assert enc.tagger_slope == 40.0
-    assert enc.categorize_scale == 60.0
+    assert enc.tagger_offset("en") == 0.005
+    assert enc.tagger_offset("de") == 0.007
+    # The checkpoint's own logit scale, and the cosine at which its sigmoid
+    # (with the learned bias) reaches 0.0003.
+    assert enc.categorize_scale == pytest.approx(112.90118)
+    assert enc.categorize_floor == pytest.approx(0.0767, abs=1e-4)
 
 
 def test_preprocess_shape_and_normalisation() -> None:
@@ -143,7 +151,7 @@ def test_embed_texts_supplies_attention_mask_when_model_wants_it() -> None:
     assert set(text.last_feeds.keys()) == {"input_ids", "attention_mask"}
 
 
-def test_embed_texts_is_cached_by_input_tuple() -> None:
+def test_embed_texts_is_cached_per_text() -> None:
     calls = {"n": 0}
 
     def emit(feeds: Any) -> Any:
@@ -165,7 +173,7 @@ def test_embed_texts_empty_returns_none() -> None:
 
 def test_load_failure_marks_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     # No injected components and the lazy load raises → available is False and the
-    # failure is sticky (so callers fall back to CLIP without retry storms).
+    # failure is sticky (so callers degrade to no AI without retry storms).
     enc = SiglipOnnxEncoder()
 
     def boom() -> None:
@@ -175,3 +183,160 @@ def test_load_failure_marks_unavailable(monkeypatch: pytest.MonkeyPatch) -> None
     assert enc.available is False
     assert enc.available is False
     assert enc.embed_image(Image.new("RGB", (4, 4))) is None
+
+
+# --------------------------------------------------------------------------- #
+# AI-NEW-1 / AI-NEW-2 / AI-12: load once, bounded cache, single-text encoding #
+# --------------------------------------------------------------------------- #
+
+
+def test_concurrent_first_use_loads_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two threads racing on first use used to enter the loader twice."""
+    enc = SiglipOnnxEncoder()
+    barrier = threading.Barrier(2)
+    calls: list[int] = []
+    vision = _FakeSession(["pixel_values"], ["pooler_output"], lambda _f: np.ones((1, 4)))
+    text = _FakeSession(["input_ids"], ["pooler_output"], lambda _f: np.ones((1, 4)))
+
+    def slow_load() -> None:
+        calls.append(1)
+        time.sleep(0.05)
+        enc._vision_session, enc._text_session, enc._tokenizer = vision, text, _FakeTokenizer()
+
+    monkeypatch.setattr(enc, "_load", slow_load)
+    results: list[bool] = []
+
+    def use() -> None:
+        barrier.wait()
+        results.append(enc.available)
+
+    threads = [threading.Thread(target=use) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert calls == [1]
+    assert results == [True, True]
+
+
+def test_each_text_is_encoded_alone_so_its_vector_ignores_its_neighbours() -> None:
+    """The int8 text tower quantizes per batch; a label must not depend on the others."""
+    batch_sizes: list[int] = []
+
+    def emit(feeds: Any) -> Any:
+        batch_sizes.append(len(feeds["input_ids"]))
+        return np.ones((len(feeds["input_ids"]), 4), dtype=np.float32)
+
+    enc, *_ = _make_encoder(text_emit=emit)
+    out = enc.embed_texts(["a", "b", "c"])
+
+    assert batch_sizes == [1, 1, 1]
+    assert out is not None and out.shape == (3, 4)
+
+
+def test_returned_text_vectors_are_read_only() -> None:
+    enc, *_ = _make_encoder()
+    out = enc.embed_texts(["a", "b"])
+
+    assert out is not None
+    with pytest.raises(ValueError):
+        out[0, 0] = 5.0
+    again = enc.embed_texts(["a"])
+    assert again is not None and float(again[0, 0]) == 1.0
+
+
+def test_the_text_cache_is_bounded_and_keeps_recent_texts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(siglip_encoder, "TEXT_CACHE_ENTRIES", 3)
+    calls: list[str] = []
+
+    def emit(feeds: Any) -> Any:
+        calls.append("run")
+        return np.ones((1, 4), dtype=np.float32)
+
+    enc, *_ = _make_encoder(text_emit=emit)
+    enc.embed_texts(["a", "b", "c"])
+    enc.embed_texts(["a"])  # refresh "a"; "b" is now the oldest
+    enc.embed_texts(["d"])  # evicts "b"
+
+    assert list(enc._text_cache) == ["c", "a", "d"]
+    runs = len(calls)
+    enc.embed_texts(["a", "c", "d"])
+    assert len(calls) == runs
+    enc.embed_texts(["b"])
+    assert len(calls) == runs + 1
+
+
+def test_an_injected_text_session_is_never_released() -> None:
+    enc, _vision, text, _tok = _make_encoder()
+    enc.embed_texts(["a"])
+    enc.release_text_session()
+
+    assert enc._text_session is text
+
+
+def test_a_released_text_tower_reloads_only_for_new_texts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    built: list[str] = []
+    text = _FakeSession(["input_ids"], ["pooler_output"], lambda f: np.ones((1, 4)))
+
+    class _Ort(types.SimpleNamespace):
+        @staticmethod
+        def InferenceSession(path: str, **_kwargs: Any) -> _FakeSession:
+            built.append(path)
+            return text
+
+    monkeypatch.setitem(sys.modules, "onnxruntime", _Ort())
+    monkeypatch.setattr(siglip_encoder, "TEXT_SESSION_IDLE_SECONDS", 0)
+    vision = _FakeSession(["pixel_values"], ["pooler_output"], lambda _f: np.ones((1, 4)))
+    enc = SiglipOnnxEncoder(vision_session=vision, tokenizer=_FakeTokenizer())
+
+    def load() -> None:
+        enc._text_session = text
+        enc._text_model_path = "text_model_quantized.onnx"
+
+    monkeypatch.setattr(enc, "_load", load)
+    enc.embed_texts(["a"])
+    enc.release_text_session()
+    assert enc._text_session is None
+
+    enc.embed_texts(["a"])  # cached: no reload
+    assert built == []
+    enc.embed_texts(["b"])  # miss: the tower comes back
+    assert built == ["text_model_quantized.onnx"]
+
+
+def test_idle_text_tower_is_released_automatically(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(siglip_encoder, "TEXT_SESSION_IDLE_SECONDS", 0.05)
+    text = _FakeSession(["input_ids"], ["pooler_output"], lambda f: np.ones((1, 4)))
+    vision = _FakeSession(["pixel_values"], ["pooler_output"], lambda _f: np.ones((1, 4)))
+    enc = SiglipOnnxEncoder(vision_session=vision, tokenizer=_FakeTokenizer())
+
+    def load() -> None:
+        enc._text_session = text
+        enc._text_model_path = "text_model_quantized.onnx"
+
+    monkeypatch.setattr(enc, "_load", load)
+    enc.embed_texts(["a"])
+    deadline = time.monotonic() + 5
+    while enc._text_session is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert enc._text_session is None
+    assert enc.embed_image(Image.new("RGB", (8, 8))) is not None
+
+
+def test_each_pack_loads_its_own_vision_tower() -> None:
+    from app.services.ai import siglip_encoder as module
+
+    assert module._VISION_FILES["siglip-standard-v2"] == "onnx/vision_model.onnx"
+    assert module._VISION_FILES["siglip-standard-v1"] == "onnx/vision_model_quantized.onnx"
+    assert SiglipOnnxEncoder()._pack_id == "siglip-standard-v2"
+    with pytest.raises(ValueError):
+        SiglipOnnxEncoder(pack_id="unknown-pack")

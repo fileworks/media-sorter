@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 import pytest
@@ -68,7 +68,7 @@ class TestValidators:
         report = run_validation(_context(catalog), enabled=["unreadable"])
 
         failed = [f for f in report.by_category("unreadable") if f.state == "failed"]
-        assert [f.relative_path for f in failed] == ["2019/beach.jpg"]
+        assert [PurePath(str(f.relative_path)) for f in failed] == [PurePath("2019/beach.jpg")]
         assert failed[0].severity == "error"
 
     def test_a_misplaced_file_names_where_it_should_be(self, catalog: MediaCatalog) -> None:
@@ -88,7 +88,10 @@ class TestValidators:
         report = run_validation(_context(catalog), enabled=["missing_sidecar"])
 
         failed = [f for f in report.by_category("missing_sidecar") if f.state == "failed"]
-        assert {f.relative_path for f in failed} == {"2019/holiday.jpg", "2019/holiday (1).jpg"}
+        assert {PurePath(str(f.relative_path)) for f in failed} == {
+            PurePath("2019/holiday.jpg"),
+            PurePath("2019/holiday (1).jpg"),
+        }
 
     def test_a_library_without_sidecars_is_not_missing_any(self, catalog: MediaCatalog) -> None:
         report = run_validation(_context(catalog), enabled=["missing_sidecar"])

@@ -111,6 +111,10 @@ def build_outcome_provenance(
             confidence=category.confidence if config.categorize_enabled else None,
             threshold=config.categorize_confidence_threshold if config.categorize_enabled else None,
             passed=(category.category is not None) if config.categorize_enabled else None,
+            margin=(min(1.0, max(0.0, category.margin)) if config.categorize_enabled else None),
+            min_margin=config.categorize_min_margin if config.categorize_enabled else None,
+            rejection=category.rejection if config.categorize_enabled else None,
+            basis=category.basis if config.categorize_enabled else None,
         ),
         duplicate=DuplicateProvenance(
             evaluated=duplicate_evaluated,

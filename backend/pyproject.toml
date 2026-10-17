@@ -3,7 +3,7 @@ name = "mediasort-backend"
 # Derived from app/_version.py (the single source of truth, bumped by
 # scripts/sync-version.mjs on release) via hatchling's dynamic-version hook below.
 dynamic = ["version"]
-description = "MediaSorter — intelligent media organisation backend"
+description = "MediaSorter — intelligent media organization backend"
 authors = [
     {name = "Niklas Büchel", email = "gykonik@gmail.com"}
 ]
@@ -74,22 +74,17 @@ dev = [
     "pyinstaller>=6.21.0",
 ]
 
-# Local, offline AI tagging (CLIP/SigLIP zero-shot + GPS geocoding). Optional so
-# CI/tests do not pull onnxruntime; release builds freeze
-# the inference runtime but never model weights. Those are installed explicitly
-# from immutable, checksum-covered sources. fastembed provides the CLIP runtime
-# without torch and does not pin pillow/numpy, so it coexists with pillow-heif/rawpy.
-# reverse_geocoder bundles the GeoNames dataset (~26 MB) for offline GPS → city
-# name resolution — no network needed at runtime.
+# Local, offline AI tagging (SigLIP 2 zero-shot tagging). Optional so
+# CI/tests do not pull onnxruntime; release builds freeze the inference runtime
+# but never model weights. Those are installed explicitly from immutable,
+# checksum-covered sources. GPS → place names use the GeoNames extract bundled
+# in app/resources/geo (scripts/build_geonames_extract.py), not a dependency.
 local-ai = [
-    "fastembed>=0.8.0",
-    "reverse_geocoder>=1.5.1",
-    # SigLIP 2 ("standard"/"max" tiers): onnxruntime runs the towers and
-    # tokenizers loads the Gemma tokenizer. huggingface_hub remains an explicit
-    # runtime dependency for fastembed compatibility, but application code
-    # disables its network path and passes only verified local component paths.
+    # onnxruntime runs the SigLIP 2 towers and tokenizers loads the Gemma
+    # tokenizer. huggingface_hub is a tokenizers dependency; application code
+    # never uses its network path and passes only verified local component paths.
     # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
-    # releases on the last universal wheel; fastembed requires 1.24.2+ on 3.14+.
+    # releases on the last universal wheel and use 1.24.2+ on 3.14+.
     "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
     "onnxruntime>=1.24.2; python_version >= '3.14'",
     "tokenizers>=0.15.0",

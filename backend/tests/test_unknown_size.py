@@ -35,6 +35,7 @@ from app.services.metadata_service import MetadataService
 from app.services.repair_service import RepairService
 from app.services.sorting_service import SortingService
 from app.services.sorting_support import SortingSupportMixin
+from tests.capabilities import requires_posix_permissions, requires_symlinks
 
 _safe_stat = SortingSupportMixin._safe_stat
 
@@ -61,12 +62,14 @@ class TestSafeStatSeparatesUnknownFromEmpty:
     def test_a_missing_file_is_unknown(self, tmp_path: Path) -> None:
         assert _safe_stat(tmp_path / "never-existed.jpg") is None
 
+    @requires_symlinks
     def test_a_dangling_symlink_is_unknown(self, tmp_path: Path) -> None:
         dangling = tmp_path / "dangling.jpg"
         dangling.symlink_to(tmp_path / "no_such_target.jpg")
 
         assert _safe_stat(dangling) is None
 
+    @requires_posix_permissions
     def test_a_real_file_behind_an_unreadable_directory_is_unknown(self, tmp_path: Path) -> None:
         """The case that loses the most information: a large file reported as 0."""
         locked = tmp_path / "locked"

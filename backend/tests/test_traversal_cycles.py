@@ -22,6 +22,7 @@ from app.services.filesystem_service import (
     FileSystemService,
     TraversalResult,
 )
+from tests.capabilities import requires_long_paths, requires_symlinks
 
 
 def _image(path: Path) -> Path:
@@ -56,6 +57,7 @@ def _walk(
     return result
 
 
+@requires_symlinks
 class TestSymlinkCycles:
     def test_a_self_referential_symlink_terminates_and_reports(
         self, service: FileSystemService, tmp_path: Path
@@ -112,6 +114,7 @@ class TestSymlinkCycles:
 
 
 class TestDepthCeiling:
+    @requires_long_paths
     def test_an_unbounded_request_still_stops_at_the_ceiling(
         self, service: FileSystemService, tmp_path: Path
     ) -> None:
@@ -150,6 +153,7 @@ class TestDepthCeiling:
         assert [path.name for path in result.files] == ["top.jpg"]
 
 
+@requires_symlinks
 def test_a_cycle_yields_each_file_once_and_reports_the_cycle(
     service: FileSystemService, tmp_path: Path
 ) -> None:

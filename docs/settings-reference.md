@@ -312,8 +312,8 @@ Use either, both, or neither.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Local AI model tier | `ai_model_tier` | `"auto"` | Auto follows the hardware probe. Lite uses CLIP ViT-B/32; Standard and the legacy Max choice use the same SigLIP 2 base model and acceleration policy; Off disables inference. Max is not a quality upgrade. Packs are explicitly installed, verified and loaded lazily. |
-| Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML / CUDA / DirectML). Turn off to force CPU-only. Only shown when an accelerator is detected. |
+| Local AI model tier | `ai_model_tier` | `"auto"` | Auto follows the hardware probe. Standard runs SigLIP 2 base (multilingual, the one shipped model); Off disables inference. Saved `lite` and `max` values from older releases select Standard. The pack is explicitly installed, verified and loaded lazily. |
+| Use GPU for AI | `ai_allow_gpu` | `true` | Permit accelerator execution providers (CoreML on macOS, CUDA where its runtime is installed). The Windows build ships the CPU runtime, so local AI runs on the CPU there and the toggle stays hidden. Turn off to force CPU-only. |
 
 The local AI section in Setup probes your machine (`GET /api/hardware`) and shows a **capability
 chip**: your CPU/RAM/GPU summary and the recommended tier. If the machine is below the
@@ -333,13 +333,13 @@ probabilities.
 |---|---|---|---|
 | Tag media by content | `ai_tagging_enabled` | `false` | Master switch for content tagging. Runs during a real sort, not in preview. |
 | Max tags per file | `ai_tagging_max_tags` | `10` | Cap on tags written per file. |
+| Add place names from GPS | `ai_location_tags_enabled` | `false` | Adds the nearest town (GeoNames, within 25 km) and the country, in the interface language, for photos and videos with a GPS position. Off for new users; configurations saved before this setting keep it on when tagging was on. Coordinates are never logged. |
 | Tag confidence | `ai_tagging_confidence_threshold` | `0.5` | Minimum confidence (0–1) to keep a tag. For the local tagger this is how much better the label fits than a generic "a photo" background (0.5 = the natural midpoint). |
 | Store generated tags | `embed_tags_in_files` + `preservation_profile.derived_metadata` | Report only | Report only leaves `embed_tags_in_files=false` and `derived_metadata=report_only`. XMP sidecar files explicitly selects `sidecar_and_report`, without rewriting media. Into the image files requests embedding (EXIF keywords for JPEG/TIFF, `keywords` for video, `.xmp` sidecar otherwise), which still needs a reviewed mutation profile. The old `ai_tagging_embed_in_files` key is read for compatibility. |
 | Tag labels | `ai_tagging_labels` | bundled concepts | The vocabulary the local tagger scores. Untouched bundled concepts emit localized English/German labels; editing the list marks it custom and preserves every value verbatim. |
 
-Local SigLIP uses localized descriptions and templates. Local CLIP may use stable English
-semantic prompts for model quality, but still emits the selected localized label. Model
-download failures remain best-effort and never fail the sort.
+Local SigLIP uses localized descriptions and templates and emits the selected
+localized label. Model download failures remain best-effort and never fail the sort.
 
 Generated XMP sidecars never replace existing files or follow existing symlinks.
 If the sidecar name is occupied, existing edits are retained and new tags remain
@@ -351,7 +351,7 @@ queued for transfer: generated tags cannot occupy its reviewed destination first
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | Smart Categorization | `categorize_enabled` | `false` | File each photo/video into your own topic folders (`…/Y/M/D/<category>/`). Local-model only. Mutually exclusive with *Preserve source subfolders*. |
-| Categories | `categorize_categories` | bundled concepts² | Untouched bundled concepts display and emit in the selected language. Editing marks the list custom; custom names remain verbatim across language changes. Works best for visually distinct topics. |
+| Categories | `categorize_categories` | bundled concepts² | Untouched bundled concepts display and emit in the selected language. Editing marks the list custom; custom names remain verbatim across language changes. Works best for visually distinct topics. **Suggest from my photos** clusters up to 150 sampled photos from the input folder with the local model and offers names in the interface language, excluding existing categories; nothing is added until the user picks one (`POST /api/ai/suggest-categories`). |
 | Categorization confidence | `categorize_confidence_threshold` | `0.55` | Top-1 probability floor (0.50–0.99). Files below it go to `_uncategorized/` rather than being guessed wrong. |
 | Categorization margin | `categorize_min_margin` | `0.15` | Required separation between the top and second-best category, so ambiguous files aren't force-filed. |
 

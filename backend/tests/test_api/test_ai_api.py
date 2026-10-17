@@ -39,13 +39,18 @@ def test_model_inventory_exposes_required_pack_without_downloading(client: TestC
     res = client.get("/api/ai/models")
     assert res.status_code == 200
     body = res.json()
-    assert body["required_pack_id"] in {"clip-lite-v1", "siglip-standard-v1"}
+    assert body["required_pack_id"] in {None, "siglip-standard-v2"}
+    assert body["active_pack_id"] is None
     assert {pack["pack_id"] for pack in body["packs"]} == {
         "clip-lite-v1",
         "siglip-standard-v1",
+        "siglip-standard-v2",
     }
     assert all(pack["state"] == "not_installed" for pack in body["packs"])
+    retired = {pack["pack_id"] for pack in body["packs"] if pack["retired"]}
+    assert retired == {"clip-lite-v1", "siglip-standard-v1"}
     assert all(pack["total_size"] > 0 for pack in body["packs"])
+    assert all(pack["download_size"] == pack["total_size"] for pack in body["packs"])
 
 
 def test_model_removal_requires_explicit_confirmation(client: TestClient) -> None:
@@ -83,3 +88,10 @@ def test_suggest_categories_response_shape(client: TestClient, tmp_path: Path) -
     assert "suggestions" in body
     assert isinstance(body["suggestions"], list)
     assert body["suggestions"] == ["nature", "travel", "family"]
+
+
+def test_a_retired_pack_cannot_be_installed(client: TestClient) -> None:
+    """AI-04: the old CLIP pack can only be removed, never downloaded again."""
+    res = client.post("/api/ai/models/clip-lite-v1/install", json={"idempotency_key": "retired"})
+    assert res.status_code == 409
+    assert res.json()["code"] == "MODEL_PACK_RETIRED"

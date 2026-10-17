@@ -22,11 +22,11 @@ for (const theme of ["light", "dark"] as const) {
         await page.route("**/api/ai/models", (route) =>
           route.fulfill({
             json: {
-              required_pack_id: "siglip-standard-v1",
+              required_pack_id: "siglip-standard-v2",
               packs: [
                 {
-                  pack_id: "siglip-standard-v1",
-                  display_name: "SigLIP Standard / Max",
+                  pack_id: "siglip-standard-v2",
+                  display_name: "SigLIP 2 Standard",
                   state: "not_installed",
                   total_size: 412538967,
                   license: "Apache-2.0",
@@ -77,9 +77,9 @@ for (const theme of ["light", "dark"] as const) {
         await expect(storage).toHaveValue("sidecar");
         await storage.selectOption("report");
         await expect(storage).toHaveValue("report");
-        await expect(setup.locator("option[value=max]")).toContainText(
-          language === "en" ? "same SigLIP 2" : "dasselbe SigLIP-2",
-        );
+        // One shipped model: the retired Lite and duplicate Max choices are gone.
+        await expect(setup.locator("#ai-model-tier option")).toHaveCount(3);
+        await expect(setup.locator("option[value=standard]")).toContainText("SigLIP 2");
         expect(await contrastViolations(page)).toEqual([]);
         for (const zoom of width === 360 ? ["1"] : ["1", "2"]) {
           await page.evaluate((value) => {

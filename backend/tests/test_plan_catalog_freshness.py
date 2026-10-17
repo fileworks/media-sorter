@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import socket
+import sys
 import tempfile
 from pathlib import Path
 
@@ -66,6 +67,8 @@ def test_destination_evidence_covers_add_rewrite_delete_and_rename(tmp_path: Pat
 
 @pytest.mark.skipif(os.name == "nt" or not hasattr(socket, "AF_UNIX"), reason="Unix nodes only")
 def test_destination_evidence_distinguishes_special_node_types() -> None:
+    if sys.platform == "win32":  # narrowed for type checking; skipif covers runtime
+        return
     # Darwin limits AF_UNIX names to 104 bytes; pytest's nested temp root can be
     # longer than that before the socket's own name is appended.
     with tempfile.TemporaryDirectory(prefix="msfp-", dir="/tmp") as temporary:
@@ -87,6 +90,8 @@ def test_destination_evidence_distinguishes_special_node_types() -> None:
 def test_destination_evidence_distinguishes_same_kind_special_node_replacement(
     tmp_path: Path,
 ) -> None:
+    if sys.platform == "win32":  # narrowed for type checking; skipif covers runtime
+        return
     destination = tmp_path / "target"
     destination.mkdir()
     special = destination / "special"

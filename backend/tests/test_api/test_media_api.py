@@ -18,6 +18,7 @@ from app.api.routes import media
 from app.core.bootstrap import AppFactory
 from app.core.config import Config
 from app.core.media_scope import assert_media_readable
+from tests.capabilities import requires_symlinks
 
 
 @pytest.fixture(scope="module")
@@ -358,6 +359,7 @@ def test_media_diff_refuses_when_either_side_is_outside(
     )
 
 
+@requires_symlinks
 def test_a_symlink_inside_the_library_cannot_escape_it(
     client: TestClient, tmp_path: Path, outside_library: Path
 ) -> None:

@@ -43,15 +43,15 @@ restore in `finally` (see `RepairService.repair_image`)
 
 ## AI / Models
 
-❌ `jina-clip-v1` via fastembed 0.8.0 ✅ Broken text encoder (model silently stuck at
-ViT-B/32) — use the default CLIP ViT-B/32 (Lite) or SigLIP 2 (Standard/Max)
+❌ CLIP ViT-B/32 "Lite" via fastembed ✅ Retired 2026-10-11: a larger download than
+SigLIP 2, weaker zero-shot and English-only. SigLIP 2 base runs directly on onnxruntime.
 
-❌ `onnx-clip` package ✅ Conflicts with the repo's pillow pin — `fastembed` provides the
-CLIP towers
+❌ `onnx-clip` or `jina-clip-v1` ✅ Pillow conflicts and a broken text encoder; neither is
+needed with SigLIP 2
 
 ❌ Hardcoding scoring constants in tagger/categoriser code ✅ `tagger_slope` /
-`categorize_scale` travel with the encoder (`VisionEncoder` properties) — CLIP and
-SigLIP need different calibrations (SigLIP needs a HIGHER softmax temperature than CLIP)
+`tagger_offset` / `categorize_scale` / `categorize_floor` travel with the encoder
+(`VisionEncoder`), calibrated with `scripts/evaluate_local_ai.py` on held-out fixtures
 
 ❌ Letting an AI failure raise out of the sort pipeline ✅ Best-effort everywhere: log a
 warning, yield no tags/category

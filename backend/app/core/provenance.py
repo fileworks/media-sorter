@@ -57,6 +57,15 @@ class CategorizationProvenance(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     threshold: float | None = Field(default=None, ge=0, le=1)
     passed: bool | None = None
+    #: Lead over the next category and the minimum required. ``None`` in plans
+    #: written before they were recorded.
+    margin: float | None = Field(default=None, ge=0, le=1)
+    min_margin: float | None = Field(default=None, ge=0, le=1)
+    #: The first gate a rejected file failed; ``None`` when it passed, when
+    #: categorization was off, or in older plans.
+    rejection: Literal["weak_match", "confidence", "margin"] | None = None
+    #: Set when the platform's own screenshot label decided instead of the model.
+    basis: Literal["file_name", "embedded_metadata"] | None = None
     #: Which tagger produced the label — `"local"` for the on-device model, or
     #: the provider's name when the picture left the machine (`D-06`). A person
     #: reviewing why a photograph was filed somewhere is entitled to know

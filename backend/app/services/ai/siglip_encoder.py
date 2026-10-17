@@ -1,10 +1,8 @@
-"""SigLIP 2 vision+text encoder backed by onnxruntime ("Standard" / "Max" tier).
+"""SigLIP 2 vision+text encoder backed by onnxruntime (the "Standard" tier).
 
-This is the higher-quality local encoder that replaces the CLIP ViT-B/32
-placeholder for the ``standard`` and ``max`` model tiers. It implements the same
-:class:`~app.services.ai.encoder_protocol.VisionEncoder` contract as
-:class:`~app.services.ai.clip_embedder.ClipEmbedder`, so AI tagging and Smart
-Categorization consume it without caring which model is loaded.
+The one shipped local encoder. It implements the
+:class:`~app.services.ai.encoder_protocol.VisionEncoder` contract, so AI tagging
+and Smart Categorization consume it without caring which model is loaded.
 
 Why SigLIP 2 (Google, 2025): substantially stronger zero-shot than CLIP ViT-B/32
 (~79% vs ~63% ImageNet) at the *exact* task both features use (image↔text-label
@@ -21,13 +19,30 @@ Design notes
 * **Runtime-adaptive I/O.** Input names (``pixel_values`` / ``input_ids`` /
   ``attention_mask``) and the pooled-embedding output name are resolved from the
   loaded graph rather than hardcoded, so a slightly different export still works.
+* **Loaded once, published whole.** A lock makes concurrent first use load the
+  sessions once; they become visible only when vision, text and tokenizer are
+  all ready (AI-NEW-1).
+* **One text at a time.** The int8 text tower quantizes activations per batch,
+  so a label's vector used to depend on which other labels shared its batch
+  (cosine as low as 0.998 against encoding it alone). Encoding each text alone
+  makes every label's vector deterministic and avoids the ~340 MB activation
+  peak an 80-prompt batch caused, at the same speed.
+* **Bounded text cache, released text tower.** Text vectors are cached per text
+  in a bounded LRU of read-only arrays (AI-NEW-2). The text tower (~280 MB
+  resident) is only needed on a cache miss, so it is released after
+  ``TEXT_SESSION_IDLE_SECONDS`` without text work and reloaded on demand (AI-12).
 * **Injectable** vision/text sessions + tokenizer (any object exposing the small
   duck-typed interface used below) so tests run without a real download.
 """
 
 from __future__ import annotations
 
+import functools
+import io
+import math
 import os
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -43,7 +58,12 @@ logger = get_logger(__name__)
 # onnx-community SigLIP 2 base/16 @256 (Apache-2.0). Its immutable commit and
 # file digests live in ai-models.json; these names only address installed files.
 SIGLIP2_REPO = "onnx-community/siglip2-base-patch16-256-ONNX"
-_VISION_FILE = "onnx/vision_model_quantized.onnx"
+#: The vision tower each pack ships: v2 full precision, v1 int8 (see evaluation).
+_VISION_FILES = {
+    "siglip-standard-v2": "onnx/vision_model.onnx",
+    "siglip-standard-v1": "onnx/vision_model_quantized.onnx",
+}
+DEFAULT_PACK = "siglip-standard-v2"
 _TEXT_FILE = "onnx/text_model_quantized.onnx"
 _TOKENIZER_FILE = "tokenizer.json"
 
@@ -63,17 +83,63 @@ _PAD_TOKEN = "<pad>"
 # least-specific. Tower-only exports expose ``pooler_output``.
 _EMBED_OUTPUT_CANDIDATES = ("pooler_output", "image_embeds", "text_embeds", "embeds")
 
+#: Distinct texts whose vectors stay cached: 4096 x 768 float32 is about 12.6 MB,
+#: far more than the bundled vocabularies and a generous custom one need.
+TEXT_CACHE_ENTRIES = 4096
+#: Seconds without text work before the text tower is released.
+TEXT_SESSION_IDLE_SECONDS = 30.0
+
+# google/siglip2-base-patch16-256 at revision 3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab:
+# logit_scale = 4.726513 (exp → 112.901), logit_bias = -16.771803.
+_LOGIT_SCALE = 112.90118
+_LOGIT_BIAS = -16.771803
+_CATEGORIZE_FLOOR = (math.log(0.0003 / 0.9997) - _LOGIT_BIAS) / _LOGIT_SCALE
+_TAGGER_OFFSETS = {"en": 0.005, "de": 0.007}
+
+
+def _to_srgb(image: Image, icc: bytes | None) -> Image | None:
+    """Convert pixels encoded in an embedded non-sRGB profile to sRGB, or ``None``.
+
+    SigLIP learned from sRGB web images. A Display P3 photo (every recent
+    iPhone) or an Adobe RGB/CMYK file read as if it were sRGB shows the model
+    shifted colours. Only the temporary pixels are converted; the file is never
+    touched. Any failure returns ``None`` and the caller uses the raw pixels.
+    """
+    if not icc:
+        return None
+    try:
+        from PIL import ImageCms
+
+        source = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+        if "srgb" in (ImageCms.getProfileDescription(source) or "").casefold():
+            return None
+        return ImageCms.profileToProfile(image, source, _srgb_profile(), outputMode="RGB")
+    except Exception as exc:
+        logger.debug("Colour profile not applied", error=str(exc))
+        return None
+
+
+@functools.cache
+def _srgb_profile() -> Any:
+    from PIL import ImageCms
+
+    return ImageCms.createProfile("sRGB")
+
 
 def _upright_rgb(image: Image) -> Image:
-    """Apply EXIF orientation and convert to RGB (best-effort, never raises)."""
+    """Apply EXIF orientation, convert to sRGB and RGB (best-effort, never raises)."""
     from PIL import ImageOps
 
+    icc = image.info.get("icc_profile")
     try:
         img = ImageOps.exif_transpose(image)
     except Exception:
         img = image
     if img is None:  # pragma: no cover - only in PIL in-place mode
         img = image
+    managed = _to_srgb(img, icc if isinstance(icc, bytes) else None)
+    if managed is not None:
+        return managed
     if img.mode != "RGB":
         try:
             img = img.convert("RGB")
@@ -87,8 +153,7 @@ class SiglipOnnxEncoder(VisionEncoder):
 
     Returns raw (un-normalised) ``float32`` embedding vectors from each tower's
     pooled output; the tagging/categorization consumers L2-normalise and score
-    them, exactly as they do for CLIP. Text embeddings are memoised by the tuple
-    of input strings so a stable label/category vocabulary is encoded once.
+    them. Returned text matrices are read-only: their rows are shared via the cache.
     """
 
     def __init__(
@@ -101,7 +166,11 @@ class SiglipOnnxEncoder(VisionEncoder):
         text_session: Any | None = None,
         tokenizer: Any | None = None,
         model_store: AiModelStore | None = None,
+        pack_id: str = DEFAULT_PACK,
     ) -> None:
+        if pack_id not in _VISION_FILES:
+            raise ValueError(f"unknown SigLIP pack: {pack_id}")
+        self._pack_id = pack_id
         self._repo = repo
         self._allow_gpu = allow_gpu
         self._image_size = image_size
@@ -110,7 +179,15 @@ class SiglipOnnxEncoder(VisionEncoder):
         self._tokenizer: Any | None = tokenizer
         self._model_store = model_store
         self._load_failed = False
-        self._text_cache: dict[tuple[str, ...], Any] = {}
+        self._lock = threading.RLock()
+        self._ready = False
+        # Only a text session this encoder built can be released and rebuilt.
+        self._owns_text_session = text_session is None
+        self._text_model_path: str | None = None
+        self._session_options: Any | None = None
+        self._providers: list[str] = []
+        self._text_cache: OrderedDict[str, Any] = OrderedDict()
+        self._idle_timer: threading.Timer | None = None
         # Resolved lazily from the loaded graphs.
         self._vision_input: str | None = None
         self._text_inputs: tuple[str, ...] = ()
@@ -132,18 +209,29 @@ class SiglipOnnxEncoder(VisionEncoder):
         # anchor-relative gap is small; slope 40 maps a confident +0.06 gap to
         # ≈0.92 and a marginal +0.015 gap to ≈0.65 while keeping non-matches
         # (negative gap) below the 0.5 threshold. Empirically calibrated on
-        # SigLIP 2 base/16 @256 (CLIP uses 100 for its wider cosine spread).
+        # SigLIP 2 base/16 @256.
         return 40.0
+
+    def tagger_offset(self, locale: str) -> float:
+        # A label must beat the generic background by this much cosine. Chosen on
+        # the calibration half of the public fixtures and confirmed on the
+        # held-out half: F1 0.858 → 0.865 in English, 0.783 → 0.888 in German,
+        # where the bare background let indoor/graph/artwork tags through.
+        return _TAGGER_OFFSETS.get(locale, _TAGGER_OFFSETS["en"])
 
     @property
     def categorize_scale(self) -> float:
-        # Softmax temperature for the top-1 categoriser. SigLIP's cosines are
-        # *lower* in absolute terms than CLIP's (≈0.02–0.14 vs ≈0.20–0.26), so it
-        # needs a HIGHER temperature than CLIP's 40 to produce confident top-1
-        # probabilities: at 60 a clear match clears the 0.55 gate while genuinely
-        # ambiguous images stay below it (route to _uncategorized). Prompt
-        # ensembling sharpens real categories further.
-        return 60.0
+        # The checkpoint's learned logit scale (exp(4.726513)), so the softmax
+        # works in the model's own units. With the best prompt per category it
+        # held out at 95 % accuracy and 62 % coverage; the former temperature
+        # 60 with generic anchors categorized 5 % (English) and 0 % (German).
+        return _LOGIT_SCALE
+
+    @property
+    def categorize_floor(self) -> float:
+        # Cosine at which SigLIP's own sigmoid, sigmoid(scale·cos + bias), reaches
+        # 0.0003: the weakest match the held-out evaluation accepted.
+        return _CATEGORIZE_FLOOR
 
     @property
     def available(self) -> bool:
@@ -155,34 +243,39 @@ class SiglipOnnxEncoder(VisionEncoder):
 
     def _ensure_loaded(self) -> bool:
         """Build the onnxruntime sessions + tokenizer once. False if unavailable."""
-        if (
-            self._vision_session is not None
-            and self._text_session is not None
-            and (self._tokenizer is not None)
-        ):
-            self._resolve_io()
+        if self._ready:
             return True
-        if self._load_failed:
-            return False
-        try:
-            self._load()
-            self._resolve_io()
-            return True
-        except Exception as exc:  # pragma: no cover - depends on optional runtime/deps
-            self._load_failed = True
-            logger.warning(
-                "SigLIP 2 encoder unavailable",
-                error=str(exc),
-                repo=self._repo,
-            )
-            return False
+        with self._lock:
+            if self._ready:
+                return True
+            if self._load_failed:
+                return False
+            try:
+                if (
+                    self._vision_session is None
+                    or self._text_session is None
+                    or self._tokenizer is None
+                ):
+                    self._load()
+                self._resolve_io()
+                self._ready = True
+                return True
+            except Exception as exc:  # pragma: no cover - depends on optional runtime/deps
+                self._load_failed = True
+                logger.warning(
+                    "SigLIP 2 encoder unavailable",
+                    error=str(exc),
+                    repo=self._repo,
+                )
+                return False
 
     def _load(self) -> None:
+        """Build every missing part, then publish them together (caller holds the lock)."""
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
         components = (
-            self._model_store.component_paths("siglip-standard-v1", verify=True)
+            self._model_store.component_paths(self._pack_id, verify=True)
             if self._model_store is not None
             else None
         )
@@ -202,23 +295,26 @@ class SiglipOnnxEncoder(VisionEncoder):
         # Local interactive workloads: cap intra-op threads to the physical core
         # count to avoid oversubscription on hyper-threaded CPUs.
         opts.intra_op_num_threads = max(1, (os.cpu_count() or 2) // 2)
+        text_path = installed(_TEXT_FILE)
 
-        if self._vision_session is None:
-            self._vision_session = ort.InferenceSession(
-                installed(_VISION_FILE), sess_options=opts, providers=providers
-            )
-        if self._text_session is None:
-            self._text_session = ort.InferenceSession(
-                installed(_TEXT_FILE), sess_options=opts, providers=providers
-            )
-        if self._tokenizer is None:
-            tok = Tokenizer.from_file(installed(_TOKENIZER_FILE))
-            pad_id = tok.token_to_id(_PAD_TOKEN) or 0
-            tok.enable_truncation(max_length=_MAX_TOKENS)
-            tok.enable_padding(length=_MAX_TOKENS, pad_id=pad_id, pad_token=_PAD_TOKEN)
-            self._tokenizer = tok
+        vision = self._vision_session or ort.InferenceSession(
+            installed(_VISION_FILES[self._pack_id]), sess_options=opts, providers=providers
+        )
+        text = self._text_session or ort.InferenceSession(
+            text_path, sess_options=opts, providers=providers
+        )
+        tokenizer = self._tokenizer
+        if tokenizer is None:
+            tokenizer = Tokenizer.from_file(installed(_TOKENIZER_FILE))
+            pad_id = tokenizer.token_to_id(_PAD_TOKEN) or 0
+            tokenizer.enable_truncation(max_length=_MAX_TOKENS)
+            tokenizer.enable_padding(length=_MAX_TOKENS, pad_id=pad_id, pad_token=_PAD_TOKEN)
 
-        logger.info("SigLIP 2 encoder ready", providers=providers, repo=self._repo)
+        self._vision_session, self._text_session, self._tokenizer = vision, text, tokenizer
+        self._text_model_path, self._session_options, self._providers = text_path, opts, providers
+        logger.info(
+            "SigLIP 2 encoder ready", providers=providers, repo=self._repo, pack_id=self._pack_id
+        )
 
     def _select_providers(self, ort: Any) -> list[str]:
         """Pick onnxruntime execution providers, honouring ``allow_gpu``."""
@@ -317,19 +413,65 @@ class SiglipOnnxEncoder(VisionEncoder):
             return None
         import numpy as np
 
-        key = tuple(texts)
-        cached = self._text_cache.get(key)
-        if cached is not None:
-            return cached
         try:
-            feeds = self._tokenize(list(texts))
-            assert self._text_session is not None
-            out = self._text_session.run([self._text_output], feeds)
-            mat = np.asarray(out[0], dtype=np.float32)
-            if mat.ndim == 1:
-                mat = mat.reshape(1, -1)
-            self._text_cache[key] = mat
-            return mat
+            rows = [self._text_vector(text) for text in texts]
         except Exception as exc:
             logger.warning("SigLIP text embedding failed", error=str(exc))
             return None
+        matrix = np.vstack(rows)
+        matrix.setflags(write=False)
+        return matrix
+
+    def _text_vector(self, text: str) -> Any:
+        """One text's read-only vector, from the cache or encoded alone."""
+        import numpy as np
+
+        with self._lock:
+            cached = self._text_cache.get(text)
+            if cached is not None:
+                self._text_cache.move_to_end(text)
+                return cached
+            session = self._text_session_for_use()
+            out = session.run([self._text_output], self._tokenize([text]))
+            vector = np.array(np.asarray(out[0], dtype=np.float32).reshape(-1), copy=True)
+            vector.setflags(write=False)
+            self._text_cache[text] = vector
+            while len(self._text_cache) > TEXT_CACHE_ENTRIES:
+                self._text_cache.popitem(last=False)
+            self._schedule_text_release()
+            return vector
+
+    def _text_session_for_use(self) -> Any:
+        """The text session, rebuilt if it was released (caller holds the lock)."""
+        if self._text_session is None:
+            import onnxruntime as ort
+
+            if self._text_model_path is None:
+                raise RuntimeError("the SigLIP text model was released and cannot be reloaded")
+            self._text_session = ort.InferenceSession(
+                self._text_model_path,
+                sess_options=self._session_options,
+                providers=self._providers,
+            )
+            logger.info("SigLIP 2 text model reloaded")
+        return self._text_session
+
+    def _schedule_text_release(self) -> None:
+        if not self._owns_text_session or TEXT_SESSION_IDLE_SECONDS <= 0:
+            return
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+        timer = threading.Timer(TEXT_SESSION_IDLE_SECONDS, self.release_text_session)
+        timer.daemon = True
+        self._idle_timer = timer
+        timer.start()
+
+    def release_text_session(self) -> None:
+        """Free the text tower; cached vectors stay and a miss reloads it."""
+        with self._lock:
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+            if self._owns_text_session and self._text_session is not None:
+                self._text_session = None
+                logger.info("SigLIP 2 text model released", cached_texts=len(self._text_cache))

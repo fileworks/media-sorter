@@ -15,22 +15,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 
 /**
- * Copy *path* to the system clipboard.
+ * Copy *path* to the system clipboard and report whether it worked.
  *
  * Prefers Tauri's clipboard API (which works without focus/permission quirks),
  * falling back to the browser Clipboard API when not running under Tauri.
  */
-export async function copyPath(path: string): Promise<void> {
+export async function copyPath(path: string): Promise<boolean> {
   try {
     await writeText(path);
-    return;
+    return true;
   } catch {
     // Not under Tauri (or clipboard plugin unavailable) — fall through.
   }
   try {
     await navigator.clipboard.writeText(path);
+    return true;
   } catch {
-    // Clipboard genuinely unavailable; nothing more we can do.
+    // Clipboard genuinely unavailable; the caller simply does not confirm.
+    return false;
   }
 }
 

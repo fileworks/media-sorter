@@ -93,6 +93,8 @@ export interface ReviewRow {
   dateSource: string;
   category: string | null;
   tags: string[];
+  /** Content tags proposed for this file; null when tagging was off for it. */
+  aiTags: string[] | null;
   unitId: string | null;
   unitPrimary: boolean | null;
   companionCount: number;
@@ -592,6 +594,7 @@ export function toReviewRows(
       dateSource: item.metadata_source,
       category: item.category ?? null,
       tags: item.tags ?? [],
+      aiTags: item.ai_tags ?? null,
       unitId: item.unit_id ?? null,
       unitPrimary: item.unit_primary ?? null,
       companionCount: item.companions?.length ?? 0,
