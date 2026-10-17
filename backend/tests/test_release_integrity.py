@@ -19,6 +19,7 @@ assert SPEC is not None and SPEC.loader is not None
 release_integrity = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = release_integrity
 SPEC.loader.exec_module(release_integrity)
+webview_profile = sys.modules["webview_profile"]
 
 PORTABLE_SCRIPT_PATH = SCRIPT_PATH.with_name("make_portable_zip.py")
 PORTABLE_SPEC = importlib.util.spec_from_file_location("make_portable_zip", PORTABLE_SCRIPT_PATH)
@@ -421,6 +422,7 @@ def test_packaged_webview_smoke_requires_frontend_ready_marker(
         )
         return subprocess.CompletedProcess(command, 0)
 
+    monkeypatch.setattr(webview_profile, "_webview_profile_processes", lambda *_, **__: [])
     monkeypatch.setattr(release_integrity.subprocess, "run", run)
 
     release_integrity._smoke_packaged_webview(launcher)
@@ -473,6 +475,7 @@ def test_packaged_webview_smoke_rejects_a_blank_shell(
         (log_dir / "mediasort.log").write_text("backend ready\n", encoding="utf-8")
         return subprocess.CompletedProcess([], 0)
 
+    monkeypatch.setattr(webview_profile, "_webview_profile_processes", lambda *_, **__: [])
     monkeypatch.setattr(release_integrity.subprocess, "run", run)
 
     with pytest.raises(release_integrity.ReleaseIntegrityError, match="never acknowledged"):
@@ -627,7 +630,7 @@ def test_dmg_detach_retries_a_transient_busy_volume(
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(release_integrity.time, "sleep", sleeps.append)
+    monkeypatch.setattr(webview_profile.time, "sleep", sleeps.append)
 
     with release_integrity._mounted_dmg(tmp_path / "MediaSorter.dmg"):
         pass

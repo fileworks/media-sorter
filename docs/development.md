@@ -182,9 +182,11 @@ a ready session and a successfully loaded Blob image under the packaged CSP.
 `img-src` and `media-src` allow `blob:` because media is fetched with the launch
 capability and exposed through short-lived object URLs; script/network policies
 remain restricted. Test previews in the packaged WebView, not just Vite.
-On Windows, isolated smoke-profile cleanup allows at most ten seconds for sharing
-locks and access-denied `.pma` metrics files inside its own `BrowserMetrics` folder.
-Other permission errors fail immediately; persistent locks still fail the gate.
+On Windows, isolated smoke-profile cleanup first waits up to 60 seconds for every
+`msedgewebview2.exe` that uses its profile to exit; a browser that outlives the app
+fails the gate. Removal then retries for at most 30 seconds on sharing violations,
+and on access-denied or directory-not-empty errors inside the WebView profile only.
+Errors in configuration, data or logs fail immediately; persistent locks still fail.
 
 The Windows release job also compiles a disposable NSIS fixture using Tauri's
 cached compiler and runs `scripts/check_nsis_guard.py --makensis <makensis.exe>`.
@@ -201,17 +203,28 @@ UserProgramFiles is unavailable; a fresh CI profile may not have that known fold
 A manual `release.yml` dispatch
 on `main` repeats the full gates and builds unpublished candidate artifacts;
 after a source fix, dispatch the new commit rather than rerunning the old SHA.
-Tag publication continues through Version Release.
+Tag publication continues through Version Release, which refuses to tag a `main`
+commit without a successful candidate run for that exact SHA. To ship:
+
+```bash
+gh workflow run release.yml --ref main          # candidate; wait for success
+gh workflow run version-release.yml --ref main  # tags vX.Y.Z, which publishes
+```
+
+Release jobs have explicit time limits, and a tag build is never cancelled by a
+newer dispatch, so publication cannot stop halfway.
 
 The backend version is single-sourced from `backend/app/_version.py` (pyproject reads it
 via hatchling's dynamic-version hook), so the running app always reports the released
 version.
 
-> **One-time setup:** add a `SEMANTIC_RELEASE_TOKEN` secret (a fine-grained PAT
-> with `contents: read/write`) so the pushed tag triggers the build — a tag pushed
-> with the default `GITHUB_TOKEN` won't. If release-it creates a tag without that
-> token, dispatch the existing tag explicitly:
-> `gh workflow run release.yml --ref vX.Y.Z`.
+> **Required secret:** `SEMANTIC_RELEASE_TOKEN`, a fine-grained PAT with
+> `contents: read/write` on this repository, owned by an organization admin (the
+> main ruleset's bypass actor). Only that token makes the pushed tag trigger the
+> build. Version Release checks it first and fails without changes when it is
+> missing or expired; replace the secret before the PAT's expiry date. The
+> release-tooling install runs with `--ignore-scripts` because the checkout
+> keeps that token.
 
 ### Building locally
 

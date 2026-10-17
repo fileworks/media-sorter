@@ -62,6 +62,7 @@ from native_provenance import (  # noqa: E402
     _verify_native_provenance,
     _verify_zip_native_provenance,
 )
+from webview_profile import _webview_smoke_state  # noqa: E402
 
 APPLE_REQUIRED = (
     "APPLE_CERTIFICATE",
@@ -645,52 +646,6 @@ def _smoke_launcher(path: Path) -> None:
                 raise ReleaseIntegrityError(
                     f"controlled launcher recovery marker is missing: {marker}"
                 )
-
-
-def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) -> bool:
-    if getattr(error, "winerror", None) == 32:
-        return True
-    if getattr(error, "winerror", None) != 5 or not error.filename:
-        return False
-    # Windows reports access denied for a still-mapped metrics file and for a
-    # cache writer's temporary file that is pending deletion. Limit this grace
-    # period to those file types in our own isolated browser profile.
-    try:
-        path = Path(error.filename).resolve()
-        profile = (directory / "webview/EBWebView").resolve()
-        suffix = path.suffix.casefold()
-        if suffix == ".pma":
-            return path.parent == profile / "BrowserMetrics"
-        return suffix == ".tmp" and profile in path.parents
-    except OSError:
-        return False
-
-
-@contextmanager
-def _webview_smoke_state():
-    """Allow WebView2 to release its isolated profile after launcher shutdown."""
-    temporary = tempfile.TemporaryDirectory(prefix="mediasorter-webview-smoke-")
-    directory = Path(temporary.name).resolve()
-    if directory.parent != Path(tempfile.gettempdir()).resolve():
-        raise ReleaseIntegrityError("WebView smoke state escaped its temporary directory")
-    try:
-        yield directory
-    finally:
-        for attempt in range(41):
-            try:
-                temporary.cleanup()
-                break
-            except PermissionError as error:
-                # WebView2 subprocess shutdown can lag behind the GUI process.
-                # Retry sharing locks and the known metrics mapping race only.
-                # Unrelated or persistent permission failures remain failures.
-                if (
-                    os.name != "nt"
-                    or not _retryable_webview_cleanup_error(error, directory)
-                    or attempt == 40
-                ):
-                    raise
-                time.sleep(0.25)
 
 
 def _smoke_packaged_webview(path: Path) -> None:

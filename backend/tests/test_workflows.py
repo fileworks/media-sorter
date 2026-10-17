@@ -179,12 +179,40 @@ def test_release_native_gate_runs_on_a_shipped_platform() -> None:
     native_gate = release.split("  check-native:", maxsplit=1)[1].split("\n  package:", maxsplit=1)[
         0
     ]
-    assert "runs-on: macos-latest" in native_gate
+    assert "runs-on: macos-26" in native_gate
     assert "cargo check --locked" in native_gate
     assert "cargo test --locked" in native_gate
     assert "cargo clippy --locked -- -D warnings" in native_gate
     assert "components: rustfmt, clippy" in native_gate
     assert "needs: [check-ci, check-native]" in release
+
+
+def test_release_jobs_are_time_bounded_and_tag_builds_are_never_cancelled() -> None:
+    workflow = yaml.safe_load((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+
+    for name, job in workflow["jobs"].items():
+        assert isinstance(job.get("timeout-minutes"), int), name
+    cancel = workflow["concurrency"]["cancel-in-progress"]
+    assert cancel == "${{ !startsWith(github.ref, 'refs/tags/') }}"
+
+
+def test_version_release_requires_a_green_candidate_and_a_working_token() -> None:
+    text = (WORKFLOWS / "version-release.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(text)
+    job = workflow["jobs"]["release"]
+    steps = job["steps"]
+
+    gate = steps[0]["run"]
+    assert 'if [ "$REF" != "refs/heads/main" ]' in gate
+    assert "--workflow release.yml" in gate
+    assert '--commit "$SHA" --status success' in gate
+    assert 'GH_TOKEN="$RELEASE_TOKEN" gh api' in gate
+    assert workflow["permissions"] == {"contents": "write", "actions": "read"}
+    assert isinstance(job.get("timeout-minutes"), int)
+    # No fallback to GITHUB_TOKEN: it could tag without ever triggering a build.
+    assert "|| secrets.GITHUB_TOKEN" not in text
+    installs = [step["run"] for step in steps if "npm ci" in str(step.get("run", ""))]
+    assert installs == ["npm ci --ignore-scripts"]
 
 
 def test_release_ref_is_verified_before_any_packaging_job_can_run() -> None:
