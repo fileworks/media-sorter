@@ -42,8 +42,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
 
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
 
@@ -196,7 +194,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15 # Apple Silicon runner → arm64 DMG
+          # Pinned to the same macOS 26 image that `macos-latest` (CI) uses, so
+          # CI and packaging share an image and neither waits for a deprecation
+          # notice. The DMG still targets macOS 12 (`minimumSystemVersion`).
+          - os: macos-26 # Apple Silicon runner → arm64 DMG
             platform: macos
             label: macOS (Apple Silicon)
             artifact: MediaSorter-macos-arm64
@@ -204,11 +205,10 @@ jobs:
               frontend/src-tauri/target/release/bundle/dmg/*.dmg
               frontend/src-tauri/target/release/bundle/SHA256SUMS
               frontend/src-tauri/target/release/bundle/release-signing-state-macos.json
-          # macos-13 was RETIRED on 2025-12-04 — that label has no runners left, so
-          # the job queued forever and the release could never finish. macos-15-intel
-          # is GitHub's replacement and the LAST x86_64 image (available until
-          # Aug 2027; Apple/GitHub drop Intel entirely after that).
-          - os: macos-15-intel # Intel runner → x86_64 DMG
+          # A retired label has no runners: macos-13 (retired 2025-12-04) left the
+          # job queued forever. Move both macOS labels together when GitHub
+          # announces the next image (actions/runner-images "Announcement" issues).
+          - os: macos-26-intel # Intel runner → x86_64 DMG
             platform: macos
             label: macOS (Intel)
             artifact: MediaSorter-macos-x64
@@ -307,8 +307,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/pyproject.toml
 
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
 
@@ -338,9 +336,20 @@ jobs:
       - name: Bundle Python backend (PyInstaller)
         run: make bundle-backend
 
+      # Verified sources keyed by the reviewed manifest. fetch_ffmpeg.py re-checks
+      # every cached file's SHA-256 before use, so the cache only saves requests:
+      # A rate-limited host (evermeet.cx, since replaced) once failed the Intel package.
+      - name: Restore verified ffmpeg sources
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/ffmpeg-sources
+          key: ffmpeg-sources-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ffmpeg-sources.json') }}
+
       - name: Bundle static ffmpeg + ffprobe
         # All platform/arch download logic lives in scripts/fetch_ffmpeg.py —
         # the single source of truth shared with local builds so they never drift.
+        env:
+          MEDIASORT_FFMPEG_CACHE: ${{ runner.temp }}/ffmpeg-sources
         run: make bundle-ffmpeg
 
       - name: Finalize permissions and sign nested native payloads

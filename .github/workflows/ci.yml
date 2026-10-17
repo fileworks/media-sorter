@@ -28,8 +28,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/uv.lock
 
       # astral-sh/setup-uv v9.0.0
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
@@ -118,8 +116,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/uv.lock
 
       # astral-sh/setup-uv v9.0.0
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
@@ -173,8 +169,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/uv.lock
 
       # astral-sh/setup-uv v9.0.0
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
@@ -227,8 +221,6 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: backend/uv.lock
 
       # astral-sh/setup-uv v9.0.0
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
@@ -453,9 +445,26 @@ jobs:
       - name: Freeze the backend and stage it into the bundle
         run: make bundle-backend
 
+      # The release's unsigned macOS path, so a PR sees the seal the DMG check
+      # will judge. Tauri dereferences symlinks while copying resources, which
+      # only shows up in the built app; the 2026-10-17 release candidate failed on it.
+      - name: Seal nested payloads ad hoc, as the release does
+        run: |
+          python scripts/release_integrity.py preflight --platform macos             --output "$RUNNER_TEMP/release-signing-state.json"
+          python scripts/release_integrity.py normalize --platform macos
+          python scripts/release_integrity.py sign-nested             --state "$RUNNER_TEMP/release-signing-state.json"
+
       - name: Build the desktop bundle
         working-directory: frontend
+        env:
+          # What `make build-tauri` exports without a Developer ID: Tauri seals
+          # the app ad hoc, so its executable's signature covers the bundle.
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run tauri build
+
+      - name: Verify the packaged app's code seal
+        run: |
+          python scripts/release_integrity.py verify-seal             --app "frontend/src-tauri/target/release/bundle/macos/MediaSorter.app"
 
       - name: Launch the packaged app and prove the React shell mounts
         # MEDIASORT_WEBVIEW_SMOKE makes `frontend_ready` exit(0) as soon as the

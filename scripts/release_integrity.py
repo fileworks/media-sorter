@@ -53,7 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from macos_signing import (  # noqa: E402
     _ad_hoc_sign_macho,
     _expected_macos_architecture,
-    _is_macho,
+    _macho_inside_out,
     _require_architecture,
     _verify_macos_seal,
 )
@@ -323,11 +323,7 @@ def sign_nested_payloads(
 
     if state.platform == "macos":
         identity = env["APPLE_SIGNING_IDENTITY"]
-        files = sorted(
-            (path for path in root.rglob("*") if path.is_file() and _is_macho(path)),
-            key=lambda path: len(path.parts),
-            reverse=True,
-        )
+        files = _macho_inside_out(root)
         for path in files:
             print(f"  sign nested Mach-O: {path}", flush=True)
             subprocess.run(
@@ -656,14 +652,16 @@ def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) ->
         return True
     if getattr(error, "winerror", None) != 5 or not error.filename:
         return False
-    # Windows can report access denied for a still-mapped metrics file. Limit
-    # this grace period to that file type in our own isolated browser profile.
+    # Windows reports access denied for a still-mapped metrics file and for a
+    # cache writer's temporary file that is pending deletion. Limit this grace
+    # period to those file types in our own isolated browser profile.
     try:
         path = Path(error.filename).resolve()
-        return (
-            path.suffix.casefold() == ".pma"
-            and path.parent == (directory / "webview/EBWebView/BrowserMetrics").resolve()
-        )
+        profile = (directory / "webview/EBWebView").resolve()
+        suffix = path.suffix.casefold()
+        if suffix == ".pma":
+            return path.parent == profile / "BrowserMetrics"
+        return suffix == ".tmp" and profile in path.parents
     except OSError:
         return False
 
@@ -982,6 +980,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     smoke_webview = subparsers.add_parser("smoke-webview")
     smoke_webview.add_argument("--path", type=Path, required=True)
+
+    verify_seal = subparsers.add_parser("verify-seal")
+    verify_seal.add_argument("--app", type=Path, required=True)
     return parser
 
 
@@ -1024,6 +1025,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
         elif args.command == "smoke-webview":
             _smoke_packaged_webview(args.path)
+        elif args.command == "verify-seal":
+            _verify_macos_seal(args.app)
         else:  # pragma: no cover - argparse enforces the choices.
             raise ReleaseIntegrityError(f"unknown command: {args.command}")
     except (ReleaseIntegrityError, OSError, subprocess.CalledProcessError) as error:

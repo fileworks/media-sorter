@@ -6,6 +6,7 @@ size; the release flow imports these helpers from there.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,8 +34,19 @@ def _is_macho(path: Path) -> bool:
 
 
 def _macho_inside_out(root: Path) -> list[Path]:
+    """Every real Mach-O file under ``root``, deepest first.
+
+    Symlinks are skipped: their target is listed itself, and ``codesign``
+    refuses a framework-root link such as PyInstaller's
+    ``Python.framework/Python`` as an ambiguous bundle, which failed the
+    release seal check on the final DMG.
+    """
     return sorted(
-        (path for path in root.rglob("*") if path.is_file() and _is_macho(path)),
+        (
+            path
+            for path in root.rglob("*")
+            if not path.is_symlink() and path.is_file() and _is_macho(path)
+        ),
         key=lambda path: (-len(path.parts), str(path)),
     )
 
@@ -78,11 +90,37 @@ def _require_architecture(paths: Sequence[Path], architecture: str) -> None:
         )
 
 
+def _digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _verify_macos_seal(app: Path) -> list[Path]:
-    """Strictly verify every nested Mach-O, then the whole bundle seal."""
+    """Strictly verify every distinct nested Mach-O, then the whole bundle seal.
+
+    Tauri copies resources with symlinks dereferenced, so PyInstaller's
+    ``Python.framework/Versions/<v>/Python`` arrives three more times as real
+    copies (``Versions/Current/Python``, ``Python.framework/Python`` and
+    ``_internal/Python``). Its signature binds the framework's Info.plist, so
+    ``codesign`` rejects the copies on their own ("bundle format is ambiguous",
+    "invalid Info.plist"). Each distinct content is therefore verified once, at
+    its deepest path, where that bundle context exists; a byte-identical copy
+    inherits the result. A framework-root binary with no verified twin fails.
+    The release smoke tests then launch the packaged backend from those copies.
+    """
     files = _macho_inside_out(app)
+    verified: set[str] = set()
     for path in files:
+        digest = _digest(path)
+        if digest in verified:
+            continue
+        if path.parent.suffix == ".framework":
+            raise ReleaseIntegrityError(f"framework-root Mach-O matches no verified copy: {path}")
         subprocess.run(["codesign", "--verify", "--strict", "--verbose=2", str(path)], check=True)
+        verified.add(digest)
     subprocess.run(
         ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True
     )
