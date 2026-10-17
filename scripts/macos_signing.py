@@ -33,8 +33,19 @@ def _is_macho(path: Path) -> bool:
 
 
 def _macho_inside_out(root: Path) -> list[Path]:
+    """Every real Mach-O file under ``root``, deepest first.
+
+    Symlinks are skipped: their target is listed itself, and ``codesign``
+    refuses a framework-root link such as PyInstaller's
+    ``Python.framework/Python`` as an ambiguous bundle, which failed the
+    release seal check on the final DMG.
+    """
     return sorted(
-        (path for path in root.rglob("*") if path.is_file() and _is_macho(path)),
+        (
+            path
+            for path in root.rglob("*")
+            if not path.is_symlink() and path.is_file() and _is_macho(path)
+        ),
         key=lambda path: (-len(path.parts), str(path)),
     )
 

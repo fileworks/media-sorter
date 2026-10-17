@@ -20,6 +20,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from collections.abc import Iterable, Mapping
@@ -35,6 +37,11 @@ _USER_AGENT = (
 )
 _DRIVE_PATH = re.compile(r"^[A-Za-z]:")
 _ARCHIVE_SUFFIXES = (".tar.xz", ".tar.gz", ".tar.bz2", ".tgz", ".txz", ".tar", ".zip")
+# Optional directory of previously verified sources, keyed by SHA-256. The
+# release workflow restores it from the Actions cache, so a rerun does not ask
+# a rate-limited host (evermeet.cx answered HTTP 429) for the same bytes again.
+CACHE_ENV = "MEDIASORT_FFMPEG_CACHE"
+_MAX_RETRY_DELAY = 120
 
 
 def log(message: str) -> None:
@@ -130,11 +137,50 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _retry_delay(error: Exception, attempt: int) -> float:
+    """Seconds to wait before retrying: the host's Retry-After, else backoff."""
+    if isinstance(error, urllib.error.HTTPError):
+        retry_after = error.headers.get("Retry-After", "") if error.headers else ""
+        if retry_after.strip().isdigit():
+            return float(min(int(retry_after), _MAX_RETRY_DELAY))
+    return float(min(15 * 2 ** (attempt - 1), _MAX_RETRY_DELAY))
+
+
+def _cached_source(expected_sha256: str, destination: Path) -> bool:
+    """Copy a cached source into place only when its digest still matches."""
+    cache_root = os.environ.get(CACHE_ENV)
+    if not cache_root:
+        return False
+    cached = Path(cache_root) / expected_sha256
+    if not cached.is_file() or sha256_file(cached) != expected_sha256:
+        return False
+    shutil.copyfile(cached, destination)
+    log(f"  = verified cache hit {expected_sha256[:12]}")
+    return True
+
+
+def _store_cached_source(expected_sha256: str, source: Path) -> None:
+    cache_root = os.environ.get(CACHE_ENV)
+    if not cache_root:
+        return
+    cache_dir = Path(cache_root)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    partial = cache_dir / f".{expected_sha256}.partial"
+    shutil.copyfile(source, partial)
+    partial.replace(cache_dir / expected_sha256)
+
+
 def download(
-    url: str, expected_sha256: str, destination: Path, attempts: int = 3
+    url: str,
+    expected_sha256: str,
+    destination: Path,
+    attempts: int = 5,
+    sleep: Any = time.sleep,
 ) -> None:
     """Stream one source to a temporary file and verify it before returning."""
     log(f"  ↓ {url}")
+    if _cached_source(expected_sha256, destination):
+        return
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         digest = hashlib.sha256()
@@ -154,11 +200,16 @@ def download(
                 raise OSError(
                     f"SHA-256 mismatch: expected {expected_sha256}, observed {observed}"
                 )
+            _store_cached_source(expected_sha256, destination)
             return
         except Exception as exc:  # noqa: BLE001 - preserve network/IO context
             last_error = exc
             destination.unlink(missing_ok=True)
             log(f"  ! attempt {attempt}/{attempts} failed: {exc}")
+            if attempt < attempts:
+                delay = _retry_delay(exc, attempt)
+                log(f"    retrying in {delay:.0f}s")
+                sleep(delay)
     raise SystemExit(f"ERROR: failed to download verified source {url}: {last_error}")
 
 

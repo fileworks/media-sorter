@@ -9,8 +9,8 @@
     {
       "owner": "native-tool-supply-chain",
       "path": "scripts/fetch_ffmpeg.py",
-      "rationale": "Download, archive validation, provenance, and atomic publication form one fail-closed transaction.",
-      "warning_lines": 450
+      "rationale": "Download, archive validation, provenance, and atomic publication form one fail-closed transaction. Reviewed when a release failed on an HTTP 429: retry backoff and the SHA-256-verified source cache are part of that download step and re-verify every byte, so the point moves rather than the module splitting.",
+      "warning_lines": 500
     },
     {
       "owner": "desktop-navigation",
