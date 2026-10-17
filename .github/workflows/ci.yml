@@ -456,6 +456,10 @@ jobs:
 
       - name: Build the desktop bundle
         working-directory: frontend
+        env:
+          # What `make build-tauri` exports without a Developer ID: Tauri seals
+          # the app ad hoc, so its executable's signature covers the bundle.
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run tauri build
 
       - name: Verify the packaged app's code seal
