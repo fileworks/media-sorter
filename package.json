@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
   },
   "description": "Audited release tooling for MediaSorter. This private package is never versioned or published.",
   "scripts": {

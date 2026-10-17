@@ -10,8 +10,8 @@
   ],
   "semanticCommits": "enabled",
   "dependencyDashboard": true,
-  "prConcurrentLimit": 1,
-  "branchConcurrentLimit": 1,
+  "prConcurrentLimit": 8,
+  "branchConcurrentLimit": 8,
   "prHourlyLimit": 0,
   "schedule": [
     "before 5am on monday"
@@ -27,7 +27,7 @@
   },
   "packageRules": [
     {
-      "description": "Batch routine maintenance into one tested weekly patch release.",
+      "description": "Batch routine maintenance into tested weekly patch releases. Updates no lane below claims stay in this fallback group.",
       "matchUpdateTypes": [
         "minor",
         "patch",
@@ -41,6 +41,144 @@
       "automerge": true,
       "semanticCommitType": "fix",
       "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Python lane: backend and CLI packages and uv.lock, independent of every other ecosystem.",
+      "matchCategories": [
+        "python"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly python updates",
+      "groupSlug": "weekly-python-updates"
+    },
+    {
+      "description": "JavaScript lane: frontend and release-tooling packages and their lockfiles.",
+      "matchCategories": [
+        "js"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly javascript updates",
+      "groupSlug": "weekly-javascript-updates"
+    },
+    {
+      "description": "Rust lane: native shell crates and Cargo.lock.",
+      "matchCategories": [
+        "rust"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly rust updates",
+      "groupSlug": "weekly-rust-updates"
+    },
+    {
+      "description": "CI lane: workflow actions and container images change how gates run, not what ships.",
+      "matchCategories": [
+        "ci",
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly ci updates",
+      "groupSlug": "weekly-ci-updates"
+    },
+    {
+      "description": "Tauri lane: crates and npm packages move together. The consumer's required checks must reject a npm/crate version mismatch before this lane can automerge.",
+      "matchPackageNames": [
+        "tauri",
+        "tauri-build",
+        "tauri-plugin-*",
+        "@tauri-apps/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "bump"
+      ],
+      "groupName": "weekly tauri updates",
+      "groupSlug": "weekly-tauri-updates"
+    },
+    {
+      "description": "Python resolution: lock in-range releases (a bare lower bound would otherwise never move uv.lock) and skip releases whose requires-python does not cover the project's.",
+      "matchCategories": [
+        "python"
+      ],
+      "rangeStrategy": "update-lockfile",
+      "constraintsFiltering": "strict"
+    },
+    {
+      "description": "Skip shipped npm dependencies whose engines do not cover the repository's Node range.",
+      "matchCategories": [
+        "js"
+      ],
+      "matchDepTypes": [
+        "dependencies"
+      ],
+      "constraintsFiltering": "strict"
+    },
+    {
+      "description": "Renovate's documented workaround for npm lockfiles that one install leaves out of sync with package.json.",
+      "matchManagers": [
+        "npm"
+      ],
+      "postUpdateOptions": [
+        "npmInstallTwice"
+      ]
+    },
+    {
+      "description": "Runtime versions set the supported platform; moving them is a product decision, never a batch item.",
+      "matchDepNames": [
+        "python",
+        "node"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "groupName": null,
+      "groupSlug": null,
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "runtime"
+    },
+    {
+      "description": "A sub-major upper bound (such as <2.5 or <2.0.1) is a deliberate cap; updating under or past it needs a reviewer. Major-boundary caps (<9, <2.0.0) stay routine.",
+      "matchCurrentValue": "/<=?\\s*\\d+(?:\\.0)*\\.0*[1-9]/",
+      "groupName": null,
+      "groupSlug": null,
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps-capped"
     },
     {
       "description": "Require explicit review for breaking-risk dependency changes.",
