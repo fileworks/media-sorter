@@ -65,6 +65,7 @@
     "vitest": "4.1.11"
   },
   "overrides": {
-    "nanoid": "3.3.19"
+    "nanoid": "3.3.19",
+    "postcss-selector-parser": "7.1.6"
   }
 }
