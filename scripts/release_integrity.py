@@ -652,14 +652,16 @@ def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) ->
         return True
     if getattr(error, "winerror", None) != 5 or not error.filename:
         return False
-    # Windows can report access denied for a still-mapped metrics file. Limit
-    # this grace period to that file type in our own isolated browser profile.
+    # Windows reports access denied for a still-mapped metrics file and for a
+    # cache writer's temporary file that is pending deletion. Limit this grace
+    # period to those file types in our own isolated browser profile.
     try:
         path = Path(error.filename).resolve()
-        return (
-            path.suffix.casefold() == ".pma"
-            and path.parent == (directory / "webview/EBWebView/BrowserMetrics").resolve()
-        )
+        profile = (directory / "webview/EBWebView").resolve()
+        suffix = path.suffix.casefold()
+        if suffix == ".pma":
+            return path.parent == profile / "BrowserMetrics"
+        return suffix == ".tmp" and profile in path.parents
     except OSError:
         return False
 
@@ -978,6 +980,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     smoke_webview = subparsers.add_parser("smoke-webview")
     smoke_webview.add_argument("--path", type=Path, required=True)
+
+    verify_seal = subparsers.add_parser("verify-seal")
+    verify_seal.add_argument("--app", type=Path, required=True)
     return parser
 
 
@@ -1020,6 +1025,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
         elif args.command == "smoke-webview":
             _smoke_packaged_webview(args.path)
+        elif args.command == "verify-seal":
+            _verify_macos_seal(args.app)
         else:  # pragma: no cover - argparse enforces the choices.
             raise ReleaseIntegrityError(f"unknown command: {args.command}")
     except (ReleaseIntegrityError, OSError, subprocess.CalledProcessError) as error:

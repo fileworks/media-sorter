@@ -1,5 +1,5 @@
 {
-  "manifest_version": "2026-08-13.1",
+  "manifest_version": "2026-10-17.1",
   "targets": {
     "darwin-arm64": [
       {
@@ -22,17 +22,19 @@
     "darwin-x86_64": [
       {
         "binaries": ["ffmpeg"],
+        "format": "binary",
         "license": "GPL-3.0-or-later",
-        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
-        "upstream_version": "7.1.1",
-        "url": "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+        "sha256": "4a4a968b98859588e98500ae25973d80a5ca5eed0724222b9f76360dcb72a001",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffmpeg-darwin-x64"
       },
       {
         "binaries": ["ffprobe"],
+        "format": "binary",
         "license": "GPL-3.0-or-later",
-        "sha256": "5a0a77d5e0c689f7b577788e286dd46b2c6120babd14301cce7a79fcfd3f7d28",
-        "upstream_version": "7.1.1",
-        "url": "https://evermeet.cx/ffmpeg/ffprobe-7.1.1.zip"
+        "sha256": "ce5414269f0efa1e88b5e23b57f801d5b9a40be554716544936e0332b4601a62",
+        "upstream_version": "7.1",
+        "url": "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b7.1.0-rc.1/ffprobe-darwin-x64"
       }
     ],
     "linux-arm64": [

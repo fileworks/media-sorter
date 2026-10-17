@@ -54,8 +54,10 @@ def test_binary_source_must_declare_exactly_one_executable(tmp_path: Path) -> No
         fetch_ffmpeg.load_sources("darwin", "arm64", manifest_path=manifest)
 
 
-def test_apple_silicon_sources_are_immutable_github_assets() -> None:
-    _, sources = fetch_ffmpeg.load_sources("darwin", "arm64")
+@pytest.mark.parametrize("arch", ["arm64", "x86_64"])
+def test_macos_sources_are_immutable_github_assets(arch: str) -> None:
+    # Both Macs ship one upstream build; evermeet.cx rate-limited release runners.
+    _, sources = fetch_ffmpeg.load_sources("darwin", arch)
 
     assert {source["format"] for source in sources} == {"binary"}
     assert {source["upstream_version"] for source in sources} == {"7.1"}
