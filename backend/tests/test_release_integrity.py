@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.capabilities import requires_posix_modes
+from tests.capabilities import requires_posix_modes, requires_symlinks
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "release_integrity.py"
 REPO_ROOT = SCRIPT_PATH.parents[1]
@@ -183,6 +183,37 @@ def test_unsigned_macos_payloads_are_sealed_ad_hoc_inside_out(
     assert commands == [
         ["codesign", "--force", "--sign", "-", str(nested)],
         ["codesign", "--force", "--sign", "-", str(outer)],
+    ]
+
+
+@requires_symlinks
+def test_macos_seal_skips_framework_symlinks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # PyInstaller's layout: codesign refuses the framework-root link as an
+    # ambiguous bundle, so only the real library may be signed or verified.
+    app = tmp_path / "MediaSorter.app"
+    internal = app / "Contents" / "Resources" / "backend" / "_internal"
+    framework = internal / "Python.framework"
+    library = framework / "Versions" / "3.11" / "Python"
+    library.parent.mkdir(parents=True)
+    library.write_bytes(b"\xcf\xfa\xed\xfe" + b"lib")
+    (framework / "Versions" / "Current").symlink_to("3.11", target_is_directory=True)
+    (framework / "Python").symlink_to("Versions/Current/Python")
+    (internal / "Python").symlink_to("Python.framework/Versions/3.11/Python")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: commands.append(list(command)))
+
+    verified = release_integrity._verify_macos_seal(app)
+    signed = release_integrity.sign_nested_payloads(
+        app, release_integrity.classify_signing("macos", {}), {}
+    )
+
+    assert verified == signed == [library]
+    assert commands == [
+        ["codesign", "--verify", "--strict", "--verbose=2", str(library)],
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)],
+        ["codesign", "--force", "--sign", "-", str(library)],
     ]
 
 

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import email.message
+import hashlib
+import io
 import json
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -69,3 +73,65 @@ def test_macos_minimum_matches_the_bundled_media_tools() -> None:
     )
 
     assert config["bundle"]["macOS"]["minimumSystemVersion"] == "12.0"
+
+
+SOURCE_URL = "https://downloads.example/ffprobe.zip"
+
+
+SOURCE_URL = "https://downloads.example/ffprobe.zip"
+
+
+def _rate_limited(url: str, retry_after: str | None) -> Exception:
+    headers = email.message.Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError(url, 429, "Too Many Requests", headers, None)
+
+
+def test_download_waits_for_retry_after_then_caches_the_verified_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"ffprobe archive"
+    digest = hashlib.sha256(payload).hexdigest()
+    responses: list[object] = [_rate_limited(SOURCE_URL, "40"), _rate_limited(SOURCE_URL, None)]
+
+    def urlopen(request: object, timeout: int) -> io.BytesIO:
+        if responses:
+            raise responses.pop(0)  # type: ignore[misc]
+        return io.BytesIO(payload)
+
+    cache = tmp_path / "cache"
+    monkeypatch.setenv(fetch_ffmpeg.CACHE_ENV, str(cache))
+    monkeypatch.setattr(fetch_ffmpeg.urllib.request, "urlopen", urlopen)
+    delays: list[float] = []
+
+    fetch_ffmpeg.download(SOURCE_URL, digest, tmp_path / "first", sleep=delays.append)
+
+    assert delays == [40.0, 30.0]
+    assert (cache / digest).read_bytes() == payload
+
+    def offline(request: object, timeout: int) -> io.BytesIO:
+        raise AssertionError("a verified cache hit must not download")
+
+    monkeypatch.setattr(fetch_ffmpeg.urllib.request, "urlopen", offline)
+    fetch_ffmpeg.download(SOURCE_URL, digest, tmp_path / "second", sleep=delays.append)
+    assert (tmp_path / "second").read_bytes() == payload
+
+
+def test_a_cached_source_with_the_wrong_digest_is_downloaded_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"real bytes"
+    digest = hashlib.sha256(payload).hexdigest()
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / digest).write_bytes(b"tampered")
+    monkeypatch.setenv(fetch_ffmpeg.CACHE_ENV, str(cache))
+    monkeypatch.setattr(
+        fetch_ffmpeg.urllib.request, "urlopen", lambda request, timeout: io.BytesIO(payload)
+    )
+
+    fetch_ffmpeg.download(SOURCE_URL, digest, tmp_path / "out", sleep=lambda delay: None)
+
+    assert (tmp_path / "out").read_bytes() == payload
+    assert (cache / digest).read_bytes() == payload

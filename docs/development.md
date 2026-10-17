@@ -45,7 +45,8 @@ backend interpreter, so Windows does not need a Unix shell or `.venv/bin/python`
 
 ## Quality gates
 
-Linux CI uses Ubuntu 24.04 and the Apple Silicon release build uses macOS 15.
+Linux CI uses Ubuntu 24.04; macOS CI (`macos-latest`) and both macOS release
+builds (`macos-26`, `macos-26-intel`) use macOS 26, still targeting macOS 12.
 Existing matrix/check names remain stable; all required gates still run. CI
 artifacts expire after seven days; published release downloads remain available.
 
@@ -222,3 +223,6 @@ Output lands in `frontend/src-tauri/target/release/bundle/`. Builds are native-o
 you get an installer for the OS you're on. Never copy a Homebrew ffmpeg binary; the
 bundled ones are statically linked and run on a clean machine. Let `make bundle-ffmpeg`
 fetch the right ones.
+Set `MEDIASORT_FFMPEG_CACHE` to a directory to reuse verified downloads; each
+cached file is re-checked against the manifest SHA-256, and rate-limited hosts
+are retried after their `Retry-After` delay.

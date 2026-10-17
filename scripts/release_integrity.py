@@ -53,7 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from macos_signing import (  # noqa: E402
     _ad_hoc_sign_macho,
     _expected_macos_architecture,
-    _is_macho,
+    _macho_inside_out,
     _require_architecture,
     _verify_macos_seal,
 )
@@ -323,11 +323,7 @@ def sign_nested_payloads(
 
     if state.platform == "macos":
         identity = env["APPLE_SIGNING_IDENTITY"]
-        files = sorted(
-            (path for path in root.rglob("*") if path.is_file() and _is_macho(path)),
-            key=lambda path: len(path.parts),
-            reverse=True,
-        )
+        files = _macho_inside_out(root)
         for path in files:
             print(f"  sign nested Mach-O: {path}", flush=True)
             subprocess.run(
