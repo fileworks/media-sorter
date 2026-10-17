@@ -54,7 +54,17 @@ def test_webview_profile_cleanup_does_not_hide_permission_denial(
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="WebView2 metrics locks are Windows-specific")
-def test_webview_profile_cleanup_retries_mapped_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "webview/EBWebView/BrowserMetrics/test.pma",
+        # A release candidate's NSIS smoke hit this cache writer's pending file.
+        "webview/EBWebView/Default/Code Cache/js/index-dir/test.tmp",
+    ],
+)
+def test_webview_profile_cleanup_retries_transient_profile_files(
+    monkeypatch: pytest.MonkeyPatch, relative: str
+) -> None:
     original = release_integrity.tempfile.TemporaryDirectory.cleanup
     attempts: list[int] = []
     delays: list[float] = []
@@ -62,8 +72,8 @@ def test_webview_profile_cleanup_retries_mapped_metrics(monkeypatch: pytest.Monk
     def cleanup(temporary: TemporaryDirectory[str]) -> None:
         attempts.append(len(attempts))
         if len(attempts) < 3:
-            metrics = Path(temporary.name) / "webview/EBWebView/BrowserMetrics/test.pma"
-            raise PermissionError(13, "fixture mapped metrics", str(metrics), 5)
+            locked = Path(temporary.name) / relative
+            raise PermissionError(13, "fixture transient profile lock", str(locked), 5)
         original(temporary)
 
     monkeypatch.setattr(release_integrity.tempfile.TemporaryDirectory, "cleanup", cleanup)
@@ -77,7 +87,12 @@ def test_webview_profile_cleanup_retries_mapped_metrics(monkeypatch: pytest.Monk
 
 @pytest.mark.skipif(sys.platform != "win32", reason="WebView2 metrics locks are Windows-specific")
 @pytest.mark.parametrize(
-    "relative", ["config/test.pma", "webview/EBWebView/BrowserMetrics/test.json"]
+    "relative",
+    [
+        "config/test.pma",
+        "config/test.tmp",
+        "webview/EBWebView/BrowserMetrics/test.json",
+    ],
 )
 def test_webview_profile_cleanup_rejects_other_access_denials(
     monkeypatch: pytest.MonkeyPatch, relative: str

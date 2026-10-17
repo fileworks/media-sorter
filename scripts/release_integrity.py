@@ -652,14 +652,16 @@ def _retryable_webview_cleanup_error(error: PermissionError, directory: Path) ->
         return True
     if getattr(error, "winerror", None) != 5 or not error.filename:
         return False
-    # Windows can report access denied for a still-mapped metrics file. Limit
-    # this grace period to that file type in our own isolated browser profile.
+    # Windows reports access denied for a still-mapped metrics file and for a
+    # cache writer's temporary file that is pending deletion. Limit this grace
+    # period to those file types in our own isolated browser profile.
     try:
         path = Path(error.filename).resolve()
-        return (
-            path.suffix.casefold() == ".pma"
-            and path.parent == (directory / "webview/EBWebView/BrowserMetrics").resolve()
-        )
+        profile = (directory / "webview/EBWebView").resolve()
+        suffix = path.suffix.casefold()
+        if suffix == ".pma":
+            return path.parent == profile / "BrowserMetrics"
+        return suffix == ".tmp" and profile in path.parents
     except OSError:
         return False
 

@@ -338,7 +338,7 @@ jobs:
 
       # Verified sources keyed by the reviewed manifest. fetch_ffmpeg.py re-checks
       # every cached file's SHA-256 before use, so the cache only saves requests:
-      # evermeet.cx answered HTTP 429 to a release and failed the Intel package.
+      # A rate-limited host (evermeet.cx, since replaced) once failed the Intel package.
       - name: Restore verified ffmpeg sources
         uses: actions/cache@v6
         with:

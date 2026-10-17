@@ -99,29 +99,28 @@ def _digest(path: Path) -> str:
 
 
 def _verify_macos_seal(app: Path) -> list[Path]:
-    """Strictly verify every nested Mach-O, then the whole bundle seal.
+    """Strictly verify every distinct nested Mach-O, then the whole bundle seal.
 
-    Tauri copies resources with symlinks dereferenced, so the packaged
-    ``Python.framework/Python`` is a real copy of ``Versions/<v>/Python``.
-    ``codesign`` cannot verify a binary at a framework root on its own ("bundle
-    format is ambiguous"); such a copy must instead be byte-identical to a
-    Mach-O that was verified at an unambiguous path.
+    Tauri copies resources with symlinks dereferenced, so PyInstaller's
+    ``Python.framework/Versions/<v>/Python`` arrives three more times as real
+    copies (``Versions/Current/Python``, ``Python.framework/Python`` and
+    ``_internal/Python``). Its signature binds the framework's Info.plist, so
+    ``codesign`` rejects the copies on their own ("bundle format is ambiguous",
+    "invalid Info.plist"). Each distinct content is therefore verified once, at
+    its deepest path, where that bundle context exists; a byte-identical copy
+    inherits the result. A framework-root binary with no verified twin fails.
+    The release smoke tests then launch the packaged backend from those copies.
     """
     files = _macho_inside_out(app)
     verified: set[str] = set()
-    framework_roots: list[Path] = []
     for path in files:
-        if path.parent.suffix == ".framework":
-            framework_roots.append(path)
+        digest = _digest(path)
+        if digest in verified:
             continue
+        if path.parent.suffix == ".framework":
+            raise ReleaseIntegrityError(f"framework-root Mach-O matches no verified copy: {path}")
         subprocess.run(["codesign", "--verify", "--strict", "--verbose=2", str(path)], check=True)
-        verified.add(_digest(path))
-    unmatched = [path for path in framework_roots if _digest(path) not in verified]
-    if unmatched:
-        raise ReleaseIntegrityError(
-            "framework-root Mach-O files match no verified copy: "
-            + ", ".join(str(path) for path in unmatched)
-        )
+        verified.add(digest)
     subprocess.run(
         ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True
     )
