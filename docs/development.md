@@ -144,16 +144,39 @@ listed exactly in [state-and-recovery.md](state-and-recovery.md).
 
 ## Releasing
 
-Releases are driven by **Conventional Commits** — you don't tag by hand, and you don't
-release by accident either. Land `fix:` or `feat:` commits on `main` as usual, then
-dispatch **Version Release** (`gh workflow run version-release.yml`) when that history is
-meant to ship. Publishing is a decision, so it is a deliberate dispatch rather than a
-side effect of merging. The workflow computes the next version from those commits,
-updates `CHANGELOG.md`, syncs that version everywhere (`scripts/sync-version.mjs` →
-`_version.py`, `tauri.conf.json`, `Cargo.toml`, …), and pushes a `v<version>` tag. That
-tag triggers the release workflow, which builds every OS natively — macOS arm64 + Intel
-`.dmg`, Windows `.msi`, NSIS `.exe`, and portable `.zip` — and uploads them to a
-GitHub Release.
+Releases are driven by **Conventional Commits**: you don't tag by hand, and merging
+never releases by itself. Land `fix:`/`feat:`/`perf:` commits on `main`; shipping
+is then one deliberate dispatch:
+
+```bash
+gh workflow run version-release.yml --ref main -f dry_run=true   # what would ship?
+gh workflow run version-release.yml --ref main                   # ship it
+```
+
+The run summary of either shows the next version, its changelog section and the
+commits it covers. A history of only docs, tests or `.github` changes has nothing
+to release; material changes without a `feat`/`fix`/`perf` record stop with an
+error rather than guessing a version (`scripts/releaseability.cjs`). Without
+`dry_run`, Version Release then:
+
+1. requires a successful unpublished **Release** candidate for that exact `main`
+   commit, reusing one or starting one and waiting (about an hour; a failed
+   candidate's failed jobs are retried once, a second failure ships nothing);
+2. syncs the version everywhere (`scripts/sync-version.mjs` → `_version.py`,
+   `tauri.conf.json`, `Cargo.toml`, …), updates `CHANGELOG.md`, commits
+   `chore(release): vX.Y.Z` to `main` and pushes the `vX.Y.Z` tag atomically
+   (if `main` moved meanwhile, the push is refused and nothing ships);
+3. the tag triggers **Release**, which rebuilds the tagged commit natively —
+   macOS arm64 + Intel `.dmg`, Windows `.msi`, NSIS `.exe` and portable `.zip` —
+   repeats every gate and publishes the GitHub Release.
+
+**Why two workflows.** Version Release decides *what* ships: a one-minute Linux job
+that alone holds the token allowed to push to `main`. Release decides *whether it
+works* and publishes: hour-long builds on three OS runners that execute
+third-party tooling (npm, cargo, pip, ffmpeg downloads) and never see that token.
+Keeping them apart also lets a tag be rebuilt without minting a new version, and
+makes Release usable as an unpublished candidate (`gh workflow run release.yml
+--ref main`); Version Release orchestrates both, so they remain one action.
 
 Tag builds publish a GitHub Release only after artifact type/content checks, packaged
 backend/ffmpeg smoke tests, controlled native startup recovery, checksums, and the
@@ -200,19 +223,13 @@ remembered Programs-root and custom-folder defaults for both scopes. The hook us
 MultiUser's page-leave callback because changing scope restores the remembered
 directory again. Model MultiUser's `%LOCALAPPDATA%\Programs` fallback when
 UserProgramFiles is unavailable; a fresh CI profile may not have that known folder.
-A manual `release.yml` dispatch
-on `main` repeats the full gates and builds unpublished candidate artifacts;
-after a source fix, dispatch the new commit rather than rerunning the old SHA.
-Tag publication continues through Version Release, which refuses to tag a `main`
-commit without a successful candidate run for that exact SHA. To ship:
-
-```bash
-gh workflow run release.yml --ref main          # candidate; wait for success
-gh workflow run version-release.yml --ref main  # tags vX.Y.Z, which publishes
-```
-
-Release jobs have explicit time limits, and a tag build is never cancelled by a
-newer dispatch, so publication cannot stop halfway.
+A manual `release.yml` dispatch on `main` repeats the full gates and builds
+unpublished candidate artifacts; after a source fix, dispatch the new commit rather
+than rerunning the old SHA. Release jobs have explicit time limits, a package's
+artifact upload is retried once after a runner network failure, and a tag build is
+never cancelled by a newer dispatch, so publication cannot stop halfway. If a tag
+build still fails for a transient reason, rerun its failed jobs
+(`gh run rerun RUN_ID --failed`); the tag and version stay unchanged.
 
 The backend version is single-sourced from `backend/app/_version.py` (pyproject reads it
 via hatchling's dynamic-version hook), so the running app always reports the released

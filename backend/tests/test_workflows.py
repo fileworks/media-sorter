@@ -196,22 +196,63 @@ def test_release_jobs_are_time_bounded_and_tag_builds_are_never_cancelled() -> N
     assert cancel == "${{ !startsWith(github.ref, 'refs/tags/') }}"
 
 
-def test_version_release_requires_a_green_candidate_and_a_working_token() -> None:
+def test_every_ci_and_release_job_is_time_bounded() -> None:
+    for name in ("ci.yml", "release.yml", "version-release.yml"):
+        workflow = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+        for job_name, job in workflow["jobs"].items():
+            assert isinstance(job.get("timeout-minutes"), int), f"{name}: {job_name}"
+
+
+def test_release_artifact_upload_retries_once() -> None:
+    workflow = yaml.safe_load((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["package"]["steps"]
+    uploads = [
+        step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact")
+    ]
+
+    first, retry = uploads
+    assert first["continue-on-error"] is True and first["id"] == "upload"
+    assert retry["if"] == "steps.upload.outcome == 'failure'"
+    assert "continue-on-error" not in retry
+    assert retry["with"]["overwrite"] is True
+    assert {**first["with"], "overwrite": True} == retry["with"]
+
+
+def test_version_release_previews_then_requires_a_green_candidate_and_a_working_token() -> None:
     text = (WORKFLOWS / "version-release.yml").read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     job = workflow["jobs"]["release"]
-    steps = job["steps"]
+    steps = {step.get("name", step.get("uses")): step for step in job["steps"]}
+    order = [step.get("name", step.get("uses")) for step in job["steps"]]
 
-    gate = steps[0]["run"]
-    assert 'if [ "$REF" != "refs/heads/main" ]' in gate
-    assert "--workflow release.yml" in gate
-    assert '--commit "$SHA" --status success' in gate
-    assert 'GH_TOKEN="$RELEASE_TOKEN" gh api' in gate
-    assert workflow["permissions"] == {"contents": "write", "actions": "read"}
+    assert workflow[True]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is False
+    assert steps["Require main"]["if"] == "github.ref != 'refs/heads/main'"
+    token = steps["Require a working release token"]
+    assert token["if"] == "${{ !inputs.dry_run }}"
+    assert 'GH_TOKEN="$RELEASE_TOKEN" gh api' in token["run"]
+    preview = steps["Preview the next version"]["run"]
+    assert "release-it --ci --release-version" in preview
+    assert "GITHUB_STEP_SUMMARY" in preview
+    candidate = steps["Require a green Release candidate for this commit"]
+    assert '--commit "$GITHUB_SHA"' in candidate["run"]
+    assert "gh workflow run release.yml --ref main" in candidate["run"]
+    assert candidate["run"].count("gh run rerun") == 1  # one retry, then stop
+    assert 'if [ "$retried" = true ]' in candidate["run"]
+    assert "cancelled)" in candidate["run"]  # a superseded candidate is followed
+    tag = steps["Tag the release"]
+    for guarded in (candidate, tag):
+        assert guarded["if"] == "${{ !inputs.dry_run && steps.preview.outputs.version != '' }}"
+    assert "npm run release" in tag["run"]
+    assert (
+        order.index("Preview the next version")
+        < order.index("Require a green Release candidate for this commit")
+        < order.index("Tag the release")
+    )
+    assert workflow["permissions"] == {"contents": "read", "actions": "write"}
     assert isinstance(job.get("timeout-minutes"), int)
-    # No fallback to GITHUB_TOKEN: it could tag without ever triggering a build.
+    # No fallback to GITHUB_TOKEN for pushing: it could tag without triggering a build.
     assert "|| secrets.GITHUB_TOKEN" not in text
-    installs = [step["run"] for step in steps if "npm ci" in str(step.get("run", ""))]
+    installs = [step["run"] for step in job["steps"] if "npm ci" in str(step.get("run", ""))]
     assert installs == ["npm ci --ignore-scripts"]
 
 
