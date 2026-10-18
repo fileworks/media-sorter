@@ -245,11 +245,13 @@ def test_version_release_previews_then_requires_a_green_candidate_and_the_releas
     for guarded in (candidate, mint, tag):
         assert guarded["if"] == "${{ !inputs.dry_run && steps.preview.outputs.version != '' }}"
     # The org App replaces any personal token; both mints use the same App.
-    for app_token in (early, mint):
+    # Only the push mint may write; the fail-fast check gets a read-only token.
+    for app_token, contents in ((early, "read"), (mint, "write")):
         assert app_token["uses"] == "actions/create-github-app-token@v3"
         assert app_token["with"] == {
             "client-id": "${{ vars.RELEASE_APP_CLIENT_ID }}",
             "private-key": "${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
+            "permission-contents": contents,
         }
     assert "SEMANTIC_RELEASE_TOKEN" not in text
     assert tag["env"]["RELEASE_TOKEN"] == "${{ steps.release-app.outputs.token }}"

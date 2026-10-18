@@ -80,13 +80,15 @@ jobs:
           fi
 
       # Fail fast: proves the App is installed here before the long candidate
-      # wait. The token expires after an hour, so the push mints its own below.
+      # wait. This token is read-only; the push mints its own below because a
+      # token lives one hour and must not exist during installs and builds.
       - name: Require a working release App
         if: ${{ !inputs.dry_run }}
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
 
       - uses: actions/checkout@v7
         with:
@@ -226,6 +228,7 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Tag the release
         if: ${{ !inputs.dry_run && steps.preview.outputs.version != '' }}
