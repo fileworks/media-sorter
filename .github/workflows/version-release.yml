@@ -1,17 +1,28 @@
 name: Version Release
 
-# Runs only after an explicitly reviewed manual dispatch. If the selected main
-# history contains a `feat:` or `fix:` (or a breaking change), release-it:
-#   1. computes the next version from Conventional Commits,
-#   2. syncs that version into the app (scripts/sync-version.mjs),
-#   3. updates CHANGELOG.md,
-#   4. commits those files back to main and creates a `v<version>` git tag.
+# Ships main as the next MediaSorter version in one manual dispatch:
 #
-# The tag is what drives release.yml (which builds + publishes the installers).
+#   gh workflow run version-release.yml --ref main -f dry_run=true   # preview only
+#   gh workflow run version-release.yml --ref main                   # ship
 #
-# Before anything is tagged, the dispatched main commit must already have a green
-# unpublished Release candidate (`gh workflow run release.yml --ref main`). A tag
-# then never points at a commit whose installers are known to fail.
+#   1. Preview. Computes the next version from Conventional Commits since the
+#      last `v*` tag and writes it, the changelog section and the commits it
+#      covers to the run summary. Docs/tests-only history means nothing to
+#      release. `dry_run` stops here and changes nothing.
+#   2. Candidate. Requires a successful unpublished Release run (release.yml
+#      dispatched on main) for this exact commit, so a tag never points at a
+#      commit whose installers fail. It reuses one, or starts one and waits. A
+#      failed candidate's failed jobs are retried once (runner network glitches
+#      happen); a second failure stops the release with nothing changed.
+#   3. Tag. release-it syncs the version (scripts/sync-version.mjs), updates
+#      CHANGELOG.md, commits `chore(release): vX.Y.Z` to main and pushes the tag
+#      atomically. If main moved meanwhile, the push is refused and nothing ships.
+#   4. Publish. The tag triggers release.yml, which rebuilds the tagged commit,
+#      repeats every gate and publishes the GitHub Release.
+#
+# Versioning and building stay separate workflows: the token that may push to
+# main exists only in this short job, never in the long builds that run
+# third-party tooling, and a tag can be rebuilt without minting a new version.
 #
 # REQUIRED SECRET — SEMANTIC_RELEASE_TOKEN
 # A tag pushed using the default GITHUB_TOKEN would NOT trigger release.yml (GitHub
@@ -22,14 +33,18 @@ name: Version Release
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only preview the next version and changelog; change nothing
+        type: boolean
+        default: false
 
 permissions:
-  # contents: write is all the configured plugins need — to push the release commit
-  # and tag. GitHub release creation is disabled here, so nothing
-  # here comments on issues/PRs or creates a GitHub Release (release.yml does that),
-  # hence no issues:/pull-requests: write grants. actions: read finds the candidate.
-  contents: write
-  actions: read
+  # The job's own GITHUB_TOKEN only reads the repository and finds, starts and
+  # retries the Release candidate. The release commit and tag are pushed with
+  # SEMANTIC_RELEASE_TOKEN, and release.yml creates the GitHub Release.
+  contents: read
+  actions: write
 
 # Never run two releases at once; never cancel one mid-flight (a half-done release
 # leaves a dangling tag).
@@ -39,29 +54,24 @@ concurrency:
 
 jobs:
   release:
-    name: Create release (if warranted)
+    name: ${{ inputs.dry_run && 'Preview the next release' || 'Release main (if warranted)' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # A candidate build takes up to about an hour and may be retried once.
+    timeout-minutes: 180
     steps:
-      - name: Require main, a green candidate and a working release token
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Not main::Version Release only runs on main, got $GITHUB_REF."
+          exit 1
+
+      - name: Require a working release token
+        if: ${{ !inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          REF: ${{ github.ref }}
-          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ "$REF" != "refs/heads/main" ]; then
-            echo "::error title=Not main::Version Release only runs on main, got $REF."
-            exit 1
-          fi
-          candidate="$(gh run list --repo "$REPOSITORY" --workflow release.yml             --branch main --event workflow_dispatch --commit "$SHA" --status success             --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
-          if [ -z "$candidate" ]; then
-            echo "::error title=No green Release candidate::main at $SHA has no successful Release candidate. Run: gh workflow run release.yml --ref main, wait for it to pass, then dispatch Version Release again."
-            exit 1
-          fi
-          echo "Release candidate for $SHA: https://github.com/$REPOSITORY/actions/runs/$candidate"
           if [ -z "$RELEASE_TOKEN" ]; then
             echo "::error title=No SEMANTIC_RELEASE_TOKEN::Add a fine-grained PAT (contents: read/write) as the SEMANTIC_RELEASE_TOKEN repository secret."
             exit 1
@@ -74,9 +84,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history so Conventional Commits can be analysed
-          persist-credentials: true
-          # The PAT makes the pushed tag trigger release.yml (see header).
-          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          persist-credentials: ${{ !inputs.dry_run }}
+          # The PAT makes the pushed tag trigger release.yml (see header). A
+          # preview pushes nothing and never needs it.
+          token: ${{ inputs.dry_run && github.token || secrets.SEMANTIC_RELEASE_TOKEN }}
 
       - name: Configure release commit identity
         run: |
@@ -98,7 +109,123 @@ jobs:
       - name: Audit release tooling
         run: npm audit --audit-level=high
 
-      - name: Run release-it
+      - name: Preview the next version
+        id: preview
+        run: |
+          set -euo pipefail
+          previous="$(git describe --tags --match='v*' --abbrev=0 HEAD)"
+          version=""
+          if [ "$(git rev-list --count "$previous..HEAD")" != 0 ]; then
+            # Prints nothing when only docs/tests changed; fails when material
+            # changes have no feat/fix/perf record (see scripts/releaseability.cjs).
+            version="$(npx --no-install release-it --ci --release-version)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            if [ -z "$version" ]; then
+              echo "## Nothing to release"
+              echo
+              echo "main has no releasable changes since \`$previous\`."
+            else
+              echo "## Next release: v$version"
+              echo
+              echo "Previous release: \`$previous\`. Commit: \`$GITHUB_SHA\`."
+              echo
+              npx --no-install release-it --ci --changelog
+              echo
+              echo "<details><summary>Commits since $previous</summary>"
+              echo
+              git log --format='- %h %s' "$previous..HEAD"
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Next version: ${version:-none (nothing to release)}"
+
+      - name: Require a green Release candidate for this commit
+        if: ${{ !inputs.dry_run && steps.preview.outputs.version != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Release candidates for exactly this commit, newest first.
+          candidates() {
+            gh run list --workflow release.yml --branch main --event workflow_dispatch               --commit "$GITHUB_SHA" --limit 20 --json databaseId,status,conclusion "$@"
+          }
+          newest() { candidates --jq '.[0].databaseId // empty'; }
+          run="$(candidates --jq 'map(select(.conclusion == "success"))[0].databaseId // empty')"
+          if [ -z "$run" ]; then
+            run="$(candidates --jq 'map(select(.status != "completed"))[0].databaseId // empty')"
+          fi
+          if [ -z "$run" ]; then
+            before="$(newest)"
+            echo "No candidate for $GITHUB_SHA yet; starting one."
+            started="$(gh workflow run release.yml --ref main 2>&1)"
+            echo "$started"
+            # Current gh prints the new run's URL; otherwise find it by polling.
+            run="$(grep -oE 'actions/runs/[0-9]+' <<< "$started" | head -n 1 | cut -d/ -f3 || true)"
+            for _ in $(seq 1 30); do
+              [ -n "$run" ] && break
+              sleep 10
+              run="$(newest)"
+              if [ -n "$run" ] && [ "$run" != "$before" ]; then break; fi
+              run=""
+            done
+            if [ -z "$run" ]; then
+              echo "::error title=Candidate did not start::No Release run appeared for $GITHUB_SHA."
+              exit 1
+            fi
+          fi
+          retried=false
+          for _ in $(seq 1 5); do
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+            echo "Release candidate: $url"
+            gh run watch "$run" --interval 60 > /dev/null || true
+            conclusion="$(gh run view "$run" --json conclusion --jq .conclusion)"
+            case "$conclusion" in
+              success)
+                echo "Release candidate: [$run]($url) passed." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+                ;;
+              cancelled)
+                # A newer dispatch of the same commit supersedes this one: follow
+                # it. One for another commit means main moved, so stop.
+                replacement="$(newest)"
+                if [ -z "$replacement" ] || [ "$replacement" = "$run" ]; then
+                  echo "::error title=Release candidate cancelled::$url was cancelled; nothing was tagged."
+                  exit 1
+                fi
+                echo "Candidate $run was superseded by $replacement."
+                run="$replacement"
+                ;;
+              *)
+                if [ "$retried" = true ]; then
+                  echo "::error title=Release candidate failed::$url failed twice; nothing was tagged."
+                  exit 1
+                fi
+                echo "::warning title=Candidate failed once::Retrying the failed jobs of $url once."
+                gh run rerun "$run" --failed
+                retried=true
+                sleep 30
+                ;;
+            esac
+          done
+          echo "::error title=Release candidate unresolved::Gave up following candidates for $GITHUB_SHA."
+          exit 1
+
+      - name: Tag the release
+        if: ${{ !inputs.dry_run && steps.preview.outputs.version != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-        run: npm run release
+          VERSION: ${{ steps.preview.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm run release
+          tag="v$VERSION"
+          if [ "$(git describe --tags --exact-match HEAD)" != "$tag" ]; then
+            echo "::error title=Unexpected version::release-it did not tag the previewed $tag."
+            exit 1
+          fi
+          echo "Tagged \`$tag\`; release.yml now builds and publishes it:" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release.yml?query=branch%3A$tag" \
+            >> "$GITHUB_STEP_SUMMARY"
