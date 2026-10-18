@@ -235,13 +235,18 @@ The backend version is single-sourced from `backend/app/_version.py` (pyproject 
 via hatchling's dynamic-version hook), so the running app always reports the released
 version.
 
-> **Required secret:** `SEMANTIC_RELEASE_TOKEN`, a fine-grained PAT with
-> `contents: read/write` on this repository, owned by an organization admin (the
-> main ruleset's bypass actor). Only that token makes the pushed tag trigger the
-> build. Version Release checks it first and fails without changes when it is
-> missing or expired; replace the secret before the PAT's expiry date. The
-> release-tooling install runs with `--ignore-scripts` because the checkout
-> keeps that token.
+> **Required App:** the organization-owned `fileworks-release` GitHub App
+> (repository permission Contents: read/write, installed on this repository and
+> listed as a bypass actor of the `main` ruleset). Version Release reads the
+> `RELEASE_APP_CLIENT_ID` organization variable and `RELEASE_APP_PRIVATE_KEY`
+> organization secret, both shared with this repository, and mints a one-hour
+> installation token. Only that token makes the pushed tag trigger the build;
+> no personal token is involved and nothing expires on a calendar. Version
+> Release checks the App first and fails without changes when it is missing or
+> misconfigured. The push token is minted only after the candidate passes, and
+> the release-tooling install runs with `--ignore-scripts`. Rotating the key:
+> generate a new private key in the App settings, replace the secret, then
+> delete the old key.
 
 ### Building locally
 

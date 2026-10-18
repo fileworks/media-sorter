@@ -218,7 +218,7 @@ def test_release_artifact_upload_retries_once() -> None:
     assert {**first["with"], "overwrite": True} == retry["with"]
 
 
-def test_version_release_previews_then_requires_a_green_candidate_and_a_working_token() -> None:
+def test_version_release_previews_then_requires_a_green_candidate_and_the_release_app() -> None:
     text = (WORKFLOWS / "version-release.yml").read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     job = workflow["jobs"]["release"]
@@ -227,9 +227,10 @@ def test_version_release_previews_then_requires_a_green_candidate_and_a_working_
 
     assert workflow[True]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is False
     assert steps["Require main"]["if"] == "github.ref != 'refs/heads/main'"
-    token = steps["Require a working release token"]
-    assert token["if"] == "${{ !inputs.dry_run }}"
-    assert 'GH_TOKEN="$RELEASE_TOKEN" gh api' in token["run"]
+    configured = steps["Require the release App configuration"]
+    early = steps["Require a working release App"]
+    assert configured["if"] == early["if"] == "${{ !inputs.dry_run }}"
+    assert "RELEASE_APP_CLIENT_ID" in configured["env"]["CLIENT_ID"]
     preview = steps["Preview the next version"]["run"]
     assert "release-it --ci --release-version" in preview
     assert "GITHUB_STEP_SUMMARY" in preview
@@ -239,13 +240,30 @@ def test_version_release_previews_then_requires_a_green_candidate_and_a_working_
     assert candidate["run"].count("gh run rerun") == 1  # one retry, then stop
     assert 'if [ "$retried" = true ]' in candidate["run"]
     assert "cancelled)" in candidate["run"]  # a superseded candidate is followed
+    mint = steps["Mint the release push token"]
     tag = steps["Tag the release"]
-    for guarded in (candidate, tag):
+    for guarded in (candidate, mint, tag):
         assert guarded["if"] == "${{ !inputs.dry_run && steps.preview.outputs.version != '' }}"
+    # The org App replaces any personal token; both mints use the same App.
+    # Only the push mint may write; the fail-fast check gets a read-only token.
+    for app_token, contents in ((early, "read"), (mint, "write")):
+        assert app_token["uses"] == "actions/create-github-app-token@v3"
+        assert app_token["with"] == {
+            "client-id": "${{ vars.RELEASE_APP_CLIENT_ID }}",
+            "private-key": "${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
+            "permission-contents": contents,
+        }
+    assert "SEMANTIC_RELEASE_TOKEN" not in text
+    assert tag["env"]["RELEASE_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert "npm run release" in tag["run"]
+    # No push credential persists from checkout through installs and the wait.
+    assert steps["actions/checkout@v7"]["with"]["persist-credentials"] is False
     assert (
-        order.index("Preview the next version")
+        order.index("Require the release App configuration")
+        < order.index("Require a working release App")
+        < order.index("Preview the next version")
         < order.index("Require a green Release candidate for this commit")
+        < order.index("Mint the release push token")  # the token lives one hour
         < order.index("Tag the release")
     )
     assert workflow["permissions"] == {"contents": "read", "actions": "write"}
