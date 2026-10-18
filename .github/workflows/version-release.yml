@@ -24,12 +24,14 @@ name: Version Release
 # main exists only in this short job, never in the long builds that run
 # third-party tooling, and a tag can be rebuilt without minting a new version.
 #
-# REQUIRED SECRET — SEMANTIC_RELEASE_TOKEN
+# REQUIRED — the fileworks-release GitHub App
 # A tag pushed using the default GITHUB_TOKEN would NOT trigger release.yml (GitHub
 # suppresses workflow runs for events created by GITHUB_TOKEN), and the main
-# ruleset rejects its direct push. The secret is a fine-grained PAT (contents:
-# read/write on this repository) owned by an organization admin, the ruleset's
-# bypass actor. A missing or expired token fails before anything is changed.
+# ruleset rejects its direct push. The org-owned fileworks-release App (contents:
+# read/write, installed on this repository, the ruleset's bypass actor) pushes
+# instead: the RELEASE_APP_CLIENT_ID variable and RELEASE_APP_PRIVATE_KEY secret
+# mint a one-hour installation token, so no personal token is stored. A missing
+# or misconfigured App fails before anything is changed.
 
 on:
   workflow_dispatch:
@@ -42,7 +44,7 @@ on:
 permissions:
   # The job's own GITHUB_TOKEN only reads the repository and finds, starts and
   # retries the Release candidate. The release commit and tag are pushed with
-  # SEMANTIC_RELEASE_TOKEN, and release.yml creates the GitHub Release.
+  # the App token, and release.yml creates the GitHub Release.
   contents: read
   actions: write
 
@@ -65,29 +67,33 @@ jobs:
           echo "::error title=Not main::Version Release only runs on main, got $GITHUB_REF."
           exit 1
 
-      - name: Require a working release token
+      - name: Require the release App configuration
         if: ${{ !inputs.dry_run }}
         env:
-          RELEASE_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
+          CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          PRIVATE_KEY_SET: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
         run: |
           set -euo pipefail
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "::error title=No SEMANTIC_RELEASE_TOKEN::Add a fine-grained PAT (contents: read/write) as the SEMANTIC_RELEASE_TOKEN repository secret."
+          if [ -z "$CLIENT_ID" ] || [ "$PRIVATE_KEY_SET" != true ]; then
+            echo "::error title=Release App not configured::Share the RELEASE_APP_CLIENT_ID organization variable and RELEASE_APP_PRIVATE_KEY organization secret with this repository."
             exit 1
           fi
-          if ! GH_TOKEN="$RELEASE_TOKEN" gh api "repos/$REPOSITORY" --silent; then
-            echo "::error title=SEMANTIC_RELEASE_TOKEN rejected::The release token is expired or lacks access to $REPOSITORY. Replace the SEMANTIC_RELEASE_TOKEN secret."
-            exit 1
-          fi
+
+      # Fail fast: proves the App is installed here before the long candidate
+      # wait. The token expires after an hour, so the push mints its own below.
+      - name: Require a working release App
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history so Conventional Commits can be analysed
-          persist-credentials: ${{ !inputs.dry_run }}
-          # The PAT makes the pushed tag trigger release.yml (see header). A
-          # preview pushes nothing and never needs it.
-          token: ${{ inputs.dry_run && github.token || secrets.SEMANTIC_RELEASE_TOKEN }}
+          # No push credential exists until the tag step, so neither the
+          # tooling install nor the candidate wait can see one.
+          persist-credentials: false
 
       - name: Configure release commit identity
         run: |
@@ -102,8 +108,8 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install release tooling
-        # The checkout keeps the release token in .git/config, so no dependency
-        # install script may run here.
+        # Release tooling runs where the push token later exists, so no
+        # dependency install script may run.
         run: npm ci --ignore-scripts
 
       - name: Audit release tooling
@@ -213,13 +219,26 @@ jobs:
           echo "::error title=Release candidate unresolved::Gave up following candidates for $GITHUB_SHA."
           exit 1
 
+      - name: Mint the release push token
+        id: release-app
+        if: ${{ !inputs.dry_run && steps.preview.outputs.version != '' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Tag the release
         if: ${{ !inputs.dry_run && steps.preview.outputs.version != '' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+          RELEASE_TOKEN: ${{ steps.release-app.outputs.token }}
           VERSION: ${{ steps.preview.outputs.version }}
         run: |
           set -euo pipefail
+          # The App token (not GITHUB_TOKEN) makes the pushed tag trigger
+          # release.yml; the action revokes it when the job ends.
+          basic="$(printf 'x-access-token:%s' "$RELEASE_TOKEN" | base64 -w0)"
+          echo "::add-mask::$basic"
+          git config --local "http.$GITHUB_SERVER_URL/.extraheader" "AUTHORIZATION: basic $basic"
           npm run release
           tag="v$VERSION"
           if [ "$(git describe --tags --exact-match HEAD)" != "$tag" ]; then
