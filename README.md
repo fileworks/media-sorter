@@ -167,7 +167,11 @@ requests, one per ecosystem: backend Python, frontend and release-tooling
 JavaScript, Rust, CI actions and images, and Tauri (crates and npm packages
 together). Each squash-merges only after all checks pass, so one failing lane
 does not hold back the others; the `build` check rejects Tauri npm/crate version
-drift. Python updates stay within the backend's `requires-python`. Python and
+drift. Direct Python and Cargo dependencies are exact pins, so each lockfile
+update installs exactly the release that passed Renovate's seven-day soak;
+deliberate caps such as NumPy's `<2.5` and ONNX Runtime's `<1.24` stay ranges
+and their in-range moves can still resolve past the soak.
+Python updates stay within the backend's `requires-python`. Python and
 Node runtime moves, updates under a deliberate cap such as NumPy's `<2.5`, and
 major, replacement, and rollback updates stay on the Dependency Dashboard until
 explicitly approved and are never auto-merged. Urgent vulnerability updates
