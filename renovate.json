@@ -154,6 +154,18 @@
       ]
     },
     {
+      "description": "config:best-practices extends security:minimumReleaseAgeNpm, a three-day npm rule that overrides the top-level release age. Restore the shared seven days so npm packages and their crate twins (Tauri) soak alike. Only versioned updates: the preset exempts pin, bump, replacement and lockfile updates, which carry no release timestamp.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "Runtime versions set the supported platform; moving them is a product decision, never a batch item.",
       "matchDepNames": [
         "python",
