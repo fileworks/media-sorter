@@ -62,6 +62,29 @@ def _workflow_text() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for path in sorted(WORKFLOWS.glob("*.yml")))
 
 
+_USES = re.compile(r"""uses:\s*["']?([\w.-]+/[\w./-]+)@([^\s"']+)["']?(?:[ \t]+#[ \t]*(\S+))?""")
+_COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _action_generations(text: str) -> dict[str, set[str]]:
+    """Each action's referenced generation, read through `@<sha> # vN` digest pins.
+
+    Renovate pins actions to a commit and keeps the tag as a trailing comment.
+    YAML parsing drops that comment, so this reads the raw text. A digest
+    without its tag comment reports the digest itself, which no approved
+    generation set contains.
+    """
+    generations: dict[str, set[str]] = {}
+    for action, ref, comment in _USES.findall(text):
+        tag = comment if _COMMIT_SHA.fullmatch(ref) and comment else ref
+        generations.setdefault(action, set()).add(tag)
+    return generations
+
+
+def _action_name(uses: object) -> str:
+    return str(uses or "").split("@", maxsplit=1)[0]
+
+
 def test_official_actions_use_node_24_compatible_generations() -> None:
     workflows = _workflow_text()
 
@@ -73,10 +96,11 @@ def test_official_actions_use_node_24_compatible_generations() -> None:
         "actions/setup-node": {"v7"},
         "actions/download-artifact": {"v8"},
     }
+    generations = _action_generations(workflows)
     for action, versions in approved.items():
-        observed = set(re.findall(rf"{re.escape(action)}@([^\s]+)", workflows))
-        assert observed
-        assert observed <= versions
+        observed = generations.get(action, set())
+        assert observed, action
+        assert observed <= versions, action
 
 
 def test_all_explicit_node_toolchains_use_node_24() -> None:
@@ -247,17 +271,21 @@ def test_version_release_previews_then_requires_a_green_candidate_and_the_releas
     # The org App replaces any personal token; both mints use the same App.
     # Only the push mint may write; the fail-fast check gets a read-only token.
     for app_token, contents in ((early, "read"), (mint, "write")):
-        assert app_token["uses"] == "actions/create-github-app-token@v3"
+        assert _action_name(app_token["uses"]) == "actions/create-github-app-token"
         assert app_token["with"] == {
             "client-id": "${{ vars.RELEASE_APP_CLIENT_ID }}",
             "private-key": "${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
             "permission-contents": contents,
         }
+    assert _action_generations(text)["actions/create-github-app-token"] == {"v3"}
     assert "SEMANTIC_RELEASE_TOKEN" not in text
     assert tag["env"]["RELEASE_TOKEN"] == "${{ steps.release-app.outputs.token }}"
     assert "npm run release" in tag["run"]
     # No push credential persists from checkout through installs and the wait.
-    assert steps["actions/checkout@v7"]["with"]["persist-credentials"] is False
+    (checkout,) = (
+        step for step in job["steps"] if _action_name(step.get("uses")) == "actions/checkout"
+    )
+    assert checkout["with"]["persist-credentials"] is False
     assert (
         order.index("Require the release App configuration")
         < order.index("Require a working release App")
