@@ -166,6 +166,13 @@
       "minimumReleaseAge": "7 days"
     },
     {
+      "description": "A pinDigest only freezes the code a floating tag already runs, but Renovate ages it against the tag's newest release, so frequently released actions never clear the soak and hold the whole pin group (media-sorter #129). Renovate's documented remedy: no release age for pinDigest. Digest and version updates keep seven days.",
+      "matchUpdateTypes": [
+        "pinDigest"
+      ],
+      "minimumReleaseAge": null
+    },
+    {
       "description": "Runtime versions set the supported platform; moving them is a product decision, never a batch item.",
       "matchDepNames": [
         "python",
