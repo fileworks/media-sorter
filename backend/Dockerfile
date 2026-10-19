@@ -1,5 +1,5 @@
 # ── Stage 1: builder ──────────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce AS builder
 
 WORKDIR /build
 
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --prefix=/install .
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
 
 LABEL org.opencontainers.image.title="MediaSorter Backend"
 LABEL org.opencontainers.image.description="FastAPI backend for intelligent media organisation"
