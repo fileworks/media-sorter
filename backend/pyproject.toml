@@ -12,27 +12,27 @@ readme = "README.md"
 
 dependencies = [
     # Web framework
-    "fastapi==0.141.1",
-    "uvicorn[standard]==0.52.1",
+    "fastapi==0.143.0",
+    "uvicorn[standard]==0.54.0",
     "python-multipart==0.0.32",
     "websockets==16.1.1",
 
     # Configuration & validation
-    "pydantic==2.13.4",
-    "pydantic-settings==2.14.2",
-    "python-dotenv==1.2.2",
-    "platformdirs==4.11.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.15.0",
+    "python-dotenv==1.2.4",
+    "platformdirs==4.12.4",
 
     # Logging
     "structlog==26.1.0",
-    "python-json-logger==4.1.0",
+    "python-json-logger==4.2.0",
 
     # Image processing
     "pillow==12.3.0",
     "piexif==1.1.3",
     "imagehash==4.3.2",
     # HEIC/HEIF support (registers a Pillow plugin)
-    "pillow-heif==1.5.0",
+    "pillow-heif==1.8.1",
     # RAW decoding (bundles libraw via the wheel)
     "rawpy==0.27.0",
     # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
@@ -54,10 +54,10 @@ dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
-    "pytest-mock==3.15.1",
+    "pytest-mock==3.16.0",
     # Property testing (`P-08`). Ported from unpacksort, where it already covers
     # the archive-path safety rules this backend re-derived as `path_identity_key`.
-    "hypothesis==6.165.10",
+    "hypothesis==6.168.5",
     # Workflow tests parse `.github/workflows/*.yml` structurally rather than by
     # substring, so the shape they assert is the shape Actions will read. It was
     # only ever present transitively before, which is a CI break waiting to
@@ -65,11 +65,11 @@ dev = [
     "pyyaml==6.0.3",
     # Ruff is the single linter + formatter (replaces black + isort + pylint).
     "ruff==0.16.1",
-    "mypy==2.3.0",
+    "mypy==2.4.0",
     "httpx==0.28.1",
     # Starlette's TestClient is built on HTTPX2; plain HTTPX is a deprecated
     # compatibility fallback and emits a warning during every test process.
-    "httpx2==2.12.0",
+    "httpx2==2.13.1",
     # Bundling — used by `make bundle-backend` to freeze the backend for distribution
     "pyinstaller==6.21.0",
 ]
@@ -87,7 +87,7 @@ local-ai = [
     # releases on the last universal wheel and use 1.24.2+ on 3.14+.
     "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
     "onnxruntime==1.26.0; python_version >= '3.14'",
-    "tokenizers==0.23.1",
+    "tokenizers==0.23.3",
     "huggingface_hub==1.26.1",
     # Reliable cross-platform RAM detection for the hardware tier probe (the
     # probe degrades gracefully without it, but psutil avoids per-OS fallbacks).
