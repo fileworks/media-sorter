@@ -12,7 +12,7 @@ readme = "README.md"
 
 dependencies = [
     # Web framework
-    "fastapi==0.143.0",
+    "fastapi==0.162.0",
     "uvicorn[standard]==0.54.0",
     "python-multipart==0.0.32",
     "websockets==16.1.1",
@@ -54,7 +54,7 @@ dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
-    "pytest-mock==3.16.0",
+    "pytest-mock==3.17.0",
     # Property testing (`P-08`). Ported from unpacksort, where it already covers
     # the archive-path safety rules this backend re-derived as `path_identity_key`.
     "hypothesis==6.168.5",
@@ -69,7 +69,7 @@ dev = [
     "httpx==0.28.1",
     # Starlette's TestClient is built on HTTPX2; plain HTTPX is a deprecated
     # compatibility fallback and emits a warning during every test process.
-    "httpx2==2.13.1",
+    "httpx2==2.14.0",
     # Bundling — used by `make bundle-backend` to freeze the backend for distribution
     "pyinstaller==6.21.0",
 ]
