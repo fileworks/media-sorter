@@ -12,13 +12,13 @@ import {
 } from "./support";
 
 /**
- * `P2-TEST-001` — the three WCAG criteria jsdom cannot decide.
+ * `P2-TEST-001` — WCAG checks that need browser rendering.
  *
  * Each criterion is checked against the real app *and* against a page
  * deliberately broken in the way the criterion exists to catch. The negative
  * controls are the point: an a11y check that has never been seen to fail is
  * indistinguishable from one that cannot fail, and this suite is being added
- * precisely because the jsdom suite's silence on these three was structural
+ * precisely because the jsdom suite's silence on these checks was structural
  * rather than earned.
  */
 
@@ -292,6 +292,19 @@ test.describe("1.4.3 contrast", () => {
       ).toEqual([]);
     });
   }
+
+  test("the check detects a visible label missing from the accessible name", async ({ page }) => {
+    await page.evaluate(() => {
+      const probe = document.createElement("button");
+      probe.id = "label-name-probe";
+      probe.textContent = "Save changes";
+      probe.setAttribute("aria-label", "Delete permanently");
+      probe.style.cssText = "position:fixed;top:0;left:0;z-index:9999";
+      document.body.appendChild(probe);
+    });
+    const violations = await contrastViolations(page);
+    expect(violations.some((v) => v.id === "label-content-name-mismatch")).toBe(true);
+  });
 
   test("the check fails on text that genuinely lacks contrast", async ({ page }) => {
     await page.evaluate(() => {

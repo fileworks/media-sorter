@@ -81,9 +81,10 @@ afterEach(() => {
 async function expectNoViolations(container: HTMLElement): Promise<void> {
   const result = await axe.run(container, {
     rules: {
-      // jsdom does not implement layout/canvas, so contrast is verified by the
-      // semantic token palette rather than pretending this rule ran.
+      // jsdom cannot render layout or icon-font ligatures. Both rules run in
+      // the Playwright suite, where canvas and computed pixels are available.
       "color-contrast": { enabled: false },
+      "label-content-name-mismatch": { enabled: false },
     },
   });
   expect(
@@ -515,7 +516,7 @@ describe.each(["en", "de"] as const)("WCAG structure in %s", (locale) => {
     for (const stage of ["configure", "review", "execute"] as const) {
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: new RegExp(`^${translate(locale, `stage.${stage}.label`)}`),
+          name: (name) => name.includes(translate(locale, `stage.${stage}.label`)),
         }),
       );
       await expectNoViolations(rendered.container);

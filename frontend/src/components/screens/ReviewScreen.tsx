@@ -767,7 +767,6 @@ export function ReviewScreen({
                 role="tab"
                 aria-selected={selected}
                 aria-controls="review-workbench-panel"
-                aria-label={label}
                 tabIndex={selected ? 0 : -1}
                 onClick={() => surface.setMode(mode as ReviewMode)}
                 onKeyDown={(event) => {

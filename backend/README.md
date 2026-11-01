@@ -27,7 +27,7 @@ The command prints a per-launch API capability. Direct clients must send it as
 
 From the repository root use `uv sync --project backend --locked --all-extras --dev`
 with Python 3.12+ for the full development environment. Core metadata admits
-Python 3.10+, but that is not a promise for every optional dependency/native build.
+Python 3.11+, but that is not a promise for every optional dependency/native build.
 See [development](../docs/development.md) for cross-platform launcher and prerequisites.
 
 ---

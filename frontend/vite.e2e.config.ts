@@ -1,7 +1,7 @@
 import { defineConfig, mergeConfig } from "vite";
 
-import base from "./vite.config";
-import { E2E_CACHE_DIR, E2E_PORT } from "./e2e/server";
+import base from "./vite.config.ts";
+import { E2E_CACHE_DIR, E2E_PORT } from "./e2e/server.ts";
 
 /**
  * The dev server the browser suite runs against — the app's own config, on its

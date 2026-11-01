@@ -218,7 +218,9 @@ function rowCheckbox(name: string): HTMLInputElement {
 }
 
 function switchTo(mode: "browse" | "resolve") {
-  fireEvent.click(screen.getByRole("tab", { name: en(`review.mode.${mode}`) }));
+  fireEvent.click(
+    screen.getByRole("tab", { name: (name) => name.includes(en(`review.mode.${mode}`)) }),
+  );
 }
 
 /** Compare a copy against the other copy of its pair, from the copy's own row. */
@@ -250,7 +252,7 @@ function acceptAllRecommendations(count: number) {
 }
 
 async function waitForReview() {
-  await screen.findByRole("tab", { name: en("review.mode.resolve") });
+  await screen.findByRole("tab", { name: (name) => name.includes(en("review.mode.resolve")) });
 }
 
 /** The tree's "make this folder the subject" control, by folder name. */
@@ -663,7 +665,8 @@ describe("resolve", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
 
@@ -687,7 +690,7 @@ describe("resolve", () => {
     for (const name of ["b.jpg", "d.jpg"]) {
       fireEvent.click(
         screen.getByRole("button", {
-          name: en("review.resolve.keepThis", { name, number: 2 }),
+          name: (label) => label.includes(en("review.resolve.keepThis", { name, number: 2 })),
         }),
       );
     }
@@ -715,13 +718,15 @@ describe("resolve", () => {
     await waitForReview();
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "d.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "d.jpg", number: 2 })),
       }),
     );
     const draft = decisions.reviewState;
@@ -748,7 +753,7 @@ describe("resolve", () => {
     for (const name of ["b.jpg", "d.jpg"]) {
       fireEvent.click(
         screen.getByRole("button", {
-          name: en("review.resolve.keepThis", { name, number: 2 }),
+          name: (label) => label.includes(en("review.resolve.keepThis", { name, number: 2 })),
         }),
       );
     }
@@ -798,7 +803,8 @@ describe("resolve", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
 
@@ -835,7 +841,9 @@ describe("resolve", () => {
     renderReview(result);
     await waitForReview();
 
-    fireEvent.click(screen.getByRole("tab", { name: en("review.mode.resolve") }));
+    fireEvent.click(
+      screen.getByRole("tab", { name: (name) => name.includes(en("review.mode.resolve")) }),
+    );
     fireEvent.keyDown(window, { key: "1" });
 
     expect(decisions.reviewedSets).toEqual([{ keep: "/in/a.jpg", demote: ["/in/b.jpg"] }]);
@@ -845,7 +853,7 @@ describe("resolve", () => {
     renderReview(result);
     await waitForReview();
     const resolveMode = screen.getByRole("tab", {
-      name: en("review.mode.resolve"),
+      name: (name) => name.includes(en("review.mode.resolve")),
     }) as HTMLButtonElement;
 
     fireEvent.click(resolveMode);
@@ -859,7 +867,8 @@ describe("resolve", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: en("review.resolve.keepThis", { name: "a.jpg", number: 1 }),
+          name: (label) =>
+            label.includes(en("review.resolve.keepThis", { name: "a.jpg", number: 1 })),
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -949,7 +958,8 @@ describe("resolve", () => {
     // copy, exactly as any other keeper choice.
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
     expect(decisions.reviewedSets.map((set) => set.keep)).toEqual(["/in/b.jpg"]);
@@ -1068,7 +1078,8 @@ describe("resolve", () => {
     switchTo("resolve");
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
     switchTo("browse");
@@ -1372,7 +1383,8 @@ describe("browsing alone is enough to finish a run", () => {
     // the set first.
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "b.jpg", number: 2 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "b.jpg", number: 2 })),
       }),
     );
 
@@ -1387,7 +1399,8 @@ describe("browsing alone is enough to finish a run", () => {
     switchTo("resolve");
     fireEvent.click(
       screen.getByRole("button", {
-        name: en("review.resolve.keepThis", { name: "a.jpg", number: 1 }),
+        name: (label) =>
+          label.includes(en("review.resolve.keepThis", { name: "a.jpg", number: 1 })),
       }),
     );
     expect(decisions.reviewedSets.map((set) => set.keep)).toEqual(["/in/a.jpg"]);

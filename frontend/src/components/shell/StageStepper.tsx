@@ -63,7 +63,6 @@ export function StageStepper({ current, gate, complete, onSelect }: StageStepper
                   data-stage-id={entry.id}
                   disabled={!reachable}
                   aria-current={active ? "step" : undefined}
-                  aria-label={`${t(entry.labelKey)}${isComplete ? `, ${t("stage.complete")}` : ""}`}
                   onClick={() =>
                     onSelect(entry.stage, entry.stage === "review" ? "review" : undefined)
                   }
@@ -86,11 +85,10 @@ export function StageStepper({ current, gate, complete, onSelect }: StageStepper
                       isComplete && !active && "border-success/40 bg-tint-success text-success",
                       !active && !isComplete && "border border-border text-faint",
                     )}
-                    aria-hidden
                   >
                     {isComplete && !active ? <FiCheck className="h-3 w-3" /> : index + 1}
                   </span>
-                  <span className="min-w-0" aria-hidden>
+                  <span className="min-w-0">
                     <span
                       className={cn(
                         "block truncate text-xs font-semibold",

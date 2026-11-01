@@ -68,7 +68,11 @@ function renderShell({
 
 /** Walk the stepper to a stage by its accessible name. */
 function goToStage(stage: string) {
-  fireEvent.click(screen.getByRole("button", { name: translate("en", `stage.${stage}.label`) }));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: (name) => name.includes(translate("en", `stage.${stage}.label`)),
+    }),
+  );
 }
 
 describe("which stages a plan locks", () => {
