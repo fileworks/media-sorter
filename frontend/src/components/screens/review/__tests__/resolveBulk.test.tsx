@@ -158,7 +158,7 @@ describe("selection-scoped duplicate decisions", () => {
     const copy = document.querySelector<HTMLElement>('[data-copy-row="/source-a/one.jpg"]');
     expect(copy).not.toBeNull();
     expect(
-      within(copy as HTMLElement).getByRole("button", { name: "Keep one.jpg — press 1" }),
+      within(copy as HTMLElement).getByRole("button", { name: "Keep this: Keep one.jpg — press 1" }),
     ).toBeTruthy();
     expect(
       within(copy as HTMLElement).getByRole("button", { name: /^Compare one\.jpg with / }),
