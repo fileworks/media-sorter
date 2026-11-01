@@ -66,6 +66,11 @@ export function CopyRow({
 }) {
   const { t } = useI18n();
   const locked = row.status === "baseline";
+  const keepLabel = keepDisabled
+    ? t("review.resolve.kept")
+    : kept
+      ? t("review.keepOnlyThis")
+      : t("review.resolve.keepShort");
   // The date leads, because between identical copies it is the one number
   // that can differ; size and destination follow it on the same line, because
   // for an exact set they are the same value printed once per copy.
@@ -170,15 +175,11 @@ export function CopyRow({
             size="sm"
             variant={kept ? "outline" : "default"}
             disabled={keepDisabled}
-            aria-label={t("review.resolve.keepThis", { name: row.name, number: position + 1 })}
+            aria-label={`${keepLabel}: ${t("review.resolve.keepThis", { name: row.name, number: position + 1 })}`}
             aria-description={keepDisabled ? t("review.resolve.alreadyKeeper") : undefined}
             onClick={onKeep}
           >
-            {keepDisabled
-              ? t("review.resolve.kept")
-              : kept
-                ? t("review.keepOnlyThis")
-                : t("review.resolve.keepShort")}
+            {keepLabel}
           </Button>
         )}
         {/* The name is the action and names the pair; the reason a disabled one

@@ -16,6 +16,7 @@
   "schedule": [
     "before 5am on monday"
   ],
+  "updateNotScheduled": false,
   "minimumReleaseAge": "7 days",
   "automerge": false,
   "automergeType": "pr",
@@ -227,6 +228,7 @@
     "schedule": [
       "at any time"
     ],
+    "updateNotScheduled": true,
     "groupName": null,
     "labels": [
       "security"

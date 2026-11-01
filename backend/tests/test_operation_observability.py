@@ -23,6 +23,7 @@ from app.core.logging_config import logging_health
 from app.services import verified_transfer
 from app.services.operation_execution import OperationExecution
 from app.services.reconciliation import apply_safe_recovery, reconcile_pending_operations
+from app.services.sorting_support import root_identifier
 
 _CONFIG_DIGEST = hashlib.sha256(b"config").hexdigest()
 
@@ -72,7 +73,7 @@ def test_a_successful_placement_produces_a_complete_ordered_timeline(tmp_path: P
         tmp_path / "sorted" / "photo.jpg",
         kind="copy",
         move=False,
-        root_id=str(tmp_path / "source"),
+        root_id=root_identifier(tmp_path / "source"),
         relative_path="photo.jpg",
     )
     execution.finish("completed")
@@ -92,7 +93,7 @@ def test_every_event_of_a_run_shares_one_operation_id(tmp_path: Path) -> None:
         tmp_path / "sorted" / "photo.jpg",
         kind="copy",
         move=False,
-        root_id=str(tmp_path / "source"),
+        root_id=root_identifier(tmp_path / "source"),
         relative_path="photo.jpg",
     )
     execution.finish("completed")
@@ -109,7 +110,7 @@ def test_action_events_correlate_to_the_manifest_action(tmp_path: Path) -> None:
         tmp_path / "sorted" / "photo.jpg",
         kind="copy",
         move=False,
-        root_id=str(tmp_path / "source"),
+        root_id=root_identifier(tmp_path / "source"),
         relative_path="photo.jpg",
     )
     execution.finish("completed")
@@ -145,7 +146,7 @@ def test_an_unsupported_commit_fails_closed_without_a_degraded_success_event(
             tmp_path / "sorted" / "photo.jpg",
             kind="copy",
             move=False,
-            root_id=str(tmp_path / "source"),
+            root_id=root_identifier(tmp_path / "source"),
             relative_path="photo.jpg",
         )
     execution.finish("failed")
@@ -168,7 +169,7 @@ def test_a_failed_placement_still_reaches_exactly_one_terminal_event(tmp_path: P
             blocker,
             kind="copy",
             move=False,
-            root_id=str(tmp_path / "source"),
+            root_id=root_identifier(tmp_path / "source"),
             relative_path="photo.jpg",
         )
     execution.finish("failed")
@@ -228,7 +229,7 @@ def test_recovery_emits_a_correlated_terminated_timeline(
             tmp_path / "sorted" / "photo.jpg",
             kind="move",
             move=True,
-            root_id=str(tmp_path / "source"),
+            root_id=root_identifier(tmp_path / "source"),
             relative_path="photo.jpg",
         )
     assert execution.journal is not None
@@ -273,7 +274,7 @@ def test_recovery_that_needs_a_person_says_so(
             action_destination,
             kind="move",
             move=True,
-            root_id=str(tmp_path / "source"),
+            root_id=root_identifier(tmp_path / "source"),
             relative_path="photo.jpg",
         )
     assert execution.journal is not None
@@ -309,7 +310,7 @@ def test_no_real_path_or_filename_survives_into_the_event_stream(tmp_path: Path)
         tmp_path / "sorted" / "Tax Return 2019 SSN.jpg",
         kind="copy",
         move=False,
-        root_id=str(tmp_path / "source"),
+        root_id=root_identifier(tmp_path / "source"),
         relative_path="Tax Return 2019 SSN.jpg",
     )
     execution.finish("completed")

@@ -19,7 +19,7 @@ Makefile    every dev/build command
 Use Python 3.12+ for the full locked development environment, Node 24 (declared
 in `package.json` `engines` and `.nvmrc`/`.node-version`; Vitest does not run on
 older Node), uv and
-Rust stable. Core backend metadata permits Python 3.10+, but optional AI/native
+Rust stable. Core backend metadata permits Python 3.11+, but optional AI/native
 packaging uses the fuller environment. Follow [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 for your OS (Windows needs MSVC build tools/WebView2; macOS Xcode tools; Linux
 WebKit/system libraries). ffmpeg/ffprobe must be on PATH for media work in
@@ -143,6 +143,25 @@ Configuration, data, database, log, legacy migration, conflict, and recovery pat
 listed exactly in [state-and-recovery.md](state-and-recovery.md).
 
 ## Releasing
+
+The frontend pins a temporary `minimatch` 11.0.1 override for
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), because
+the lint toolchain still requests vulnerable 10.x. Remove the override when
+upstream dependency ranges include the patched version, then rerun lint,
+typechecking, tests and the complete npm audit.
+
+Routine Renovate branch updates stay inside the weekly window; urgent security
+updates remain immediate. CI pins native runner images while retaining stable
+check names and separates concurrent uv cache writers by job/matrix cell.
+The Windows system-interpreter job uses uv copy mode across runner volumes;
+the cached Rust auditor installs with an explicitly selected stable toolchain.
+
+Rust audit findings in Tauri's Linux dependency graph remain visible until
+upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
+and [zbus 6 migration](https://github.com/tauri-apps/plugins-workspace/issues/3716)
+track the remaining `glib`, `proc-macro-error` and standalone zvariant-family
+warnings. Do not treat a zero-vulnerability audit as zero warnings or add an
+unreviewed suppression to make the output appear clean.
 
 Releases are driven by **Conventional Commits**: you don't tag by hand, and merging
 never releases by itself. Land `fix:`/`feat:`/`perf:` commits on `main`; shipping

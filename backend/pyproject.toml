@@ -7,7 +7,7 @@ description = "MediaSorter — intelligent media organization backend"
 authors = [
     {name = "Niklas Büchel", email = "gykonik@gmail.com"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 
 dependencies = [
@@ -28,7 +28,7 @@ dependencies = [
     "python-json-logger==4.2.0",
 
     # Image processing
-    "pillow==12.3.0",
+    "pillow==13.0.0",
     "piexif==1.1.3",
     "imagehash==4.3.2",
     # HEIC/HEIF support (registers a Pillow plugin)
@@ -37,7 +37,7 @@ dependencies = [
     "rawpy==0.27.0",
     # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
     # NumPy 2.5+ requires Python 3.12 and its stubs cannot represent this
-    # project's Python 3.10 API contract; lift the cap when the product floor moves.
+    # project's Python 3.11 API contract; lift the cap when the product floor moves.
     "numpy>=1.24.0,<2.5",
 
     # HTTP
@@ -103,7 +103,7 @@ path = "app/_version.py"
 # resolved above known vulnerable releases without pretending they are direct
 # application dependencies.
 constraint-dependencies = [
-    "setuptools>=83.0.0",
+    "setuptools>=84.1.0",
     "starlette>=1.3.1",
     "urllib3>=2.8.0",
 ]
@@ -123,7 +123,7 @@ pythonpath = ["tests"]
 
 [tool.mypy]
 strict = true
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 # Same scope as the sibling CLI repos. The suite is the thing that says the
 # product is correct, so it is held to the product's standard: a fixture that
@@ -143,6 +143,7 @@ implicit_reexport = true
 
 [tool.ruff]
 line-length = 100
+# Keep the existing syntax/style baseline; requires-python owns runtime support.
 target-version = "py310"
 
 [tool.ruff.lint]

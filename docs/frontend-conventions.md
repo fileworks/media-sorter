@@ -31,3 +31,6 @@ the browser when changing locale wiring.
 - Declare helpers before hooks/initializers: no-use-before-define is enforced.
 - Run lint with zero warnings, format check, Vitest and build. Pure logic uses
   the node test environment; components opt into jsdom with its environment docblock.
+- Axe's contrast and label-in-name rules run in Playwright because they need
+  rendered pixels and canvas-based icon-font detection. Keep the semantic rules
+  in Vitest; browser negative controls prove the rendering checks detect defects.

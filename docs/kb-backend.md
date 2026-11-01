@@ -1,7 +1,7 @@
 <!-- scope: FastAPI/raw-sqlite3/Pydantic backend rules and patterns AS USED IN THIS REPO -->
 
 ## Project Setup
-- Python 3.10+ core; locked development environment at `backend/.venv` uses uv.
+- Python 3.11+ core; locked development environment at `backend/.venv` uses uv.
   Follow [development setup](development.md#setup) for full/native prerequisites.
 - Ruff is the single linter + formatter; Mypy `--strict`; gate: `make ci` (lint + typecheck + tests ≥80% cov)
 - Layout: `backend/app/{main.py, api/{deps.py, schemas.py, routes/}, core/, services/, background_tasks/, utils/}`

@@ -401,9 +401,8 @@ export interface ContrastViolation {
 /**
  * Run axe in the page, restricted to the rules jsdom cannot evaluate.
  *
- * Scoping to `color-contrast` is deliberate rather than lazy: running the full
- * rule set here would duplicate the vitest suite, and a duplicated assertion
- * that drifts is worse than one that lives in a single place.
+ * Contrast and label-in-name need rendering: axe detects icon-font ligatures
+ * with canvas. The remaining semantic rules run in the Vitest suite.
  */
 export async function contrastViolations(page: Page): Promise<ContrastViolation[]> {
   await page.evaluate(AXE_SOURCE);
@@ -423,7 +422,7 @@ export async function contrastViolations(page: Page): Promise<ContrastViolation[
       run(context: Document, options: unknown): Promise<{ violations: AxeViolation[] }>;
     }
     const results = await (window as unknown as { axe: AxeRun }).axe.run(document, {
-      runOnly: { type: "rule", values: ["color-contrast"] },
+      runOnly: { type: "rule", values: ["color-contrast", "label-content-name-mismatch"] },
       resultTypes: ["violations"],
     });
     return results.violations.map((violation) => ({
