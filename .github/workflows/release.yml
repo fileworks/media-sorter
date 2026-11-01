@@ -147,11 +147,20 @@ jobs:
       - name: Validate reviewed dependency suppressions
         run: python scripts/validate_dependency_suppressions.py --check
 
+      - name: Cache the pinned Rust audit executable
+        id: cargo-audit-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-ubuntu-24.04-${{ runner.arch }}-0.22.2
+
       - name: Audit Rust lock
         working-directory: frontend/src-tauri
         shell: bash
         run: |
-          cargo install cargo-audit --locked --version 0.22.2
+          if [[ "${{ steps.cargo-audit-cache.outputs.cache-hit }}" != true ]]; then
+            cargo +stable install cargo-audit --locked --version 0.22.2
+          fi
           audit_args=()
           while IFS= read -r advisory; do
             audit_args+=(--ignore "$advisory")
@@ -178,6 +187,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Cache Rust cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: frontend/src-tauri
+
       - name: Verify native source independently of package resources
         working-directory: frontend/src-tauri
         env:
@@ -193,6 +207,9 @@ jobs:
     needs: [check-ci, check-native] # don't build installers until both gates are green
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
+    env:
+      # Windows' interpreter/cache volumes cannot share hardlinks; macOS uses clones.
+      UV_LINK_MODE: ${{ matrix.platform == 'windows' && 'copy' || 'clone' }}
     permissions:
       contents: read
     strategy:
