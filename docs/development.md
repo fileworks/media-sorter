@@ -157,6 +157,8 @@ The Windows system-interpreter job uses uv copy mode across runner volumes;
 the cached Rust auditor installs with an explicitly selected stable toolchain.
 Release candidate checks use the same pinned auditor cache, retain a native
 Cargo build cache and select copy mode for Windows packaging environments.
+Python audits consume portable PEP 751 lock exports, checking all locked
+platform/runtime variants without reinstalling the dependency graph.
 
 Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
