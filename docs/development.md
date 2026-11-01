@@ -153,6 +153,8 @@ typechecking, tests and the complete npm audit.
 Routine Renovate branch updates stay inside the weekly window; urgent security
 updates remain immediate. CI pins native runner images while retaining stable
 check names and separates concurrent uv cache writers by job/matrix cell.
+The Windows system-interpreter job uses uv copy mode across runner volumes;
+the cached Rust auditor installs with an explicitly selected stable toolchain.
 
 Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
