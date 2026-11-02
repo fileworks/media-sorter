@@ -346,6 +346,15 @@ def test_packaging_invokes_a_locked_all_extra_install_target() -> None:
         .split("\n  check-native:", maxsplit=1)[0]
     )
     assert "uv export --locked --all-extras" in source_gate
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+    pr_package = ci["jobs"]["packaging-smoke"]
+    (install,) = (
+        step["run"]
+        for step in pr_package["steps"]
+        if step.get("name") == "Install the locked dependencies"
+    )
+    assert "uv export --locked --all-extras" in install
+    assert "--verify-frozen-runtime" in makefile
 
 
 def test_shipped_local_ai_keeps_a_macos_intel_onnxruntime_wheel() -> None:

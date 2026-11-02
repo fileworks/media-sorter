@@ -160,8 +160,10 @@ Cargo build cache and select copy mode for Windows packaging environments.
 Python audits consume portable PEP 751 lock exports, checking all locked
 platform/runtime variants without reinstalling the dependency graph.
 
-Backend freezing uses the maintained ONNX native-provider and platformdirs hooks,
-not whole-package collection of model-authoring tools or foreign OS backends.
+Backend freezing uses the maintained ONNX native-provider hook and an explicit
+platformdirs host hook, not whole-package collection of model-authoring tools or
+foreign OS backends. The PR packaging job installs the same extras as releases;
+a UI launch alone does not establish that the inference runtime was bundled.
 Hugging Face's CLI/network modules are not needed by local-file tokenization.
 A small SciPy hook collects only extension modules present in the locked wheel;
 remove it when PyInstaller's upstream hook handles the removed `_cdflib` module.

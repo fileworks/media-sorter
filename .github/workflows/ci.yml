@@ -444,14 +444,13 @@ jobs:
           cache-suffix: ${{ github.workflow }}-${{ github.job }}-${{ strategy.job-index }}
 
       # The bundle this job smoke-tests must be frozen from the same versions
-      # the backend jobs type-check and test, or it is proving a different
-      # artifact. `pyinstaller` is already in the `dev` extra, so the lock
-      # pins it too.
+      # the release uses, including the shipped local-AI runtime. A dev-only
+      # install can launch the UI while silently omitting inference libraries.
       - name: Install the locked dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          (cd backend && uv export --locked --extra dev --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt)
+          (cd backend && uv export --locked --all-extras --no-hashes --no-emit-project             --format requirements-txt -o requirements.ci.txt)
           uv pip install --system -r backend/requirements.ci.txt
           uv pip install --system -e backend --no-deps
           npm --prefix frontend ci

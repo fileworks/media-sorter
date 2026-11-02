@@ -283,15 +283,14 @@ ci: branding-check contracts-check lint typecheck test-ci
 
 # ── Distribution: freeze Python backend with PyInstaller ─────────────────────
 #
-# Hidden-import cheat-sheet for the current stack (Python 3.13 / uvicorn 0.47 /
-# FastAPI 0.136 / anyio 4.x / pydantic v2):
+# Hidden imports for Python 3.11+ and the stack pinned in backend/uv.lock:
 #
 #  uvicorn.*          — entry-point sub-modules that uvicorn loads at runtime
 #  anyio._backends.*  — anyio selects its backend dynamically; both must ship
 #  email.*            — pulled in by httpx / starlette header handling
 #
 # --collect-all is reserved for packages whose runtime needs that complete tree.
-# The standard platformdirs/ONNX hooks select the host module and native providers;
+# The platformdirs/ONNX hooks select the host module and native providers;
 # collecting their entire trees also imports foreign-platform and model-authoring
 # tools. Tokenizers loads verified local files, not Hugging Face's network CLI.
 
