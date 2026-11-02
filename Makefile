@@ -283,15 +283,16 @@ ci: branding-check contracts-check lint typecheck test-ci
 
 # ── Distribution: freeze Python backend with PyInstaller ─────────────────────
 #
-# Hidden-import cheat-sheet for the current stack (Python 3.13 / uvicorn 0.47 /
-# FastAPI 0.136 / anyio 4.x / pydantic v2):
+# Hidden imports for Python 3.11+ and the stack pinned in backend/uv.lock:
 #
 #  uvicorn.*          — entry-point sub-modules that uvicorn loads at runtime
 #  anyio._backends.*  — anyio selects its backend dynamically; both must ship
 #  email.*            — pulled in by httpx / starlette header handling
 #
-# --collect-all gathers every file (py, data, so) for packages that use
-# importlib or have data files PyInstaller would otherwise miss.
+# --collect-all is reserved for packages whose runtime needs that complete tree.
+# The platformdirs/ONNX hooks select the host module and native providers;
+# collecting their entire trees also imports foreign-platform and model-authoring
+# tools. Tokenizers loads verified local files, not Hugging Face's network CLI.
 
 bundle-backend:
 	@echo "==> Freezing Python backend with PyInstaller …"
@@ -300,6 +301,8 @@ bundle-backend:
 		--noupx \
 		--name mediasort-backend \
 		--noconfirm \
+		--additional-hooks-dir=../scripts/pyinstaller-hooks \
+		--runtime-hook=../scripts/verify_frozen_runtime.py \
 		--hidden-import=uvicorn.logging \
 		--hidden-import=uvicorn.loops \
 		--hidden-import=uvicorn.loops.auto \
@@ -320,15 +323,13 @@ bundle-backend:
 		--collect-all=rawpy \
 		--collect-all=numpy \
 		--collect-all=structlog \
-		--collect-all=platformdirs \
 		--collect-all=anyio \
 		--collect-all=pydantic \
 		--collect-all=fastapi \
 		--collect-all=app.resources \
-		--collect-all=onnxruntime \
 		--collect-all=tokenizers \
-		--collect-all=huggingface_hub \
 		app/main.py
+	$(BACKEND)/dist/mediasort-backend/mediasort-backend$(EXE) --verify-frozen-runtime
 	@# Copy to resources and fix all permissions for Cargo build process.
 	@# Every subdirectory of resources/ is gitignored, and git cannot track an
 	@# empty directory — so resources/ itself does not exist in a clean checkout
