@@ -372,10 +372,16 @@ def test_packaged_backend_smoke_uses_launch_capability(
     monkeypatch.setattr(release_integrity.socket, "socket", lambda *_args: Listener())
     monkeypatch.setattr(release_integrity.subprocess, "Popen", popen)
     monkeypatch.setattr(release_integrity.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(
+        release_integrity,
+        "_smoke_program",
+        lambda path, arguments: observed.update(runtime_probe=(path, arguments)),
+    )
 
     release_integrity._smoke_backend(backend)
 
     assert observed["command"] == [str(backend)]
+    assert observed["runtime_probe"] == (backend, ("--verify-frozen-runtime",))
     assert observed["header"] == observed["capability"]
     assert len(str(observed["capability"])) >= 32
 

@@ -561,6 +561,7 @@ def _require_bundled_data(path: Path) -> None:
 
 def _smoke_backend(path: Path) -> None:
     _require_bundled_data(path)
+    _smoke_program(path, ("--verify-frozen-runtime",))
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]

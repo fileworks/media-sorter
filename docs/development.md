@@ -160,6 +160,19 @@ Cargo build cache and select copy mode for Windows packaging environments.
 Python audits consume portable PEP 751 lock exports, checking all locked
 platform/runtime variants without reinstalling the dependency graph.
 
+Backend freezing uses the maintained ONNX native-provider and platformdirs hooks,
+not whole-package collection of model-authoring tools or foreign OS backends.
+Hugging Face's CLI/network modules are not needed by local-file tokenization.
+A small SciPy hook collects only extension modules present in the locked wheel;
+remove it when PyInstaller's upstream hook handles the removed `_cdflib` module.
+Windows includes `tzdata` because it has no system IANA time-zone database.
+Every backend freeze and packaged-artifact check runs `--verify-frozen-runtime`
+before starting the application. This offline probe exercises real ONNX inference
+on an authored Identity graph, local tokenization, image hashing, SciPy, platform
+directories and time zones. It downloads no weights and touches no user state.
+Normal application startup does not run the probe. Packaging warnings remain
+visible; do not disable the freezer's logger to make a build appear clean.
+
 Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
 and [zbus 6 migration](https://github.com/tauri-apps/plugins-workspace/issues/3716)
