@@ -19,9 +19,9 @@ dependencies = [
 
     # Configuration & validation
     "pydantic==2.14.1",
-    "pydantic-settings==2.15.0",
+    "pydantic-settings==2.16.1",
     "python-dotenv==1.2.4",
-    "platformdirs==4.12.4",
+    "platformdirs==4.13.5",
 
     # Logging
     "structlog==26.1.0",
@@ -57,7 +57,7 @@ dev = [
     "pytest-mock==3.16.0",
     # Property testing (`P-08`). Ported from unpacksort, where it already covers
     # the archive-path safety rules this backend re-derived as `path_identity_key`.
-    "hypothesis==6.168.5",
+    "hypothesis==6.170.11",
     # Workflow tests parse `.github/workflows/*.yml` structurally rather than by
     # substring, so the shape they assert is the shape Actions will read. It was
     # only ever present transitively before, which is a CI break waiting to
@@ -69,7 +69,7 @@ dev = [
     "httpx==0.28.1",
     # Starlette's TestClient is built on HTTPX2; plain HTTPX is a deprecated
     # compatibility fallback and emits a warning during every test process.
-    "httpx2==2.13.1",
+    "httpx2==2.16.0",
     # Bundling — used by `make bundle-backend` to freeze the backend for distribution
     "pyinstaller==6.21.0",
 ]
@@ -86,7 +86,7 @@ local-ai = [
     # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
     # releases on the last universal wheel and use 1.24.2+ on 3.14+.
     "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
-    "onnxruntime==1.26.0; python_version >= '3.14'",
+    "onnxruntime==1.31.0; python_version >= '3.14'",
     "tokenizers==0.23.3",
     "huggingface_hub==1.26.1",
     # Reliable cross-platform RAM detection for the hardware tier probe (the
