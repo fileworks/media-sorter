@@ -2,14 +2,47 @@
 
 import itertools
 import json
+import os
 import re
 import shlex
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+def test_desktop_build_receives_app_notarization_credentials() -> None:
+    workflow = yaml.safe_load((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+    steps = {step.get("name"): step for step in workflow["jobs"]["package"]["steps"]}
+    for key in ("APPLE_SIGNING_IDENTITY", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"):
+        assert steps["Build desktop app"]["env"][key] == f"${{{{ secrets.{key} }}}}"
+        assert steps["Sign and verify outer packages"]["env"][key] == f"${{{{ secrets.{key} }}}}"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Executes the POSIX Makefile recipe")
+@pytest.mark.parametrize("populated", [False, True])
+def test_tauri_build_clears_empty_credentials_without_erasing_real_ones(populated: bool) -> None:
+    text = (ROOT / "Makefile").read_text(encoding="utf-8")
+    cleanup = "\n".join(
+        line.strip().removesuffix("\\").replace("$$", "$")
+        for line in text.splitlines()
+        if 'if [ -z "$$APPLE_' in line
+    )
+    keys = ("APPLE_SIGNING_IDENTITY", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID")
+    checks = "\n".join(
+        f'test "${{{key}}}" = "fixture-value"' if populated else f'test "${{{key}+present}}" = ""'
+        for key in keys
+    )
+    subprocess.run(
+        [shutil.which("sh") or "sh", "-ec", cleanup + "\n" + checks],
+        env={**os.environ, **dict.fromkeys(keys, "fixture-value" if populated else "")},
+        check=True,
+    )
 
 
 def _matrix_rows(matrix: object) -> list[dict[str, object]]:
