@@ -454,6 +454,7 @@ jobs:
           uv pip install --system -r backend/requirements.ci.txt
           uv pip install --system -e backend --no-deps
           npm --prefix frontend ci
+          npm --prefix frontend run verify:native-watch
 
       - name: Freeze the backend and stage it into the bundle
         run: make bundle-backend

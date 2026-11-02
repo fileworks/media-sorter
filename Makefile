@@ -206,6 +206,7 @@ install-release:
 	uv pip install --python "$(VENV_PYTHON)" -r "$(BACKEND)/requirements.ci.txt"
 	uv pip install --python "$(VENV_PYTHON)" -e "$(BACKEND)" --no-deps
 	cd $(FRONTEND) && npm ci
+	cd $(FRONTEND) && npm run verify:native-watch
 	@echo ""
 	@echo "✓ Locked packaging dependencies installed."
 

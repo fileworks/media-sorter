@@ -175,6 +175,14 @@ directories and time zones. It downloads no weights and touches no user state.
 Normal application startup does not run the probe. Packaging warnings remain
 visible; do not disable the freezer's logger to make a build appear clean.
 
+The frontend explicitly denies `fsevents` install scripts through npm's
+`allowScripts` policy. The locked package ships a universal macOS binary and no
+source build inputs, despite registry metadata advertising `node-gyp rebuild`.
+Both PR and release packaging load the native module after installation on macOS;
+this proves the shipped binary works without running an unnecessary rebuild.
+Other dependencies receive no blanket script approval. Review future script
+requests and keep native packaging verification enabled.
+
 Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
 and [zbus 6 migration](https://github.com/tauri-apps/plugins-workspace/issues/3716)
