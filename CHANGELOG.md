@@ -3,6 +3,30 @@
 All notable changes to MediaSorter are documented here.
 This file is generated from [Conventional Commits](https://www.conventionalcommits.org/) by release-it; do not edit it by hand.
 
+## [2.0.0](https://github.com/fileworks/media-sorter/compare/v1.1.0...v2.0.0) (2026-11-03)
+
+### ⚠ BREAKING CHANGES
+
+* **ci:** restore secure bounded validation ([#143](https://github.com/fileworks/media-sorter/issues/143))
+
+### Bug Fixes
+
+* **build:** verify and narrow the frozen runtime ([#146](https://github.com/fileworks/media-sorter/issues/146)) ([023fbbb](https://github.com/fileworks/media-sorter/commit/023fbbb61e4832d841062b3b8595f0db6d47f002))
+* **ci:** cache release validation tooling consistently ([#144](https://github.com/fileworks/media-sorter/issues/144)) ([8e15536](https://github.com/fileworks/media-sorter/commit/8e1553609201c0eab8fba91158487335ae3de105))
+* **ci:** make macOS npm install-script policy explicit ([#147](https://github.com/fileworks/media-sorter/issues/147)) ([b93248d](https://github.com/fileworks/media-sorter/commit/b93248d0d24bd336b637be35c597ef5742894782))
+* **ci:** restore secure bounded validation ([#143](https://github.com/fileworks/media-sorter/issues/143)) ([7499d86](https://github.com/fileworks/media-sorter/commit/7499d86b506c7453d3ad89aee15b93dc01058282))
+* **deps:** apply reviewed November updates ([#150](https://github.com/fileworks/media-sorter/issues/150)) ([3e2a641](https://github.com/fileworks/media-sorter/commit/3e2a6418daf9608f1de7d6c83c65f85fe6fae823))
+* **deps:** pin dependencies ([#129](https://github.com/fileworks/media-sorter/issues/129)) ([2366d33](https://github.com/fileworks/media-sorter/commit/2366d33a16ef3f035f1cee81d95b319d7aeaa335))
+* **deps:** pin direct Python and Cargo dependencies so Renovate lanes resolve ([#134](https://github.com/fileworks/media-sorter/issues/134)) ([2a79335](https://github.com/fileworks/media-sorter/commit/2a79335ff727b2c6ee931267453e869f1f3814aa)), references [renovatebot/renovate#41624](https://github.com/renovatebot/renovate/issues/41624) [#129](https://github.com/fileworks/media-sorter/issues/129) [#131](https://github.com/fileworks/media-sorter/issues/131)
+* **deps:** replace yanked async-executor ([#149](https://github.com/fileworks/media-sorter/issues/149)) ([8bcd3eb](https://github.com/fileworks/media-sorter/commit/8bcd3eb9abf49294b35c68ac202ebe2b077373b7))
+* **deps:** update weekly ci updates ([#137](https://github.com/fileworks/media-sorter/issues/137)) ([c5f3808](https://github.com/fileworks/media-sorter/commit/c5f3808599133f0b8481349cb672785085ad71d6))
+* **deps:** update weekly javascript updates ([#130](https://github.com/fileworks/media-sorter/issues/130)) ([28652f7](https://github.com/fileworks/media-sorter/commit/28652f7a36fe8e0b590a1cf06a3daedd8dc1f993))
+* **deps:** update weekly python updates ([#132](https://github.com/fileworks/media-sorter/issues/132)) ([660f636](https://github.com/fileworks/media-sorter/commit/660f6362c5686de50c96c4482c40a0b2aa981efb))
+* **deps:** update weekly rust updates ([#131](https://github.com/fileworks/media-sorter/issues/131)) ([4418d79](https://github.com/fileworks/media-sorter/commit/4418d79081a3e38ae28250e5c65cd056b5e86a85))
+* **deps:** update weekly tauri updates ([#133](https://github.com/fileworks/media-sorter/issues/133)) ([28efc62](https://github.com/fileworks/media-sorter/commit/28efc62edb3c675b43d2741b7dfe43991f0013f3))
+* **release:** pass app notarization credentials ([#148](https://github.com/fileworks/media-sorter/issues/148)) ([1d67919](https://github.com/fileworks/media-sorter/commit/1d67919be10f4b9da20bed0d417a3fba4c16d1a8))
+* **security:** audit every locked platform and runtime variant ([#145](https://github.com/fileworks/media-sorter/issues/145)) ([da9a1d8](https://github.com/fileworks/media-sorter/commit/da9a1d8212fa99b341fca07ae48c5e2d76cfe493))
+
 ## [1.1.0](https://github.com/fileworks/media-sorter/compare/v1.0.6...v1.1.0) (2026-10-18)
 
 ### Bug Fixes
