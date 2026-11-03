@@ -66,6 +66,12 @@ repository secrets:
 | `APPLE_PASSWORD` | App-specific password |
 | `APPLE_TEAM_ID` | Apple Developer team identifier |
 
+The desktop build step receives the same complete notarization credentials as
+the outer-package check. Tauri notarizes the app before that check assesses it
+with Gatekeeper; the final DMG is then notarized and verified separately. Empty
+GitHub secret values are removed before invoking Tauri, so an unsigned build
+cannot accidentally attempt authentication with empty credentials.
+
 CI imports the identity into an ephemeral keychain. Executable modes are finalized
 first; nested Mach-O backend, ffmpeg/ffprobe, and native libraries are signed inside-out
 with hardened runtime; Tauri signs the outer app using the tracked entitlements; the

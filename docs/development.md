@@ -157,12 +157,40 @@ The Windows system-interpreter job uses uv copy mode across runner volumes;
 the cached Rust auditor installs with an explicitly selected stable toolchain.
 Release candidate checks use the same pinned auditor cache, retain a native
 Cargo build cache and select copy mode for Windows packaging environments.
+Python audits consume portable PEP 751 lock exports, checking all locked
+platform/runtime variants without reinstalling the dependency graph.
+
+Backend freezing uses the maintained ONNX native-provider hook and an explicit
+platformdirs host hook, not whole-package collection of model-authoring tools or
+foreign OS backends. The PR packaging job installs the same extras as releases;
+a UI launch alone does not establish that the inference runtime was bundled.
+Hugging Face's CLI/network modules are not needed by local-file tokenization.
+A small SciPy hook collects only extension modules present in the locked wheel;
+remove it when PyInstaller's upstream hook handles the removed `_cdflib` module.
+Windows includes `tzdata` because it has no system IANA time-zone database.
+Every backend freeze and packaged-artifact check runs `--verify-frozen-runtime`
+before starting the application. This offline probe exercises real ONNX inference
+on an authored Identity graph, local tokenization, image hashing, SciPy, platform
+directories and time zones. It downloads no weights and touches no user state.
+Normal application startup does not run the probe. Packaging warnings remain
+visible; do not disable the freezer's logger to make a build appear clean.
+
+The frontend explicitly denies `fsevents` install scripts through npm's
+`allowScripts` policy. The locked package ships a universal macOS binary and no
+source build inputs, despite registry metadata advertising `node-gyp rebuild`.
+Both PR and release packaging load the native module after installation on macOS;
+this proves the shipped binary works without running an unnecessary rebuild.
+Other dependencies receive no blanket script approval. Review future script
+requests and keep native packaging verification enabled.
 
 Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
 and [zbus 6 migration](https://github.com/tauri-apps/plugins-workspace/issues/3716)
 track the remaining `glib`, `proc-macro-error` and standalone zvariant-family
-warnings. Do not treat a zero-vulnerability audit as zero warnings or add an
+warnings. These crates are absent from the locked Windows x64 and both macOS
+normal/build/dev target graphs; they remain in the full lock audit for upstream
+tracking. Recheck reachability when targets or dependencies change. Do not treat
+a zero-vulnerability audit as zero warnings or add an
 unreviewed suppression to make the output appear clean.
 
 Releases are driven by **Conventional Commits**: you don't tag by hand, and merging
