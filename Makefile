@@ -478,6 +478,9 @@ build-tauri:
 	@echo "Building Tauri app…"
 	cd $(FRONTEND) && \
 		if [ -z "$$APPLE_SIGNING_IDENTITY" ]; then unset APPLE_SIGNING_IDENTITY; fi; \
+		if [ -z "$$APPLE_ID" ]; then unset APPLE_ID; fi; \
+		if [ -z "$$APPLE_PASSWORD" ]; then unset APPLE_PASSWORD; fi; \
+		if [ -z "$$APPLE_TEAM_ID" ]; then unset APPLE_TEAM_ID; fi; \
 		if [ "$$(uname)" = "Darwin" ] && [ -z "$${APPLE_SIGNING_IDENTITY:-}" ]; then \
 			export APPLE_SIGNING_IDENTITY=-; \
 			echo "No Developer ID: sealing the app ad hoc so its signature verifies"; \

@@ -187,7 +187,10 @@ Rust audit findings in Tauri's Linux dependency graph remain visible until
 upstream releases a compatible fix. The [GTK binding upgrade](https://github.com/tauri-apps/tauri/issues/16264)
 and [zbus 6 migration](https://github.com/tauri-apps/plugins-workspace/issues/3716)
 track the remaining `glib`, `proc-macro-error` and standalone zvariant-family
-warnings. Do not treat a zero-vulnerability audit as zero warnings or add an
+warnings. These crates are absent from the locked Windows x64 and both macOS
+normal/build/dev target graphs; they remain in the full lock audit for upstream
+tracking. Recheck reachability when targets or dependencies change. Do not treat
+a zero-vulnerability audit as zero warnings or add an
 unreviewed suppression to make the output appear clean.
 
 Releases are driven by **Conventional Commits**: you don't tag by hand, and merging

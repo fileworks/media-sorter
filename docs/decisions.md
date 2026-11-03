@@ -8,6 +8,7 @@ decision record. Missing private notes do not block ordinary work.
 
 | Date | Choice | Reason | Owning documentation |
 |---|---|---|---|
+| 2026-11-02 | Pass notarization credentials through the desktop build, clearing empty values | Tauri must notarize the app before the later Gatekeeper assessment; empty GitHub secrets must remain the explicit unsigned path | [signing](release-signing.md) |
 | 2026-11-02 | Deny unnecessary fsevents install scripts and verify its prebuilt macOS binary | Registry metadata advertises a source rebuild although the locked tarball ships only its universal native binary; explicit policy removes repeated npm review warnings without granting blanket script execution | [development](development.md#releasing) |
 | 2026-11-02 | Freeze the inference runtime through targeted hooks and prove it offline | Whole-package collection pulled unused model-authoring/network tools and foreign OS code into installers; a real frozen-runtime probe protects inference, tokenization and Windows time-zone data while reducing collection work | [development](development.md#releasing) |
 | 2026-11-01 | Audit every locked Python platform/runtime variant using PEP 751 | Host-filtered requirements can skip vulnerable conditional dependencies; direct lock auditing also avoids installation work | [development](development.md#releasing) |
