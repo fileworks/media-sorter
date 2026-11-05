@@ -207,6 +207,11 @@ that notice risks upgrade/state continuity. Revisit only with an explicit
 identity migration. Unsigned notarization notices are expected while signing
 is disabled; partial signing credentials still fail preflight.
 
+Publishing the verified ffmpeg directory allows up to 30 seconds for Windows
+access/sharing locks to clear after executable smoke tests. Other errors fail
+immediately; persistent locks fail and the previous bundle is restored. This
+does not disable antivirus, change permissions or bypass checksum verification.
+
 Releases are driven by **Conventional Commits**: you don't tag by hand, and merging
 never releases by itself. Land `fix:`/`feat:`/`perf:` commits on `main`; shipping
 is then one deliberate dispatch:

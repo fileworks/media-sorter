@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import email.message
+import errno
 import hashlib
 import io
+import itertools
 import json
+import os
 import urllib.error
 from pathlib import Path
 
@@ -11,6 +14,62 @@ import pytest
 from scripts import fetch_ffmpeg
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Exercises Windows executable sharing locks")
+def test_publication_waits_for_a_brief_executable_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staged, destination = tmp_path / "staged", tmp_path / "ffmpeg"
+    staged.mkdir()
+    executable = staged / "ffmpeg.exe"
+    executable.write_bytes(b"verified executable fixture")
+    handle = executable.open("rb")
+    waits: list[float] = []
+
+    def release_lock(delay: float) -> None:
+        waits.append(delay)
+        handle.close()
+
+    monkeypatch.setattr(fetch_ffmpeg.time, "sleep", release_lock)
+    try:
+        fetch_ffmpeg._publish_bundle(staged, destination)
+    finally:
+        handle.close()
+    assert waits
+    assert (destination / "ffmpeg.exe").read_bytes() == b"verified executable fixture"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Exercises Windows executable sharing locks")
+def test_persistent_publication_lock_fails_and_restores_previous_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staged, destination = tmp_path / "staged", tmp_path / "ffmpeg"
+    staged.mkdir()
+    destination.mkdir()
+    (staged / "ffmpeg.exe").write_bytes(b"new")
+    (destination / "ffmpeg.exe").write_bytes(b"previous")
+    ticks = itertools.count(0, 31)
+    monkeypatch.setattr(fetch_ffmpeg.time, "monotonic", lambda: next(ticks))
+    with (staged / "ffmpeg.exe").open("rb"), pytest.raises(PermissionError):
+        fetch_ffmpeg._publish_bundle(staged, destination)
+    assert (destination / "ffmpeg.exe").read_bytes() == b"previous"
+    assert (staged / "ffmpeg.exe").read_bytes() == b"new"
+
+
+def test_unrelated_publication_errors_are_not_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Path, Path]] = []
+
+    def fail(source: Path, destination: Path) -> None:
+        calls.append((source, destination))
+        raise OSError(errno.EIO, "storage failure")
+
+    monkeypatch.setattr(fetch_ffmpeg.os, "replace", fail)
+    with pytest.raises(OSError, match="storage failure"):
+        fetch_ffmpeg._replace_bundle_path(tmp_path / "source", tmp_path / "destination")
+    assert len(calls) == 1
 
 
 def _manifest(tmp_path: Path, sources: list[dict[str, object]]) -> Path:

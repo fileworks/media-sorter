@@ -395,6 +395,23 @@ def _write_provenance(
     )
 
 
+def _replace_bundle_path(source: Path, destination: Path) -> None:
+    """Allow brief Windows executable/scanner locks without masking a lasting failure."""
+    deadline = time.monotonic() + 30
+    reported = False
+    while True:
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as error:
+            if getattr(error, "winerror", None) not in {5, 32, 33} or time.monotonic() >= deadline:
+                raise
+            if not reported:
+                log("    waiting for a Windows file lock before publishing ffmpeg")
+                reported = True
+            time.sleep(0.25)
+
+
 def _publish_bundle(staged_bundle: Path, destination: Path) -> None:
     """Replace the resource directory, retaining the old bundle until the new one exists."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -402,12 +419,12 @@ def _publish_bundle(staged_bundle: Path, destination: Path) -> None:
     if previous.exists():
         shutil.rmtree(previous)
     if destination.exists():
-        os.replace(destination, previous)
+        _replace_bundle_path(destination, previous)
     try:
-        os.replace(staged_bundle, destination)
+        _replace_bundle_path(staged_bundle, destination)
     except BaseException:
         if previous.exists() and not destination.exists():
-            os.replace(previous, destination)
+            _replace_bundle_path(previous, destination)
         raise
     if previous.exists():
         shutil.rmtree(previous)
