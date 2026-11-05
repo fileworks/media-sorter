@@ -193,6 +193,25 @@ tracking. Recheck reachability when targets or dependencies change. Do not treat
 a zero-vulnerability audit as zero warnings or add an
 unreviewed suppression to make the output appear clean.
 
+Artifact downloads retain GitHub's fail-on-digest-mismatch check and use
+`skip-decompress` to avoid the deprecated Node ZIP extraction dependency
+([upstream issue](https://github.com/actions/download-artifact/issues/484)).
+The standard-library extractor keeps each platform's namespace, leaves portable
+ZIP payloads intact and refuses traversal, symlinks, duplicate members and
+overwrites. A tiny hosted round trip in `release-integrity` verifies this path
+without rebuilding or publishing installers. Warning output is not suppressed.
+
+The existing `com.mediasort.app` identifier is retained despite Tauri's naming
+recommendation: changing an installed application's identity solely to silence
+that notice risks upgrade/state continuity. Revisit only with an explicit
+identity migration. Unsigned notarization notices are expected while signing
+is disabled; partial signing credentials still fail preflight.
+
+Publishing the verified ffmpeg directory allows up to 30 seconds for Windows
+access/sharing locks to clear after executable smoke tests. Other errors fail
+immediately; persistent locks fail and the previous bundle is restored. This
+does not disable antivirus, change permissions or bypass checksum verification.
+
 Releases are driven by **Conventional Commits**: you don't tag by hand, and merging
 never releases by itself. Land `fix:`/`feat:`/`perf:` commits on `main`; shipping
 is then one deliberate dispatch:
