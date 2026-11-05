@@ -687,7 +687,19 @@ jobs:
       - name: Download all installer artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          path: artifacts
+          pattern: MediaSorter-*
+          path: artifact-archives
+          skip-decompress: true
+          digest-mismatch: error
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: release-tools
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      # Keep the action's digest check; avoid its deprecated Node ZIP extractor.
+      - name: Extract verified artifact archives
+        run: python release-tools/.github/scripts/extract_artifacts.py artifact-archives artifacts
 
       # Every platform job produces a file literally named SHA256SUMS, and all
       # three were uploaded as one release asset of that name. They collided:
