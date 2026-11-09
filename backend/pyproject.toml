@@ -14,14 +14,14 @@ dependencies = [
     # Web framework
     "fastapi==0.143.0",
     "uvicorn[standard]==0.54.0",
-    "python-multipart==0.0.32",
+    "python-multipart==0.0.33",
     "websockets==16.1.1",
 
     # Configuration & validation
     "pydantic==2.14.1",
-    "pydantic-settings==2.16.1",
+    "pydantic-settings==2.16.2",
     "python-dotenv==1.2.4",
-    "platformdirs==4.13.5",
+    "platformdirs==4.14.3",
 
     # Logging
     "structlog==26.1.0",
@@ -34,7 +34,7 @@ dependencies = [
     # HEIC/HEIF support (registers a Pillow plugin)
     "pillow-heif==1.8.1",
     # RAW decoding (bundles libraw via the wheel)
-    "rawpy==0.27.0",
+    "rawpy==0.28.0",
     # rawpy.postprocess returns an ndarray that PIL.Image.fromarray consumes.
     # NumPy 2.5+ requires Python 3.12 and its stubs cannot represent this
     # project's Python 3.11 API contract; lift the cap when the product floor moves.
@@ -59,7 +59,7 @@ dev = [
     "pytest-mock==3.16.0",
     # Property testing (`P-08`). Ported from unpacksort, where it already covers
     # the archive-path safety rules this backend re-derived as `path_identity_key`.
-    "hypothesis==6.170.11",
+    "hypothesis==6.170.14",
     # Workflow tests parse `.github/workflows/*.yml` structurally rather than by
     # substring, so the shape they assert is the shape Actions will read. It was
     # only ever present transitively before, which is a CI break waiting to
@@ -88,7 +88,7 @@ local-ai = [
     # ONNX Runtime 1.24+ dropped macOS x86_64 wheels. Keep supported Python
     # releases on the last universal wheel and use 1.24.2+ on 3.14+.
     "onnxruntime>=1.23.2,<1.24; python_version < '3.14'",
-    "onnxruntime==1.31.0; python_version >= '3.14'",
+    "onnxruntime==1.31.1; python_version >= '3.14'",
     "tokenizers==0.23.3",
     "huggingface_hub==1.26.1",
     # Reliable cross-platform RAM detection for the hardware tier probe (the
